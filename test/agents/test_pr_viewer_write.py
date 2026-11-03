@@ -1374,7 +1374,8 @@ def test_app_imports_only_the_two_shared_review_libraries():
     imported: set[str] = set()
     for p in sources:
         text = p.read_text(encoding="utf-8")
-        for m in re.finditer(r"""(?:from|import)\s*\(?\s*["']([^"']+)["']""", text):
+        # 先頭の from/import だけを拾う（`query.get("from")` のような文字列リテラルを import と誤認しない）
+        for m in re.finditer(r"""(?:\bfrom\s+|\bimport\s*\(?\s*)["']([^"']+)["']""", text):
             spec = m.group(1)
             if "harness" in spec:
                 assert spec.startswith("../../home/dot_config/pi/harness/"), (p.name, spec)

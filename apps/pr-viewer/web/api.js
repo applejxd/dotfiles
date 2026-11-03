@@ -59,6 +59,12 @@
     return "/api/prs/" + m[1] + "/" + m[2];
   }
 
+  /* 同じく、ジョブの ID（UUID）も検査してから経路に入れる */
+  function jobPart(jobId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(String(jobId))) throw fail("依頼の指定が正しくありません。");
+    return String(jobId);
+  }
+
   /* idPath が投げる失敗を Promise の失敗にそろえる */
   function guard(f) {
     try {
@@ -104,10 +110,18 @@
     capabilities: function () {
       return get("/api/capabilities").then(
         function (b) {
-          return { merge: b.merge === true, targets: Array.isArray(b.targets) ? b.targets : [] };
+          var lim = b.jobLimits && typeof b.jobLimits === "object" ? b.jobLimits : null;
+          var why = b.jobsReason === "unsupported_platform" || b.jobsReason === "pis_missing" ? b.jobsReason : null;
+          return {
+            merge: b.merge === true,
+            targets: Array.isArray(b.targets) ? b.targets : [],
+            jobs: b.jobs === true,
+            jobsReason: why,
+            jobLimits: lim,
+          };
         },
         function () {
-          return { merge: false, targets: [] };
+          return { merge: false, targets: [], jobs: false, jobsReason: null, jobLimits: null };
         }
       );
     },
@@ -119,6 +133,32 @@
     merge: function (id, m) {
       return guard(function () {
         return post(idPath(id) + "/merge", { expect: m.expect, message: m.message, cleanup: m.cleanup });
+      });
+    },
+    /* ジョブ（CHG-0062 段 A4a。pi への変更依頼）。起動の本文は契約の 4 キーだけ */
+    jobInput: function (id) {
+      return guard(function () {
+        return get(idPath(id) + "/job-input");
+      });
+    },
+    jobStart: function (id, s) {
+      return guard(function () {
+        return post(idPath(id) + "/jobs", { kind: "address_review", expect: s.expect, batches: s.batches, inputDigest: s.inputDigest });
+      });
+    },
+    jobs: function (id) {
+      return guard(function () {
+        return get(idPath(id) + "/jobs");
+      });
+    },
+    job: function (id, jobId, from, signal) {
+      return guard(function () {
+        return get(idPath(id) + "/jobs/" + jobPart(jobId) + "?from=" + (from > 0 ? Math.floor(from) : 0), signal);
+      });
+    },
+    jobCancel: function (id, jobId) {
+      return guard(function () {
+        return post(idPath(id) + "/jobs/" + jobPart(jobId) + "/cancel", {});
       });
     },
   };

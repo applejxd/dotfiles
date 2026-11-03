@@ -1,18 +1,24 @@
 // PR ビューアのサーバ（段 1: 読み取り専用、段 2: レビューの書き込み、段 A2: 統合）。
 // 起動: node apps/pr-viewer/server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>]
 //       [--allow-merge] [--rules-file <パス>]
+//       [--allow-jobs] [--job-timeout-ms <N>] [--test-platform <名前>] [--pis-command <絶対パス>]
+//       [--state-dir <パス>] [--job-model <提供元/モデル>]
 // 設計: docs/change/0060-local-pr-viewer.md・docs/change/0062-pr-hub-simplify.md。契約: .tmp/keep/prv-app/api-contract.md
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { lstat, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ApiError, configureLimits, openRepo } from "./git-view.ts";
 import type { Repo } from "./git-view.ts";
 import { mergeRequestError, stopMerges } from "./merge-api.ts";
 import type { MergeEnv, PostResult } from "./merge-api.ts";
-import { handleApi, handlePost, isMergePostRoute, isPostRoute } from "./routes.ts";
+import { handleApi, handlePost, isJobGetRoute, isJobPostRoute, isMergePostRoute, isPostRoute } from "./routes.ts";
+import { DEFAULT_JOB_TIMEOUT_MS, MAX_JOB_TIMEOUT_MS, jobCapabilities, jobRequestError, recoverJobs, stateDirIsolated, stopJobs } from "./job-api.ts";
+import type { JobsConfig } from "./job-api.ts";
+import { buildArgv } from "./job-runner.ts";
+import { defaultStateDir } from "./job-store.ts";
 
 const DEFAULT_PORT = 8780;
 const HOST = "127.0.0.1";
@@ -30,6 +36,18 @@ type Options = {
 	rulesFile: string;
 	/** 試験用: ff の直前に入れる遅延（競合・停止の再現） */
 	mergeDelayMs: number;
+	/** pi への依頼（ジョブ）を許可する（既定で無効。Linux のみ）。値を取らない旗 */
+	allowJobs: boolean;
+	/** 1 回の上限。試験用に ms で指定する（1 ms〜30 分） */
+	jobTimeoutMs: number;
+	/** 試験用: process.platform の代わりに使う名前 */
+	testPlatform: string | null;
+	/** pis の絶対パス（既定: ~/.local/bin/pis。試験で偏の pis に差し替える） */
+	pisCommand: string;
+	/** ジョブの保存先（絶対パス。既定: $XDG_STATE_HOME/pr-viewer） */
+	stateDir: string;
+	/** pis へ渡す --model（既定は pi の既定に任せる） */
+	jobModel: string | null;
 };
 
 function parseArgs(argv: string[]): Options | null {
@@ -41,11 +59,21 @@ function parseArgs(argv: string[]): Options | null {
 		allowMerge: false,
 		rulesFile: join(homedir(), ".config", "pi", "harness", "rules.json"),
 		mergeDelayMs: 0,
+		allowJobs: false,
+		jobTimeoutMs: DEFAULT_JOB_TIMEOUT_MS,
+		testPlatform: null,
+		pisCommand: join(homedir(), ".local", "bin", "pis"),
+		stateDir: defaultStateDir(),
+		jobModel: null,
 	};
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
 		if (a === "--allow-merge") {
 			o.allowMerge = true; // 値を取らない。`--allow-merge=1` は未知の旗として断る
+			continue;
+		}
+		if (a === "--allow-jobs") {
+			o.allowJobs = true; // 値を取らない
 			continue;
 		}
 		const v = argv[i + 1];
@@ -62,6 +90,21 @@ function parseArgs(argv: string[]): Options | null {
 		else if (a === "--merge-test-delay-ms") {
 			if (!/^\d+$/.test(v) || Number(v) > 60_000) return null; // 試験用
 			o.mergeDelayMs = Number(v);
+		} else if (a === "--job-timeout-ms") {
+			if (!/^\d+$/.test(v) || Number(v) < 1 || Number(v) > MAX_JOB_TIMEOUT_MS) return null; // 試験用
+			o.jobTimeoutMs = Number(v);
+		} else if (a === "--test-platform") {
+			if (!/^[a-z0-9]{1,16}$/.test(v)) return null; // 試験用
+			o.testPlatform = v;
+		} else if (a === "--pis-command") {
+			if (!isAbsolute(v) || v.includes("\0")) return null;
+			o.pisCommand = v;
+		} else if (a === "--state-dir") {
+			if (!isAbsolute(v) || v.includes("\0")) return null;
+			o.stateDir = v;
+		} else if (a === "--job-model") {
+			if (v.startsWith("-") || buildArgv("x", v) === null) return null; // "<provider>/<model>" の形だけ（先頭の - は旗と紛れるので不可）
+			o.jobModel = v;
 		} else return null;
 		i++;
 	}
@@ -162,10 +205,26 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
 	});
 }
 
-/** 書き込み（POST）。共通の規則を検査してから routes.ts へ渡す。統合系は Origin 必須・--allow-merge が要る（先に断る）。 */
+/** 設定から、ジョブ API に渡す形を作る。 */
+function jobsOf(opts: Options): JobsConfig {
+	return {
+		enabled: opts.allowJobs,
+		platform: opts.testPlatform ?? process.platform,
+		pisCommand: opts.pisCommand,
+		stateDir: opts.stateDir,
+		timeoutMs: opts.jobTimeoutMs,
+		model: opts.jobModel,
+		rulesFile: opts.rulesFile,
+	};
+}
+
+/** 書き込み（POST）。共通の規則を検査してから routes.ts へ渡す。統合系・ジョブ系は Origin 必須・--allow-merge / --allow-jobs が要る（先に断る）。 */
 async function servePost(repos: Repo[], req: IncomingMessage, res: ServerResponse, pathname: string, opts: Options): Promise<void> {
 	if (isMergePostRoute(pathname)) {
 		const denied = mergeRequestError(req.headers, opts.allowMerge);
+		if (denied) return sendError(res, denied.status, denied.code, denied.message);
+	} else if (isJobPostRoute(pathname)) {
+		const denied = jobRequestError(req.headers, jobsOf(opts), "POST");
 		if (denied) return sendError(res, denied.status, denied.code, denied.message);
 	} else if (!originAllowed(req.headers.origin, req.headers.host)) {
 		return sendError(res, 403, "forbidden_origin", "この Origin は許可されていません。");
@@ -193,7 +252,7 @@ async function servePost(repos: Repo[], req: IncomingMessage, res: ServerRespons
 		return sendError(res, 400, "bad_request", "リクエストの形が正しくありません。");
 	}
 	const env: MergeEnv = { rulesFile: opts.rulesFile, testDelayMs: opts.mergeDelayMs };
-	const result: PostResult = await handlePost(repos, pathname, body as Record<string, unknown>, env);
+	const result: PostResult = await handlePost(repos, pathname, body as Record<string, unknown>, env, jobsOf(opts));
 	sendJson(res, result.status, result.body);
 }
 
@@ -209,7 +268,8 @@ async function drainMerges(): Promise<void> {
 function isMergePost(req: IncomingMessage): boolean {
 	if (req.method !== "POST") return false;
 	try {
-		return isMergePostRoute(new URL(req.url ?? "", "http://localhost").pathname);
+		const p = new URL(req.url ?? "", "http://localhost").pathname;
+		return isMergePostRoute(p) || isJobPostRoute(p); // ジョブの起動・停止も、応答を書き終えるまで停止を待つ
 	} catch {
 		return false;
 	}
@@ -267,8 +327,14 @@ function makeInnerHandler(repos: Repo[], opts: Options) {
 			const p = url.pathname;
 			if (p === "/") return await serveStatic(res, opts.webDir, "index.html");
 			if (p.startsWith("/web/")) return await serveStatic(res, opts.webDir, p.slice("/web/".length));
-			if (p === "/api/capabilities") return sendJson(res, 200, { merge: opts.allowMerge, targets: ["develop"] });
-			if (p.startsWith("/api/")) return sendJson(res, 200, await handleApi(repos, p, url.searchParams));
+			if (p === "/api/capabilities") {
+				return sendJson(res, 200, { merge: opts.allowMerge, targets: ["develop"], ...jobCapabilities(jobsOf(opts)) });
+			}
+			if (isJobGetRoute(p)) {
+				const denied = jobRequestError(req.headers, jobsOf(opts), "GET");
+				if (denied) return sendError(res, denied.status, denied.code, denied.message);
+			}
+			if (p.startsWith("/api/")) return sendJson(res, 200, await handleApi(repos, p, url.searchParams, jobsOf(opts)));
 			return sendError(res, 404, "not_found", "見つかりません。");
 		} catch (e) {
 			if (e instanceof ApiError) return sendError(res, e.status, e.code, e.message, {}, e.conflicts);
@@ -281,8 +347,13 @@ async function main(): Promise<void> {
 	const opts = parseArgs(process.argv.slice(2));
 	if (!opts || opts.repos.length === 0) {
 		process.stderr.write(
-			"使い方: node server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>] [--allow-merge] [--rules-file <パス>]\n",
+			"使い方: node server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>] [--allow-merge] [--allow-jobs] [--rules-file <パス>]\n",
 		);
+		process.exit(2);
+	}
+	const jobs = jobsOf(opts);
+	if (jobs.enabled && jobs.platform !== "linux") {
+		process.stderr.write("--allow-jobs は Linux でだけ使えます。\n");
 		process.exit(2);
 	}
 	const repos: Repo[] = [];
@@ -295,6 +366,14 @@ async function main(): Promise<void> {
 		if (!repos.some((x) => x.repoId === r.repoId)) repos.push(r);
 	}
 	configureLimits({ timeoutMs: opts.timeoutMs, maxBytes: opts.maxBytes });
+	if (jobs.enabled) {
+		// 保存先が共通 .git や worktree の中なら、何も作らずに断る
+		if (!(await stateDirIsolated(jobs, repos))) {
+			process.stderr.write("--state-dir は、対象リポジトリの .git や worktree の中には置けません。別の場所を指定してください。\n");
+			process.exit(2);
+		}
+	}
+	await recoverJobs(jobs, repos); // 前回の実行中のジョブを interrupted にし、古い排他を掃除する（自動では再開しない）
 	const server = createServer(makeHandler(repos, opts));
 	server.listen(opts.port, HOST, () => {
 		const addr = server.address();
@@ -313,6 +392,7 @@ async function main(): Promise<void> {
 		const closed = new Promise<void>((done) => server.close(() => done()));
 		server.closeIdleConnections();
 		void (async () => {
+			await stopJobs(); // 実行中のジョブは interrupted にして止め、結果の確定中のものだけ待つ
 			await drainMerges();
 			server.closeAllConnections();
 			await closed;

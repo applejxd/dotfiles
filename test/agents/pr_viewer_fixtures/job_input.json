@@ -1,0 +1,17 @@
+{"input": {
+  "inputDigest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "batches": [
+    {"batchId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "kind": "changes", "at": "2099-01-01T02:10:00+00:00", "comments": [
+      {"id": "c4", "by": "app", "at": "2099-01-01T02:00:00+00:00", "body": "app.ts の 1 行目の名前を直す",
+       "anchor": {"path": "src/app.ts", "side": "new", "blob": "2222222222222222222222222222222222222222", "line": 1, "lineEnd": 1}},
+      {"id": "c3", "by": "app", "at": "2099-01-01T01:00:00+00:00", "body": "全体として、テストを足してください。\n二行目も読むこと。", "anchor": null}
+    ]},
+    {"batchId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "kind": "comment", "at": "2099-01-01T02:20:00+00:00", "comments": [
+      {"id": "c6", "by": "app", "at": "2099-01-01T02:15:00+00:00", "body": "search.ts の 3 行目は範囲指定にする",
+       "anchor": {"path": "src/search.ts", "side": "new", "blob": "2222222222222222222222222222222222222222", "line": 3, "lineEnd": 5}}
+    ]}
+  ],
+  "blockers": [],
+  "limits": {"maxComments": 50, "maxBodyChars": 4000, "maxTotalBytes": 24576},
+  "notice": {"timeoutMin": 10, "writes": "worktree", "commit": "app"}
+}}
