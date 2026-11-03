@@ -252,7 +252,7 @@ def _baseline(layout: str) -> dict:
 
 
 # 注入なしの統合が呼ぶ git のサブコマンド（k = 1..N）。統合器の手順が変わったら、下の試験が落ちて k の対応の見直しを促す
-_COMMON = [
+_HEAD = [
     "version",  # 1 git の版（P1）
     "rev-parse",  # 2 common-dir
     "config",  # 3 .git/config の外部コード検査（P1）
@@ -260,37 +260,52 @@ _COMMON = [
     "rev-parse",  # 5 source
     "rev-parse",  # 6 target
     "merge-base",  # 7 is-ancestor
-    "merge-tree",  # 8
-    "merge-base",  # 9
-    "diff-tree",  # 10
-    "diff-tree",  # 11 --raw（P1。変わるパスの確認）
-    "check-attr",  # 12 filter 属性の確認（P1）
-    "worktree list",  # 13
+    "worktree list",  # 8 target の worktree（属性の検査のため merge-tree より前）
+]
+# merge-tree より前の属性の検査（worktree があるときだけ。B1）
+_ATTRS_WT = [
+    "rev-parse",  # 9 target の worktree の git-dir
+    "status",  # 10 --ignored（.gitattributes の未コミットの変更）
+    "config",  # 11 attr.tree
+]
+_MERGE_TREE = [
+    "merge-tree",
+    "merge-base",
+    "diff-tree",
+    "diff-tree",  # --raw（P1。変わるパスの確認）
+    "check-attr",  # filter 属性の確認（P1）
 ]
 # 統合器が何も変える前に行う確認の呼び出しの数（k がここまでなら、失敗は「何も変えず failed」でなければならない）
-PREFLIGHT_CALLS = 13
-# P1 で増えた確認の呼び出し（version・config 2 回・diff-tree --raw・check-attr）。失敗を「後続を進めて良い」と読むと危険なもの
-P1_ADDED_CALLS = (1, 3, 4, 11, 12)
+PREFLIGHT_CALLS = {"wt": 16, "bare": 13}
+# P1 で増えた確認の呼び出し（version・config 2 回・diff-tree --raw・check-attr）と、B1 の属性検査（wt の status・config）。
+# 失敗を「後続を進めて良い」と読むと危険なもの
+P1_ADDED_CALLS = {"wt": (1, 3, 4, 10, 11, 15, 16), "bare": (1, 3, 4, 12, 13)}
+# このうち、必ず failed で断るもの（diff-tree --raw と check-attr）
+MUST_FAIL_CALLS = {"wt": (15, 16), "bare": (12, 13)}
 EXPECTED_CALLS = {
     "wt": [
-        *_COMMON,
-        "rev-parse",  # 14 target の worktree の git-dir
-        "symbolic-ref",  # 15
-        "status",  # 16
-        "status",  # 17 --ignored
-        "config",  # 18 identity
-        "rev-parse",  # 19 source（最終の検査）
-        "rev-parse",  # 20 target
-        "symbolic-ref",  # 21
-        "status",  # 22
-        "status",  # 23
-        "commit-tree",  # 24
-        "symbolic-ref",  # 25 ff の直前の HEAD 確認
-        "merge",  # 26 --ff-only
-        "rev-parse",  # 27 反映の確認
+        *_HEAD,
+        *_ATTRS_WT,
+        *_MERGE_TREE,  # 12〜16
+        "symbolic-ref",  # 17
+        "status",  # 18
+        "status",  # 19 --ignored
+        "config",  # 20 identity
+        "rev-parse",  # 21 source（最終の検査）
+        "rev-parse",  # 22 target
+        "status",  # 23 最終の属性検査（--ignored）
+        "config",  # 24 attr.tree
+        "symbolic-ref",  # 25
+        "status",  # 26
+        "status",  # 27
+        "commit-tree",  # 28
+        "symbolic-ref",  # 29 ff の直前の HEAD 確認
+        "merge",  # 30 --ff-only
+        "rev-parse",  # 31 反映の確認
     ],
     "bare": [
-        *_COMMON,
+        *_HEAD,
+        *_MERGE_TREE,  # 9〜13
         "config",  # 14 identity
         "rev-parse",  # 15
         "rev-parse",  # 16
@@ -307,11 +322,6 @@ MODES = {"A": "fail", "B": "lie", "C1": "kill_before", "C2": "kill_after"}
 def test_baseline_call_sequence_is_recorded(layout):
     base = _baseline(layout)
     assert base["calls"] == EXPECTED_CALLS[layout], base["raw"]
-    assert _fsck_ok_dir(base["before"]) in (True, None)
-
-
-def _fsck_ok_dir(_obs_dict: dict) -> None:
-    return None
 
 
 # ---------------------------------------------------------------- 不変条件
@@ -415,7 +425,9 @@ def _check_returned(w: World, base: dict, rc: int, out: dict | None) -> list[str
         return problems
     # 反映の確認だけが読めなかった: 「失敗」とも「先に進んでいる」とも言わず、状態ファイルを残して recover に確かめさせる（§3.5）
     if out.get("code") == "unverified":
-        if now["develop"] != base["after"]["develop"] and not _is_merged(now, base):
+        state_file = w.git_dir() / "pr-viewer-merge.state"
+        state_text = state_file.read_text(encoding="utf-8") if state_file.exists() else ""
+        if now["develop"] in state_text and not _is_merged(now, base):
             problems.append(
                 "unverified だが、develop が進んだのに作業ツリー・index が統合後の状態でない（中間状態）"
             )
@@ -558,8 +570,8 @@ def test_unreadable_final_ref_check_is_reported_as_unverified(tmp_path, layout, 
 @pytest.mark.parametrize("layout", LAYOUTS)
 def test_preflight_git_failure_refuses_with_failed_and_changes_nothing(tmp_path, layout, method):
     """P1 の確認（版・config・check-attr・diff-tree --raw など）の git が壊れたら、何も変えず failed で断る（状態ファイルも残さない）。"""
-    assert EXPECTED_CALLS[layout][PREFLIGHT_CALLS - 1] == "worktree list"
-    for k in P1_ADDED_CALLS:
+    assert EXPECTED_CALLS[layout][PREFLIGHT_CALLS[layout] - 1] == "check-attr"
+    for k in P1_ADDED_CALLS[layout]:
         (tmp_path / f"k{k}").mkdir()
         w = _build(tmp_path / f"k{k}", layout)
         base = {**_baseline(layout), "before": _obs(w), "gitdir_before": _gitdir_names(w)}
@@ -568,7 +580,7 @@ def test_preflight_git_failure_refuses_with_failed_and_changes_nothing(tmp_path,
         assert rc == 2 and isinstance(out, dict), (where, rc, out)
         # P1 で増えた diff-tree --raw（11）・check-attr（12）は必ず failed。その他は安全側の専用コードで断ってよい
         assert out.get("ok") is False, (where, out)
-        if k in (11, 12):
+        if k in MUST_FAIL_CALLS[layout]:
             assert out.get("code") == "failed", (where, out)
         now = _obs(w)
         assert now["develop"] == base["before"]["develop"], where

@@ -347,20 +347,28 @@ export async function isUntouchedBrief(repo: Repo, prKey: string, sourceOid: str
 
 /**
  * 起票の依頼文を、新しい記録（refs/pi/review/<prKey>。meta.schema 2）の最初のイベントとして書く（CAS 新規）。
- * 記録が既にあれば何も書かない（上書きしない）。書けたときだけ true。
+ * 記録が既にあれば何も書かない（createOnly: 既存の ref への追記もしない）。
+ * 結果: recorded=書けた / not_recorded=書かなかったと確定（拒否）/ unknown=書けたか確定できない（git の失敗・例外）。
  */
-export async function recordBrief(repo: Repo, branch: string, target: string, baseOid: string, d: BriefData): Promise<boolean> {
+export type RecordResult = "recorded" | "not_recorded" | "unknown";
+export async function recordBrief(repo: Repo, branch: string, target: string, baseOid: string, d: BriefData): Promise<RecordResult> {
 	const prKey = prKeyOf(branch);
 	const vs: Vs = { source: baseOid, target: baseOid, base: baseOid };
 	const at = new Date().toISOString();
-	const res = await appendEvents(
-		gitAdapter(repo),
-		prKey,
-		{ schema: SCHEMA_BRIEF, pr: prKey, branch, target, createdAt: at },
-		(state) => (state.brief !== null || state.threads.length > 0 ? { refuse: "exists" } : [{ v: 1, id: newId(), by: "app", at, vs, t: "brief", d } as ReviewEvent]),
-		{ current: vs },
-	);
-	return res.ok === true && !("noop" in res);
+	let res;
+	try {
+		res = await appendEvents(
+			gitAdapter(repo),
+			prKey,
+			{ schema: SCHEMA_BRIEF, pr: prKey, branch, target, createdAt: at },
+			(state) => (state.brief !== null || state.threads.length > 0 ? { refuse: "exists" } : [{ v: 1, id: newId(), by: "app", at, vs, t: "brief", d } as ReviewEvent]),
+			{ current: vs, createOnly: true },
+		);
+	} catch {
+		return "unknown";
+	}
+	if (res.ok === true) return "noop" in res ? "not_recorded" : "recorded";
+	return "refused" in res ? "not_recorded" : "unknown";
 }
 
 // ---- POST …/submit ----

@@ -50,10 +50,15 @@ async function refExists(gitDir: string, ref: string): Promise<boolean> {
 	return (await runGit(["rev-parse", "--verify", "--quiet", ref], { gitDir })).code === 0;
 }
 
-/** 起票の枝（feature/<名>）が既にあるか（枝そのもの・D/F 衝突を含む）。再送の判定に使う。 */
+/** 起票の枝（feature/<名>）が既にあるか（枝そのもの・D/F 衝突を含む）。衝突の検査に使う。 */
 export async function featureBranchExists(gitDir: string, name: string): Promise<boolean> {
 	const r = await runGit(["for-each-ref", "--count=1", "--format=%(refname)", `refs/heads/feature/${name}`], { gitDir });
 	return r.code !== 0 || r.out.trim() !== "" ? true : await refExists(gitDir, "refs/heads/feature");
+}
+
+/** 起票の枝そのもの（完全一致の branch ref）があるか。D/F 衝突は含まない。再送の判定に使う。 */
+export async function featureBranchRefExists(gitDir: string, name: string): Promise<boolean> {
+	return await refExists(gitDir, `refs/heads/feature/${name}`);
 }
 
 type Layout = { root: string; wt: string; rel: string };
@@ -149,13 +154,15 @@ async function verify(input: CreateInput, layout: Layout, baseOid: string): Prom
 
 /** 巻き戻してよい状態か（清潔・進行中の操作なし・外部コード設定なしの 3 つがすべて確かめられたとき）。 */
 async function safeToRemove(input: CreateInput, layout: Layout, baseOid: string): Promise<boolean> {
-	if (!(await verify(input, layout, baseOid))) return false;
+	// 外部コード設定の検査を、git status（filter を動かしうる）より先に行う。rev-parse は filter を動かさない
 	const gd = await runGit(["rev-parse", "--absolute-git-dir"], { cwd: layout.wt });
 	const wtGit = gd.out.trim();
 	if (gd.code !== 0 || wtGit === "") return false;
-	for (const f of IN_PROGRESS) if (await lstatOrNull(join(wtGit, f))) return false;
 	if (await configHasExternalCode(join(wtGit, "config.worktree"))) return false;
-	return !(await configHasExternalCode(join(input.gitDir, "config"))) && !(await configHasExternalCode(join(input.gitDir, "config.worktree")));
+	if ((await configHasExternalCode(join(input.gitDir, "config"))) || (await configHasExternalCode(join(input.gitDir, "config.worktree"))))
+		return false;
+	for (const f of IN_PROGRESS) if (await lstatOrNull(join(wtGit, f))) return false;
+	return await verify(input, layout, baseOid);
 }
 
 /** 巻き戻す。残ったものの種類（"branch" / "worktree"）を返す。空なら完全に戻した。 */
@@ -183,36 +190,68 @@ async function rollback(input: CreateInput, layout: Layout, baseOid: string): Pr
 	return residue;
 }
 
+/** 依頼文の記録の結果。unknown は「書けたか確定できない」（失敗の結果を受け取っただけでは、未保存とは言えない）。 */
+export type RecordOutcome = "recorded" | "not_recorded" | "unknown";
+
+/** 残骸の診断（何も消さない）。枝・worktree（ディレクトリか登録）が残っていれば、その種類を返す。 */
+async function diagnose(input: CreateInput, layout: Layout): Promise<string[]> {
+	const residue: string[] = [];
+	const reg = await registeredPaths(input.gitDir);
+	if ((await lstatOrNull(layout.wt)) !== null || reg === null || reg.includes(layout.wt)) residue.push("worktree");
+	if (await refExists(input.gitDir, `refs/heads/feature/${input.name}`)) residue.push("branch");
+	return residue;
+}
+
 /**
- * 枝と worktree を作り、record（依頼文の記録。成功なら true）を呼ぶ。失敗したら巻き戻す。
- * 巻き戻せたら 500 create_failed、巻き戻せなかったら 500 create_partial（残骸の種類だけ）。
+ * 枝と worktree を作り、record（依頼文の記録）を呼ぶ。
+ * 巻き戻しは、自分の worktree add が成功した（= 枝と worktree を自分が作った）うえで、記録が「書かれなかった」と確定したときだけ。
+ * add が失敗したとき・記録が不明なときは、何も消さず残骸を診断する（無ければ 500 create_failed、あれば 500 create_partial）。
+ * 巻き戻せたら create_failed、戻せなかったら create_partial（残骸の種類だけ）。
  */
-export async function createFeature(input: CreateInput, record: (baseOid: string) => Promise<boolean>): Promise<Created> {
+export async function createFeature(input: CreateInput, record: (baseOid: string) => Promise<RecordOutcome>): Promise<Created> {
 	const { baseOid, layout } = await precheck(input);
 	const branch = `feature/${input.name}`;
 	await ensureDir(join(layout.root, ".tmp"));
 	await ensureDir(join(layout.root, ".tmp", "worktrees"));
 	let ok = false;
+	let added = false; // 自分の worktree add が成功した（所有の証拠）
+	let unknown = false;
 	try {
+		if (input.env.testFail === "race") {
+			// 試験用: 事前検査の後に、別の操作が同名の枝と worktree を作った状態を再現する
+			await runGit(["worktree", "add", "-b", branch, layout.wt, baseOid], { gitDir: input.gitDir, write: true, timeoutMs: 120_000 });
+		}
 		if (input.env.testFail === "add") {
 			// 試験用: git が枝だけ作って失敗した状態を再現する
 			await runGit(["branch", "--no-track", branch, baseOid], { gitDir: input.gitDir, write: true });
 		} else {
 			const r = await runGit(["worktree", "add", "-b", branch, layout.wt, baseOid], { gitDir: input.gitDir, write: true, timeoutMs: 120_000 });
-			ok = r.code === 0;
+			added = r.code === 0;
 		}
+		ok = added;
 		if (ok) ok = await verify(input, layout, baseOid);
 		if (ok && input.env.testDelayMs > 0) await sleep(input.env.testDelayMs);
-		if (ok) ok = input.env.testFail === "record" ? false : await record(baseOid);
+		if (ok && input.env.testFail === "record") ok = false;
+		else if (ok) {
+			let out: RecordOutcome;
+			try {
+				out = await record(baseOid);
+			} catch {
+				out = "unknown";
+			}
+			ok = out === "recorded";
+			unknown = out === "unknown";
+		}
 	} catch {
 		ok = false;
 	}
 	if (ok) return { branch, baseOid };
-	const residue = await rollback(input, layout, baseOid);
+	const residue = added && !unknown ? await rollback(input, layout, baseOid) : await diagnose(input, layout);
 	if (residue.length === 0) throw new ApiError(500, "create_failed", "起票に失敗しました（作ったものは元に戻しました）。");
+	const why = !added ? "枝・worktree を自分が作ったと確かめられないため" : unknown ? "依頼文の記録が書かれたか確かめられないため" : "安全に戻せないため";
 	throw new ApiError(
 		500,
 		"create_partial",
-		`起票に失敗し、一部を元に戻せませんでした（残り: ${residue.join(", ")}）。git worktree remove と枝の削除で手動で片付けてください。`,
+		`起票に失敗し、${why}一部を残しました（残り: ${residue.join(", ")}）。内容を確かめて、git worktree remove と枝の削除で手動で片付けてください。`,
 	);
 }

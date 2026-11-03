@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import threading
@@ -553,13 +554,12 @@ def test_external_code_config_is_refused(make):
 # ---------------------------------------------------------------- 巻き戻し・記録の順序
 
 
-def test_add_failure_rolls_the_branch_back(make):
+def test_add_failure_does_not_delete_what_it_cannot_prove_it_made(make):
+    # worktree add が失敗して枝が残ったとき、自分が作った証拠が無いので消さず、create_partial で知らせる
     w = make(fail="add")
-    before = snapshot(w)
     status, body = create(w)
-    assert (status, body["error"]["code"]) == (500, "create_failed")
-    assert snapshot(w) == before
-    assert not has_ref(w, "refs/heads/feature/alpha")
+    assert (status, body["error"]["code"]) == (500, "create_partial")
+    assert has_ref(w, "refs/heads/feature/alpha") and not has_ref(w, review_ref("alpha"))
 
 
 def test_record_failure_rolls_branch_and_worktree_back(make):
@@ -837,8 +837,9 @@ def test_responses_and_diagnostics_do_not_leak_paths_or_text(make):
     ]
     stderr = stop_and_stderr(w)
     no_leak(w, *[o[1] for o in outs], stderr)
+    assert [o[0] for o in outs[:3]] == [201, 200, 409]
     assert marker not in stderr and marker not in "".join(
-        json.dumps(o[1], ensure_ascii=False) for o in outs[1:]
+        json.dumps(o[1], ensure_ascii=False) for o in outs
     )
     lines = [json.loads(line) for line in stderr.splitlines() if line.startswith("{")]
     creates = [ln for ln in lines if ln.get("t") == "create"]
@@ -970,3 +971,125 @@ def test_import_boundaries():
         for imp in _imports(src):
             if "harness/" in imp:
                 assert imp.rsplit("/", 1)[-1] in ("review-log.ts", "review-git.ts"), (src.name, imp)
+
+
+# ---------------------------------------------------------------- 独立 review の指摘（M1〜M4・MINOR）
+
+
+def _plain(repo: Path, *args: str, stdin: str | None = None) -> str:
+    """試験の準備用（標準入力を渡せる素の git）。"""
+    r = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=Rival",
+            "-c",
+            "user.email=rival@example.com",
+            *args,
+        ],
+        input=stdin,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={
+            "PATH": "/usr/bin:/bin:/usr/local/bin",
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_CONFIG_NOSYSTEM": "1",
+        },
+        check=True,
+    )
+    return r.stdout.strip()
+
+
+def test_m1_losing_a_race_never_deletes_the_rivals_branch_or_worktree(make):
+    # 事前検査の後に、別の操作が同名の枝と worktree を作った（add は既存名で失敗する）
+    w = make(fail="race")
+    status, body = create(w)
+    assert (status, body["error"]["code"]) == (500, "create_partial")
+    base = _git(w.repo, "rev-parse", "develop")
+    assert _git(w.repo, "rev-parse", "refs/heads/feature/alpha") == base
+    assert (wt_path(w) / ".git").exists()
+    assert str(wt_path(w)) in _git(w.repo, "worktree", "list", "--porcelain")
+    assert not has_ref(w, review_ref("alpha"))
+
+
+def test_m2_brief_never_appends_to_a_record_made_after_the_precheck(make):
+    w = make(delay_ms=2500)
+    t, out = post_async(w)
+    assert wait_for(lambda: (wt_path(w) / ".git").exists())
+    # 起票の途中で、競合相手が空の schema 2 の記録を作る
+    ref = review_ref("alpha")
+    meta = json.dumps(
+        {
+            "schema": 2,
+            "pr": _pr_key("feature/alpha"),
+            "branch": "feature/alpha",
+            "target": "develop",
+            "createdAt": "2025-01-01T00:00:00Z",
+        }
+    )
+    (w.base / "m.json").write_text(meta + "\n", encoding="utf-8")
+    (w.base / "e.jsonl").write_text("", encoding="utf-8")
+    mb = _plain(w.repo, "hash-object", "-w", str(w.base / "m.json"))
+    eb = _plain(w.repo, "hash-object", "-w", str(w.base / "e.jsonl"))
+    tree = _plain(
+        w.repo, "mktree", stdin=f"100644 blob {eb}\tevents.jsonl\n100644 blob {mb}\tmeta.json\n"
+    )
+    rival = _plain(w.repo, "commit-tree", tree, "-m", "rival")
+    _plain(w.repo, "update-ref", ref, rival)
+    t.join(30)
+    assert out["r"][0] == 500 and out["r"][1]["error"]["code"] == "create_failed"
+    assert _git(w.repo, "rev-parse", ref).strip() == rival
+    assert _git(w.repo, "show", f"{ref}:events.jsonl").strip() == ""
+    assert not has_ref(w, "refs/heads/feature/alpha") and not wt_path(w).exists()
+
+
+def test_m3_record_written_but_result_lost_is_confirmed_by_rereading(make):
+    # update-ref は成功したが結果を受け取れなかった: 保存内容を読み直して一致すれば成功
+    w = make(fail="record-lost")
+    status, body = create(w)
+    assert status == 201, body
+    assert has_ref(w, "refs/heads/feature/alpha") and wt_path(w).is_dir()
+    assert events_of(w, "alpha")[0]["t"] == "brief"
+
+
+def test_m3_unknown_record_result_keeps_branch_and_worktree(make):
+    w = make(fail="record-unknown")
+    status, body = create(w)
+    assert (status, body["error"]["code"]) == (500, "create_partial")
+    assert has_ref(w, "refs/heads/feature/alpha") and wt_path(w).is_dir()
+    assert not has_ref(w, review_ref("alpha"))
+
+
+def test_m4_external_code_config_is_checked_before_git_status_runs(make):
+    w = make(delay_ms=2500, fail="record")
+    t, out = post_async(w)
+    assert wait_for(lambda: (wt_path(w) / ".git").exists())
+    marker = w.base / "filter-ran"
+    _git(w.repo, "config", "extensions.worktreeConfig", "true")
+    wt = wt_path(w)
+    _git(wt, "config", "--worktree", "filter.x.clean", f"touch {marker}; cat")
+    attr = Path(_git(wt, "rev-parse", "--git-path", "info/attributes"))
+    attr = attr if attr.is_absolute() else wt / attr
+    attr.parent.mkdir(parents=True, exist_ok=True)
+    attr.write_text("README.md filter=x\n", encoding="utf-8")
+
+    os.utime(
+        wt / "README.md", (time.time() + 100, time.time() + 100)
+    )  # status に内容の再確認をさせる
+    t.join(30)
+    assert out["r"][1]["error"]["code"] == "create_partial"
+    assert wt.is_dir()
+    assert not marker.exists()
+
+
+def test_minor_replay_does_not_treat_a_d_f_conflict_as_the_same_branch(make):
+    w = make()
+    assert create(w)[0] == 201
+    _git(w.repo, "worktree", "remove", str(wt_path(w)))
+    _git(w.repo, "branch", "-D", "feature/alpha")
+    _git(w.repo, "branch", "feature/alpha/child", "develop")
+    status, body = create(w)
+    assert (status, body["error"]["code"]) == (409, "name_used")

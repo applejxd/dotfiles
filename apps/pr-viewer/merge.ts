@@ -72,7 +72,7 @@ const REASONS: Record<string, string> = {
 	dirty: "統合が触るファイルに未コミットの変更があります。",
 	ignored: "統合が作るファイルと同名の無視ファイルがあります。",
 	external_code: "外部のコードを動かしうる設定があるため、統合しません。",
-	git_version: "git の版が古い（2.40 以上が要ります）か、版を確認できません。",
+	git_version: "git の版が古い（2.43 以上が要ります）か、版を確認できません。",
 	unsupported_repo: "この統合器が扱わないリポジトリの設定（sparse checkout）があるため、統合しません。",
 	unsupported_change: "サブモジュール、または filter 属性を持つファイルを含む変更は、統合しません。",
 	busy: "別の統合が実行中です。",
@@ -253,8 +253,30 @@ async function statusPaths(w: Wt, ignored: boolean): Promise<StatusEntry[] | nul
 	return r.code === 0 ? parseStatus(r.out) : null;
 }
 
+/**
+ * 属性の参照元が target の tree と worktree でずれうるかの検査。merge-tree は target の tree の .gitattributes を読むが、
+ * git merge は worktree のそれを読む。未コミットの変更・追加・削除・無視ファイル、または attr.tree 設定があれば拒否する。
+ */
+async function checkAttributes(w: Wt): Promise<Refusal | null> {
+	const st = await statusPaths(w, true);
+	if (st === null) return refuse("failed");
+	if (st.some((e) => e.path.split("/").pop() === ".gitattributes")) {
+		return refuse("dirty", "統合先の作業ツリーに、未コミットの .gitattributes の変更があります。コミットか退避をしてください。");
+	}
+	const cfg = await runGit(["config", "-z", "--list"], { cwd: w.path });
+	if (cfg.code !== 0) return refuse("failed");
+	if (cfg.out.split("\0").some((kv) => /^attr\.tree(\n|$)/i.test(kv))) {
+		return refuse("unsupported_repo", "属性の参照元を変える設定（attr.tree）があるため、統合しません。");
+	}
+	return null;
+}
+
 /** target の worktree の事前検査（S4 の 6〜9）。 */
-async function checkWorktree(ctx: Ctx, w: Wt, touched: string[]): Promise<Refusal | null> {
+async function checkWorktree(ctx: Ctx, w: Wt, touched: string[], attrsChecked = false): Promise<Refusal | null> {
+	if (!attrsChecked) {
+		const attrBad = await checkAttributes(w);
+		if (attrBad) return attrBad;
+	}
 	if (await configHasExternalCode(join(w.gitDir, "config.worktree"))) return refuse("external_code");
 	const head = await runGit(["symbolic-ref", "-q", "HEAD"], { cwd: w.path });
 	if (head.code !== 0 || head.out.trim() !== ctx.target.ref) return refuse("head_mismatch");
@@ -286,9 +308,17 @@ async function computePlan(ctx: Ctx): Promise<Planned | Refusal> {
 	if (anc.code === 0) return refuse("already_merged");
 	if (anc.code !== 1) return refuse("failed");
 
+	// merge-tree は target の tree の属性を読むので、worktree の属性がずれていないことを先に確かめる
+	const wt = await findWorktree(ctx.gitDir, ctx.target.ref);
+	if (wt === undefined) return refuse("failed");
+	if (wt) {
+		const attrBad = await checkAttributes(wt);
+		if (attrBad) return attrBad;
+	}
+
 	// 結果の tree（object だけを書く。ref・作業ツリーは変えない）。
 	// worktree の外で動かすと .gitattributes（binary など）が読まれず、porcelain の git merge と結果が変わる（P2 の差分試験で発見）。
-	// 属性は target の tree から読む（git merge は target の作業ツリーの属性を読むのと同じ。git 2.40 以上）
+	// 属性は target の tree から読む（clean な .gitattributes なら git merge が worktree から読むのと同じ。--attr-source は 2.41、併用の不具合修正は 2.43）
 	const mt = await runGit([`--attr-source=${targetOid}`, "merge-tree", "--write-tree", "--name-only", "-z", targetOid, sourceOid], {
 		gitDir: ctx.gitDir,
 	});
@@ -320,11 +350,9 @@ async function computePlan(ctx: Ctx): Promise<Planned | Refusal> {
 	if (unsupported) return refuse("unsupported_change");
 	const added = all.filter((f) => f.status === "A").map((f) => f.path);
 
-	const wt = await findWorktree(ctx.gitDir, ctx.target.ref);
-	if (wt === undefined) return refuse("failed");
 	let newDirs: string[] = [];
 	if (wt) {
-		const bad = await checkWorktree(ctx, wt, touched);
+		const bad = await checkWorktree(ctx, wt, touched, true);
 		if (bad) return bad;
 		// 統合で新しく作られるディレクトリ（復旧で、空なら消してよいもの）
 		const dirs = new Set<string>();

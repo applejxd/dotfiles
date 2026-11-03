@@ -11,7 +11,8 @@ import type { Repo } from "./git-view.ts";
 import { preflight } from "./job-git.ts";
 export { stateDirIsolated } from "./job-git.ts";
 import { buildPrompt, inputDigest } from "./job-prompt.ts";
-import { runJob, shutdown as shutdownRunner } from "./job-runner.ts";
+import { acquireInstanceLock, runJob, shutdown as shutdownRunner } from "./job-runner.ts";
+export { acquireInstanceLock };
 import type { RunHandle } from "./job-runner.ts";
 import {
 	acquireLock,
@@ -23,7 +24,7 @@ import {
 	openStore,
 	publicJob,
 	readJob,
-	readLog,
+	readLogLines,
 	recover,
 	releaseLock,
 	updateJob,
@@ -141,14 +142,27 @@ function storeOf(cfg: JobsConfig, repo: Repo): Store {
 	return s;
 }
 
-/** 起動時の回復: 前回の実行中のジョブを interrupted にし、古い排他を掃除する。ジョブが無効なら何もしない。 */
+/** 回復で残存プロセスの消滅を確認できなかった（または回復に失敗した）リポジトリ。ジョブの受付を止める。 */
+const blockedRepos = new Set<string>();
+
+function requireNotBlocked(repo: Repo): void {
+	if (blockedRepos.has(repo.repoId)) {
+		throw new ApiError(503, "recovery_failed", "前回の依頼の残りを止められませんでした。サーバを再起動するか、手で確認してください。");
+	}
+}
+
+/**
+ * 起動時の回復: 前回の実行中のジョブを interrupted にし、古い排他を掃除する。ジョブが無効なら何もしない。
+ * 残存プロセスを止め切れない、あるいは回復に失敗したリポジトリは、ジョブの受付を止める（起動は続ける）。
+ */
 export async function recoverJobs(cfg: JobsConfig, repos: Repo[]): Promise<void> {
 	if (!cfg.enabled) return;
 	for (const r of repos) {
 		try {
-			await recover(storeOf(cfg, r));
+			const res = await recover(storeOf(cfg, r));
+			if (res.survivors.length > 0) blockedRepos.add(r.repoId);
 		} catch {
-			// 回復に失敗しても起動は止めない（ジョブの起動時に state の異常が 5xx で見える）
+			blockedRepos.add(r.repoId);
 		}
 	}
 }
@@ -257,6 +271,7 @@ export async function jobInput(ctx: PrCtx, pr: JobPr, cfg: JobsConfig): Promise<
 	} catch (e) {
 		if (e instanceof ApiError) add(e.code, e.message);
 	}
+	if (blockedRepos.has(ctx.repo.repoId)) add("recovery_failed", "前回の依頼の残りを止められませんでした。サーバを再起動するか、手で確認してください。");
 	return {
 		input: {
 			inputDigest: inputDigest(live.batches),
@@ -303,6 +318,7 @@ function diag(entry: Record<string, unknown>): void {
 
 async function startJob(ctx: PrCtx, input: StartBody, cfg: JobsConfig, rsv: Reservation): Promise<PostResult> {
 	const store = storeOf(cfg, ctx.repo);
+	requireNotBlocked(ctx.repo);
 	if (dailyCount(store) >= DAILY) throw new ApiError(429, "quota", BLOCK_TEXT.quota);
 
 	const pf = await preflight({ repo: ctx.repo.gitDir, source: ctx.branch, expectOid: ctx.sourceOid, protectedRefs: protectedRefs(ctx) });
@@ -398,20 +414,10 @@ export async function jobGet(ctx: PrCtx, id: string, fromRaw: string | null, cfg
 	if (fromRaw !== null && !/^\d{1,10}$/.test(fromRaw)) throw bad("bad_request", "from の形が正しくありません。");
 	const store = storeOf(cfg, ctx.repo);
 	const rec = ownJob(store, ctx, id);
-	const raw = readLog(store, id, fromRaw === null ? 0 : Number(fromRaw), LOG_READ_MAX);
-	let text = raw.text;
-	let next = raw.next;
-	// 1 回の上限いっぱいなら、行の途中で切らない（パスが 2 つの応答にまたがって、衛生化をすり抜けないように）
-	if (raw.next - raw.from >= LOG_READ_MAX - 3) {
-		const cut = text.lastIndexOf("\n");
-		if (cut >= 0) {
-			text = text.slice(0, cut + 1);
-			next = raw.from + Buffer.byteLength(text, "utf8");
-		}
-	}
+	const raw = readLogLines(store, id, fromRaw === null ? 0 : Number(fromRaw), LOG_READ_MAX, isTerminal(rec.state));
 	return {
 		job: publicJob(rec),
-		log: { from: raw.from, next, text: sanitizeLog(text, rootsOf(cfg, ctx.repo, rec)), truncated: raw.truncated },
+		log: { from: raw.from, next: raw.next, text: sanitizeLog(raw.text, rootsOf(cfg, ctx.repo, rec)), truncated: raw.truncated },
 	};
 }
 

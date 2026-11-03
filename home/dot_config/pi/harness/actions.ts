@@ -14,9 +14,6 @@ import { VIEW_FULL, presentConfirm } from "./confirm-present.ts";
 import { classifyFreeZone, freeZoneSettings, type FreeZone } from "./freezone.ts";
 import { gitSync } from "./gitrun.ts";
 import { reconcilePending, repoTargetEnv, savePendingSnapshot, snapshotStaged, type Snapshot } from "./pending-store.ts";
-import type { Json, Limits, Reason, SaveInput, SaveResult } from "./pending-ops.ts";
-import { saveRequest } from "./pending-request.ts";
-import { NATIVE_ACTIONS, executeNative } from "./native-action.ts";
 
 export const ACTION_TOOL = "action";
 const NOT_APPROVED = "not approved:";
@@ -235,27 +232,6 @@ function tail(s: string, n = OUTPUT_TAIL_CHARS): string {
 
 export type SelectResult = { choice: string | undefined; elapsedMs: number; aborted: boolean; error: boolean };
 
-/** 保留 (非同期承認) に対応する操作の、前提の取得 (CHG-0055)。承認の時点の再検査と実行は、後の段 (P5) で足す */
-export type PendingAdapter = {
-	/** 要求時の前提を取る。失敗したら、その要求は保留せず、従来どおり (時間切れ・不在・UI なしは拒否) */
-	capture: (a: { cwd: string; values: Values; env: NodeJS.ProcessEnv }) => Promise<
-		{ ok: true; premise: Record<string, Json>; worktree?: string; host?: string } | { ok: false; reason: string }
-	>;
-};
-export type PendingDeps = {
-	/** [pi.pending] enabled */
-	enabled: boolean;
-	/** [pi.pending] modes (今の実行モードが含まれるときだけ保留する) */
-	modes: readonly string[];
-	/** アダプタを登録した操作 (action.id) だけが保留の対象。未登録の操作は「あとで」も出さず、従来どおり */
-	adapters: Record<string, PendingAdapter>;
-	limits?: Limits;
-	/** 保存 (試験で差し替える。既定は pending-ops.ts の saveOp) */
-	save?: (cwd: string, input: SaveInput, limits?: Limits) => SaveResult;
-	/** 保存できたとき (BEL・フッターなどの通知用。通知は手段で、正本は ref) */
-	onSaved?: (info: { id: string; ref: string; duplicate: boolean; action: string; reason: Reason }) => void;
-};
-
 export type ActionDeps = {
 	actions: ActionSpec[];
 	rules: any;
@@ -273,8 +249,6 @@ export type ActionDeps = {
 	absence?: { absent: boolean; gen: number };
 	/** 自由区の判定 (試験で差し替える)。無ければ freezone.ts の classifyFreeZone */
 	freeZone?: (cwd: string, protectedRefs: readonly string[]) => FreeZone;
-	/** 保留 (非同期承認)。無ければ従来どおり */
-	pending?: PendingDeps;
 };
 
 /** 退避して続行する結果 (deferred) または、退避できなかった結果 (defer_failed)。どちらも元の操作は未実行 */
@@ -285,18 +259,17 @@ function deferError(cwd: string, snap: Snapshot, why: string, signal: AbortSigna
 	const saved = savePendingSnapshot(cwd, snap);
 	if (!saved.ok) {
 		return notApproved(
-			`${why}。元の操作は未実行で、内容も退避できなかった (${saved.reason})。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。任せられる作業が無ければ、「保留したコミット」の再作成が要ると報告して終える${where}`,
+			`${why}。元の操作は未実行で、内容も退避できなかった (${saved.reason})。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (退避は /pending で確認・破棄するだけで、承認して実行する経路は無い)。任せられる作業が無ければ、「保留したコミット」の再作成が要ると報告して終える${where}`,
 		);
 	}
 	return notApproved(
-		`${why}。元の操作は未実行。内容は ${saved.ref} (${saved.short}) に退避した。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。任せられる作業が無ければ、「保留したコミット」として報告して終える (${dir ? `対象のリポジトリ: ${dir}。/pending には出ない。そのリポジトリの refs/pi/pending/ にある` : "利用者は /pending で確認・破棄できる"})`,
+		`${why}。元の操作は未実行。内容は ${saved.ref} (${saved.short}) に退避した。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (退避は /pending で確認・破棄するだけで、承認して実行する経路は無い)。任せられる作業が無ければ、「保留したコミット」として報告して終える (${dir ? `対象のリポジトリ: ${dir}。/pending には出ない。そのリポジトリの refs/pi/pending/ にある` : "利用者は /pending で確認・破棄できる"})`,
 	);
 }
 
 const APPROVE = "承認して実行";
 const EDIT = "編集して承認";
 const REJECT = "拒否";
-const LATER = "あとで (保留)";
 
 // TUI の git_commit の確認: 常に要約 + 「全文を見る」 (全文は先頭から読めるビューアで読む)。表示だけを変える: 同一性の照合・実行の argv は変えない
 // see docs/spec/guard/pi-extensions.md#guarded_action
@@ -501,7 +474,6 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 	const checked = validateCall(deps.actions, params);
 	if (!checked.ok) throw new Error(checked.error);
 	const { action } = checked;
-	if (NATIVE_ACTIONS.has(action.id)) return executeNative(action.id, checked.values, ctx, deps, signal); // 保存専用。argv 実行・確認には進まない
 	let values = checked.values;
 	let cwd: string = ctx.cwd;
 	let resolvedParams: any = params; // dir を解決したあとの判定用の入力 (解決済みの対象を指す)
@@ -533,52 +505,10 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		// 自由区 (feature の linked worktree) の git_commit は、設定が真のときだけ確認を省略する。偽の間も判定は行い、結果に添えて観測する
 		const zone: FreeZone | null = action.id === "git_commit" ? (deps.freeZone ?? ((c, r) => classifyFreeZone(c, r, { env: deps.env })))(cwd, zoneSettings.protectedRefs) : null;
 		const skipConfirm = zone?.free === true && zoneSettings.skip;
-		// 保留 (非同期承認): 設定が有効で、今のモードが対象で、この操作がアダプタを登録しているときだけ。git_commit は従来の退避 (snap)。
-		// 前提を取れなければ、保留せず従来どおり (時間切れ・不在・UI なしは拒否)。確認を省略する操作 (自由区) には関係しない
-		const pendingCfg = deps.pending;
-		const adapter = !snap && pendingCfg?.enabled === true && pendingCfg.modes.includes(ctx.mode) ? pendingCfg.adapters[action.id] : undefined;
-		const captured =
-			adapter && !skipConfirm
-				? await adapter.capture({ cwd, values, env: deps.env }).catch((e: unknown) => ({ ok: false as const, reason: String((e as Error)?.message ?? e) }))
-				: null;
-		const canDefer = captured?.ok === true;
-		const sessionIdOf = (): string => {
-			try {
-				return String(ctx.sessionManager?.getSessionId?.() ?? "unknown");
-			} catch {
-				return "unknown";
-			}
-		};
-		/** 実行せずに、記録として保存して結果を返す (未実行の結果)。保存できなければ拒否 */
-		const deferToPending = (reason: Reason, why: string): Error => {
-			if (signal?.aborted) return notApproved(outcomeReason("aborted"));
-			if (!pendingCfg || captured?.ok !== true) return notApproved(`${why}。保留の前提を取れなかったので拒否した`);
-			const saved = saveRequest({
-				action: action.id,
-				values,
-				captured,
-				reason,
-				sessionId: sessionIdOf(),
-				repoCwd: cwd,
-				requestCwd: ctx.cwd,
-				save: pendingCfg.save,
-				limits: pendingCfg.limits,
-			});
-			if (!saved.ok) {
-				return notApproved(
-					`${why}。元の操作は未実行で、保留も作れなかった (${saved.reason})。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。任せられる作業が無ければ、「承認が取れなかった操作」として報告して終える`,
-				);
-			}
-			pendingCfg.onSaved?.({ id: saved.id, ref: saved.ref, duplicate: saved.duplicate, action: action.id, reason });
-			return notApproved(
-				`${why}。元の操作は未実行。保留 ${saved.id} に保存した${saved.duplicate ? " (同じ要求が、すでに保留中)" : ""}。再試行しない。続きの作業を子 (worker など) に背景で任せられるなら任せ、親は応答を終えて idle になる (親が実行中は、利用者が /pending で承認できない)。任せられる作業が無ければ、「保留した操作」として報告して終える。利用者が承認すると実行される`,
-			);
-		};
 		// 確認の流れ (UI の確認・時間切れの退避・編集)。確認を省略するときは通らない
 		const confirmFlow = async (): Promise<{ values: Values; edited: boolean }> => {
 			if (!ctx.hasUI) {
 				if (snap) throw deferError(cwd, snap, "確認できない実行なので承認が取れなかった", signal, values.dir);
-				if (canDefer) throw deferToPending("no_ui", "確認できない実行なので承認が取れなかった");
 				throw notApproved("確認できない実行 (print・子) では、確認が要る操作は拒否する。利用者が `pis` の対話で実行する");
 			}
 			const absence = deps.absence ?? { absent: false, gen: 0 };
@@ -587,9 +517,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			const minutes = timeoutMs >= 60_000 ? `${Math.round(timeoutMs / 60_000)} 分` : `${Math.round(timeoutMs / 1000)} 秒`;
 			const notice =
 				action.id !== "git_commit"
-					? canDefer
-						? `\n\n(${minutes}応答が無ければ、実行せず保留に保存して作業を続けます。「あとで」でも保留にできます。編集・拒否理由の入力中は対象外)`
-						: ""
+					? ""
 					: snap
 						? `\n\n(${minutes}応答が無ければ、実行せず内容を退避して作業を続けます。編集・拒否理由の入力中は対象外)`
 						: `\n\n(退避できない状態なので、${minutes}応答が無ければ拒否します)`;
@@ -617,12 +545,11 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			const decision = await deps.dialog(async () => {
 				if (signal?.aborted) return { kind: "aborted" as const };
 				// 不在 (先の確認が時間切れで、そのあと利用者の入力が無い) なら、待たずに退避する
-				if ((snap || canDefer) && absence.absent) return { kind: "absent" as const };
+				if (snap && absence.absent) return { kind: "absent" as const };
 				deps.bell();
 				const gen0 = absence.gen;
 				const head = summarize ? [APPROVE, VIEW_FULL, EDIT] : [APPROVE, EDIT];
-				// 「あとで」は、アダプタを登録した操作 (保留に対応する操作) にだけ出す。未対応の操作で出すと、後から実行できると誤解させる
-				const options = canDefer ? [...head, LATER, REJECT] : [...head, REJECT];
+				const options = [...head, REJECT];
 				// 「全文を見る」の押し直しと期限は presentConfirm が持つ。承認・拒否・時間切れ・取消の分類は、ここ (操作の意味) で行う
 				const { choice, timedOut, error } = await presentConfirm(ctx.ui, {
 					title,
@@ -631,8 +558,6 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 					signal,
 					viewFull: { title: `${action.label}: 全文 (読むだけ。閉じると確認に戻る)`, text: () => `${viewBody(action, values, preview, viewArgv, cwd)}${notice}` },
 				});
-				// 利用者が「あとで」を選んだ (不在ではない。absent は立てない)
-				if (choice === LATER && canDefer) return { kind: "later" as const };
 				if (choice === REJECT) {
 					let reason: string | undefined;
 					try {
@@ -660,12 +585,10 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 			if (decision.kind === "aborted") throw notApproved(outcomeReason("aborted"));
 			if (decision.kind === "absent") {
 				if (snap) throw deferError(cwd, snap, "利用者が不在のため確認せずに退避した (先の確認が時間切れ)", signal, values.dir);
-				throw deferToPending("absent", "利用者が不在のため確認せずに保留した (先の確認が時間切れ)");
+				throw notApproved(outcomeReason("aborted"));
 			}
-			if (decision.kind === "later") throw deferToPending("later", "利用者が「あとで」を選んだ");
 			if (decision.kind === "outcome") {
 				if (decision.outcome === "timeout" && snap) throw deferError(cwd, snap, `確認が ${minutes}の時間切れになった`, signal, values.dir);
-				if (decision.outcome === "timeout" && canDefer) throw deferToPending("timeout", `確認が ${minutes}の時間切れになった`);
 				throw notApproved(outcomeReason(decision.outcome));
 			}
 			if (decision.kind === "empty") throw notApproved("編集の結果が空、または取り消されたので拒否した");

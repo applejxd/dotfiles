@@ -22,7 +22,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
 import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
-import { integrationConfig, integrationTimeoutGuidance, tightenIntegration } from "./integration-gate.ts";
+import { integrationConfig, tightenIntegration } from "./integration-gate.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
@@ -32,7 +32,6 @@ import { previewBlocked, profileDefaults } from "./freezone.ts";
 import { appendOperations, appendResult, decorateEditResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
 import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions } from "./actions.ts";
 import { registerPr } from "./pr-review.ts";
-import { registerPrInbox } from "./pr-inbox.ts";
 import { auditConditions, auditFormat, summarizeCalls } from "./audit.ts";
 import { unguardedMessage, unguardedSources } from "./unguarded.ts";
 import { SessionTmp } from "./session-tmp.ts";
@@ -42,10 +41,7 @@ import { loadFileGlobs, loadReadDenyExceptions } from "./judge/policy.ts";
 import { DEFAULT_LIMITS, WorktreeError, collect, createIsolation, discard, markKept, runGit, validateJobId, type IsolationRecord, type ReadDeny } from "./worktree.ts";
 import { STARTUP_LIMITS, findRepoRoot, isolationTraceRoot, runWorktreesCommand, startupReconcile } from "./worktrees-command.ts";
 import { reconcilePending } from "./pending-store.ts";
-import { reconcileOps } from "./pending-ops.ts";
-import { currentOwner, ownerState } from "./pending-owner.ts";
-import { PENDING_ADAPTERS, APPROVAL_ADAPTERS, authorizeRecord, integrateWiring } from "./pending-adapters.ts";
-import { pendingSettings, registerPendingCommand } from "./pending-command.ts";
+import { registerPendingCommand } from "./pending-command.ts";
 import { buildBoard, renderBoard } from "./board.ts";
 import { collectBoardInput } from "./board-collect.ts";
 
@@ -70,8 +66,6 @@ const CHILD_PREAMBLE =
 	"【子エージェントへ】AGENTS.md・個人用の指示のうち、親 (オーケストレーター) の責務にあたる指示 — 子への委譲・feature の起票と取り込み・全件検査 (verify:all)・コミットと承認・ask での質問・停止と報告の方針 — は、あなたには適用しない。" +
 	"あなたの責務は、依頼文と、その中で参照された共通の約束 (worker-common.md など) で決まる。両者が矛盾したら、依頼文を優先する。" +
 	"言語 (日本語)・公開リポジトリの制約・ファイルの書き方 (.ps1 の BOM など) は、AGENTS.md に従う。";
-// この pi プロセスの世代 (保留の owner に記録する。判定には使わない)
-const RUNTIME_EPOCH = randomBytes(8).toString("hex");
 
 // rules.json が読めなければ読み込みごと失敗させる。起動は止まり、/reload ではツールが無くなる
 const rules = JSON.parse(readFileSync(join(HERE, "rules.json"), "utf-8"));
@@ -378,48 +372,19 @@ export default async function (pi: ExtensionAPI) {
 	});
 	// セッションの終了・切り替え・/reload で、保持している子を全部止める。
 	// そのうえで、セッションごとの一時置き場 (.tmp/s/<ID>/) は quit のときだけ消す (CHG-0042)
-	// 保留 (非同期承認) の /pending。子には登録しない。[pi.pending] の設定は呼ぶたびに読む。task ツールの有無に関わらず登録する
-	// git_integrate (保存専用 + /pending approve) の配線。[pi.pending] と [pi.integrate] の両方が true のときだけ中身がある。false の間は全て空で、従来と同一 (CHG-0055 の C1)
-	const wiring = integrateWiring(rules);
-	const pendingNow = () => pendingSettings(rules.judge.common?.pi?.pending);
+	// 退避したコミットの /pending (list / show / drop)。子には登録しない。task ツールの有無に関わらず登録する
 	const pendingCmd = !CHILD
 		? registerPendingCommand(pi, {
-				settings: pendingNow,
 				redact: redactText,
 				// コマンドは input イベントより先に処理されるので、不在の解除はここでする
 				touch: () => {
 					absence.gen++;
 					absence.absent = false;
 				},
-				approveDeps: (ctx: any) => ({
-					adapters: { ...APPROVAL_ADAPTERS, ...wiring.approval },
-					// 承認の前に、いまの役割・操作の定義で許されるかを再判定する (保留の記録は信頼しない入力)
-					authorize: (rec) => authorizeRecord(rec, { specs: actionSpecs, roleTools, child: CHILD }),
-					enabled: () => pendingNow().enabled,
-					modes: pendingNow().modes,
-					rules,
-					env: { ...AGENT_ENV, ...process.env },
-					dialog: dialogInOrder,
-					bell: () => {
-						if (ctx.mode === "tui") process.stdout.write("\x07");
-					},
-					owner: () => currentOwner(String(ctx.sessionManager?.getSessionId?.() ?? ""), RUNTIME_EPOCH),
-					notify: (text: string, level: "info" | "warning" | "error") => ctx.ui?.notify?.(redactText(text), level),
-					tellModel: (content: string, details: Record<string, unknown>) => {
-						deferWhileCompacting(() => {
-							try {
-								pi.sendMessage({ customType: "pending-result", content, display: true, details }, { triggerTurn: true, deliverAs: "followUp" });
-							} catch {}
-						});
-					},
-					limits: pendingNow().limits,
-					liveness: ownerState,
-				}),
 			})
 		: null;
 	pi.on("session_shutdown", async (event: any) => {
 		compactDefer.shutdown();
-		pendingCmd?.abortAll();
 		jobs.closeAll();
 		try {
 			await sessionTmp.teardown(String(event?.reason ?? ""));
@@ -440,11 +405,6 @@ export default async function (pi: ExtensionAPI) {
 			// 取り込み済み・重複・古い退避を片付ける (消すのはハーネスだけ。モデルは消せない)
 			try {
 				reconcilePending(cwd);
-			} catch {}
-			// 新形式の期限切れの記録・結果を片付ける。無効 ([pi.pending] enabled = false) でも復旧と掃除は動かす
-			try {
-				const s = pendingNow();
-				reconcileOps(cwd, { retentionDays: s.retentionDays, resultRetentionDays: s.resultRetentionDays }, s.limits);
 			} catch {}
 			pendingCmd?.refresh(ctx);
 			if (event?.reason === "startup") sessionTmp.sweep(cwd);
@@ -645,18 +605,7 @@ export default async function (pi: ExtensionAPI) {
 				if (view.kind === "block") return block(view.reason);
 				const timeoutMs = confirmTimeoutSeconds(rules) * 1000;
 				const outcome = classifyConfirm(await confirmDetailed(ctx, view.title, view.body, timeoutMs), timeoutMs);
-				if (outcome !== "approved") {
-					// 統合の確認が時間切れのときだけ、保留に保存できると伝える (TUI のときだけ。判定・拒否は変えない)
-					const guide = integrationTimeoutGuidance({
-						reason: d.reason,
-						outcome,
-						enabled: wiring.enabled,
-						tui: ctx.mode === "tui",
-						child: CHILD,
-						hasActionTool: roleTools.includes(ACTION_TOOL),
-					});
-					return block(outcomeReason(outcome) + guide);
-				}
+				if (outcome !== "approved") return block(outcomeReason(outcome));
 				if (ep !== epoch) return stale();
 				decided.set(event.toolCallId, { input, decision: d, approved: true, epoch: ep, bodyFile: view.bodyFile });
 				return undefined;
@@ -733,7 +682,7 @@ export default async function (pi: ExtensionAPI) {
 		pi.registerTool({
 			...def,
 			// 説明の上書き (組み込みの文言は ...def で入る。tools-ext.ts)。read の tail と write の append は引数を足す
-			...toolText(tool, PREFIX, def, { integrateAction: wiring.enabled && !CHILD && roleTools.includes(ACTION_TOOL) }),
+			...toolText(tool, PREFIX, def),
 			...(tool === "read" ? { parameters: readParameters(Type) } : tool === "write" ? { parameters: writeParameters(Type) } : {}),
 			name: `${PREFIX}${tool}`,
 			// 最終の判定はここ。tool_call の後に別の拡張が入力を書き換えても、ここで止まる (spike の E1)
@@ -789,8 +738,8 @@ export default async function (pi: ExtensionAPI) {
 		pi.registerMcpServer(server.name, server.config);
 	}
 
-	// 承認つきの操作 (git commit・gh issue comment、有効なら git_integrate)。役割に action があり、子でないときだけ登録する
-	const actionSpecs = [...loadActions(rules), ...wiring.specs];
+	// 承認つきの操作 (git commit・gh issue comment)。役割に action があり、子でないときだけ登録する
+	const actionSpecs = loadActions(rules);
 	if (!CHILD && roleTools.includes(ACTION_TOOL) && actionSpecs.length > 0) {
 		pi.registerTool({
 			name: `${PREFIX}${ACTION_TOOL}`,
@@ -839,16 +788,6 @@ export default async function (pi: ExtensionAPI) {
 						bell: () => {
 							if (ctx.mode === "tui") process.stdout.write("\x07");
 						},
-						pending: {
-							enabled: pendingNow().enabled,
-							modes: pendingNow().modes,
-							adapters: { ...PENDING_ADAPTERS, ...wiring.request },
-							limits: pendingNow().limits,
-							onSaved: () => {
-								if (ctx.mode === "tui") process.stdout.write("\x07");
-								pendingCmd?.refresh(ctx);
-							},
-						},
 					},
 					params,
 					signal,
@@ -861,8 +800,6 @@ export default async function (pi: ExtensionAPI) {
 	// ローカル PR ビューアの道具 (pr_summary・pr_comments) と、次の入力の前の注入。役割に道具があり、子でないときだけ登録する
 	// see docs/spec/pr-viewer.md
 	registerPr(pi, { Type, prefix: PREFIX, child: CHILD, hasTool: (name) => roleTools.includes(name) });
-	// 受信箱 (/pr inbox)。既定は off。振る舞いは docs/change/0061-pr-inbox.md
-	registerPrInbox(pi, { child: CHILD, defer: deferWhileCompacting });
 
 	const agents: Record<string, any> = rules.agents ?? {};
 	if (!CHILD && supportsChildTasks() && roleTools.includes("task") && Object.keys(agents).length > 0) registerTask(pi, agents);

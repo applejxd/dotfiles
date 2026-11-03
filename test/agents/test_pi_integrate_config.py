@@ -33,7 +33,6 @@ def _with_integrate(section):
 def test_integrate_defaults_when_omitted():
     out = gen.pi_integrate(_with_integrate(None))
     assert out == {
-        "enabled": False,
         "target": "develop",
         "protected_refs": FLOOR,
         "risk_paths": [],
@@ -43,7 +42,7 @@ def test_integrate_defaults_when_omitted():
 
 def test_shipped_config_enables_the_free_zone_skip_and_carries_the_floor():
     out = gen.pi_integrate(load_common())
-    assert out["enabled"] is True  # 同梱は有効 (F4)。キルスイッチは false にすれば従来どおり
+    assert "enabled" not in out  # 旧い統合経路の撤去で廃止したキー
     assert out["skip_confirm_in_free_zone"] is True  # 自由区の git_commit は確認を省略する (S5b)
     assert out["target"] == "develop"
     assert set(FLOOR) <= set(out["protected_refs"])
@@ -61,7 +60,7 @@ def test_shipped_protected_refs_add_production_to_the_floor():
 
 def test_rules_json_carries_integrate_and_confirm_flag():
     judge = gen.build_pi_harness({}, load_common())["judge"]["common"]["pi"]
-    assert judge["integrate"]["enabled"] is True  # 同梱は有効 (F4)
+    assert "enabled" not in judge["integrate"]  # 廃止したキー
     assert judge["integrate"]["skip_confirm_in_free_zone"] is True  # 自由区の確認省略 (S5b)
     assert judge["confirm"]["integration"] is True  # 統合コマンドの必須確認 (S4b)
 
@@ -74,8 +73,6 @@ def test_integrate_is_not_shared_to_opencode():
 @pytest.mark.parametrize(
     "section",
     [
-        {"enabled": "yes"},
-        {"enabled": 1},
         {"skip_confirm_in_free_zone": "false"},
         {"target": 1},
         {"target": ""},
@@ -93,6 +90,11 @@ def test_integrate_rejects_bad_types(section):
 def test_integrate_rejects_unknown_keys():
     with pytest.raises(ValueError, match="unknown_key"):
         gen.pi_integrate(_with_integrate({"unknown_key": True}))
+
+
+def test_integrate_rejects_the_retired_enabled_key():
+    with pytest.raises(ValueError, match="enabled"):
+        gen.pi_integrate(_with_integrate({"enabled": True}))
 
 
 @pytest.mark.parametrize("missing", FLOOR)

@@ -77,4 +77,5 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0020](0020-env-allowlist-and-env-check.md) | 環境変数の一覧・個別参照は許可リスト方式で止め、診断は env-check に集める | Accepted | 2026-10-25 | 案件は CHG-0037 |
 | [0021](0021-conventions-as-instructions-slim-guarded-action.md) | 運用規約をコードの強制から指示へ戻し、guarded_action を承認つきの commit と gh 投稿に縮める | Accepted | 2026-10-31 | 案件は CHG-0050 |
 | [0022](0022-containment-first-minimal-approvals.md) | 確認を「人が判断を足せる操作」に絞り、残りは境界で守る（封じ込めを主、承認を従にする。ask 層とモードの廃止の方向） | Proposed | 2026-10-31 | 案件は CHG-0054。調査は [AC1](../research/agents/approval-containment-survey.md)。採用が確定したら ADR-0014 を部分改定する |
-| [0023](0023-pending-approval.md) | 承認が取れない操作を失わず保留し、利用者だけが後から承認して実行する | Proposed | 2026-10-31 | 案件は CHG-0055。ADR-0022 の「残る確認は、人が不在でも失われない」の具体化。前身は CHG-0046 の退避 |
+| [0023](0023-pending-approval.md) | 承認が取れない操作を失わず保留し、利用者だけが後から承認して実行する | Superseded by ADR-0024 | 2026-10-31 | 案件は CHG-0055。ADR-0022 の「残る確認は、人が不在でも失われない」の具体化。前身は CHG-0046 の退避。2026-11-03 に ADR-0024 で置き換えた |
+| [0024](0024-human-press-merges-in-app.md) | 統合は利用者が PR ビューアで押し、アプリが同期で実行する（保留と非同期承認を置き換える） | Accepted | 2026-11-03 | 案件は CHG-0062。ADR-0023 を置き換える |

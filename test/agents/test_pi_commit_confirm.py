@@ -430,24 +430,12 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     shutil.copy2(HARNESS_SRC.parent / "session-tmp.ts", harness / "session-tmp.ts")
     shutil.copy2(HARNESS_SRC.parent / "model-choice.ts", harness / "model-choice.ts")
     shutil.copy2(HARNESS_SRC.parent / "pending-store.ts", harness / "pending-store.ts")
-    shutil.copy2(HARNESS_SRC.parent / "pending-ops.ts", harness / "pending-ops.ts")
     for name in (
-        "pending-approve.ts",
-        "exclusive-lock.ts",
-        "pending-owner.ts",
-        "pending-pick.ts",
         "pending-command.ts",
-        "integrate-action.ts",
-        "integrate-plan.ts",
         "integrate-profile-load.ts",
-        "integrate-exec.ts",
-        "pending-adapters.ts",
-        "pending-request.ts",
-        "native-action.ts",
         "review-log.ts",
         "review-git.ts",
         "pr-review.ts",
-        "pr-inbox.ts",
         "board.ts",
         "board-collect.ts",
     ):

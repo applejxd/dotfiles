@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 import pytest
-from agents_common import ROOT
+from agents_common import ROOT, load_common
 from test_pi_judge_ts import _node
 from test_pi_review_git import PRELUDE
 from test_pr_viewer_server import (
@@ -325,8 +325,8 @@ def test_fake_review_events_never_merge(w):
     assert plan(w)[1]["mergeable"] is True
 
 
-def test_fake_pending_record_never_merges_and_only_blocks(w):
-    """旧経路の保留を偽造しても、統合されない。偽造でできるのは統合を止めることだけ。"""
+def test_fake_pending_record_never_merges_and_does_not_block(w):
+    """旧経路の保留を偽造しても、統合されない。旧経路は撤去済みなので、偽造しても統合を止めることもない。"""
     make_ref(
         w,
         "refs/pi/pending/001793000000000",
@@ -343,11 +343,7 @@ def test_fake_pending_record_never_merges_and_only_blocks(w):
     status, resp = merge(w, origin=None)
     assert status == 403 and resp["error"]["code"] == "forbidden_origin"
     status, p = plan(w)
-    assert (
-        status == 200
-        and [b["code"] for b in p["blockers"]] == ["legacy_pending"]
-        and p["mergeable"] is False
-    )
+    assert status == 200 and p["blockers"] == [] and p["mergeable"] is True, p
     assert snapshot(w) == fake
 
 
@@ -666,112 +662,28 @@ def test_target_other_than_develop_is_refused(make):
     assert snapshot(w) == before
 
 
-# ---------------------------------------------------------------- 10 旧経路との共存（C4）
+# ---------------------------------------------------------------- 10 旧経路の残骸（撤去済み）
 
 
-def _legacy_pending(w: W, source: str) -> None:
+def test_legacy_refs_left_behind_do_not_block_a_merge(w):
+    """refs/pi/{pending,lock,running} の残骸（壊れたものを含む）があっても、plan は通り、統合できる。"""
     make_ref(
         w,
-        f"refs/pi/pending/0017930{next(_counter):08d}",
+        "refs/pi/pending/001793000000000",
         {
             "record.json": json.dumps(
-                {
-                    "schema": 1,
-                    "action": "git_integrate",
-                    "params": {"source": source, "message": "m", "cleanup": "none"},
-                }
+                {"schema": 1, "action": "git_integrate", "params": {"source": "feature/a"}}
             )
         },
     )
-
-
-@pytest.mark.parametrize("source", ["feature/a", "refs/heads/feature/a"])
-def test_a_legacy_pending_for_the_same_branch_blocks(w, source):
-    _legacy_pending(w, source)
-    before = snapshot(w)
-    status, p = plan(w)
-    assert status == 200 and p["mergeable"] is False
-    assert [b["code"] for b in p["blockers"]] == ["legacy_pending"], p
-    status, resp = merge(w)
-    assert status == 409 and resp["error"]["code"] == "legacy_pending", resp
-    assert snapshot(w) == before
-
-
-def test_a_legacy_pending_for_another_branch_does_not_block(w):
-    _legacy_pending(w, "feature/other")
     make_ref(w, "refs/pi/pending/001793000000001", {"record.json": "これは JSON ではない"})
-    make_ref(w, "refs/pi/pending/001793000000002", {"other.txt": "形が違う"})
-    status, p = plan(w)
-    assert status == 200 and p["blockers"] == [] and p["mergeable"] is True, p
-    assert merge(w)[0] == 200
-
-
-def test_a_legacy_lock_blocks_every_pr_in_the_repo(w):
-    other = feature(w, "feature/b", {"b.txt": "b\n"})
+    make_ref(w, "refs/pi/pending/0017930+odd", {"other.txt": "x"})
     make_ref(w, "refs/pi/lock/abcdef0123456789", {"x": "x"})
-    before = snapshot(w)
-    for pr in (w.pr, other):
-        status, p = plan(w, pr)
-        assert status == 200 and [b["code"] for b in p["blockers"]] == ["legacy_lock"], p
-        status, resp = merge(w, pr)
-        assert status == 409 and resp["error"]["code"] == "legacy_lock", resp
-    assert snapshot(w) == before
-
-
-def test_a_legacy_running_attempt_blocks_every_pr_in_the_repo(w):
     make_ref(w, "refs/pi/running/001793000000003", {"attempt.json": "{}"})
     status, p = plan(w)
-    assert status == 200 and [b["code"] for b in p["blockers"]] == ["legacy_running"], p
-    before = snapshot(w)
+    assert status == 200 and p["blockers"] == [] and p["mergeable"] is True, p
     status, resp = merge(w)
-    assert status == 409 and resp["error"]["code"] == "legacy_running"
-    assert snapshot(w) == before
-
-
-def test_an_unreadable_pending_record_blocks_instead_of_being_ignored(w):
-    """記録の blob を読めない（I/O 失敗と同じ扱い）ときは、無いことにせず統合を断る。"""
-    tree_in = w.base / "tree-missing"
-    tree_in.write_text(f"100644 blob {'1' * 40}\trecord.json\n", encoding="utf-8")
-    tree = subprocess.run(
-        ["git", "mktree", "--missing"],
-        cwd=w.repo,
-        stdin=tree_in.open(),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=True,
-    ).stdout.strip()
-    commit = _git(w.repo, "commit-tree", tree, "-m", "x").strip()
-    _git(w.repo, "update-ref", "refs/pi/pending/001793000000009", commit)
-    before = snapshot(w)
-    status, p = plan(w)
-    assert (
-        status == 200
-        and [b["code"] for b in p["blockers"]] == ["legacy_unreadable"]
-        and p["mergeable"] is False
-    ), p
-    status, resp = merge(w)
-    assert status == 409 and resp["error"]["code"] == "legacy_unreadable", resp
-    assert snapshot(w) == before
-
-
-def test_pending_refs_that_are_not_readable_commits_block(w):
-    """旧経路の名前空間にある、読めないもの（tree を持たない・名前の形が想定外）は、無いことにせず統合を断る。"""
-    blob = w.base / "blob-ref"
-    blob.write_text("x\n", encoding="utf-8")
-    oid = _git(w.repo, "hash-object", "-w", str(blob)).strip()
-    _git(
-        w.repo, "update-ref", "refs/pi/pending/001793000000010", oid
-    )  # commit でない（ls-tree が失敗する）
-    status, p = plan(w)
-    assert [b["code"] for b in p["blockers"]] == ["legacy_unreadable"], p
-    _git(w.repo, "update-ref", "-d", "refs/pi/pending/001793000000010")
-    assert plan(w)[1]["blockers"] == []  # 対照: 片付ければ通る
-    make_ref(w, "refs/pi/pending/0017930+odd", {"other.txt": "x"})  # ref 名の形が想定外
-    status, p = plan(w)
-    assert [b["code"] for b in p["blockers"]] == ["legacy_unreadable"], p
-    status, resp = merge(w)
-    assert status == 409 and resp["error"]["code"] == "legacy_unreadable", resp
+    assert status == 200, resp
 
 
 # ---------------------------------------------------------------- 11 失敗しても ref が動かない・パスを漏らさない
@@ -1006,6 +918,23 @@ def test_risks_come_from_all_touched_paths_and_touches_app_is_independent_of_con
         all(not f["path"].startswith("apps/") for f in p3["plan"]["files"])
         and p3["plan"]["touchesApp"] is True
     )
+
+
+def test_shipped_risk_paths_flag_pi_json(make):
+    """生成器が出す同梱の risk_paths が、.agents/config/pi.json の変更をリスクとして表示する。"""
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts" / "agents"))
+    import generate as gen
+
+    pi_json = ".agents/config/pi.json"
+    risk = gen.pi_integrate(load_common())["risk_paths"]
+    assert pi_json in risk
+    rules = json.dumps({"judge": {"common": {"pi": {"integrate": {"risk_paths": risk}}}}})
+    w = make(rules=rules)
+    _, p = plan(w, feature(w, "feature/pij", {pi_json: "{}\n"}))
+    flagged = {r["path"]: r["reason"] for r in p["plan"]["risks"]}
+    assert flagged.get(pi_json) == "risk_path", p
 
 
 @pytest.mark.parametrize(
@@ -1443,3 +1372,13 @@ def test_every_refusal_reason_of_the_merger_has_an_http_status():
     statuses = set(re.findall(r"^\t(\w+):", status_block.group(1), re.M))
     assert reasons >= {"failed", "not_ff", "unverified"}, reasons
     assert not (reasons - statuses), f"HTTP の状態が無い拒否コード: {sorted(reasons - statuses)}"
+
+
+def test_unverified_is_http_500_and_says_recover_is_needed():
+    """結果を確認できなかった（unverified）は 500 のまま。コードと、recover が要るという文言を固定する。"""
+    merge_ts = (APP / "merge.ts").read_text(encoding="utf-8")
+    api_ts = (APP / "merge-api.ts").read_text(encoding="utf-8")
+    assert re.search(r"^\tunverified: 500,", api_ts, re.M)
+    msg = re.search(r'^\tunverified: "(.*?)",', merge_ts, re.M)
+    assert msg and "recover" in msg.group(1) and "確認できませんでした" in msg.group(1)
+    assert 'refuse("unverified")' in merge_ts

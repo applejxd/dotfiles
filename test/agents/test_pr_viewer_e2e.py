@@ -13,7 +13,6 @@ import contextlib
 import http.client
 import json
 import re
-import subprocess
 
 import pytest
 from agents_common import ROOT
@@ -350,7 +349,7 @@ def test_real_merge_responses_have_the_same_shape_as_the_fixtures(tmp_path):
 
 
 def test_real_merge_plan_variants_have_the_same_shape_as_the_fixtures(tmp_path):
-    """リスク設定なし・衝突・旧経路の blockers の、実サーバの応答の形。"""
+    """リスク設定なし・旧経路の残骸・衝突の、実サーバの応答の形。"""
     repo, server = _merge_world(tmp_path)  # rules.json 無し
     try:
         pr = server.get("/api/prs")[1]["prs"][0]
@@ -358,48 +357,23 @@ def test_real_merge_plan_variants_have_the_same_shape_as_the_fixtures(tmp_path):
         status, plan = _post_merge(server, path, {})
         assert status == 200 and plan["plan"]["riskConfig"] == "unavailable", plan
         _same_shape(plan, _load("merge_plan_riskcfg.json"), "merge-plan(riskcfg)")
-        # 旧経路の保留（同じ枝）→ blockers
-        pend = tmp_path / "pending.json"
-        pend.write_text(
-            json.dumps(
-                {"schema": 1, "action": "git_integrate", "params": {"source": "feature/add-search"}}
-            ),
-            encoding="utf-8",
-        )
-        blob = _git(repo, "hash-object", "-w", str(pend)).strip()
-        tree_in = tmp_path / "tree.txt"
-        tree_in.write_text(f"100644 blob {blob}\trecord.json\n", encoding="utf-8")
-        tree = subprocess.run(
-            ["git", "mktree"],
-            cwd=repo,
-            stdin=tree_in.open(),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            check=True,
-        ).stdout.strip()
-        _git(
-            repo,
-            "update-ref",
+        # 旧経路の残骸（refs/pi/{pending,lock,running}）があっても、blockers は空で統合できる
+        head = _git(repo, "rev-parse", "HEAD").strip()
+        for ref in (
             "refs/pi/pending/001793000000001",
-            _git(repo, "commit-tree", tree, "-m", "x").strip(),
-        )
-        status, blocked = _post_merge(server, path, {})
-        assert status == 200 and blocked["blockers"], blocked
-        _same_shape(blocked, _load("merge_plan_blocked.json"), "merge-plan(blocked)")
-        status, err = _post_merge(
-            server,
-            f"/api/prs/{pr['id']}/merge",
-            {
-                "expect": {"source": pr["sourceOid"], "target": pr["targetOid"]},
-                "message": "feat: x\n",
-                "cleanup": "none",
-            },
-        )
-        assert (
-            status == 409 and set(err) == {"error"} and set(err["error"]) == {"code", "message"}
-        ), err
-        _git(repo, "update-ref", "-d", "refs/pi/pending/001793000000001")
+            "refs/pi/lock/abcdef0123456789",
+            "refs/pi/running/001793000000002",
+        ):
+            _git(repo, "update-ref", ref, head)
+        status, residue = _post_merge(server, path, {})
+        assert status == 200 and residue["blockers"] == [] and residue["mergeable"] is True, residue
+        _same_shape(residue, _load("merge_plan_riskcfg.json"), "merge-plan(residue)")
+        for ref in (
+            "refs/pi/pending/001793000000001",
+            "refs/pi/lock/abcdef0123456789",
+            "refs/pi/running/001793000000002",
+        ):
+            _git(repo, "update-ref", "-d", ref)
         # 衝突: 統合先と同じファイルを変える
         _commit(repo, {"AGENTS.md": "develop 側\n"}, "develop 側の変更")
         pr = server.get("/api/prs")[1]["prs"][0]

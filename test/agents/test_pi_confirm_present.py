@@ -5,7 +5,7 @@
 保留の承認 (CHG-0055) が共用する部品で、選択・期限・取消・「全文を見る」の押し直しだけを持つ。
 承認・拒否・時間切れの分類は呼び出し側 (``test_pi_action_view.py`` / ``test_pi_actions_harness.py``) が見る。
 
-see docs/change/0055-async-approval.md
+see docs/change/closed/0055-async-approval.md
 """
 
 from __future__ import annotations

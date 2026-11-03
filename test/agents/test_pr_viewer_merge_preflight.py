@@ -52,7 +52,17 @@ def _refused(w: World, source: str, code: str) -> None:
 
 @pytest.mark.parametrize(
     "line",
-    ["git version 2.39.9", "git version 2.9.0", "git version 1.99.0", "git version", "garbage", ""],
+    [
+        "git version 2.42.9",
+        "git version 2.41.0",
+        "git version 2.40.0",
+        "git version 2.39.9",
+        "git version 2.9.0",
+        "git version 1.99.0",
+        "git version",
+        "garbage",
+        "",
+    ],
 )
 def test_an_old_or_unreadable_git_version_is_refused_before_anything_runs(w, line):
     w.feature("feature/a", {"a.txt": "a\n"})
@@ -63,8 +73,8 @@ def test_an_old_or_unreadable_git_version_is_refused_before_anything_runs(w, lin
 @pytest.mark.parametrize(
     "line",
     [
-        "git version 2.40.0",  # 境界（最小）
-        "git version 2.43.0",
+        "git version 2.43.0",  # 境界（最小）
+        "git version 2.43.1",
         "git version 3.0.0",
         "git version 2.45.1.windows.1",
         "git version 2.50.1 (Apple Git-155)",

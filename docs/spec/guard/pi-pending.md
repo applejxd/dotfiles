@@ -1,159 +1,39 @@
-# 保留（非同期承認）の仕様
+# 保留（非同期承認）【撤去済み・履歴】
 
-確認が時間切れ・不在・UI なしで取れないとき、操作を**実行せず**、構造化した記録として保留する。利用者だけが、あとで `/pending approve` で実行する。
-案件と経緯は [CHG-0055](../../change/0055-async-approval.md)、決定は [ADR-0023](../../adr/0023-pending-approval.md)。実装は `home/dot_config/pi/harness/pending-*.ts`・`integrate-*.ts`・`exclusive-lock.ts`・`native-action.ts`。
+確認が取れないとき操作を保留し、利用者があとで `/pending approve` で実行する仕組み（`git_integrate`）は、**撤去済み**。
+統合は PR ビューアの「統合する」ボタンへ移った（[CHG-0062](../../change/0062-pr-hub-simplify.md) 段 A5）。経緯は [CHG-0055](../../change/closed/0055-async-approval.md)・[ADR-0023](../../adr/0023-pending-approval.md)。
+撤去は 1 つの feature・1 回の保存で行った。PR ビューアが作る、この feature の統合 merge commit を `git revert -m 1` すれば旧経路が復活する（履歴には撤去本体・develop の取り込み・後続修正があり、本体 commit だけの revert は後続修正と競合しうる）。
 
-## 状態
+## 今の統合の流れ
 
-- 実装済み・**同梱の設定で有効**（`[pi.pending] enabled = true`・`[pi.integrate] enabled = true`。止めるキルスイッチは `false`。`chezmoi apply` の後に pi を再起動すると反映される）。有効化は実機の確認 E1・E2 の合格の後に行い、**E3（排他）・E4（実行中の停止からの復旧）・E5（キルスイッチ）は利用者の確認待ち**（確認で違えば別で起票する）。
-- **既知の制限**: フッターの「📥 保留 N 件」は、起動時・自分の保存・`/pending` の操作の後にだけ更新される。別のセッションの保存は、次の操作まで反映されない（将来の機能）。
-- 対応する操作は `git_integrate`（保護ブランチへの統合）だけ。`git_commit` は従来の退避（[pi の拡張](pi-extensions.md#guarded_action承認つきの外部操作)）のまま、gh は確認が取れなければ拒否のまま。
-- **実機の確認（2026-11-01、Orca の端末）**: 保存（feature の worktree の `pis`）→ 本体で `/pending approve` → 実行 → 結果の通知 → モデルの続行までを、E1・E2 で確かめた。さらに、素の `/pending` が一覧を経ずに承認の確認画面へ進むこと、利用者が `git flow feature finish` を明示したときはモデルがそのとおり実行すること、確認が時間切れのときに案内（`git_integrate` で保存できる）が届くことを確かめた（モデルは、利用者が禁じた `git_integrate` を使わず、選択肢を示して指示を待った）。Zed・Windows と、排他・復旧・キルスイッチ（E3〜E5）は**未確認**。
-- 実際の pi の試験（RPC）では、TUI 専用の経路は回せない。**時間切れの案内**は、疑似端末（pty）で TUI を動かす試験（`test_pi_tui_guidance.py`）で確かめる。承認の確認画面と `/pending` の選択画面は、実機の確認による。
+1. AI が feature の worktree で `git_commit`（自由区。確認なし）する。
+2. AI が `guarded_pr_summary` で、PR に要約（`mergeMessage` の下書き）を出す。
+3. 利用者が [PR ビューア](../pr-viewer.md)の「統合する」ボタンを押す（アプリが merge commit で同期統合する）。
 
-## キルスイッチ
+`git flow feature finish`・`git merge` を AI が実行するときは、素の pi の必須確認のまま（`integration-gate`。[pi の拡張](pi-extensions.md)）。
 
-`[pi.pending] enabled` と `[pi.integrate] enabled` の**両方が true**のときだけ、`git_integrate` が見え、使える。どちらかが false の間は、ツールの説明・システムプロンプト・拒否の理由・承認の対応表に何も足さず、従来と同一（試験: `test_pi_integrate_index.py`）。
-`[pi.pending] modes`（既定 `["tui"]`）に含まれない実行モードでは保存しない。
+## 撤去したもの
 
-## 流れ
+- `guarded_action` の `git_integrate`、`/pending` の `approve`・`resolve`・`unlock`・`log`、承認の巡回、排他ロック、フッターの新形式の保留の件数表示（コミット退避（旧形式）の件数表示は残る。PR 到着・旧統合結果の通知はなくなり、残る通常の BEL 通知とは別物）
+- 設定 `[pi.pending]`、`[pi.integrate] enabled`（`protected_refs`・`risk_paths`・`skip_confirm_in_free_zone` は残る）
+- 実装 `integrate-plan.ts`・`integrate-exec.ts` など
 
-1. **要求**: モデルが `guarded_action` の `git_integrate`（`source`・`message`・任意の `cleanup`）を呼ぶ。**保存専用**: 確認画面を出さず、実行もしない。前提（統合元・統合先の OID、結果の tree、マージベース、メッセージの digest）を取り、`refs/pi/pending/<id>` に保存し、必ず `not approved:` で始まる結果を返す。検査の順は、子 → 無効 → 実行モード → 未対応 → 中断 → 前提の取得 → 保存。同じ要求は重複して保存しない。**要求の時点では、統合先の worktree の状態（未コミットの変更・進行中の操作）を調べない**（サンドボックスの内側では、統合先の作業ツリーを読めず、git が全ファイルを「削除」と見て誤って断る。実機で確認）。承認の時点で、統合先の pi が再計画して検査し、実行器の precheck も検査する。要求を保存してから、承認者が片付けて承認できる。
-2. **承認**: 利用者が、**統合先の worktree（本体）で起動した pi の TUI で** `/pending approve` を実行する。feature 側の pi は保存だけで、承認も実行もしない。モデルの実行中（`ctx.isIdle()` が偽）は断る。
-3. 記録を読む → **`authorize`**（いまの役割・操作の定義で再判定。子・action ツールの無い役割・未登録の操作・不正な引数は断る。保留の記録は信頼しない入力）→ アダプターが、現在の設定・実行先で**実行計画**を作る → 画面に表示（期限なし）→ 承認（保留 ref の CAS）→ 再検査 → 開始を記録 → 実行 → 結果を記録 → 通知。
-4. **通知**: BEL・フッター・モデルへの固定テンプレートのメッセージ。記録の自由な文を指示として流さない。通知は正本ではなく、失っても `/pending list` で確認できる。
+## 残るもの
 
-## コマンド（利用者専用。モデルは呼べない）
-
-`/pending [list | show [<id>] | approve [<id>] | resolve [<id>] [<結果>] | drop [<id>] | unlock | log]`
-
-**引数なしの `/pending`（TUI）を、入口にする**: 候補から選び、状態に合った操作に進む。候補の先頭の印が、Enter で起きることを示す。
+`/pending`（利用者専用。モデルは呼べない）のうち、旧形式（`git_commit` の時間切れ退避）を扱う次の 3 つだけが残る。詳細は [pi の拡張](pi-extensions.md#guarded_action承認つきの外部操作)。
 
 | サブコマンド | 内容 |
 | --- | --- |
-| (引数なし) | TUI: 一覧から選んで進む。「承認」（承認できる保留 → 承認の確認画面）・「決着」（実行中・実行器が記録した unknown → 決着の質問）・「詳細」（旧形式の退避・アダプターの無い操作 → 詳細）。候補が 1 件なら選ばずに進む。承認の候補（引数なしの `/pending` と `/pending approve`）は、**保存した順（古い順）**に並ぶ（承認は待ち行列。積み重ねの依存は保存の順と一致しやすい）。`list`・`show`・`drop`・`resolve` は新しい順。成功・失敗の結果は候補に入れない（`log`）。0 件・非 TUI（print・RPC）は `list` と同じ |
-| `list` | 保留・実行中・結果の一覧（新しい順）。ロックを持っていれば 1 行で出す |
-| `show` | 詳細（旧形式の退避も）。引数は、1 行で 200 字以下ならそのまま 1 行、複数行・長い値は次の行から空行を除く全行を 4 スペースで 1 行ずつ出す（1 つの引数あたり 1300 字まで。超えた分は `…(以下 N 字は省略)`。折り返しは端末に任せる） |
-| `approve` | 承認して実行（TUI のみ） |
-| `resolve` | 実行者が生きているかもしれない試行の決着（`success`・`failed`・`retry`・`pending`・`abandon`）。排他の操作の started は、停止を確かめたかを聞く |
-| `drop` | 保留の破棄（確認つき。1 件でも確認する） |
-| `unlock` | 孤児になったロックを外す（確認つき・TUI のみ） |
-| `log` | 結果の履歴 |
+| `list` | 退避の一覧（新しい順） |
+| `show <ref>` | 詳細（差分の本文まで） |
+| `drop <ref>` | 到達用の ref を外す |
 
-**巡回**（[CHG-0058](../../change/0058-batch-approval.md) 段 1）: 承認待ちが 2 件以上あるとき、ID を打たない承認（`/pending approve` で一覧から選ぶ・引数なしの `/pending` で「承認」を選ぶ）は、1 件の処理の後に、**まだ見ていない最も古い承認待ち**の画面を続けて開く。
+## 残骸の ref の掃除
 
-- **始まる条件**: TUI・ID を打たない・承認待ちが 2 件以上。`/pending approve <id>`（ID を指定）と、承認待ちが 1 件のときは、従来の単件のまま
-- **画面**: 先頭に `巡回 i/N`。選択肢の**先頭は「ここで終える（残りは保留のまま）」**（直前の Enter の勢いで承認しない）。続けて「承認して実行」「全文を見る」「保留のまま次へ」「破棄」。最初の 1 件目からこの画面を使う
-- **止める**: 「ここで終える」・Esc・中断（次の画面は開かない）・承認の結果が成功以外（`not_executed`・`failed_confirmed`・`unknown`（停止確認済みも）・結果を保存できなかった・後片付けが残った）・計画や再判定で断られた・モデルが起きた（各件の前と画面の後に `isIdle()` を確かめる）。「保留のまま次へ」と「破棄」は止めない
-- **結果の通知**: 各件の結果は、次の画面の前に利用者へ出す。**モデルへの通知は巡回の終わりまで溜め**、終わりに溜めた順に出す（途中でモデルを起こさない）
-- **上限**: 8 件（見た件数）。1 つの `AbortController` を巡回の全体で持つ（終了・reload で実行器へ届く）
-- **Esc**: 選択中の Esc は巡回を止める。**実行中の Esc は実行を止めず**（統合の途中で止めるのは危険）、その件の後で巡回を止める。全文表示中の Esc は、全文を閉じて同じ画面に戻る（先頭は「ここで終える」）
-- **snapshot**: 計画と記録は、複製して深く固定したもの（複製できない形は画面の前に断る）。実行するのは表示した計画。構造化した結果には、保存した結果の記録の OID (`doneOid`) を含む
-- 補助の失敗（モデルへの通知・フッターの更新）は、記録した結果を変えず、巡回と通知の出力を妨げない
-- **実装**: `planApproval`（画面の前までの検査と、不変の snapshot）→ 画面 → `executeApproval`（再判定・表示した記録の OID の取得・`runApproved`。実行の有無・outcome・停止確認・保存・後片付けを構造化して返す）。1 件ずつ**既存の経路**を通り、新しい実行経路は無い。巡回のループは `pending-command.ts`
-- 単件の承認にも、**画面の後に `isIdle()` の確認**を足した（モデルが起きていたら実行せず、保留のまま）
+新形式の分の ref（`refs/pi/{pending,running,done,key,lock}/*`）は、撤去後は使われない。利用者が一度だけ、補助スクリプトで掃除する。**先に dry-run で対象を確かめる**。
 
-**ID を打たせない**（スマホの端末でも使えるように）:
+```sh
+pk pending-clean
+```
 
-- `<id>` を省くと、その種類の候補から**選ぶ**。候補が 1 件なら `approve`・`show` は選びを飛ばす（`drop`・`resolve` は 1 件でも確認する）。
-- 一覧の 1 行は、ID を出さず `操作名 経過 要約`（端末の幅 - 4 セル以内。幅が不明・狭いときは従来の 44）。同じ表示が並ぶときだけ、末尾 4 桁を添える。
-- **末尾一致**: 数字だけで 15 桁未満・3 桁以上（例 `approve 4708`）は、その種類の候補の ID の末尾に一致するものを探す。複数なら選ぶ（TUI でなければ断る）、無ければ「見つからない」。15 桁の ID と `refs/` の指定は従来どおり。
-- Tab 補完は、サブコマンドと ID。選ぶのは ID を決めるだけで、承認・破棄・決着の検査は、同じ経路を通る。
-- **候補の作成は、完了済み（done）の数にほぼ依存しない**: 記録を読む前に、state・kind と結果 commit の subject（`pi pending result: <outcome>`）で絞る（`approve`・`drop` は pending の action だけ、`hub`・`resolve` は pending・running・unknown の可能性がある done だけを読む）。`show`（全件）は新しい順に 30 件（`SHOW_MAX`）までで、超えた分は「ほか N 件」の 1 行（選べない）。
-
-## 状態と ref
-
-| ref | 意味 |
-| --- | --- |
-| `refs/pi/pending/<id>` | 保留の記録（要求） |
-| `refs/pi/running/<id>` | 実行中の試行（`reserved` → `started`。実行者の owner を持つ） |
-| `refs/pi/done/<id>` | 結果。`not_executed`・`success`・`failed_confirmed`・`unknown` |
-| `refs/pi/lock/<key>` | 排他ロック（common-dir 単位で 1 本。`<key>` は common-dir の sha256） |
-
-保持の既定は、保留 30 日・結果 90 日。上限（件数・読む量・時間）を超えたら、保存せず断る。期限切れの掃除と復旧は、無効でも `session_start` で動く。
-
-## 実行の安全
-
-- **排他ロック**は、実行の間だけ持つ。取得できなければ（別の実行・孤児・読めない）、保留へ戻す。自動で回復するのは、検証できた同一の試行が `reserved` で、owner が `gone` のときだけ。`started` は自動で回復しない（`/pending resolve` で、停止を確かめたと答える）。
-- 実行器は、hook が動く git を専用のプロセスグループで起動し、中断・時間切れでは**停止を確認してから**結果の確認と rollback を行う。停止を確認できないとき（排他の操作の例外・不正な結果・旧形式の `unknown` も同じ）は、**結果を書かず、running とロックを残し**、モデルには「再実行しない」の固定文だけを返す。自動で `reset` しない。
-- 統合は、統合先の worktree の中でだけ実行する。`runsHere` は `git rev-parse` の common-dir・git-dir・show-toplevel の一致で判定し、観測できなければ「中ではない」。統合の前に、統合先・統合元の OID と結果の tree が、承認した計画と一致することを再検査する。
-- 結果の facts（`source_oid`・`target_oid_before`・`result_commit`・`result_tree`・`cleanup` など）を記録する。結果コミットは、commit の成立を確かめた後だけ。
-- **承認の画面（4 択）に、統合のコミットメッセージの全行（空行を除く）を、端末の幅で折り返して出す**（2 スペースのぶら下がり。件名は最大 3 行まで必ず全部。本文は行数の予算まで。予算は `rows` が分かれば `clamp(rows - 他の行の数 - 8, 3, 24)`、不明なら 8 行。超えた分は最後に `… 残り N 行 (「全文を見る」で全文)`。幅は `process.stdout.columns - 2`（30〜200 に収め、不明・狭い端末は従来の 46）。他の行の幅も同じ。制御文字は可視化する）。承認するのは、保護ブランチへ入る内容そのもの（メッセージを含む）なので、全文を開かなくても判断できるようにする。全文は「全文を見る」。幅・行数の取得は `confirm-view.ts` の `termSize` / `fitWidth`。
-- 承認画面は、統合元が未統合の他の feature を含むとき（積み重ね）だけ、警告を 1 行出す。その feature を統合する保留が未承認なら、その保留の末尾 4 桁も示す。表示だけで、保留の記録・再検査・承認の判断には使わない（[積み重ね](pi-subagents.md#積み重ね依存する-feature)）。
-- 統合の成功は、commit の親が計画どおりであることに加えて、**統合先 ref（`plan.target.ref`）が結果コミットを指している**ことを確かめてから記録する。一致しない・読めないときは `unknown`（cleanup に進まず、自動で `reset` もしない）。feature ブランチの削除は `update-ref --no-deref -d`（実行の途中で別ブランチへの symbolic ref に差し替わっても、参照先を消さない）。
-- **外部のコードを、承認の前に動かさない**: hook・fsmonitor・外部 diff を止め、外部 merge driver と、`filter.<名前>.clean|smudge|process` が設定されたリポジトリは、算出と実行の前に断る（初版の対象外。Git LFS などを使うリポジトリは保留に保存できない）。実測で、filter は `merge.renormalize` の有無にかかわらず、算出の途中で起動していた。
-- **停止確認の要否は、アダプター表が空でも失われない**: 排他かどうかは、アダプターが見つからない（キルスイッチを切って再起動した後など）ときも、排他として扱う（`--confirm-stopped` を求める側へ倒す）。承認の画面の後、実行の前に、`authorize` をもう一度呼ぶ（画面は期限なしで、眺める間に役割・設定が変わりうる）。
-
-## プロジェクト設定（`pi.json`）と承認画面
-
-`git_integrate` は、リポジトリの HEAD にコミットされた `.agents/config/pi.json` から、統合先と統合元の接頭辞を受け取る（形・検査・診断コードは [pi の拡張](pi-extensions.md#プロジェクトごとの設定pijson)、案件は [CHG-0057](../../change/0057-per-project-integrate.md)）。**保護ブランチは全体設定のまま**。
-
-- 実装の状況: この節の配線（`integrate-plan.ts`・`integrate-action.ts`・`pending-adapters.ts`・`integrate-exec.ts`）は取り込み済み（2026-11-02）。記述はそのコードの読解に基づく。実機は未確認
-- 読めないとき: `git_integrate` は承認があるので、設定を読めなくても全体の既定で計画する（自由区は fail closed で扱いが違う。[pi-extensions.md](pi-extensions.md#プロジェクトごとの設定pijson)）
-
-### どの設定を読むか
-
-| 場面 | 読む HEAD |
-| --- | --- |
-| 要求（保存する前の計画） | 要求した pi の cwd |
-| 承認の計画・再検査 | **承認する pi の cwd（統合先の主 worktree）** |
-
-- 要求時と承認時で設定が違うことを前提として、承認側で計画を作り直す
-- 要求時の記録（`premise`）に、統合先の完全な ref 名（`target`）と、`pi.json` の blob ID（`profileBlob`）を持つ
-
-### 承認画面
-
-- **「要求時から変わった点」**に、次を足す（既存の「統合先が進んだ」等に加えて）:
-  - 「統合先が要求時と違う (A→B)」（ref 名が違うとき）
-  - 「プロジェクト設定 (pi.json) が要求時と違う」（blob ID が違うとき。無い場合は `null` として比べる）
-- **設定の 1 行**: 設定が有効で既定と違うときと、無効のときだけ、summary と全文表示に 1 行足す。設定が無いとき・既定と同じときは足さない
-  - 有効で既定と違う: 「プロジェクト設定 (pi.json): 統合先 …・統合元の接頭辞 …」
-  - 無効: 「プロジェクト設定 (pi.json) は無効 (コード)。全体の既定で処理」。診断は固定のコードだけ（入力の本文・値は出さない）
-- 統合元・統合先の ref 名は、表示用に無害化する（制御文字の可視化・長さの制限）
-- **既知の制限**: summary では統合先と接頭辞が同じ行にあり（分けているが行を幅で切る）、長い統合先名で接頭辞が落ちうる。全文表示には残る
-
-### 再検査
-
-承認の後・実行の前の再検査は、次を全て照合する（どれかが違えば実行せず、理由を返す）:
-
-| 照合するもの | 理由の文 |
-| --- | --- |
-| 統合先の完全な ref 名 | 統合先のブランチが変わった (設定が変わった) |
-| `pi.json` の blob ID | プロジェクト設定 (pi.json) が変わった |
-| 統合先・統合元の OID、結果の tree、統合先の worktree | （既存） |
-
-- 統合元の判定は、**接頭辞に当たること**と**保護ブランチでないこと**（保護ブランチを統合元にする計画は `bad_source` で断る）
-
-### 後片付けの保護確認
-
-- 後片付け（ブランチ削除・worktree 削除）の**直前にも**、統合元が全体の保護ブランチに入っていないことを確かめる
-- 入っていれば**後片付けだけ**止め、「統合元が保護ブランチに入っているため、後片付けをしていない」を残りの後片付けとして報告する。**統合の結果は残る**
-
-### 限界・未確認
-
-- 古い記録（`profileBlob` が無い）で今の `pi.json` があると「要求時と違う」と出る（安全側の警告）
-- 任意の外部プロセスによる HEAD の更新との競合を、完全に原子的に防ぐ保証ではない（既存の契約と同じ）
-- **未確認**: Windows。実機（`pis`・実 TUI）での見え方
-
-## モデルから見える面
-
-- `guarded_action` の操作一覧に `git_integrate`（有効なときだけ）。bash の説明に、「統合は `git_integrate` を優先する。bash の `git flow feature finish` は即時の承認が要り、時間切れになりうる」の 1 文（有効なときだけ）。
-- 統合の必須確認が**時間切れ**で拒否されたとき、TUI で、子でなく、action ツールがある役割のときだけ、「再試行せず `git_integrate` で保存できる」の案内を足す。判定・確認・拒否は変えない。
-- 保存の結果は「元の操作は未実行。保留 `<id>` に保存した。再試行しない。…利用者が統合先の worktree で `/pending approve` を実行し、一覧から選ぶと実行される」。
-
-## 保証の範囲
-
-ガードは境界ではなく「うっかり防止」。保証するのは、**ガードが識別する直接経路**（`guarded_action` と bash の `git flow`・`git merge` など）だけ。Python・node の内部、alias、利用者のシェルは対象外。`refs/pi/` を書く git コマンドは必須確認（P6）。
-
-## 試験
-
-| 対象 | 試験 |
-| --- | --- |
-| 保存層・状態遷移 | `test_pi_pending_ops.py` |
-| 承認・実行・排他・復旧 | `test_pi_pending_approve.py`、`test_pi_approve_core.py`、`test_pi_exclusive_lock.py` |
-| `/pending` の選択・補完 | `test_pi_pending_command.py`、`test_pi_pending_pick.py` |
-| 巡回（計画と実行の分離・止める条件・通知の遅延） | `test_pi_pending_patrol.py` |
-| 統合の計画・実行器・アダプター | `test_pi_integrate_plan.py`、`test_pi_integrate_exec.py`、`test_pi_integrate_action.py` |
-| 保存専用の操作 | `test_pi_pending_request.py`、`test_pi_native_action.py` |
-| 配線・キルスイッチ（実際の pi） | `test_pi_integrate_wiring.py`、`test_pi_integrate_index.py` |
-| 時間切れの案内・bash の説明 | `test_pi_integration_gate.py`、`test_pi_tools_ext.py`、`test_pi_tui_guidance.py`（疑似端末で TUI） |
+旧形式の退避の ref（`/pending list` に出るもの）は対象にしない。

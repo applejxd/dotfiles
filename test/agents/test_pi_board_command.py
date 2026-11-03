@@ -1,6 +1,6 @@
 """`/board` コマンドの配線 (index.ts)。pi を RPC で動かし、拡張のスラッシュコマンドとして走り、盤面を通知することを確かめる。
 
-盤面の中身そのもの (要対応・状態の表示) は test_pi_board.py、実物の収集は test_pi_board_collect.py が確かめる。
+盤面の中身そのもの (状態の表示) は test_pi_board.py、実物の収集は test_pi_board_collect.py が確かめる。
 """
 
 # ruff: noqa: F811
@@ -107,7 +107,10 @@ def test_board_command_notifies_the_board_with_real_feature_state(env):
     assert text, "盤面の通知が来なかった (/board が登録されていない)"
     lines = text.splitlines()
     assert lines[0].startswith("盤面")
-    assert any("要対応" in ln for ln in lines)  # 最上段の節
+    assert any("盤面" in ln for ln in lines[:1]) and any(
+        "保留" in ln for ln in lines
+    )  # 保留の節 (旧形式の件数だけ)
+    assert not any("要対応" in ln for ln in lines)
     assert any("feature a" in ln and "↑1" in ln for ln in lines), (
         text
     )  # 実物の状態 (develop より 1 commit 先)

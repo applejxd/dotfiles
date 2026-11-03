@@ -20,26 +20,6 @@ import { clip200 } from "./judge/shared.ts";
 
 type Decision = { decision: "allow" | "ask" | "deny"; reason: string; source: string; mustConfirm?: boolean };
 
-export type GuidanceInput = {
-	/** 判定器の ask の理由 (統合の必須確認は MUST_CONFIRM_INTEGRATION_PREFIX で始まる。confirm-view.ts) */
-	reason: string;
-	/** classifyConfirm の結果 (approved / denied / timeout / aborted / error) */
-	outcome: string;
-	/** git_integrate が使えるか: [pi.pending] enabled ∧ [pi.integrate] enabled */
-	enabled: boolean;
-	tui: boolean;
-	child: boolean;
-	/** いまの役割が action ツールを持つか */
-	hasActionTool: boolean;
-};
-
-/** 統合の必須確認が時間切れで拒否されたときだけ、モデルへ足す案内。それ以外は空文字。判定は変えない */
-export function integrationTimeoutGuidance(i: GuidanceInput): string {
-	if (i.outcome !== "timeout" || !i.reason.startsWith(MUST_CONFIRM_INTEGRATION_PREFIX)) return "";
-	if (!(i.enabled && i.tui && !i.child && i.hasActionTool)) return "";
-	return " 統合したいときは、統合のコマンドを再試行せず、guarded_action の git_integrate で保留に保存できる (利用者が /pending approve で選んで承認すると実行される)";
-}
-
 export type IntegrationConfig = { enabled: boolean; protectedRefs: readonly string[] };
 
 const SHELL_TOOLS = new Set(["bash", "bg_run"]);

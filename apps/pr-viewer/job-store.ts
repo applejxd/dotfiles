@@ -339,6 +339,48 @@ export function readLog(store: Store, id: string, from: number, max: number = LO
 	return { from: start, next: end, text: buf.subarray(start, end).toString("utf8"), truncated: buf.length >= LOG_LIMIT_BYTES };
 }
 
+// ---- 行境界のログ ----
+
+/** 長すぎる 1 行の代わりに返す表示（中身は返さない）。 */
+export const LONG_LINE_MARK = "[長すぎる行を省略]\n";
+
+/**
+ * ログを「生ログの行境界」で返す（行をまたいだパスの断片を返さないため）。
+ * from が行の途中なら、その行の残りは捨てて次の行首から返す。終わりも改行まで。
+ * max を超える 1 行は LONG_LINE_MARK に置き換え、行末まで進める。改行の無い末尾の短い行は、
+ * final（ジョブが終端）のときだけ返す（まだ書かれている行は待つ）。
+ */
+export function readLogLines(
+	store: Store,
+	id: string,
+	from: number,
+	max: number = LOG_READ_MAX,
+	final = false,
+): { from: number; next: number; text: string; truncated: boolean } {
+	const buf = readFileSync(join(jobDir(store, id), "log.txt"));
+	const truncated = buf.length >= LOG_LIMIT_BYTES;
+	let start = Number.isInteger(from) ? Math.min(Math.max(0, from), buf.length) : 0;
+	if (start > 0 && start < buf.length && buf[start - 1] !== 0x0a) {
+		const nl = buf.indexOf(0x0a, start);
+		start = nl < 0 ? buf.length : nl + 1; // 行の途中からは返さない
+	}
+	const out: Buffer[] = [];
+	let pos = start;
+	let size = 0;
+	while (pos < buf.length) {
+		const nl = buf.indexOf(0x0a, pos);
+		const lineEnd = nl < 0 ? buf.length : nl + 1;
+		const len = lineEnd - pos;
+		if (nl < 0 && !final && len <= max) break; // まだ書かれている行
+		const piece = len > max ? Buffer.from(LONG_LINE_MARK, "utf8") : buf.subarray(pos, lineEnd);
+		if (size + piece.length > max && size > 0) break;
+		out.push(piece);
+		size += piece.length;
+		pos = lineEnd;
+	}
+	return { from: start, next: pos, text: Buffer.concat(out).toString("utf8"), truncated };
+}
+
 // ---- 排他ファイル ----
 
 type LockBody = { pid: number; start: string | null; jobId: string };
@@ -482,29 +524,85 @@ function signalGroup(pid: number, sig: NodeJS.Signals): void {
 	}
 }
 
-export type RecoverResult = { interrupted: string[]; killed: string[]; locksRemoved: number; pruned: string[] };
+/** 環境に PR_VIEWER_JOB_ID=<id> を持つプロセスの pid（このプロセスを除く）。pid の再利用に影響されない。 */
+export function findByJobId(jobId: string, procRoot = "/proc"): number[] {
+	const mark = `PR_VIEWER_JOB_ID=${jobId}`;
+	const out: number[] = [];
+	let names: string[];
+	try {
+		names = readdirSync(procRoot);
+	} catch {
+		return out;
+	}
+	for (const name of names) {
+		if (!/^\d+$/.test(name) || Number(name) === process.pid) continue;
+		try {
+			if (readFileSync(`${procRoot}/${name}/environ`).toString("latin1").split("\0").includes(mark)) out.push(Number(name));
+		} catch {
+			// 読めない・既に終了
+		}
+	}
+	return out;
+}
+
+/** 印つきのプロセスへシグナルを送る。送った数を返す（runner と回復で共通）。 */
+export function signalByJobId(jobId: string, sig: NodeJS.Signals, procRoot = "/proc"): number {
+	let n = 0;
+	for (const pid of findByJobId(jobId, procRoot)) {
+		try {
+			process.kill(pid, sig);
+			n++;
+		} catch {
+			// 既に終了
+		}
+	}
+	return n;
+}
+
+export type RecoverResult = {
+	interrupted: string[];
+	killed: string[];
+	/** 残存プロセスの消滅を確認できなかったジョブ。interrupted にせず、ロックも残す。 */
+	survivors: string[];
+	locksRemoved: number;
+	pruned: string[];
+};
 
 /**
  * 起動時の回復。非終端のジョブは `interrupted`（reasons: shutdown）にする。自動では再開しない。
- * pid と開始時刻が一致して生きていれば、プロセスグループへ SIGTERM → graceMs 待って SIGKILL。
+ * 停止対象は 2 系統の和: (a) pid と開始時刻が一致して生きている親のプロセスグループ、
+ * (b) 親の生死に関係なく、環境に PR_VIEWER_JOB_ID=<id> を持つプロセス（/proc 走査。setsid で抜けた子孫を含む）。
+ * SIGTERM → graceMs 待つ → SIGKILL → 消滅を確認する。確認できないジョブは survivors に入れ、
+ * 状態もロックも変えない（呼び出し側がそのリポジトリのジョブ受付を止める）。
  * そのうえで古いロックを掃除し、保持の整理をする。
  */
-export async function recover(store: Store, opts: { graceMs?: number; now?: number } = {}): Promise<RecoverResult> {
+export async function recover(store: Store, opts: { graceMs?: number; now?: number; procRoot?: string; confirmMs?: number } = {}): Promise<RecoverResult> {
 	const graceMs = opts.graceMs ?? 15_000;
 	const now = opts.now ?? Date.now();
-	const res: RecoverResult = { interrupted: [], killed: [], locksRemoved: 0, pruned: [] };
+	const root = opts.procRoot ?? "/proc";
+	const res: RecoverResult = { interrupted: [], killed: [], survivors: [], locksRemoved: 0, pruned: [] };
 	const live = listJobs(store).filter((j) => !isTerminal(j.state));
-	const targets = live.filter((j) => j.pid !== null && sameProcess(j.pid, j.pidStart));
-	for (const j of targets) signalGroup(j.pid as number, "SIGTERM");
-	if (targets.length > 0) {
-		const deadline = Date.now() + graceMs;
-		while (Date.now() < deadline && targets.some((j) => sameProcess(j.pid, j.pidStart))) await sleep(50);
-		for (const j of targets) {
-			if (sameProcess(j.pid, j.pidStart)) signalGroup(j.pid as number, "SIGKILL");
-			res.killed.push(j.id);
-		}
+	const parentOk = (j: JobRecord): boolean => j.pid !== null && sameProcess(j.pid, j.pidStart);
+	const groupTargets = new Set(live.filter(parentOk).map((j) => j.id));
+	const remains = (j: JobRecord): boolean => (groupTargets.has(j.id) && parentOk(j)) || findByJobId(j.id, root).length > 0;
+	const touched = live.filter(remains);
+	for (const j of touched) {
+		if (groupTargets.has(j.id)) signalGroup(j.pid as number, "SIGTERM");
+		signalByJobId(j.id, "SIGTERM", root);
+	}
+	for (let end = Date.now() + graceMs; Date.now() < end && touched.some(remains); ) await sleep(50);
+	for (const j of touched.filter(remains)) {
+		if (groupTargets.has(j.id) && parentOk(j)) signalGroup(j.pid as number, "SIGKILL"); // 直前に生死と開始時刻を確かめた親だけ
+		signalByJobId(j.id, "SIGKILL", root);
+	}
+	for (let end = Date.now() + (opts.confirmMs ?? 3000); Date.now() < end && touched.some(remains); ) await sleep(50);
+	const survivors = new Set(touched.filter(remains).map((j) => j.id));
+	for (const j of touched) {
+		if (survivors.has(j.id)) res.survivors.push(j.id);
+		else res.killed.push(j.id);
 	}
 	for (const j of live) {
+		if (survivors.has(j.id)) continue;
 		updateJob(store, j.id, { state: "interrupted", reasons: ["shutdown"] }, now);
 		res.interrupted.push(j.id);
 	}
@@ -514,7 +612,9 @@ export async function recover(store: Store, opts: { graceMs?: number; now?: numb
 			rmSync(p, { force: true }); // 途中で落ちた一時ファイルの残り
 			continue;
 		}
-		if (lockIsStale(store, readLock(p))) {
+		const body = readLock(p);
+		if (body && survivors.has(body.jobId)) continue; // 子孫が残っている間は、同じ枝を受け付けない
+		if (lockIsStale(store, body)) {
 			rmSync(p, { force: true });
 			res.locksRemoved++;
 		}

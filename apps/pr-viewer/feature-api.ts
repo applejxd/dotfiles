@@ -4,8 +4,8 @@
 // ここは git を直接動かさない（git は feature-create.ts、記録の読み書きは review-api.ts を通す）。
 import type { IncomingHttpHeaders } from "node:http";
 import { briefBytes, briefDigest, buildBriefData, parseBrief } from "./brief.ts";
-import { createFeature, featureBranchExists, nameProblem } from "./feature-create.ts";
-import type { CreateEnv } from "./feature-create.ts";
+import { createFeature, featureBranchRefExists, nameProblem } from "./feature-create.ts";
+import type { CreateEnv, RecordOutcome } from "./feature-create.ts";
 import { ApiError, prKeyOf } from "./git-view.ts";
 import type { Repo } from "./git-view.ts";
 import { strictOriginOk } from "./merge-api.ts";
@@ -116,8 +116,8 @@ export async function createFeatureRoute(repo: Repo, body: Record<string, unknow
 	const who = { req: input.requestId, repo: repo.repoId, pr: prKey };
 	const d = buildBriefData({ requestId: input.requestId, rev: 1, name: input.name, via: "viewer" }, input.brief);
 	const info = { rev: 1, digest: briefDigest(d), bytes: briefBytes(d) };
-	// 再送: 枝があり、記録の requestId と内容が一致するなら、作らずに同じ結果を返す（応答を取り損ねた再送を救う）
-	if (await featureBranchExists(repo.gitDir, input.name)) {
+	// 再送: 枝（完全一致の branch ref。D/F 衝突は除く）があり、記録の requestId と内容が一致するなら、作らずに同じ結果を返す（応答を取り損ねた再送を救う）
+	if (await featureBranchRefExists(repo.gitDir, input.name)) {
 		const rec = await readBriefRecord(repo, prKey);
 		if (rec && rec.brief.d.requestId === input.requestId && rec.brief.d.name === input.name && briefDigest(rec.brief.d) === info.digest) {
 			diag({ ...who, result: "replay", recorded: true });
@@ -126,9 +126,20 @@ export async function createFeatureRoute(repo: Repo, body: Record<string, unknow
 	}
 	return await gated(repo, async () => {
 		try {
-			const made = await createFeature({ gitDir: repo.gitDir, name: input.name, expectTarget: input.expectTarget, env }, (baseOid) =>
-				recordBrief(repo, branch, "develop", baseOid, d),
-			);
+			const made = await createFeature({ gitDir: repo.gitDir, name: input.name, expectTarget: input.expectTarget, env }, async (baseOid): Promise<RecordOutcome> => {
+				if (env.testFail === "record-unknown") return "unknown"; // 試験用: 何も書かず結果不明
+				let out = await recordBrief(repo, branch, "develop", baseOid, d);
+				if (env.testFail === "record-lost" && out === "recorded") out = "unknown"; // 試験用: 書けたあとに結果を失う
+				if (out !== "unknown") return out;
+				// 結果不明: 保存内容を読み直して、requestId・digest・基点が一致すれば成功とみなす
+				const rec = await readBriefRecord(repo, prKey).catch(() => null);
+				const same =
+					rec !== null &&
+					rec.brief.d.requestId === input.requestId &&
+					briefDigest(rec.brief.d) === info.digest &&
+					rec.baseOid === baseOid;
+				return same ? "recorded" : "unknown";
+			});
 			diag({ ...who, result: "ok", recorded: true });
 			return { status: 201, body: respond(repo, input.name, made.baseOid, info, false) };
 		} catch (e) {

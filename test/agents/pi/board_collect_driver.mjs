@@ -1,9 +1,11 @@
 // 盤面の収集部品 (board-collect.ts) を、実際の一時リポジトリに対して動かす。照合は test_pi_board_collect.py。
 //
 //   node test/agents/pi/board_collect_driver.mjs '<JSON>'
-//   {"op":"save","cwd":...,"input":{...}}  保留を 1 件保存して結果を出す
+//   {"op":"legacy","cwd":...}  旧形式の退避を 1 件保存して結果を出す
 //   {"op":"collect","cwd":...,"now":...,"target":"develop"}  collectBoardInput と、buildBoard → renderBoard (幅 44) を出す
-import { dirname, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -13,9 +15,14 @@ const imp = (f) => import(pathToFileURL(resolve(H, f)).href);
 
 const a = JSON.parse(process.argv[2]);
 let out;
-if (a.op === "save") {
-	const ops = await imp("pending-ops.ts");
-	out = ops.saveOp(a.cwd, a.input);
+if (a.op === "legacy") {
+	const store = await imp("pending-store.ts");
+	const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.test", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.test" };
+	const git = (...args) => execFileSync("git", args, { cwd: a.cwd, env, encoding: "utf8" }).trim();
+	writeFileSync(join(a.cwd, "legacy.txt"), "legacy\n");
+	git("add", "legacy.txt");
+	out = store.savePendingSnapshot(a.cwd, store.snapshotStaged(a.cwd, "feat: legacy", "req-legacy"));
+	git("reset", "-q");
 } else {
 	const c = await imp("board-collect.ts");
 	const b = await imp("board.ts");
