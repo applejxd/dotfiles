@@ -284,8 +284,16 @@ feature B が、まだ `develop` に入っていない feature A の変更を要
 - **許可の状況**: feature の worktree の中の `git merge feature/<A>`、A の先頭からの起票（`git flow feature start <B> feature/<A>`・`git switch -c`）は、保護ブランチを動かさないので、統合の必須確認にはならない。判定器の結果は、通常モードで確認（`ask`）、bypass で許可。`git rebase` は共通の deny のまま（履歴を書き換えない）。保護ブランチへの統合は、今までどおり必須確認（または保留の承認）。
 - **依存は宣言しない**: git の祖先関係から導く。B の先頭が、他のローカルの feature ブランチ G の先頭を祖先に持ち、G が `develop` に統合されていないとき、G は B の依存。G を足しても `develop` の内容が変わらないもの（squash で統合済みで、ブランチだけ残っている）は除く。宣言ファイルは古くなるので作らない。
 - **関門**: `parallel_check.py`・`feature_gate.py` は、依存 G の `develop...G` の変更パスを、B の変更から引く（担当外・重複の誤検知を防ぐ）。出力に `depends on:`。B の未コミットの変更は引かない。限界: B が G のファイルを**コミットで**さらに編集しても検知されない。先頭が同じ 2 つのブランチは、互いを依存に数えない。
-- **承認画面**: `git_integrate`（計画の `stacked`）は、統合元が未統合の他の feature/bugfix を含むとき、「含む他の feature (未統合): … — 先にそちらを統合するのが通常の順序」を 1 行出す。その feature を統合する保留が未承認のときは、「… (保留 …<末尾 4 桁> が未承認) — 先にそちらを承認するのが通常の順序」と、承認すべき保留を示す（状態が pending のものだけ。読めないときは保留の記述なし）。表示だけで、保留の記録・再検査・承認の判断には使わない。
-- **順序**: A → B。承認の候補（引数なしの `/pending`・`/pending approve`）は保存した順（古い順）に並ぶので、通常は A が先頭。**強制はしない**（A を捨てて B だけ入れたいとき・A が古くなったとき・循環で詰まるため。誤った順序はあとの A が `no_change` で断られるだけで、無害）。A が入ったら B に `develop` を取り込む（同じ内容なので衝突しない）。B を先に入れると、あとの A は `no_change`（統合しても内容が変わらない）で断られる。
+- **承認画面**: `git_integrate`（計画の `stacked`）は、統合元が未統合の他の feature/bugfix を含むとき、「含む他の feature (未統合): <名前, …> — この統合に含まれる。先に個別に統合すると、この統合が衝突することがある」を 1 行出す。その feature を統合する保留が未承認のときは、名前の後ろに「 (保留 …<末尾 4 桁> が未承認)」を付け、複数行で出す（状態が pending のものだけ。読めないときは保留の記述なし）。表示だけで、保留の記録・再検査・承認の判断には使わない。
+- **順序**: **積み重ねは先頭の B だけを保存・承認する**。コミットは分けてよいが、統合の保存は先頭の 1 件。B は A のコミットを含むので、A の変更も一緒に統合される。
+  - 理由: A を先に squash で統合すると、develop には A の内容が入るが、A の元のコミットとは繋がらない。B が A のファイルをさらに直していると、あとの B の統合は 3 方向 merge で衝突する（`conflict`）。承認のたびに再発するので、下から 1 件ずつ承認する運用は成立しない。実例: 2026-11-03 の PR ビューアの積み重ね 6 本（[CHG-0060](../../change/0060-local-pr-viewer.md)）。最初の 3 本は通ったが、4 本目から衝突して止まった。
+  - 下の A の保留は承認せず破棄してよい（`/pending drop`）。
+  - **強制はしない**（A を捨てて B だけ入れたいとき・A が古くなったとき・循環で詰まるため）。B を先に入れると、あとの A は `no_change`（統合しても内容が変わらない）で断られる。
+  - 復旧（A を先に統合し、B が `conflict` で断られるとき）: B の枝へ develop を「枝の側を優先」で取り込む。
+    1. `git merge-tree --write-tree -X theirs --name-only develop feature/<B>` で tree を作る（`ours` は第 1 引数 = develop の側。枝の側は `theirs`）。
+    2. 検証: 「B の先頭 → その tree」の差が develop だけにある変更だけであること（`git diff --stat feature/<B> <tree>`）。`scripts/verify.py` など共有ファイルに無関係な変更が無いこと。
+    3. `git commit-tree <tree> -p feature/<B> -p develop -m "merge: develop を取り込む"` で merge commit を作り、B の worktree で `git merge --ff-only <commit>`。
+    4. `git merge-tree --write-tree --name-only develop feature/<B>` が衝突しないことを確かめ、B を新しい保留として保存し、古い保留を `/pending drop` で破棄する。
 - **規則**: マージは親だけ（子は git を書けない）。衝突は止めて報告する（LLM に直させない）。
 - **見送り**: 依存の宣言ファイル・汎用 DAG。配車（[CHG-0056](../../change/0056-orchestrator.md)）の `needs` は「統合済みを待つ」計画上の前提で、積み重ね（コミット済みの先頭から始める）とは別のもの。
 - **試験**: `test_parallel_check.py`・`test_feature_gate.py`（関門）、`test_pi_integrate_plan.py`・`test_pi_integrate_action.py`（`stacked`・`no_change`）。

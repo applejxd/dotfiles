@@ -203,7 +203,7 @@ function stackedLine(plan: IntegratePlan, pend: Map<string, string> = new Map())
 		const id = pend.get(r);
 		return `${oneLine(branchName(r), 80)}${id ? ` (保留 …${id} が未承認)` : ""}`;
 	});
-	return `含む他の feature (未統合): ${names.join(", ")} — 先にそちらを${pend.size ? "承認" : "統合"}するのが通常の順序`;
+	return `含む他の feature (未統合): ${names.join(", ")} — この統合に含まれる。先に個別に統合すると、この統合が衝突することがある`;
 }
 
 /** 承認画面の summary は幅が狭く 1 行だと切れるので、保留が見つかったときは行を分ける */
@@ -213,7 +213,7 @@ function stackedSummaryLines(plan: IntegratePlan, pend: Map<string, string>): st
 	return [
 		"含む他の feature (未統合):",
 		...plan.stacked.map((r) => `  ${oneLine(branchName(r), 80)}${pend.get(r) ? ` (保留 …${pend.get(r)} が未承認)` : ""}`),
-		"  先にそちらを承認するのが通常の順序",
+		"  この統合に含まれる。先に個別に統合すると、この統合が衝突することがある",
 	];
 }
 

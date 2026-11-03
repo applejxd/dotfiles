@@ -153,7 +153,11 @@ def test_stacked_warning_shows_unapproved_pending(repo: Path) -> None:
     tail = res["savedIds"][0][-4:]
     for key in ("summary", "view"):
         assert f"feature/a (保留 …{tail} が未承認)" in res["plan"][key], res["plan"][key]
-    assert "先にそちらを承認するのが通常の順序" in res["plan"]["view"]
+    assert (
+        "この統合に含まれる。先に個別に統合すると、この統合が衝突することがある"
+        in res["plan"]["view"]
+    )
+    assert "通常の順序" not in res["plan"]["view"]
     assert res["recheck"] == {"ok": True}
 
 
@@ -179,9 +183,12 @@ def test_stacked_warning_ignores_unrelated_pending(repo: Path) -> None:
         assert "未承認" not in res["plan"][key] and "feature/z" not in res["plan"][key], res[
             "plan"
         ][key]
-    # 無関係な保留があっても、文言は「統合する」のままで、summary は 1 行のまま (保留が見つかったときだけ行を分ける)
+    # 無関係な保留があっても、警告は保留なしの形のままで、summary は 1 行のまま (保留が見つかったときだけ行を分ける)
     assert "保留" not in res["plan"]["view"], res["plan"]["view"]
-    assert "先にそちらを統合するのが通常の順序" in res["plan"]["view"], res["plan"]["view"]
+    assert (
+        "— この統合に含まれる。先に個別に統合すると、この統合が衝突することがある"
+        in res["plan"]["view"]
+    ), res["plan"]["view"]
     assert "含む他の feature (未統合): feature/a" in res["plan"]["summary"], res["plan"]["summary"]
 
 
