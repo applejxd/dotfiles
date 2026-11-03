@@ -748,3 +748,167 @@ out({ r, before, kept: S.dailyCount(other, t), tomorrow: S.countDaily(s, 3, t + 
     assert [x["ok"] for x in res["r"]] == [True, True, True, False]
     assert res["before"] == 3 and res["kept"] == 3
     assert res["tomorrow"] == {"ok": True, "count": 1} and res["yesterday"] == 0
+
+
+# ---- 残存プロセスの回復（親の生死に依らない）----
+
+
+def _marked(job_id: str, script: str) -> subprocess.Popen:
+    """PR_VIEWER_JOB_ID の印つきで、新しいセッションに抜けたプロセス（setsid した子孫と同じ形）。"""
+    p = subprocess.Popen(
+        ["sh", "-c", script],
+        env={**os.environ, "PR_VIEWER_JOB_ID": job_id},
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+    )
+    threading.Thread(target=p.wait, daemon=True).start()
+    return p
+
+
+_RUNNING_JOB = (
+    _NEW_JOB
+    + """
+S.updateJob(s, j.id, { state: "running", pid: arg.pid ?? undefined });
+S.acquireLock(s, "f", j.id);"""
+)
+
+
+def _new_running_job(tmp: Path, state: Path, pid: int | None) -> str:
+    res = js(
+        tmp,
+        _RUNNING_JOB + "\nout({ id: j.id });",
+        {"state": str(state), "repo": REPO, "pid": pid},
+    )
+    return res["id"]
+
+
+def _recover_only(tmp: Path, state: Path, grace: int = 400, confirm: int = 600) -> dict:
+    return js(
+        tmp,
+        """const s = S.openStore(arg.state, arg.repo);
+const r = await S.recover(s, { graceMs: arg.grace, confirmMs: arg.confirm });
+out({ r, jobs: S.listJobs(s).map((j) => [j.id, j.state]) });""",
+        {"state": str(state), "repo": REPO, "grace": grace, "confirm": confirm},
+    )
+
+
+def test_recover_stops_a_marked_orphan_even_when_the_parent_died_first(st):
+    tmp, state = st
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    jid = _new_running_job(tmp, state, dead.pid)
+    other_id = "22222222-2222-4222-8222-222222222222"
+    orphan = _marked(jid, "trap '' TERM; while :; do sleep 1; done")  # SIGTERM を無視する
+    bystander = _marked(other_id, "sleep 60")  # 別のジョブの印: 触らない
+    plain = _spawn_sleeper("sleep", "60")  # 印なし: 触らない
+    time.sleep(0.3)
+    try:
+        res = _recover_only(tmp, state)
+        time.sleep(0.2)
+        assert not _alive(orphan.pid), "印つきの孤児は、SIGTERM を無視しても SIGKILL で止まる"
+        assert _alive(bystander.pid) and _alive(plain.pid), "無関係なプロセスは止めない"
+    finally:
+        for p in (orphan, bystander, plain):
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(p.pid, signal.SIGKILL)
+    assert res["r"]["survivors"] == [] and res["r"]["killed"] == [jid]
+    assert res["jobs"] == [[jid, "interrupted"]]
+    assert list((state / REPO / "locks").iterdir()) == []
+
+
+def test_recover_stops_descendants_that_ignore_sigterm_while_the_parent_exits(st):
+    tmp, state = st
+    # 親は SIGTERM で終わるが、setsid した子は SIGTERM を無視して書き続ける
+    parent = _spawn_sleeper("sleep", "60")
+    jid = _new_running_job(tmp, state, parent.pid)
+    child = _marked(jid, "trap '' TERM; while :; do sleep 1; done")
+    time.sleep(0.3)
+    try:
+        res = _recover_only(tmp, state)
+        time.sleep(0.2)
+        assert not _alive(parent.pid) and not _alive(child.pid)
+    finally:
+        for p in (parent, child):
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(p.pid, signal.SIGKILL)
+    assert res["r"]["survivors"] == [] and res["jobs"] == [[jid, "interrupted"]]
+
+
+def test_recover_keeps_the_job_and_lock_when_a_survivor_cannot_be_confirmed_gone(st):
+    tmp, state = st
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    jid = _new_running_job(tmp, state, dead.pid)
+    proc = tmp / "proc"
+    (proc / "4242").mkdir(parents=True)
+    (proc / "4242" / "environ").write_bytes(f"A=b\0PR_VIEWER_JOB_ID={jid}\0".encode())
+    res = js(
+        tmp,
+        """const s = S.openStore(arg.state, arg.repo);
+const r = await S.recover(s, { graceMs: 100, confirmMs: 200, procRoot: arg.proc });
+out({ r, state: S.readJob(s, arg.id).state });""",
+        {"state": str(state), "repo": REPO, "proc": str(proc), "id": jid},
+    )
+    # 偽の /proc の pid 4242 は kill できず（無関係の pid を撃たない）、消滅を確認できない
+    assert res["r"]["survivors"] == [jid] and res["r"]["interrupted"] == []
+    assert res["state"] == "running"  # 状態を変えない
+    assert len(list((state / REPO / "locks").iterdir())) == 1  # ロックも残す
+
+
+# ---- 行境界のログ ----
+
+
+def _log_lines(tmp: Path, state: Path, content: str, steps: list[dict]) -> list[dict]:
+    return js(
+        tmp,
+        _NEW_JOB
+        + """
+S.appendLog(s, j.id, arg.content);
+out(arg.steps.map((x) => S.readLogLines(s, j.id, x.from, x.max, x.final)));""",
+        {"state": str(state), "repo": REPO, "content": content, "steps": steps},
+    )
+
+
+def test_read_log_lines_never_starts_mid_line_or_ends_mid_line(st):
+    tmp, state = st
+    text = "aaaa /home/someone/secret/x\nbbbb\ncc"
+    mid = text.index("/home") + 3  # パスの途中
+    a, b, c = _log_lines(
+        tmp,
+        state,
+        text,
+        [
+            {"from": mid, "max": 100},
+            {"from": 0, "max": 100},
+            {"from": 0, "max": 100, "final": True},
+        ],
+    )
+    assert a["text"] == "bbbb\n" and a["from"] == text.index("bbbb")  # 行の途中の断片は返さない
+    assert b["text"] == "aaaa /home/someone/secret/x\nbbbb\n"  # 書きかけの末尾行は待つ
+    assert c["text"] == text and c["next"] == len(text)  # 終端のジョブは最後まで
+
+
+def test_read_log_lines_replaces_a_long_line_without_leaking_pieces(st):
+    tmp, state = st
+    long_line = "x" * 20 + "/home/someone/secret/" + "y" * 100
+    content = long_line + "\nok\n" + long_line  # 最後の行は改行なし
+    a, b, c = _log_lines(
+        tmp,
+        state,
+        content,
+        [
+            {"from": 0, "max": 100},
+            {"from": 5, "max": 100},
+            {"from": len(long_line) + 4, "max": 100},
+        ],
+    )
+    assert a["text"].startswith("[長すぎる行を省略]\n") and "secret" not in a["text"]
+    mark = "[長すぎる行を省略]\n"
+    assert a["text"] == mark + "ok\n" + mark and a["next"] == len(content)
+    assert (
+        b["from"] == len(long_line) + 1 and b["text"] == "ok\n" + mark
+    )  # 行の途中の from は次の行から
+    assert "secret" not in c["text"] and c["text"].startswith(
+        "[長すぎる行を省略]"
+    )  # 書きかけの長い行も省略

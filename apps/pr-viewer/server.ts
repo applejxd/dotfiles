@@ -15,7 +15,7 @@ import type { Repo } from "./git-view.ts";
 import { mergeRequestError, stopMerges } from "./merge-api.ts";
 import type { MergeEnv, PostResult } from "./merge-api.ts";
 import { handleApi, handlePost, isJobGetRoute, isJobPostRoute, isMergePostRoute, isPostRoute } from "./routes.ts";
-import { DEFAULT_JOB_TIMEOUT_MS, MAX_JOB_TIMEOUT_MS, jobCapabilities, jobRequestError, recoverJobs, stateDirIsolated, stopJobs } from "./job-api.ts";
+import { DEFAULT_JOB_TIMEOUT_MS, MAX_JOB_TIMEOUT_MS, acquireInstanceLock, jobCapabilities, jobRequestError, recoverJobs, stateDirIsolated, stopJobs } from "./job-api.ts";
 import type { JobsConfig } from "./job-api.ts";
 import { buildArgv } from "./job-runner.ts";
 import { defaultStateDir } from "./job-store.ts";
@@ -370,6 +370,16 @@ async function main(): Promise<void> {
 		// 保存先が共通 .git や worktree の中なら、何も作らずに断る
 		if (!(await stateDirIsolated(jobs, repos))) {
 			process.stderr.write("--state-dir は、対象リポジトリの .git や worktree の中には置けません。別の場所を指定してください。\n");
+			process.exit(2);
+		}
+		// 同じ state root でこのアプリは 1 つだけ。回復より先に取る（先発の健全なジョブを止めないため）
+		const inst = await acquireInstanceLock(jobs.stateDir);
+		if (!inst.ok) {
+			process.stderr.write(
+				inst.reason === "held"
+					? "同じ --state-dir を使う、ほかのサーバがすでに動いています。先にそちらを止めるか、別の --state-dir を指定してください。\n"
+					: "--state-dir の排他（flock）を取れませんでした。flock コマンドと --state-dir の書き込み権限を確認してください。\n",
+			);
 			process.exit(2);
 		}
 	}
