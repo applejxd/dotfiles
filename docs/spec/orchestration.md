@@ -54,6 +54,29 @@
 | 隔離なしの worktree | 運用 | 親が feature の分割を決め、子には worktree の中だけで作業させる。起票は利用者。強制の囲いではない | [並列実装の運用](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
 | 子の隔離（`isolation: "worktree"`） | 保留（素の `pi` では認証のロックの書き込みが拒否される） | Landlock で書き込みを狭める。`pis` では認証の写しが既にある | [CHG-0029](../change/0029-worktree-isolation.md) |
 
+### worktree の所有の表明
+
+調査: `.tmp/keep/wt-research/synthesis.md` の P1（利用者の選択）。他ツールで所有を機械で強制するものはなく、`git worktree lock` を表明に使うのは一部（pid 付きのものがある）。
+
+- **理由欄**は 1 行 `owner=<kind> id=<id> pid=<pid> started=<unix 秒>`。`id` は空白を含まない 1 語。
+- **kind**: `worker`（親が起動した子エージェント）・`job`（PR ビューアのジョブ）・`create`（起票の作成中だけ）・`train`（統合用の枝の組み立て）・`interactive`（人の対話 pi。任意）。
+- **生死**: `pid` が生きている間だけ「有効」（`kill -0`）。死んでいれば「残骸」で、引き継ぐ・解除してよい。`owner=` で始まらない lock（人が付けたもの・理由なし）は「不明の lock」として自動では解除しない。
+- **道具**: `scripts/wt_owner.py`（`claim <wt> --kind <k> --id <id> [--pid N]`・`release <wt> [--id <id>]`・`status [<wt>]`・`reap`。他の有効な owner・不明の lock で終了コード 3）。同じ規則の TS 実装が `apps/pr-viewer/worktree-owner.ts`。`--pid` を省くと、シェルではない最初の祖先（= 呼び出した AI）の pid になる。
+- **4 経路**: (1) 子エージェント = 親が起動の直前に手で `claim`、commit 後に `release`（ハーネスは改造しない）。(2) ジョブ = 起動前検査（`preflight`）が他の有効な owner・不明の lock・cwd が worktree の中のプロセスを `worktree_busy`（HTTP 409）で拒否し、開始で `claim(kind=job, id=<jobId>)`、終了・失敗・キャンセル・回復で `release`。(3) 起票 = `worktree add --lock` で作成中だけ `kind=create`、終われば解除（巻き戻しより先）。(4) 人の対話 pi = 任意。
+- **限界**: lock を忘れた経路は検出できない。cwd 走査は、cwd が別の場所の子エージェントを見つけられない。pid の再利用は見分けない（`kill -0` だけ）。全件検査の前に `status` で worker の lock が無いことを確かめる（検査中の編集による誤失敗の防止）。
+
+### worktree の掃除の規則
+
+取り込み済みの worktree を、PR ビューアの統合の cleanup（[後始末](pr-viewer.md)）と CLI `scripts/wt_clean.py <名前>... [--dry-run] [--repo <パス>]` で同じ規則で消す。
+
+1. **統合済み**（枝が統合先の祖先）だけが対象。未統合・追跡ファイルの変更・未追跡（無視されないもの）は拒否。
+2. 無視ファイル（`__pycache__`・`.pytest_cache`・`node_modules` など）だけなら、それごと削除する。`git worktree remove`（`--force` なし）が無視ファイルごと消す。status が空と確かめた後だけ呼ぶ。`filter`・hooks など外部コードが動きうる設定があれば、status も動かさず残す。
+3. 削除前に無視ファイルを tgz へ退避する（ビューアは `--state-dir` 配下の `cleanup-backups/`、CLI は `<共通 git-dir>/pi-cleanup-backups/`。`<名前>-<時刻>.tgz`）。200 MB 超・数えられない・失敗なら worktree を残して警告。退避は新しい順に 5 件まで。
+4. **有効な owner の lock**（pid が生きている）と人が付けた lock は消さない。残骸の lock は解除して消す。
+5. 枝は `git branch -d`（ビューアは承認した先頭を指定した CAS で削除）。
+
+CLI の終了コード: 0 = 全て処理、3 = 一部を残した・拒否、2 = 使い方の誤り。
+
 ## 5. ガードとの接点（承認・確認・保留）
 
 ガードの機能の正本は [ガード](guard/index.md)。ここには、並列作業で効く点だけを置く（[機能の地図](pi-features.md#柱をまたぐ機能の置き場)）。
@@ -94,6 +117,25 @@
 | `/board` | **盤面**（読み取り専用・利用者専用）。feature ごとの `↑`（統合先に無い commit）・`↓`（統合先にあって無い）・`dirty`・最後の commit からの経過、保留（旧形式の退避の件数）・子・隔離 worker・モード。44 桁の 1 行で、状態の側を欠かさず名前の側を先に切る。集めるのは読み取りの git だけ（`runGit`。hook・外部 diff を無効にし、`status` は index を更新させない）。リポジトリの設定に外部 filter（clean・smudge・process）があるときは、`status` を実行せず `dirty` を出さない。bg ジョブは見られないので行を出さない。承認・操作の入口は持たない） | [CHG-0056](../change/0056-orchestrator.md#10-実施計画) |
 | `/worktrees` | 隔離の worktree の掃除・回収のやり直し（利用者専用） | [pi の子エージェント](guard/pi-subagents.md#worktree-隔離の場所と承認) |
 | フッター | 動いている子の数・経過時間（3 件以下は名前つき） | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
+
+## 統合用の枝（train）
+
+複数の feature を 1 回の全件検査・1 回の「統合する」で取り込むため、統合用の枝 `feature/train-N`（worktree `.tmp/worktrees/train-N`）を `scripts/train.py` で作る。`git flow` は呼ばない（`.gitflow` の接頭辞と基点を読む）。
+
+| コマンド | 内容 |
+| --- | --- |
+| `python3 scripts/train.py start [--name train-N] <feature>...` | develop の最新から枝と worktree を作り、指定順に `git merge` する。`a` でも `feature/a` でもよい。名前を省くと空き番号を選ぶ |
+| `continue [--name train-N]` | 衝突が解消され `git add -A` 済みならコミットし、残りの枝を続ける |
+| `verify [--name train-N]` | その worktree で `mise run verify:all` を回し、件数と終了コードを要約する（`TRAIN_VERIFY_CMD` で差し替え可） |
+| `status` / `summary` | 取り込み済み・未取り込み・衝突中の一覧 / PR 要約の材料（枝ごとのコミット数・変更ファイル数） |
+
+各枝の前に、「存在する」「develop に未統合」「worktree に生きた pid の owner lock（`locked owner=<kind> id=<id> pid=<pid> started=<秒>`）が無い」を確かめ、満たさなければ何も作らず止まる。
+
+**終了コード**: 0 成功 / 1 verify 失敗 / 2 使い方・前提違反・git の失敗 / 3 衝突で停止。
+
+**衝突の扱い**: 衝突したら、そこで止めて衝突ファイルの一覧を出す（終了コード 3）。**自明に見える衝突でもスクリプトは直さない**。設計上、衝突は worker が直す（取り違えると片方の変更を黙って捨てるため、解消は意味を読める役が責任を持つ）。worker が worktree で解消し、`git add -A` したあと `continue` を呼ぶ。マーカーが残っていると `continue` は拒否する。
+
+AI のガードが `git merge` を直接は通さない場合に備え、`python3 scripts/train.py ...` の形で呼ぶ想定。ガード側で通るかは未確認。Windows は未検証。
 
 ## 9. 未実装・保留（案件）
 

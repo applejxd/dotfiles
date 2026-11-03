@@ -172,12 +172,21 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 | 項目 | 規則 |
 | --- | --- |
-| 描画 | `textContent` のみ。`innerHTML`・`insertAdjacentHTML`・`eval` を使わない。**v1 は Markdown を描画しない**（本文は改行とコードだけ） |
+| 描画 | 生の文字列は `textContent` のみ。`innerHTML`・`insertAdjacentHTML`・`eval` を使わない。本文の markdown は `web/markdown.js` が `createElement` と `textContent` だけで描く（下の「markdown の描画」） |
 | コメントの位置 | スレッドは、行の側の blob（旧は `oldBlob`・新は `newBlob`）と `anchor.blob` が一致するときだけ行の下に置く。一致しないもの（古い版のコメント）は、表の上に「表示中の行に対応しないスレッド」としてまとめる（行番号だけで置くと、新しいコードの同じ行に付いてしまう） |
 | CSP 等 | `default-src 'self'`・外部画像なし・`frame-ancestors 'none'`・`nosniff`・`Referrer-Policy: no-referrer` |
 | git の実行 | 固定の argv・`shell:false`・hook / fsmonitor / 外部 diff / textconv / 外部 filter を止める設定・`--no-ext-diff --no-textconv --no-pager`・出力量と時間の上限。**自動の fetch も止める**（`GIT_NO_LAZY_FETCH=1`・`GIT_ALLOW_PROTOCOL=` を固定。partial clone で足りないオブジェクトを読むと git が ssh などを起動するため。足りないときは取得せずエラーにする） |
 | 入力 | ref は `for-each-ref` の出力にあるものだけ。OID は 40（または 64）桁の 16 進だけ。パスは `--` の後か `<oid>:<path>` でだけ渡し、ref 内のパスをファイルシステムのパスとして使わない |
 | 登録 | 登録されたリポジトリ（正規化した common dir）だけを扱う |
+
+### markdown の描画
+
+`web/markdown.js`（`PRV.md(text)`）。「pi のまとめ」・コメント本文・依頼文・ジョブへ渡すコメントの表示に使う。統合コミットのメッセージ（確認画面）・ログ・編集用の `textarea` は生の文字のまま。
+
+- 対応: 段落・改行（`<br>`）・見出し（`#`〜`###`）・箇条書き（順序なし/あり。入れ子は 2 段まで）・引用（入れ子 2 段まで）・水平線・コードブロック（言語名は無視）・インラインコード・太字・斜体・リンク・表（GFM の簡単なもの。横にはみ出すときは横スクロール）
+- 安全: 要素は `createElement`、文字は `textContent` / テキストノードだけ。生の HTML は文字として出す。リンクは `http:`・`https:` と同一ページ内の `#` だけ許可し（`rel="noopener noreferrer"`・`target="_blank"`）、ほかは書いたままの文字で出す。画像 `![alt](url)` は描画せず `[画像: alt]` の文字にする
+- 上限: 全体 2 万文字・300 行・1 行 2,000 文字（超えた行は書式なし）・太字等の入れ子 3 段。超えた残りは書式なしの `<pre>` で出し、描画器が重くならない
+- 送信バー: 「下書き 未送信 N 件」と「送信済み・pi の受け取り待ち N 件・pi が受領済み N 件」を並べる。受け取り待ち（`refs/pi/review/<prKey>` の未受領バッチ）が 1 件以上のときは、キューに積まれていて、次に pi へ入力すると届く（pi が自動で読みに来るわけではない）と出す
 
 ### Host の検査と公開
 
@@ -195,6 +204,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 経路 | `GET /api/capabilities`（`{merge, targets}`。パスを含めない）・`POST /api/prs/<repoId>/<prKey>/merge-plan`（承認シート用の計画。副作用は git の object の書き込みだけ。GET でないのは、`merge-tree --write-tree` が object を書くため）・`POST …/merge`（実行）。`recover` は HTTP に出さない（他の git が動いていないことを人が確かめる手順があるため。画面は CLI の手順を案内する） |
 | 入口の検査（merge-plan・merge だけ。既存の comments・submit は変えない） | (1) `--allow-merge` が無ければ 403 `merge_disabled`（**既定で無効**。起動の旗で値を取らない） (2) `Tailscale-Funnel-Request` ヘッダーがあれば 403 `forbidden_funnel` (3) **Origin 必須**（無し・`null`・別ホスト・形の悪い値は 403 `forbidden_origin`。host を Host ヘッダーと照合） (4) `X-PRV: 1` と `application/json`（無ければ 400） (5) 本文は上限 64 KB・未知のキーは 400。OPTIONS は 405 で CORS ヘッダーを返さない |
 | 実行の入力 | `expect: {source, target}`（2 キー必須・40 桁の 16 進。違えば 409 `stale_view`）・`message`（1〜4000 文字・改行は `\n` にそろえる・1 行目が空白だけは不可・制御文字と双方向制御文字と孤立サロゲートは不可）・`cleanup`（`none`·`branch`·`branch_and_worktree`。既定 `none`） |
+| 後始末（`branch_and_worktree`） | [worktree の掃除の規則](orchestration.md#worktree-の掃除の規則)と同じ。統合元が統合済みで、追跡ファイルの変更・未追跡（無視されないもの）・確かめられない設定（`filter`・hooks など）が無ければ、**無視ファイル（`__pycache__`・`node_modules` など）ごと** worktree を削除する（`--force` は使わない。status が空と確かめた後だけ削除する）。削除前に無視ファイルを `<--state-dir>/cleanup-backups/<名前>-<時刻>.tgz` へ退避する（CLI 単体は `<共通 git-dir>/pi-cleanup-backups/`。上限 200 MB・5 件。超える・失敗なら worktree を残して警告）。有効な owner の lock・人が付けた lock があれば残す（残骸の lock は解除して消す）。枝は、worktree が無くなった後に CAS つきで消す |
 | 応答 | 成功 200 `{merge: {commit, targetOld, targetNew, cleanup, warnings, recorded}}`。統合器の拒否コードをそのまま HTTP に写す（`conflict` は `conflicts` を添える。`recover_needed`・`busy` も 409。`failed` は 500 `merge_failed`）。生の git 出力・絶対パスを返さない。詳細な契約は試験 `test_pr_viewer_merge_api.py` と U の画面 |
 | 計画（merge-plan） | `mergeable`・`refusal`・`blockers`（常に `[]`。API の形と `web/merge.js` の `legacy_` の処理は残す）・`plan`（統合元・統合先の先頭・コミット数・ファイル一覧 200 件・+/−・リスクのあるパス 50 件・`riskConfig`・`touchesApp`）・`defaults`（メッセージ・`messageSource`・`summaryStale`）・`warnings`（変更依頼・古いレビュー・未送信コメント。**表示専用**）。リスクの判定は表示上限ではなく**全件の変更パス**に対して行う。リスク設定（`~/.config/pi/harness/rules.json` の `judge.common.pi.integrate.risk_paths`。`--rules-file` で差し替え）を読めないときは `riskConfig: "unavailable"`（「リスクなし」と混同しない）。`touchesApp`（`apps/pr-viewer/**` に触れるか）は設定と独立。既定メッセージは、レビュー記録の下書き（検査を通るものだけ。古い版なら `summaryStale`）、無ければ枝の最新コミットの件名を使う生成文 |
 | 記録（表示用） | 成功だけ、`merge_request` と `merge_result` を 1 回の追記で書く（`merge_result` は先行する request が要る）。書けなかっても統合の成功は取り消さず `recorded: false`。記録は権限の根拠にしない。診断ログは標準エラーに 1 行の JSON（要求 ID・PR・結果・統合後の OID・記録の成否。本文・ヘッダー・パスは出さない） |
@@ -229,7 +239,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 未 push と分かっていて（一覧の「origin より N 件先」は最後に取得した状態との比較で、**未 push の目安であって証拠ではない**。公開済みか不明なら下の revert を選ぶ）、統合の後に develop へ他のコミットが無い・develop を checkout している | 前提: **index に未コミットの変更が無い**（`git diff --cached --quiet`。`reset --keep` は worktree の変更は残すが **index の変更は保存しない**。stage 済みがあれば先にコミットか退避する）。`git status` で、統合を戻すと上書きされるファイルに手元の変更が無いことを確かめ、`git reset --keep <targetOld>`。`--hard` ではなく `--keep` を使う（重なると何も変えず中止する）。無関係な未コミットの worktree の作業・未追跡・無視ファイルは残る |
 | 同じで、develop をどの worktree も checkout していない | `git update-ref refs/heads/develop <targetOld> <統合コミット>`。末尾の期待値を必ず付ける（統合のあとに develop が進んでいれば、期待値が合わず何も変えない） |
 | push 済み・公開済みか不明、または統合の後に他のコミットがある | 履歴を巻き戻さず、**develop を checkout している worktree で** `git revert -m 1 <統合コミット>`（第 1 親 = develop 側を残す。別の枝で実行するとその枝に取り消しができ、develop は戻らない）。**統合が導入した変更だけ**を取り消す新しいコミットができる。後続の変更は残り、重なると衝突しうる。**同じ枝をもう一度統合したいときは、その revert コミットを revert してから**でないと、変更が入らない（git の仕様） |
-| cleanup で枝を消した | `git branch <枝> <統合コミット>^2`（第 2 親 = feature の先頭）。worktree は `git worktree add <パス> <枝>` で作り直す。**削除された worktree の中の未追跡・無視ファイル（`.tmp` など）は戻らない** |
+| cleanup で枝を消した | `git branch <枝> <統合コミット>^2`（第 2 親 = feature の先頭）。worktree は `git worktree add <パス> <枝>` で作り直す。**削除された worktree の中の未追跡ファイルは戻らない。無視ファイルは、上の退避の tgz から戻せる** |
 
 これは利用者が自分の端末で行う手順で、エージェント（pi）に任せることは想定しない。復旧できない異常終了（状態ファイルが残った）は、取り消しではなく `recover`（CHG-0062 §3.5）。統合の結果を確認できなかった（`unverified`）ときも `recover` が「統合済み」と確かめて状態を解除する。
 

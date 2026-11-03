@@ -27,7 +27,7 @@ description: "feature を起票して worker に実装を切り出し、成果�
    依存があるときは、案件の「実施計画」表の「前提」列（計画）と todo の note（状態）に置く。
 2. **起票**: `git flow feature start <名前> --worktree --no-fetch`（名前は小文字・数字・`.`・`_`・`-`）。
    worktree は `.tmp/worktrees/<名前>/`。
-3. **依頼**: `guarded_task`（`agent: "worker"`、`background: true`、`todo` に項目 ID）。依頼文は雛形に従い、次を必ず入れる。
+3. **依頼**: `guarded_task`（`agent: "worker"`、`background: true`、`todo` に項目 ID）。**起動の直前に `python3 scripts/wt_owner.py claim <worktree の絶対パス> --kind worker --id <名前>`、commit 後に `release`**（[parallel-ops.md](references/parallel-ops.md)）。依頼文は雛形に従い、次を必ず入れる。
    - worktree の絶対パスと、**担当ファイル（これだけ編集）** と読み取りだけのファイル。同じ worktree に別の worker がいるなら、そのファイル。
    - 優先順位つきの「作ること」、「変えてはいけないもの」、合格条件（実行するコマンド）。
    - **共通の約束は [references/worker-common.md](references/worker-common.md) を読ませる**（ツールの制約・報告形式・時間制限を毎回書かない）。
@@ -62,6 +62,10 @@ B が、まだ develop に入っていない A の変更を要るとき、A の�
 3. **関門**: `feature_gate.py check <B> --owned <B の glob>`。A の変更は「継承したパス」として引かれ（出力に `depends on: feature/<A>`）、担当外・重複を誤検知しない。既知の制限: B が A のファイルをコミットで編集しても検知されない。
 4. **統合は、A・B とも利用者の押下**。統合は merge commit なので、A を先に統合すると B から見て A は祖先になり、順序の問題は起きない（squash では B が衝突した。[CHG-0062](../../../docs/change/0062-pr-hub-simplify.md) の実験 X1 で確かめ、合格）。B を先に押すと A の変更も一緒に入り、あとの A は「統合しても内容が変わらない」状態になる（A のブランチは手で片付ける）。
 5. **全件検査**は B の worktree でも回せる（A の変更を含む。A が壊れていれば B も落ちる）。
+
+## 複数 feature をまとめて取り込む (train)
+
+全件検査と「統合する」を 1 回にしたいときは、手で merge せず `python3 scripts/train.py start <a> <b> ...` を使う（衝突は止まる＝終了コード 3。worker に解消させ、`git add -A` 後に `continue`、最後に `verify`・`summary`）。正本は [統合用の枝](../../../docs/spec/orchestration.md#統合用の枝train)。
 
 ## 落とし穴
 

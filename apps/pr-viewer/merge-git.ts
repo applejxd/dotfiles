@@ -1,7 +1,7 @@
 // 統合器（merge.ts）が使う git の実行器。書き込みを含む。
 // 設計: docs/change/0062-pr-hub-simplify.md の §3.2・§3.4.1。hook・外部の driver・filter を動かさない（S1）。
 // 独立させるため、node: 標準ライブラリと ./ だけを import する。
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -345,6 +345,16 @@ export async function listWorktrees(gitDir: string): Promise<WorktreeInfo[] | nu
 }
 
 export type StatusEntry = { code: string; path: string };
+
+/** files（wt からの相対パス）を tgz に固める（再帰しない・シンボリックリンクは辿らない）。成功なら true。 */
+export function tarFiles(wt: string, out: string, files: string[]): boolean {
+	const r = spawnSync("tar", ["-czf", out, "--null", "--no-recursion", "-T", "-"], {
+		cwd: wt,
+		input: files.join("\0"),
+		env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+	});
+	return r.status === 0;
+}
 
 /** `git status --porcelain=v1 -z` の解析。改名・複製は旧新の両方を別の項目で返す。 */
 export function parseStatus(out: string): StatusEntry[] {

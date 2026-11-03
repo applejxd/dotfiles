@@ -1283,7 +1283,10 @@ def flow_overview(page, kind: str, check, shots) -> None:
     check("次に pi へ入力したときに届く" in bar, f"{kind} 送信バーに届くタイミングの説明が無い")
     check(page.locator("button", has_text="統合").count() == 0, f"{kind} 統合のボタンがある")
     ws = page.evaluate("getComputedStyle(document.querySelector('.summary .cbody')).whiteSpace")
-    check(ws == "pre-wrap", f"{kind} 本文が pre-wrap でない: {ws}")
+    check(
+        ws == "normal" and page.locator(".summary .cbody.md").count() >= 1,
+        f"{kind} 本文が markdown 描画でない: {ws}",
+    )
     shot(page, shots, f"{kind}-overview-review")
 
 
@@ -1299,7 +1302,10 @@ def flow_diff_comment(page, kind: str, check, shots) -> None:
     ):
         check(s in t, f"{kind} 差分のスレッドに {s!r} が無い")
     ws = page.evaluate("getComputedStyle(document.querySelector('.thread .cbody')).whiteSpace")
-    check(ws == "pre-wrap", f"{kind} コメント本文が pre-wrap でない: {ws}")
+    check(
+        ws == "normal" and page.locator(".thread .cbody.md").count() >= 1,
+        f"{kind} コメント本文が markdown 描画でない: {ws}",
+    )
     # 同じ path・同じ行番号でも別の blob のスレッドは行の下に出さず、表の上の「対応しない」箱にまとめる
     other = "別の版の同じ行番号のコメント"
     check(
@@ -1508,6 +1514,124 @@ def flow_hostile_review(page, kind: str, check) -> None:
     page.wait_for_selector(".sheet", state="detached")
 
 
+def md_html(page, src: str) -> str:
+    return page.evaluate("s => PRV.md(s).outerHTML", src)
+
+
+def flow_markdown(br, check) -> None:
+    """markdown 描画: 対応記法、XSS の反例（生 HTML・javascript: ・data: ・画像）、上限、送信バーのキュー表示。"""
+    srv, base = serve()
+    ctx = br.new_context(viewport={"width": 390, "height": 844})
+    page = ctx.new_page()
+    page.goto(base + "/")
+    page.wait_for_selector(".prlist")
+    page.evaluate("window.__pwned = 0")
+    # --- 反例先行: 危険な入力は要素にならず、文字として出る ---
+    h = md_html(
+        page, '<img src=x onerror="window.__pwned=1"> </script><script>window.__pwned=1</script>'
+    )
+    check("<img" not in h and "<script" not in h, f"md: 生 HTML が要素になった: {h}")
+    check("&lt;img src=x onerror" in h, f"md: 生 HTML が文字として出ていない: {h}")
+    for bad in (
+        "javascript:alert(1)",
+        "data:text/html,x",
+        "JaVaScRiPt:x",
+        "vbscript:x",
+        "//evil.example/x",
+        "/relative",
+    ):
+        h = md_html(page, f"[click]({bad})")
+        check(
+            "<a" not in h and f"[click]({bad})" in h.replace("&amp;", "&"),
+            f"md: 危険なリンクが生きている {bad}: {h}",
+        )
+    h = md_html(page, "![alt text](https://evil.example/a.png)")
+    check("<img" not in h and "[画像: alt text]" in h, f"md: 画像が文字にならない: {h}")
+    h = md_html(page, "[a](https://ok.example/x) [b](#frag)")
+    check(
+        h.count("<a ") == 2 and 'rel="noopener noreferrer"' in h and 'target="_blank"' in h,
+        f"md: リンク: {h}",
+    )
+    h = md_html(page, '[**x**](https://ok.example/"onmouseover=1)')
+    check(
+        "onmouseover"
+        not in page.evaluate(
+            "s => [...PRV.md(s).querySelectorAll('*')].map(e => e.getAttributeNames().join()).join()",
+            '[x](https://ok.example/"onmouseover=1)',
+        ),
+        "md: 属性注入",
+    )
+    # --- 対応記法 ---
+    src = (
+        "# 見出し\n\n段落1\n同じ段落 `code` と **太字** と *斜体*\n\n- a\n  - a1\n- b\n\n1. x\n2. y\n\n"
+        "> 引用\n\n---\n\n```js\nlet a = '<b>';\n```\n\n| h1 | h2 |\n|---|---|\n| c1 | c2 |\n"
+    )
+    h = md_html(page, src)
+    for frag in (
+        "<h4",
+        "<br>",
+        "<code>code</code>",
+        "<strong>太字</strong>",
+        "<em>斜体</em>",
+        "<ul>",
+        "<ol>",
+        "<blockquote>",
+        "<hr>",
+        "<pre",
+        "<table>",
+        "<th>h1</th>",
+        "<td>c2</td>",
+        "&lt;b&gt;",
+    ):
+        check(frag in h, f"md: {frag!r} が無い: {h}")
+    check(
+        page.evaluate("s => PRV.md(s).querySelectorAll('ul ul li').length", src) == 1,
+        "md: 入れ子の箇条書きが無い",
+    )
+    # --- 上限: 巨大・行数超過・深い入れ子は重くならず、残りは文字 ---
+    t0 = page.evaluate(
+        "() => { const t = performance.now(); const e = PRV.md('*a '.repeat(30000) + '\\n' + '- x\\n'.repeat(5000));"
+        " window.__big = [e.querySelectorAll('li').length, !!e.querySelector('.mdrest')]; return performance.now() - t; }"
+    )
+    li, rest = page.evaluate("window.__big")
+    check(
+        t0 < 2000 and rest and li < 400,
+        f"md: 巨大な入力の上限が効かない ({t0}ms, li={li}, rest={rest})",
+    )
+    deep = page.evaluate(
+        "() => PRV.md('>>>>> deep\\n' + '- a\\n  - b\\n    - c\\n      - d').querySelectorAll('blockquote blockquote blockquote').length"
+    )
+    check(deep == 0, f"md: 引用の入れ子が上限を超えた {deep}")
+    check(not page.evaluate("window.__pwned"), "md: 敵対的な入力が実行された")
+    # --- 送信バーのキュー表示（3 状態） ---
+    js = (
+        "b => { const rv = { unsent: 2, batches: b, worktrees: [] };"
+        " return PRV.reviewBar({ pr: { state: 'open' }, review: rv, error: null }, null).innerText; }"
+    )
+    t = page.evaluate(js, [])
+    check(
+        "下書き 未送信 2 件" in t and "受け取り待ち 0 件" in t and "受領済み 0 件" in t,
+        f"queue: 空の表示: {t!r}",
+    )
+    check("キューに積まれ" not in t, f"queue: 待ち 0 件でキューの案内が出ている: {t!r}")
+    t = page.evaluate(js, [{"batchId": "b1", "received": False, "items": []}])
+    check(
+        "受け取り待ち 1 件" in t and "キューに積まれ" in t and "次に pi へ入力したときに届く" in t,
+        f"queue: 待ちあり: {t!r}",
+    )
+    t = page.evaluate(
+        js,
+        [
+            {"batchId": "b1", "received": True},
+            {"batchId": "b2", "received": True},
+            {"batchId": "b3", "received": False},
+        ],
+    )
+    check("受け取り待ち 1 件" in t and "受領済み 2 件" in t, f"queue: 受領済みの内訳: {t!r}")
+    ctx.close()
+    srv.shutdown()
+
+
 def flow_hub_light(br, check) -> None:
     """CHG-0062 A3: 統合先が進んだ・衝突の可能性・未 push の表示。パスは文字として出る。"""
     srv, base = serve()
@@ -1648,10 +1772,10 @@ def flow_live(br, check) -> None:
     js(
         "(() => { const t = document.querySelector('#app textarea'); t.focus(); t.setSelectionRange(2, 4); })()"
     )
-    check("未受信" in page.inner_text(".live-batches"), "live: 前提: 最初は未受信")
+    check("受け取り待ち" in page.inner_text(".live-batches"), "live: 前提: 最初は受け取り待ち")
     st.mark_received(LIVE_KEY)
     step(POLL_MS, 1, "受領済みを取り直す")
-    until(lambda: "pi が受け取り済み" in page.inner_text(".live-batches"), "受領済みの表示")
+    until(lambda: "pi が受領済み" in page.inner_text(".live-batches"), "受領済みの表示")
     got = js(
         "(() => { const t = document.querySelector('#app textarea'); return [t.value, document.activeElement === t,"
         " t.selectionStart, t.selectionEnd, t.hasAttribute('data-mark')]; })()"
@@ -3219,9 +3343,9 @@ def flow_create_submit(br, check) -> None:
         "create-submit: 依頼文が <details>（折りたたみ）でない",
     )
     card.locator("summary").click()
-    bt = page.locator(".briefbody").text_content() or ""
+    bt = page.locator(".briefbody").inner_text() or ""
     check(
-        HOSTILE_TITLE in bt and HOSTILE_GOAL in bt and "- apps/**" in bt,
+        HOSTILE_TITLE in bt and HOSTILE_GOAL in bt and "apps/**" in bt,
         f"create-submit: 依頼文が文字として出ていない: {bt!r}",
     )
     check(
@@ -4172,9 +4296,7 @@ def flow_create_real(br, check) -> None:
             check("起票のみ" in page.inner_text(".prhead"), "create-real: 起票のみのチップが無い")
             page.locator(".briefcard summary").click()
             bt = page.locator(".briefbody").text_content() or ""
-            check(
-                "実サーバで起票" in bt and "- docs/**" in bt, f"create-real: 依頼文が無い: {bt!r}"
-            )
+            check("実サーバで起票" in bt and "docs/**" in bt, f"create-real: 依頼文が無い: {bt!r}")
             page.locator(".crumb a").click()
             page.wait_for_selector(".prlist .rtitle")
             row = page.locator(".prrow", has_text="feature/real-feat")
@@ -4403,6 +4525,7 @@ def browser_main(shots: pathlib.Path | None) -> int:
         flow_live(br, check)
         flow_live_guards(br, check)
         flow_hub_light(br, check)
+        flow_markdown(br, check)
         for flow in (
             flow_merge_caps,
             flow_merge_steps,

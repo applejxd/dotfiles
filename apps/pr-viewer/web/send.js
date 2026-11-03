@@ -9,7 +9,29 @@
     ["approve", "承認"],
   ];
   var DELIVERY = "送ったレビューは、次に pi へ入力したときに届く（pi が自動で読みに来るわけではない）。";
+  var QUEUED = "キューに積まれています。次に pi へ入力したときに届く（pi が自動で読みに来るわけではない）。";
   var current = null;
+
+  /* 送信済みバッチの内訳: 受け取り待ち（キュー）と受領済み */
+  function queueCounts(rv) {
+    var bs = rv && Array.isArray(rv.batches) ? rv.batches : [];
+    var done = bs.filter(function (b) {
+      return b && b.received;
+    }).length;
+    return { pending: bs.length - done, received: done };
+  }
+
+  /* 固定バーのキュー表示を描き直す（初回と自動更新で共用） */
+  PRV.paintQueue = function (bar, rv) {
+    var q = queueCounts(rv);
+    var line = bar.querySelector(".revqueue");
+    if (line) {
+      line.textContent = "送信済み・pi の受け取り待ち " + q.pending + " 件 ・ pi が受領済み " + q.received + " 件";
+      line.className = "revqueue small " + (q.pending > 0 ? "attn" : "muted");
+    }
+    var note = bar.querySelector(".revnote");
+    if (note) note.textContent = q.pending > 0 ? QUEUED : DELIVERY;
+  };
 
   PRV.closeSheet = function () {
     if (current) {
@@ -87,7 +109,7 @@
         function (res) {
           var n = res && Array.isArray(res.items) ? res.items.length : 0;
           PRV.closeSheet();
-          ctx.reload("レビューを送りました（コメント " + n + " 件）。次に pi へ入力したときに届きます。");
+          ctx.reload("レビューを送りました（コメント " + n + " 件）。キューに積まれました。次に pi へ入力したときに届きます。");
         },
         function (e) {
           err.textContent = e && e.userMessage ? e.userMessage : "送信に失敗しました。";
@@ -129,6 +151,7 @@
       return bar;
     }
     var main = h("div", { class: "revmain" });
+    main.appendChild(h("span", { class: "muted small", text: "下書き " }));
     main.appendChild(h("strong", { class: "revcount", text: "未送信 " + (rv.unsent || 0) + " 件" }));
     main.appendChild(h("span", { class: "revchips" }, PRV.mainChip(ctx.pr, rv), PRV.staleReviewChip(rv)));
     var open = h("button", { class: "btn primary", type: "button", text: "レビューを送る…" });
@@ -140,7 +163,9 @@
       openSheet(ctx, approve, "approve");
     });
     bar.appendChild(main);
-    bar.appendChild(h("span", { class: "revnote small", text: DELIVERY }));
+    bar.appendChild(h("div", { class: "revqueue small", role: "status" }));
+    bar.appendChild(h("span", { class: "revnote small" }));
+    PRV.paintQueue(bar, rv);
     bar.appendChild(h("div", { class: "revbtns" }, open, approve));
     if (notice) bar.appendChild(h("div", { class: "revnotice", role: "status", text: notice }));
     return bar;
@@ -190,7 +215,7 @@
             null,
             h("strong", { text: label[b.kind] || String(b.kind) }),
             " ・ " + n + " 件 ・ " + to + " ・ ",
-            b.received ? h("span", { class: "c-ok", text: "● pi が受け取り済み" }) : h("span", { class: "attn", text: "○ 未受信（次に pi へ入力したときに届く）" }),
+            b.received ? h("span", { class: "c-ok", text: "● pi が受領済み" }) : h("span", { class: "attn", text: "○ 受け取り待ち（キュー。次に pi へ入力したときに届く）" }),
             ctx && ctx.canWrite ? " " : null,
             ctx && ctx.canWrite ? resendButton(b) : null
           );

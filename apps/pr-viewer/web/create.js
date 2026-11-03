@@ -602,8 +602,8 @@
       scope: Array.isArray(b.scope) ? b.scope.map(String) : [],
       acceptance: String(b.acceptance || ""),
     });
-    var pre = h("pre", { class: "mmsg briefbody" });
-    pre.textContent = text;
+    var pre = PRV.md(text);
+    pre.classList.add("briefbody");
     return h(
       "section",
       { class: "card briefcard" },
