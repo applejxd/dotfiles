@@ -401,6 +401,7 @@ RULES: tuple[Rule, ...] = (
         "並列実装の関門", ("scripts/feature_gate.py",), ("test_feature_gate", "test_parallel_check")
     ),
     Rule("worktree の所有表明", ("scripts/wt_owner.py",), ("test_wt_owner",)),
+    Rule("統合用の枝 (train)", ("scripts/train.py",), ("test_train",)),
     Rule("skill-lab のスキル同期", ("scripts/sync_skill_lab.py",), ("test_sync_skill_lab",)),
     Rule("model-eval", ("scripts/model-eval/**",), ("test_model_eval",)),
     Rule(

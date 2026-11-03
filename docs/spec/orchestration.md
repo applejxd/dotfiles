@@ -106,6 +106,25 @@
 | `/worktrees` | 隔離の worktree の掃除・回収のやり直し（利用者専用） | [pi の子エージェント](guard/pi-subagents.md#worktree-隔離の場所と承認) |
 | フッター | 動いている子の数・経過時間（3 件以下は名前つき） | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
 
+## 統合用の枝（train）
+
+複数の feature を 1 回の全件検査・1 回の「統合する」で取り込むため、統合用の枝 `feature/train-N`（worktree `.tmp/worktrees/train-N`）を `scripts/train.py` で作る。`git flow` は呼ばない（`.gitflow` の接頭辞と基点を読む）。
+
+| コマンド | 内容 |
+| --- | --- |
+| `python3 scripts/train.py start [--name train-N] <feature>...` | develop の最新から枝と worktree を作り、指定順に `git merge` する。`a` でも `feature/a` でもよい。名前を省くと空き番号を選ぶ |
+| `continue [--name train-N]` | 衝突が解消され `git add -A` 済みならコミットし、残りの枝を続ける |
+| `verify [--name train-N]` | その worktree で `mise run verify:all` を回し、件数と終了コードを要約する（`TRAIN_VERIFY_CMD` で差し替え可） |
+| `status` / `summary` | 取り込み済み・未取り込み・衝突中の一覧 / PR 要約の材料（枝ごとのコミット数・変更ファイル数） |
+
+各枝の前に、「存在する」「develop に未統合」「worktree に生きた pid の owner lock（`locked owner=<kind> id=<id> pid=<pid> started=<秒>`）が無い」を確かめ、満たさなければ何も作らず止まる。
+
+**終了コード**: 0 成功 / 1 verify 失敗 / 2 使い方・前提違反・git の失敗 / 3 衝突で停止。
+
+**衝突の扱い**: 衝突したら、そこで止めて衝突ファイルの一覧を出す（終了コード 3）。**自明に見える衝突でもスクリプトは直さない**。設計上、衝突は worker が直す（取り違えると片方の変更を黙って捨てるため、解消は意味を読める役が責任を持つ）。worker が worktree で解消し、`git add -A` したあと `continue` を呼ぶ。マーカーが残っていると `continue` は拒否する。
+
+AI のガードが `git merge` を直接は通さない場合に備え、`python3 scripts/train.py ...` の形で呼ぶ想定。ガード側で通るかは未確認。Windows は未検証。
+
 ## 9. 未実装・保留（案件）
 
 仕様ではなく、決まっていることの置き場。着手するときは、案件の記述が正本になる。
