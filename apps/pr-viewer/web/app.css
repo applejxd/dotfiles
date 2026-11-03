@@ -209,3 +209,27 @@ td.code.can { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 .livebar { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
 .livebar [hidden] { display: none; }
+
+/* 統合する: カード・スマホ用の固定バー・承認シート */
+.mergecard .btn { width: 100%; }
+.mergebar { display: none; }
+.sheet.mergesheet { width: min(640px, 100%); }
+.mergesheet details { margin: 2px 0; }
+.mergesheet summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.mergebr li { padding: 4px 0; overflow-wrap: anywhere; }
+.mergebr .k { color: var(--muted); }
+.oidfull code { overflow-wrap: anywhere; }
+.mfiles ul { max-height: 220px; overflow: auto; }
+.mfiles li { overflow-wrap: anywhere; }
+.mergesheet .alertbox { margin: 0; }
+.mmsg { margin: 0; padding: 8px; background: var(--bg2); border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.confirmrow { display: flex; gap: 10px; align-items: center; min-height: 44px; font-weight: 600; }
+.confirmrow input { width: 22px; height: 22px; flex: none; }
+.mergeback { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--bd); display: flex; gap: 8px; flex-wrap: wrap; justify-content: space-between; }
+.mergesheet ol { margin: 4px 0; padding-left: 22px; }
+@media (max-width: 719px) {
+  .mergebar { display: flex; position: sticky; bottom: 0; z-index: 6; margin-top: 8px; padding: 8px 12px; border: 1px solid var(--bd); border-radius: 8px; background: var(--bg2); }
+  .mergebar .btn { flex: 1 1 100%; }
+  .hasmerge .revbar { bottom: 64px; }
+  .confirmrow { min-height: 48px; }
+}

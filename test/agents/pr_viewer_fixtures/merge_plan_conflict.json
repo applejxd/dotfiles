@@ -1,0 +1,12 @@
+{
+  "mergeable": false,
+  "refusal": {
+    "code": "conflict",
+    "message": "統合先と衝突しています。",
+    "conflicts": ["a.txt", "<img src=x onerror=\"window.__pwned=1\">.txt"]
+  },
+  "blockers": [],
+  "plan": null,
+  "defaults": {"message": "", "messageSource": "generated", "summaryStale": false, "cleanup": "none"},
+  "warnings": []
+}

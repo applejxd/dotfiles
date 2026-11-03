@@ -13,11 +13,21 @@
 
   PRV.closeSheet = function () {
     if (current) {
-      current.backdrop.remove();
-      document.removeEventListener("keydown", current.onKey);
-      if (current.opener && current.opener.isConnected) current.opener.focus();
+      var c = current;
       current = null;
+      c.backdrop.remove();
+      document.removeEventListener("keydown", c.onKey);
+      if (c.onClose) c.onClose();
+      if (c.opener && c.opener.isConnected) c.opener.focus();
     }
+  };
+
+  /* 別のシート（統合する）が、同じ「開いている」扱いと閉じ方を使うための入口。onClose は閉じた直後に呼ぶ */
+  PRV.openSheet = function (backdrop, onKey, opener, onClose) {
+    PRV.closeSheet();
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(backdrop);
+    current = { backdrop: backdrop, onKey: onKey, opener: opener, onClose: onClose };
   };
 
   PRV.sheetOpen = function () {
@@ -104,9 +114,7 @@
     var onKey = function (ev) {
       if (ev.key === "Escape") PRV.closeSheet();
     };
-    document.addEventListener("keydown", onKey);
-    document.body.appendChild(backdrop);
-    current = { backdrop: backdrop, onKey: onKey, opener: opener };
+    PRV.openSheet(backdrop, onKey, opener);
     paint();
     btns.comment.focus();
   }

@@ -263,6 +263,7 @@ def test_web_dir_has_files() -> None:
         "review.js",
         "send.js",
         "live.js",
+        "merge.js",
     } <= names
 
 
@@ -314,6 +315,59 @@ def test_fake_server_checks_expect() -> None:
     code, res = post_response(path, {"body": "x", "expect": exp}, st)
     assert code == 409 and res["error"]["code"] == "stale_view"
     assert post_response(path, {"body": "x"}, st)[0] == 201 and st.missing_expect == ["comments"]
+
+
+def test_merge_api_and_screen_are_wired() -> None:
+    """統合 (CHG-0062 段 A2): API の 3 本と、画面の統合・既存の「承認して送る」の分離。"""
+    api = (WEB / "api.js").read_text(encoding="utf-8")
+    assert "/api/capabilities" in api and "/merge-plan" in api and '"/merge"' in api
+    assert re.search(r"/merge\"[^;]*expect\s*:\s*m\.expect[^;]*cleanup\s*:\s*m\.cleanup", api)
+    merge = (WEB / "merge.js").read_text(encoding="utf-8")
+    send = (WEB / "send.js").read_text(encoding="utf-8")
+    assert "PRV.api.submit" not in merge  # レビューの承認を再利用しない
+    assert "PRV.openSheet" in merge and "PRV.openSheet" in send
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    assert "/web/merge.js" in html and html.index("/web/send.js") < html.index("/web/merge.js")
+    assert "承認して送る" in send
+
+
+def test_merge_fixtures_follow_contract() -> None:
+    oid = re.compile(r"[0-9a-f]{40}")
+    assert load_fixture("capabilities.json")["targets"] == ["develop"]
+    for name in ("ok", "conflict", "blocked", "riskcfg", "hostile"):
+        p = load_fixture(f"merge_plan_{name}.json")
+        assert {"mergeable", "refusal", "blockers", "plan", "defaults", "warnings"} <= set(p), name
+        assert (p["plan"] is None) == (not p["mergeable"]), name
+        if p["plan"]:
+            assert oid.fullmatch(p["plan"]["source"]["oid"])
+            assert oid.fullmatch(p["plan"]["target"]["oid"])
+            assert p["plan"]["riskConfig"] in ("loaded", "unavailable")
+    assert load_fixture("merge_plan_conflict.json")["refusal"]["conflicts"]
+    assert load_fixture("merge_plan_blocked.json")["blockers"]
+    assert load_fixture("merge_plan_riskcfg.json")["plan"]["riskConfig"] == "unavailable"
+    for name, recorded in (("merge_ok", True), ("merge_unrecorded", False)):
+        m = load_fixture(f"{name}.json")["merge"]
+        assert oid.fullmatch(m["commit"]) and m["recorded"] is recorded, name
+
+
+def test_fake_server_merge_routes() -> None:
+    """偽物サーバ自身の確認: merge-plan・merge・版違い・枝の削除。"""
+    st = ReviewState()
+    base = "/api/prs/r1a2b3c4d/paaaaaaaaaaaaaaa1"
+    assert api_response("/api/capabilities", st)[1]["merge"] is False
+    st.caps_mode = "on"
+    assert api_response("/api/capabilities", st)[1]["merge"] is True
+    st.caps_mode = "404"
+    assert api_response("/api/capabilities", st)[0] == 404
+    assert post_response(base + "/merge-plan", {}, st)[1]["mergeable"] is True
+    exp = {"source": "a" * 40, "target": "b" * 40}
+    body = {"expect": exp, "message": "m", "cleanup": "branch"}
+    code, res = post_response(base + "/merge", body, st)
+    assert code == 200 and res["merge"]["cleanup"]["done"] == ["branch"]
+    assert api_response(base, st)[0] == 404  # 枝を消した詳細は 404
+    st2 = ReviewState()
+    st2.bumped.add("paaaaaaaaaaaaaaa1")
+    assert post_response(base + "/merge", {"expect": exp}, st2)[1]["error"]["code"] == "stale_view"
 
 
 def test_html_has_no_inline_code() -> None:
@@ -390,6 +444,19 @@ class ReviewState:
         self.last_expect: dict | None = None
         self.last_submit: dict | None = None
         self.submit_log: list[dict] = []  # 受け付けた submit の全件
+        # --- 統合 (CHG-0062 段 A2) ---
+        self.caps_mode = "off"  # off: merge=false / on: merge=true / 404: 古いサーバ
+        self.plan_name = "merge_plan_ok.json"
+        self.plan_for: dict[str, str] = {}  # key ごとの merge-plan の fixture
+        self.plan_gate: dict[str, threading.Event] = {}  # セットされるまで merge-plan の応答を保留
+        self.plan_calls: list[str] = []
+        self.merge_mode = "ok"  # ok / ok_unrecorded / error / drop (応答を返さず切断)
+        self.merge_error: tuple[int, str, str, dict] = (500, "internal", "", {})
+        self.merge_gate: threading.Event | None = None  # セットされるまで merge の応答を保留
+        self.merge_log: list[dict] = []
+        self.merged_keys: set[str] = set()  # 統合済みにする key
+        self.deleted: set[str] = set()  # 枝を消した key (詳細は 404)
+        self.pr_gets: dict[str, int] = {}  # GET 詳細の回数 (キャッシュを捨てた確認用)
 
     def get(self, key: str) -> dict:
         if key not in self.rv:
@@ -514,6 +581,11 @@ def find_pr(parts: list[str], state: ReviewState | None = None) -> dict | None:
     )
     if pr is not None and state is not None and parts[3] in state.bumped:
         pr = {**pr, "sourceOid": BUMPED_OID}  # 更新後の版
+    if pr is not None and state is not None:
+        if parts[3] in state.deleted:
+            return None
+        if parts[3] in state.merged_keys:
+            pr = {**pr, "state": "merged"}
     return pr
 
 
@@ -527,11 +599,16 @@ def api_response(path: str, state: ReviewState | None = None) -> tuple[int, dict
         return 200, load_fixture("repos.json")
     if parts == ["api", "prs"]:
         return 200, load_fixture("prs.json")
+    if parts == ["api", "capabilities"]:
+        if state.caps_mode == "404":
+            return err
+        return 200, {**load_fixture("capabilities.json"), "merge": state.caps_mode == "on"}
     if len(parts) in (4, 5) and parts[:2] == ["api", "prs"]:
         pr = find_pr(parts, state)
         if pr is None:
             return err
         if len(parts) == 4:
+            state.pr_gets[parts[3]] = state.pr_gets.get(parts[3], 0) + 1
             return 200, {"pr": pr, **load_fixture(f"detail_{parts[3]}.json")}
         if parts[4] == "review":
             state.review_gets[parts[3]] = state.review_gets.get(parts[3], 0) + 1
@@ -548,8 +625,52 @@ def api_response(path: str, state: ReviewState | None = None) -> tuple[int, dict
     return err
 
 
+class DropConnection(Exception):
+    """応答を返さずに接続を切る (通信断の試験)。"""
+
+
+CLEANUP_DONE = {"none": [], "branch": ["branch"], "branch_and_worktree": ["branch", "worktree"]}
+
+
+def merge_post(parts: list[str], payload: dict, state: ReviewState, pr: dict) -> tuple[int, dict]:
+    """契約 §2・§3 の merge-plan / merge の偽物。"""
+    key = parts[3]
+    if parts[4] == "merge-plan":
+        state.plan_calls.append(key)
+        gate = state.plan_gate.get(key)
+        if gate is not None:
+            gate.wait(10)
+        return 200, load_fixture(state.plan_for.get(key) or state.plan_name)
+    state.merge_log.append(payload)
+    if state.merge_gate is not None:
+        state.merge_gate.wait(10)
+    if state.merge_mode == "drop":
+        raise DropConnection
+    if payload.get("expect") != {"source": pr["sourceOid"], "target": pr["targetOid"]}:
+        return 409, err_body("stale_view", "表示中の版から PR が更新されています。")
+    if state.merge_mode == "error":
+        status, code, msg, extra = state.merge_error
+        body = err_body(code, msg)
+        body["error"].update(extra)
+        return status, body
+    res = load_fixture(
+        "merge_unrecorded.json" if state.merge_mode == "ok_unrecorded" else "merge_ok.json"
+    )
+    cleanup = payload.get("cleanup", "none")
+    res["merge"]["cleanup"] = {"requested": cleanup, "done": CLEANUP_DONE[cleanup]}
+    state.merged_keys.add(key)
+    if "branch" in CLEANUP_DONE[cleanup]:
+        state.deleted.add(key)
+    return 200, res
+
+
 def post_response(path: str, payload: dict, state: ReviewState) -> tuple[int, dict]:
     parts = [p for p in urllib.parse.urlparse(path).path.split("/") if p]
+    if len(parts) == 5 and parts[:2] == ["api", "prs"] and parts[4] in ("merge-plan", "merge"):
+        pr = find_pr(parts, state)
+        if pr is None:
+            return 404, err_body("not_found", "見つかりません。")
+        return merge_post(parts, payload, state, pr)
     if len(parts) == 5 and parts[:2] == ["api", "prs"] and find_pr(parts, state) is not None:
         pr = find_pr(parts, state)
         exp = payload.get("expect")
@@ -606,7 +727,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not isinstance(payload, dict):
             self._json(400, err_body("bad_json", "本文が正しくありません。"))
             return
-        code, data = post_response(self.path, payload, self.server.state)  # type: ignore[attr-defined]
+        try:
+            code, data = post_response(self.path, payload, self.server.state)  # type: ignore[attr-defined]
+        except DropConnection:
+            self.close_connection = True  # 応答を返さずに切る
+            return
         self._json(code, data)
 
     def do_GET(self) -> None:
@@ -1346,6 +1471,653 @@ def flow_live_guards(br, check) -> None:
     srv.shutdown()
 
 
+# --- 統合の承認シート (CHG-0062 段 A2) ---
+
+HOSTILE = '<img src=x onerror="window.__pwned=1">'
+KEY_A = "paaaaaaaaaaaaaaa1"
+ID_A = f"r1a2b3c4d/{KEY_A}"
+KEY_B = "p2222222222222222"
+RECOVER_LINES = (
+    "他の git・エディターの自動保存・ビルドが動いていないことを確かめる",
+    "node apps/pr-viewer/merge-cli.ts recover <リポジトリのパス>",
+    "画面を再読み込みする",
+)
+UNKNOWN = "結果を確認できません。再読み込みして PR の状態を確認してください。"
+CHECK_TREE = "統合先の作業ツリーを確認してください"
+# (code, HTTP, 画面に出る文言, 再試行できるか, 応答に足す項目)
+MERGE_ERRORS: list[tuple[str, int, tuple[str, ...], bool, dict]] = [
+    ("merge_disabled", 403, ("この画面からは統合できません",), False, {}),
+    ("forbidden_origin", 403, ("この画面からは統合できません",), False, {}),
+    ("bad_message", 400, ("入力に誤りがあります",), True, {}),
+    ("not_found", 404, ("PR が見つかりません", "一覧へ"), False, {}),
+    ("no_target", 404, ("PR が見つかりません",), False, {}),
+    ("policy_target", 403, ("統合できない PR です",), False, {}),
+    ("stale_view", 409, ("最新の版を読み込む",), False, {}),
+    ("not_ff", 409, ("最新の版を読み込む",), False, {}),
+    ("already_merged", 409, (CHECK_TREE,), False, {}),
+    ("dirty", 409, (CHECK_TREE,), True, {}),
+    ("head_mismatch", 409, (CHECK_TREE,), True, {}),
+    ("no_identity", 409, (CHECK_TREE,), True, {}),
+    (
+        "conflict",
+        409,
+        ("衝突の解消は pi で行ってください", "conflict-a.txt", HOSTILE + ".txt"),
+        False,
+        {"conflicts": ["conflict-a.txt", HOSTILE + ".txt"]},
+    ),
+    ("busy", 409, ("しばらくして再試行してください",), True, {}),
+    ("legacy_pending", 409, (), False, {}),
+    ("too_large", 413, ("本文が大きすぎます",), True, {}),
+]
+UNCERTAIN = [("merge_failed", 500), ("internal", 500)]
+
+
+def merge_page(br, kind: str = "pc"):
+    """統合の試験用のサーバとページ。capabilities は merge=true。"""
+    srv, base = serve()
+    st: ReviewState = srv.state  # type: ignore[attr-defined]
+    st.caps_mode = "on"
+    sp = kind == "sp"
+    size = {"width": 393, "height": 852} if sp else {"width": 1280, "height": 900}
+    ctx = br.new_context(viewport=size, has_touch=sp, is_mobile=sp, color_scheme="light")
+    page = ctx.new_page()
+    errs: list[str] = []
+    page.on("pageerror", lambda e, errs=errs: errs.append(f"pageerror: {e}"))
+    page.on(
+        "request",
+        lambda r, errs=errs, base=base: (
+            errs.append(f"外部通信: {r.url}") if not r.url.startswith((base, "data:")) else None
+        ),
+    )
+    return srv, base, st, ctx, page, errs
+
+
+def merge_open(page, base: str, key: str = KEY_A, bar: bool = False) -> None:
+    """PR の概要を開き、「統合する…」でシートを開いて計画の表示を待つ。"""
+    page.goto(f"{base}/#/pr/r1a2b3c4d/{key}")
+    page.wait_for_selector(".revbar")
+    page.locator(".mergebar button" if bar else ".mergecard button").click()
+    page.wait_for_selector(".mergesheet .mergenext")
+
+
+def merge_confirm(page) -> None:
+    """手順 1 → 手順 2 (最終確認) へ進む。"""
+    page.locator(".mergesheet .mergenext").click()
+    page.wait_for_selector(".mergesheet input[type=checkbox]")
+
+
+def merge_go(page) -> None:
+    """チェックを入れて「統合する」を押す。"""
+    page.locator(".mergesheet input[type=checkbox]").check()
+    page.locator(".mergesheet .mergego").click()
+
+
+def waitfor(cond, what: str, check, timeout: float = 5.0) -> bool:
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if cond():
+            return True
+        time.sleep(0.05)
+    check(False, f"merge: 待ち切れない: {what}")
+    return False
+
+
+def flow_merge_caps(br, check) -> None:
+    """capabilities: merge=false・404 (古いサーバ)・統合済みの PR ではボタンを出さない。"""
+    srv, base, st, ctx, page, errs = merge_page(br)
+    both = ".mergecard button, .mergebar button"
+    for mode in ("off", "404"):
+        st.caps_mode = mode
+        page.goto(f"{base}/#/pr/r1a2b3c4d/{KEY_A}")
+        page.reload()
+        page.wait_for_selector(".revbar")
+        check(page.locator(both).count() == 0, f"merge-caps: caps={mode} でボタンがある")
+        check(
+            page.locator(".revbar button", has_text="承認して送る").count() == 1,
+            f"merge-caps: caps={mode} で既存のボタンが無い",
+        )
+    st.caps_mode = "on"
+    page.reload()
+    page.wait_for_selector(".revbar")
+    check(
+        page.locator(".mergecard button").count() == 1,
+        "merge-caps: caps=on でカードのボタンが 1 つでない",
+    )
+    check(
+        page.locator(".revbar button", has_text="承認して送る").count() == 1,
+        "merge-caps: 「承認して送る…」が消えた",
+    )
+    page.goto(f"{base}/#/pr/r1a2b3c4d/p1111111111111111")  # 統合済み
+    page.wait_for_selector("text=変更ファイル (1)")
+    check(page.locator(both).count() == 0, "merge-caps: 統合済みの PR にボタンがある")
+    check(errs == [], f"merge-caps: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_merge_steps(br, check) -> None:
+    """手順 1・2、承認 snapshot、成功後の一覧への遷移。背景のフォーカス・キー操作。"""
+    srv, base, st, ctx, page, errs = merge_page(br)
+    merge_open(page, base)
+    sheet = page.locator(".mergesheet")
+    check(sheet.get_attribute("role") == "dialog", "merge: role=dialog でない")
+    check(sheet.get_attribute("aria-modal") == "true", "merge: aria-modal でない")
+    t = sheet.inner_text()
+    full = sheet.text_content() or ""  # 折りたたみの中身も含む
+    for s in (
+        "統合できます",
+        "feature/example",
+        "develop",
+        "aaaaaaa",
+        "bbbbbbb",
+        "コミット 3 件",
+        "ファイル 12 件",
+        "+120",
+        "−8",
+        "AGENTS.md",
+        "変更依頼のままです。",
+        "レビュー記録の下書き",
+        "残す",
+        "枝を削除",
+        "枝と作業ツリーを削除",
+        "未コミットがあれば残します",
+    ):
+        check(s in full, f"merge: 手順 1 に {s!r} が無い")
+    for s in ("docs/index.md", "ほか 10 件", "a" * 40, "b" * 40):
+        check(s in full, f"merge: 手順 1 (展開内) に {s!r} が無い")
+    check("リスク設定を読み込めません" not in t, "merge: 設定を読めているのに警告が出る")
+    ta = page.locator(".mergesheet textarea")
+    default_msg = load_fixture("merge_plan_ok.json")["defaults"]["message"]
+    check(ta.input_value() == default_msg, "merge: メッセージの既定値が違う")
+    pressed = page.locator(".mergesheet .seg button[aria-pressed='true']").all_inner_texts()
+    check(
+        len(pressed) == 1 and pressed[0].endswith("残す"),
+        f"merge: cleanup の既定が「残す」でない: {pressed}",
+    )
+    check(page.locator(".mergesheet form").count() == 0, "merge: form 要素がある")
+    # 背景: #app は操作できない。Tab はシートの外へ出ない
+    check(
+        page.evaluate("document.getElementById('app').inert") is True,
+        "merge: シート中も背景が操作できる",
+    )
+    outside = 0
+    for _ in range(30):
+        page.keyboard.press("Tab")
+        if not page.evaluate("!!document.activeElement.closest('.mergesheet')"):
+            outside += 1
+    check(outside == 0, f"merge: Tab でシートの外へフォーカスが出た ({outside} 回)")
+    # Esc で閉じ、開いたボタンへフォーカスが戻る。背景のタップでも閉じる (実行中でないとき)
+    page.keyboard.press("Escape")
+    page.wait_for_selector(".mergesheet", state="detached")
+    check(
+        page.evaluate("document.getElementById('app').inert") is False,
+        "merge: 閉じた後も背景が inert",
+    )
+    check(
+        page.evaluate("!!document.activeElement.closest('.mergecard')"),
+        "merge: 閉じた後にフォーカスがボタンへ戻らない",
+    )
+    page.locator(".mergecard button").click()
+    page.wait_for_selector(".mergesheet .mergenext")
+    page.mouse.click(5, 5)
+    page.wait_for_selector(".mergesheet", state="detached")
+    # 手順 1 を編集 → 手順 2
+    page.locator(".mergecard button").click()
+    page.wait_for_selector(".mergesheet .mergenext")
+    msg = "feat: 編集した件名\n\n本文の一行\n二行目\n三行目\n四行目"
+    page.locator(".mergesheet textarea").fill(msg)
+    page.locator(".mergesheet .seg button", has_text="枝を削除").first.click()
+    merge_confirm(page)
+    t = page.locator(".mergesheet").inner_text()
+    for s in (
+        "feature/example（aaaaaaa）を develop（bbbbbbb）へ merge commit で統合します",
+        "feat: 編集した件名",
+        "本文の一行",
+        "本文の一行",
+        "この内容で develop を更新することを確認しました",
+        "枝",
+    ):
+        check(s in t, f"merge: 手順 2 に {s!r} が無い")
+    check("二行目" not in t, "merge: 手順 2 のメッセージが先頭 3 行でない")
+    check(page.locator(".mergesheet textarea").count() == 0, "merge: 手順 2 に編集欄がある")
+    go = page.locator(".mergesheet .mergego")
+    cb = page.locator(".mergesheet input[type=checkbox]")
+    check(go.is_disabled(), "merge: 確認前に「統合する」が有効")
+    cb.check()
+    check(go.is_enabled(), "merge: 確認後も「統合する」が無効")
+    cb.uncheck()
+    check(go.is_disabled(), "merge: チェックを外したのに「統合する」が有効")
+    cb.check()
+    gb = page.locator(".mergesheet .mergebackbtn").bounding_box()
+    gg = go.bounding_box()
+    check(
+        gb is not None and gg is not None and abs(gb["y"] - gg["y"]) + abs(gb["x"] - gg["x"]) > 40,
+        f"merge: 「戻る」が「統合する」の近くにある {gb} {gg}",
+    )
+    # 「戻る」でチェックを外す。編集内容と cleanup は残る
+    page.locator(".mergesheet .mergebackbtn").click()
+    page.wait_for_selector(".mergesheet textarea")
+    check(
+        page.locator(".mergesheet textarea").input_value() == msg, "merge: 戻ったとき編集を失った"
+    )
+    still = page.locator(".mergesheet .seg button[aria-pressed='true']").inner_text()
+    check(still.endswith("枝を削除"), f"merge: 戻ったとき cleanup を失った: {still}")
+    merge_confirm(page)
+    check(
+        not page.locator(".mergesheet input[type=checkbox]").is_checked(),
+        "merge: 戻った後にチェックが残る",
+    )
+    check(page.locator(".mergesheet .mergego").is_disabled(), "merge: 戻った後に「統合する」が有効")
+    # 計画の取り直しもチェックを外す (手順 1 へ戻ってから)
+    page.locator(".mergesheet .mergebackbtn").click()
+    n = len(st.plan_calls)
+    page.locator(".mergesheet", has_text="計画を取り直す").locator(
+        "button", has_text="計画を取り直す"
+    ).click()
+    waitfor(lambda: len(st.plan_calls) == n + 1, "計画の取り直し", check)
+    page.wait_for_selector(".mergesheet .mergenext:not([disabled])")
+    check(
+        page.locator(".mergesheet textarea").input_value() == msg,
+        "merge: 計画の取り直しで編集を失った",
+    )
+    merge_confirm(page)
+    merge_go(page)
+    page.wait_for_selector(".mergesheet .mergeresult")
+    want = {"expect": {"source": "a" * 40, "target": "b" * 40}, "message": msg, "cleanup": "branch"}
+    check(st.merge_log == [want], f"merge: 送信内容が snapshot と違う: {st.merge_log}")
+    t = page.locator(".mergesheet").inner_text()
+    for s in (
+        "統合しました",
+        "fffffff",
+        "後始末: branch を実行しました",
+        "作業ツリーの削除は未コミットがあるため見送りました",
+    ):
+        check(s in t, f"merge: 成功の表示に {s!r} が無い")
+    check("画面用の記録は保存できませんでした" not in t, "merge: recorded=true で記録失敗の表示")
+    # 枝を消したときは一覧へ (詳細は 404 になる)
+    before = st.pr_gets.get(KEY_A, 0)
+    page.locator(".mergesheet button", has_text="一覧へ").click()
+    page.wait_for_selector(".prlist")
+    check(page.evaluate("location.hash") == "#/", "merge: 一覧へ遷移しない")
+    check(page.locator(".mergesheet").count() == 0, "merge: 一覧にシートが残る")
+    check(st.pr_gets.get(KEY_A, 0) == before, "merge: 枝を消したのに詳細を取り直した")
+    check(len(st.merge_log) == 1, f"merge: POST が 1 回でない: {len(st.merge_log)}")
+    check(errs == [], f"merge: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_merge_keep(br, check) -> None:
+    """枝を残すときは PR 本体のキャッシュを捨てて取り直す。recorded:false の表示。"""
+    srv, base, st, ctx, page, errs = merge_page(br)
+    st.merge_mode = "ok_unrecorded"
+    merge_open(page, base)
+    merge_confirm(page)
+    merge_go(page)
+    page.wait_for_selector(".mergesheet .mergeresult")
+    t = page.locator(".mergesheet").inner_text()
+    check("統合は成功しました" in t, "merge: recorded=false で「統合は成功」と出ない")
+    check("画面用の記録は保存できませんでした" in t, "merge: recorded=false の表示が無い")
+    check(st.merge_log[0]["cleanup"] == "none", "merge: 既定の cleanup が none でない")
+    before = st.pr_gets.get(KEY_A, 0)
+    page.locator(".mergesheet button", has_text="最新の状態を読み込む").click()
+    page.wait_for_selector(".prhead .chip:has-text('統合済み')")
+    check(st.pr_gets.get(KEY_A, 0) > before, "merge: PR 本体を取り直さない (古いキャッシュ)")
+    check(page.locator(".mergesheet").count() == 0, "merge: 取り直し後にシートが残る")
+    check(
+        page.locator(".mergecard button, .mergebar button").count() == 0,
+        "merge: 統合済みなのにボタンがある",
+    )
+    check(errs == [], f"merge: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_merge_running(br, check) -> None:
+    """実行中: 二重押下でも POST は 1 回。入力をすべて無効にし、背景・Esc・自動更新で消えない。"""
+    srv, base, st, ctx, page, errs = merge_page(br)
+    st.merge_gate = threading.Event()
+    merge_open(page, base)
+    merge_confirm(page)
+    page.locator(".mergesheet input[type=checkbox]").check()
+    page.locator(".mergesheet .mergego").click()
+    page.evaluate(
+        "(() => { const b = document.querySelector('.mergesheet .mergego'); if (b) { b.click(); b.click(); } })()"
+    )
+    waitfor(lambda: len(st.merge_log) >= 1, "merge の受信", check)
+    time.sleep(0.3)
+    check(len(st.merge_log) == 1, f"merge: 二重押下で POST が {len(st.merge_log)} 回")
+    t = page.locator(".mergesheet").inner_text()
+    check("統合中…（画面を閉じても処理は続きます）" in t, f"merge: 実行中の表示が無い: {t!r}")
+    alld = page.evaluate(
+        "[...document.querySelectorAll('.mergesheet button, .mergesheet input, .mergesheet textarea, .mergesheet select')]"
+        ".every(e => e.disabled)"
+    )
+    check(alld is True, "merge: 実行中に無効でない入力がある")
+    page.keyboard.press("Escape")
+    page.mouse.click(5, 5)
+    page.mouse.click(5, 5)
+    check(page.locator(".mergesheet").count() == 1, "merge: 実行中に Esc / 背景のタップで閉じた")
+    # 自動更新 (3 秒間隔) で pi の返信を取りなおしても、シートを消さず、スレッドを差し替えない
+    st.pi_reply(KEY_A, "c3", "実行中の返信です")
+    waitfor(lambda: page.locator(".livebar button").is_visible(), "バナー", check, timeout=9.0)
+    check(page.locator(".mergesheet").count() == 1, "merge: 自動更新でシートが消えた")
+    check(
+        "実行中の返信です" not in page.locator(".threads").inner_text(),
+        "merge: 実行中に画面が再描画された",
+    )
+    check(
+        "統合中" in page.locator(".mergesheet").inner_text(),
+        "merge: 自動更新で実行中の表示が消えた",
+    )
+    st.merge_gate.set()
+    page.wait_for_selector(".mergesheet .mergeresult")
+    check(len(st.merge_log) == 1, f"merge: POST が 1 回でない: {len(st.merge_log)}")
+    check(errs == [], f"merge: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_merge_errors(br, check) -> None:
+    """エラー表のとおりに表示する。通信断・merge_failed・internal は成功とも失敗とも決め付けない。"""
+    srv, base, st, ctx, page, errs = merge_page(br)
+    merge_open(page, base)
+    page.locator(".mergesheet .mergeclose").click()
+    page.wait_for_selector(".mergesheet", state="detached")
+    cases: list[tuple] = [(c, s, w, r, x, HOSTILE) for c, s, w, r, x in MERGE_ERRORS]
+    cases.append(("recover_needed", 409, RECOVER_LINES, False, {}, "/home/example/secret-repo"))
+    for code, status, wants, retry, extra, message in cases:
+        st.merge_mode, st.merge_error = "error", (status, code, message, extra)
+        page.locator(".mergecard button").click()
+        page.wait_for_selector(".mergesheet .mergenext")
+        merge_confirm(page)
+        merge_go(page)
+        page.wait_for_selector(".mergesheet .formerr:not(:empty)")
+        err = page.locator(".mergesheet .formerr").inner_text()
+        for s in wants:
+            check(s in err, f"merge: {code} の表示に {s!r} が無い: {err!r}")
+        if code == "recover_needed":
+            check(
+                message not in page.locator(".mergesheet").inner_text(),
+                "merge: recover_needed で実パスを出した",
+            )
+            check(
+                page.locator(".mergesheet .formerr li").count() == 3,
+                "merge: recover_needed の手順が 3 行でない",
+            )
+        else:
+            check(
+                message in err,
+                f"merge: {code} のサーバの message を文字として出していない: {err!r}",
+            )
+        check(page.locator(".mergesheet img").count() == 0, f"merge: {code} で img 要素ができた")
+        check(page.evaluate("window.__pwned === undefined"), f"merge: {code} で文字列が実行された")
+        if code in ("stale_view", "not_ff"):
+            check(
+                page.locator(".mergesheet button", has_text="最新の版を読み込む").count() == 1,
+                f"merge: {code} で取り直しボタンが無い",
+            )
+        cb = page.locator(".mergesheet input[type=checkbox]")
+        go = page.locator(".mergesheet .mergego")
+        check(not cb.is_checked(), f"merge: {code} の後もチェックが残る")
+        check(go.is_disabled(), f"merge: {code} の後、チェックなしで「統合する」が有効")
+        if retry:
+            cb.check()
+            check(go.is_enabled(), f"merge: {code} (再試行可) なのに先へ進めない")
+        else:
+            check(cb.is_disabled(), f"merge: {code} (再試行不可) なのにチェックできる")
+        page.locator(".mergesheet .mergeclose").click()
+        page.wait_for_selector(".mergesheet", state="detached")
+    # 通信断・merge_failed・internal: 成功とも失敗とも決め付けず、再読み込みを案内する
+    for code, status in [*UNCERTAIN, ("drop", 0)]:
+        if code == "drop":
+            st.merge_mode = "drop"
+        else:
+            st.merge_mode, st.merge_error = "error", (status, code, HOSTILE, {})
+        page.locator(".mergecard button").click()
+        page.wait_for_selector(".mergesheet .mergenext")
+        merge_confirm(page)
+        merge_go(page)
+        page.wait_for_selector(".mergesheet .formerr:not(:empty)")
+        t = page.locator(".mergesheet").inner_text()
+        check(UNKNOWN in t, f"merge: {code} の案内が無い: {t!r}")
+        check("失敗" not in t and "成功" not in t, f"merge: {code} で成功・失敗を決め付けた: {t!r}")
+        check(
+            page.locator(".mergesheet button", has_text="再読み込み").count() == 1,
+            f"merge: {code} で再読み込みボタンが無い",
+        )
+        check(
+            page.locator(".mergesheet .mergego").is_disabled(), f"merge: {code} の後でも再送できる"
+        )
+        check(page.locator(".mergesheet img").count() == 0, f"merge: {code} で img 要素ができた")
+        page.locator(".mergesheet .mergeclose").click()
+        page.wait_for_selector(".mergesheet", state="detached")
+    # 再読み込みボタン: PR を取り直す
+    st.merge_mode = "drop"
+    page.locator(".mergecard button").click()
+    page.wait_for_selector(".mergesheet .mergenext")
+    merge_confirm(page)
+    merge_go(page)
+    page.wait_for_selector(".mergesheet .formerr:not(:empty)")
+    before = st.pr_gets.get(KEY_A, 0)
+    page.locator(".mergesheet button", has_text="再読み込み").click()
+    page.wait_for_selector(".mergesheet", state="detached")
+    waitfor(lambda: st.pr_gets.get(KEY_A, 0) > before, "PR の取り直し", check)
+    check(errs == [], f"merge: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_merge_plans(br, check) -> None:
+    """計画の応答の分岐: 衝突・blockers・リスク設定なし・敵対的な文字列・メッセージの検査。"""
+    srv, base, st, ctx, page, errs = merge_page(br)
+    sheet = ".mergesheet"
+
+    def reopen(name: str, key: str = KEY_A) -> str:
+        st.plan_for[key] = name
+        merge_open(page, base, key)
+        return page.locator(sheet).text_content() or ""
+
+    def close() -> None:
+        page.locator(".mergesheet .mergeclose").click()
+        page.wait_for_selector(sheet, state="detached")
+
+    nxt = page.locator(".mergesheet .mergenext")
+    t = reopen("merge_plan_conflict.json")
+    for s in (
+        "統合できません",
+        "統合先と衝突しています。",
+        "a.txt",
+        HOSTILE + ".txt",
+        "衝突の解消は pi で行ってください",
+    ):
+        check(s in t, f"merge-plans: 衝突の表示に {s!r} が無い")
+    check(nxt.is_disabled(), "merge-plans: 衝突で「確認へ」が有効")
+    check(
+        page.locator(".mergesheet img").count() == 0, "merge-plans: 衝突のパスで img 要素ができた"
+    )
+    close()
+    t = reopen("merge_plan_blocked.json")
+    for s in (
+        "旧方式の承認待ちが残っています（試験）。",
+        "旧方式の排他ロックが残っています（試験）。",
+        "統合を進められません",
+    ):
+        check(s in t, f"merge-plans: blockers の表示に {s!r} が無い")
+    check(nxt.is_disabled(), "merge-plans: blockers で「確認へ」が有効")
+    close()
+    t = reopen("merge_plan_riskcfg.json")
+    for s in (
+        "リスク設定を読み込めません",
+        "アプリ自身を変更します。統合後に再起動してください",
+        "古い版の下書き",
+    ):
+        check(s in t, f"merge-plans: 設定なしの表示に {s!r} が無い")
+    check(
+        "リスクのあるパスはありません" not in t, "merge-plans: 設定を読めないのにリスクなしと表示"
+    )
+    check(nxt.is_enabled(), "merge-plans: 「確認へ」が無効")
+    close()
+    t = reopen("merge_plan_hostile.json", KEY_B)
+    for s in (
+        "feature/" + HOSTILE,
+        "<script>window.__pwned=1</script>.ts",
+        "<b>AGENTS.md</b>",
+        HOSTILE,
+        "ほかにもあります",
+    ):
+        check(s in t, f"merge-plans: 敵対的な文字列 {s!r} が文字として出ていない")
+    check(
+        HOSTILE in page.locator(".mergesheet textarea").input_value(),
+        "merge-plans: 既定のメッセージが文字として入っていない",
+    )
+    check(
+        page.locator(".mergesheet img, .mergesheet script, .mergesheet b, .mergesheet i").count()
+        == 0,
+        "merge-plans: シートに敵対的な文字列から要素ができた",
+    )
+    check(page.evaluate("window.__pwned === undefined"), "merge-plans: 敵対的な文字列が実行された")
+    merge_confirm(page)
+    check(
+        page.locator(".mergesheet img, .mergesheet script").count() == 0
+        and HOSTILE in page.locator(sheet).inner_text(),
+        "merge-plans: 手順 2 で敵対的な文字列が文字でない",
+    )
+    check(page.evaluate("window.__pwned === undefined"), "merge-plans: 手順 2 で実行された")
+    close()
+    # メッセージの検査 (契約 §3): 1、4000 文字、1 行目が空白だけは不可、制御・双方向制御文字は不可
+    reopen("merge_plan_ok.json")
+    ta = page.locator(".mergesheet textarea")
+    for label, value, ok in (
+        ("空", "", False),
+        ("1 行目が空白", "  \n本文", False),
+        ("4001 文字", "x" * 4001, False),
+        ("4000 文字", "x" * 4000, True),
+        ("双方向制御", "a\u202eb", False),
+        ("制御文字", "a\u0007b", False),
+        ("普通", "feat: 例\n\n本文\tタブ", True),
+    ):
+        ta.fill(value)
+        check(
+            nxt.is_enabled() == ok,
+            f"merge-plans: メッセージ ({label}) で「確認へ」の有効状態が違う",
+        )
+    ta.fill("x" * 4001)
+    check("4000" in page.locator(sheet).inner_text(), "merge-plans: 文字数の上限の案内が無い")
+    ta.fill("計画の取り直しで残る編集")
+    st.plan_for[KEY_A] = "merge_plan_riskcfg.json"
+    page.locator(".mergesheet button", has_text="計画を取り直す").click()
+    page.wait_for_function(
+        "() => document.querySelector('.mergesheet').textContent.includes('リスク設定を読み込めません')"
+    )
+    check(
+        page.locator(".mergesheet textarea").input_value() == "計画の取り直しで残る編集",
+        "merge-plans: 取り直しで編集を失った",
+    )
+    check(errs == [], f"merge-plans: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_merge_slow_plan(br, check) -> None:
+    """遅い merge-plan の応答が、別の PR のシートや閉じた後のシートへ反映されない。"""
+    srv, base, st, ctx, page, errs = merge_page(br)
+    st.plan_for = {KEY_A: "merge_plan_ok.json", KEY_B: "merge_plan_hostile.json"}
+    gate_a = threading.Event()
+    st.plan_gate[KEY_A] = gate_a
+    page.goto(f"{base}/#/pr/r1a2b3c4d/{KEY_A}")
+    page.wait_for_selector(".revbar")
+    page.locator(".mergecard button").click()
+    waitfor(lambda: KEY_A in st.plan_calls, "A の計画", check)
+    check("確認中" in page.locator(".mergesheet").inner_text(), "merge-slow: 計画の待ち表示が無い")
+    page.locator(".mergesheet .mergeclose").click()  # 計画を待つ間も閉じられる
+    page.wait_for_selector(".mergesheet", state="detached")
+    page.goto(f"{base}/#/pr/r1a2b3c4d/{KEY_B}")
+    page.wait_for_function(
+        "() => document.querySelector('.prhead h1')?.textContent.includes('onerror')"
+    )
+    page.locator(".mergecard button").click()
+    page.wait_for_selector(".mergesheet .mergenext")
+    gate_a.set()  # A の遅い応答が B のシートを開いている間に届く
+    time.sleep(0.8)
+    t = page.locator(".mergesheet").text_content() or ""
+    check("feature/example" not in t, "merge-slow: 別の PR の計画がシートへ反映された")
+    check("feature/" + HOSTILE in t, "merge-slow: 開いている PR の計画が消えた")
+    page.locator(".mergesheet .mergeclose").click()
+    page.wait_for_selector(".mergesheet", state="detached")
+    gate_b = threading.Event()
+    st.plan_gate[KEY_B] = gate_b
+    page.locator(".mergecard button").click()
+    waitfor(lambda: st.plan_calls.count(KEY_B) == 2, "B の 2 回目の計画", check)
+    page.locator(".mergesheet .mergeclose").click()
+    page.wait_for_selector(".mergesheet", state="detached")
+    gate_b.set()  # 閉じた後に応答が届く
+    time.sleep(0.8)
+    check(
+        page.locator(".mergesheet, .backdrop").count() == 0,
+        "merge-slow: 閉じた後のシートが応答でよみがえった",
+    )
+    check(
+        page.evaluate("document.getElementById('app').inert") is False,
+        "merge-slow: 閉じた後に背景が inert",
+    )
+    check(errs == [], f"merge-slow: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_merge_stale(br, check) -> None:
+    """確認後に PR が更新された: 確認した版 (snapshot) を送り、拒否されて取り直せる。"""
+    srv, base, st, ctx, page, errs = merge_page(br)
+    merge_open(page, base)
+    merge_confirm(page)
+    page.locator(".mergesheet input[type=checkbox]").check()
+    st.bumped.add(KEY_A)
+    page.locator(".mergesheet .mergego").click()
+    page.wait_for_selector(".mergesheet .formerr:not(:empty)")
+    check(
+        len(st.merge_log) == 1
+        and st.merge_log[0]["expect"] == {"source": "a" * 40, "target": "b" * 40},
+        f"merge-stale: 確認した版を送っていない: {st.merge_log}",
+    )
+    check(len(st.merged_keys) == 0, "merge-stale: 古い版で統合された")
+    page.locator(".mergesheet button", has_text="最新の版を読み込む").click()
+    page.wait_for_selector(".mergesheet", state="detached")
+    page.wait_for_selector(f"text={BUMPED_OID[:7]}")
+    check(errs == [], f"merge-stale: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_merge_sp(br, check) -> None:
+    """スマホ: 固定バーから開き、タップ領域は 44px 以上。横にはみ出さない。"""
+    srv, base, _st, ctx, page, errs = merge_page(br, "sp")
+    page.goto(f"{base}/#/pr/r1a2b3c4d/{KEY_A}")
+    page.wait_for_selector(".revbar")
+    check(page.locator(".mergebar").is_visible(), "merge-sp: 固定バーが見えない")
+    check(page.locator(".mergecard").is_visible(), "merge-sp: カードが見えない")
+    page.locator(".mergebar button").click()
+    page.wait_for_selector(".mergesheet .mergenext")
+    small = page.evaluate(
+        "[...document.querySelectorAll('.mergesheet button, .mergesheet input[type=checkbox], .mergesheet summary')]"
+        ".filter(e => e.getBoundingClientRect().width > 0 && e.getBoundingClientRect().height < 43.5)"
+        ".map(e => e.textContent.trim() + ':' + e.getBoundingClientRect().height)"
+    )
+    check(small == [], f"merge-sp: タップ領域が 44px 未満: {small}")
+    merge_confirm(page)
+    small = page.evaluate(
+        "[...document.querySelectorAll('.mergesheet button, .mergesheet label')]"
+        ".filter(e => e.getBoundingClientRect().width > 0 && e.getBoundingClientRect().height < 43.5)"
+        ".map(e => e.textContent.trim() + ':' + e.getBoundingClientRect().height)"
+    )
+    check(small == [], f"merge-sp: 手順 2 のタップ領域が 44px 未満: {small}")
+    w = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
+    check(w[0] <= w[1], f"merge-sp: 横にはみ出している {w}")
+    check(errs == [], f"merge-sp: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
 def browser_main(shots: pathlib.Path | None) -> int:
     """子プロセスで動く本体。失敗は JSON で標準出力へ。"""
     from playwright.sync_api import sync_playwright
@@ -1540,6 +2312,18 @@ def browser_main(shots: pathlib.Path | None) -> int:
             srv.shutdown()
         flow_live(br, check)
         flow_live_guards(br, check)
+        for flow in (
+            flow_merge_caps,
+            flow_merge_steps,
+            flow_merge_keep,
+            flow_merge_running,
+            flow_merge_errors,
+            flow_merge_plans,
+            flow_merge_slow_plan,
+            flow_merge_stale,
+            flow_merge_sp,
+        ):
+            flow(br, check)
         br.close()
     print(json.dumps({"fails": fails}, ensure_ascii=False))
     return 1 if fails else 0

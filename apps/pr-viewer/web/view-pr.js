@@ -170,14 +170,15 @@
       reload: function (notice) {
         return PRV.loadReview(id).then(function (x) {
           if (PRV.token !== tok) return;
-          draw(id, data, { review: x.review, error: x.error, notice: typeof notice === "string" ? notice : "", tok: tok });
+          draw(id, data, { review: x.review, error: x.error, notice: typeof notice === "string" ? notice : "", tok: tok, caps: st.caps });
         });
       },
+      caps: st.caps,
     };
     draw2(data, ctx, st.notice);
     PRV.liveBind(st.review, function (rv, force) {
       return liveApply(ctx, rv, force, function (x) {
-        draw(id, data, { review: x, error: null, notice: "", tok: tok });
+        draw(id, data, { review: x, error: null, notice: "", tok: tok, caps: st.caps });
       });
     });
   }
@@ -223,25 +224,27 @@
     d.keys.batches = JSON.stringify([(rv && rv.batches) || [], (rv && rv.worktrees) || []]);
     var main = [d.summary, generalCard(ctx), files, commits, d.batches];
     d.bar = PRV.reviewBar(ctx, notice);
+    var me = PRV.mergeEntry ? PRV.mergeEntry(ctx) : null;
     PRV.mount(
       h(
         "div",
-        { class: "page withbar" },
+        { class: me ? "page withbar hasmerge" : "page withbar" },
         PRV.prHead(data, "overview", rv),
         PRV.liveBar(),
-        h("div", { class: "cols" }, h("div", { class: "col-main" }, main), h("div", { class: "col-side" }, side)),
-        d.bar
+        h("div", { class: "cols" }, h("div", { class: "col-main" }, main), h("div", { class: "col-side" }, me ? me.card : null, side)),
+        d.bar,
+        me ? me.bar : null
       )
     );
   }
 
   PRV.viewOverview = function (r, isCurrent) {
     PRV.loading();
-    Promise.all([PRV.getPr(r.id), PRV.loadReview(r.id)]).then(
+    Promise.all([PRV.getPr(r.id), PRV.loadReview(r.id), PRV.api.capabilities()]).then(
       function (res) {
         if (!isCurrent()) return;
         PRV.liveStart(r.id);
-        draw(r.id, res[0], { review: res[1].review, error: res[1].error, notice: "" });
+        draw(r.id, res[0], { review: res[1].review, error: res[1].error, notice: "", caps: res[2] });
       },
       function (e) {
         if (isCurrent()) PRV.showError(e);

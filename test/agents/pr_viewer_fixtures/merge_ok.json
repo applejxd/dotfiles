@@ -1,0 +1,8 @@
+{"merge": {
+  "commit": "ffffffffffffffffffffffffffffffffffffffff",
+  "targetOld": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "targetNew": "ffffffffffffffffffffffffffffffffffffffff",
+  "cleanup": {"requested": "none", "done": []},
+  "warnings": ["作業ツリーの削除は未コミットがあるため見送りました（試験）。"],
+  "recorded": true
+}}

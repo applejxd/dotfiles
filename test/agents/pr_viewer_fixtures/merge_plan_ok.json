@@ -1,0 +1,29 @@
+{
+  "mergeable": true,
+  "refusal": null,
+  "blockers": [],
+  "plan": {
+    "source": {"branch": "feature/example", "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    "target": {"branch": "develop", "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+    "mergeBase": "cccccccccccccccccccccccccccccccccccccccc",
+    "commits": 3,
+    "files": [
+      {"status": "M", "path": "docs/index.md"},
+      {"status": "A", "path": "src/example.ts"}
+    ],
+    "fileCount": 12,
+    "additions": 120,
+    "deletions": 8,
+    "risks": [{"path": "AGENTS.md", "reason": "risk_path"}],
+    "risksTruncated": false,
+    "riskConfig": "loaded",
+    "touchesApp": false
+  },
+  "defaults": {
+    "message": "feat: 検索を追加\n\n本文の 1 行目\n本文の 2 行目\n本文の 3 行目",
+    "messageSource": "summary",
+    "summaryStale": false,
+    "cleanup": "none"
+  },
+  "warnings": [{"code": "review_changes", "message": "変更依頼のままです。"}]
+}

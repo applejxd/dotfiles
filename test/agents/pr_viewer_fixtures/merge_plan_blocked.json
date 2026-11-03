@@ -1,0 +1,24 @@
+{
+  "mergeable": true,
+  "refusal": null,
+  "blockers": [
+    {"code": "legacy_pending", "message": "旧方式の承認待ちが残っています（試験）。"},
+    {"code": "legacy_lock", "message": "旧方式の排他ロックが残っています（試験）。"}
+  ],
+  "plan": {
+    "source": {"branch": "feature/example", "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    "target": {"branch": "develop", "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+    "mergeBase": "cccccccccccccccccccccccccccccccccccccccc",
+    "commits": 1,
+    "files": [{"status": "M", "path": "docs/index.md"}],
+    "fileCount": 1,
+    "additions": 1,
+    "deletions": 0,
+    "risks": [],
+    "risksTruncated": false,
+    "riskConfig": "loaded",
+    "touchesApp": false
+  },
+  "defaults": {"message": "feat: 例", "messageSource": "generated", "summaryStale": false, "cleanup": "none"},
+  "warnings": []
+}

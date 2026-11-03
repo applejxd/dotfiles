@@ -1,0 +1,21 @@
+{
+  "mergeable": true,
+  "refusal": null,
+  "blockers": [],
+  "plan": {
+    "source": {"branch": "feature/example", "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    "target": {"branch": "develop", "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+    "mergeBase": "cccccccccccccccccccccccccccccccccccccccc",
+    "commits": 2,
+    "files": [{"status": "M", "path": "apps/example/main.ts"}],
+    "fileCount": 1,
+    "additions": 5,
+    "deletions": 1,
+    "risks": [],
+    "risksTruncated": false,
+    "riskConfig": "unavailable",
+    "touchesApp": true
+  },
+  "defaults": {"message": "feat: 例", "messageSource": "summary", "summaryStale": true, "cleanup": "none"},
+  "warnings": []
+}
