@@ -118,7 +118,7 @@
       "div",
       { class: "comment" },
       h("div", { class: "cmeta" }, h("strong", { text: byLabel(c.by) }), " ", h("span", { class: "muted small", text: PRV.ago(c.at) })),
-      h("div", { class: "cbody", text: c.body })
+      PRV.md(c.body)
     );
   }
 
@@ -170,7 +170,7 @@
     var card = h("section", { class: "card summary", "aria-label": "pi のまとめ" });
     card.appendChild(h("h2", null, "pi のまとめ ", h("span", { class: "muted small", text: PRV.ago(s.at) })));
     card.appendChild(h("h3", { text: "やったこと" }));
-    card.appendChild(h("div", { class: "cbody", text: lines(s.done) || "（記載なし）" }));
+    card.appendChild(PRV.md(lines(s.done) || "（記載なし）"));
     if (Array.isArray(s.files) && s.files.length) {
       card.appendChild(h("h3", { text: "変更ファイル" }));
       card.appendChild(h("ul", { class: "plain mono" }, s.files.map(function (f) { return h("li", { text: String(f) }); })));
@@ -182,14 +182,14 @@
           "ul",
           { class: "plain" },
           s.findings.map(function (f) {
-            return h("li", null, h("code", { text: PRV.short(f && f.ref) }), " ", h("span", { class: "cbody", text: lines(f && f.reply) }));
+            return h("li", null, h("code", { text: PRV.short(f && f.ref) }), " ", PRV.md(lines(f && f.reply)));
           })
         )
       );
     }
     if (lines(s.notes)) {
       card.appendChild(h("h3", { text: "確認してほしい点" }));
-      card.appendChild(h("div", { class: "cbody", text: s.notes }));
+      card.appendChild(PRV.md(s.notes));
     }
     return card;
   };

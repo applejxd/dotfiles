@@ -133,6 +133,7 @@
     /* 状態の表示（入力欄を含まない部分）は、常に部分更新する */
     var count = d.bar && d.bar.querySelector(".revcount");
     if (count) count.textContent = "未送信 " + (rv.unsent || 0) + " 件";
+    if (d.bar && PRV.paintQueue) PRV.paintQueue(d.bar, rv);
     var chips = d.bar && d.bar.querySelector(".revchips");
     if (chips) chips.replaceChildren.apply(chips, [PRV.mainChip(ctx.pr, rv) || "", PRV.staleReviewChip(rv) || ""]);
     var hc = document.querySelector(".prhead .hchips");

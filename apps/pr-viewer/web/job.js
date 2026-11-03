@@ -311,7 +311,7 @@
                 "li",
                 { class: "jobcm" },
                 h("div", { class: "small" }, code(where(c)), " ", who),
-                h("div", { class: "cbody", text: String(c.body) })
+                PRV.md(String(c.body))
               );
             })
           )
