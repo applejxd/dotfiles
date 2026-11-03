@@ -1,19 +1,36 @@
-// PR ビューアのサーバ（段 1: 読み取り専用）。
+// PR ビューアのサーバ（段 1: 読み取り専用、段 2: レビューの書き込み、段 A2: 統合）。
 // 起動: node apps/pr-viewer/server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>]
-// 設計: docs/change/0060-local-pr-viewer.md。契約: .tmp/keep/prv-app/api-contract.md
+//       [--allow-merge] [--rules-file <パス>]
+// 設計: docs/change/0060-local-pr-viewer.md・docs/change/0062-pr-hub-simplify.md。契約: .tmp/keep/prv-app/api-contract.md
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { lstat, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ApiError, configureLimits, openRepo } from "./git-view.ts";
 import type { Repo } from "./git-view.ts";
-import { handleApi, handlePost, isPostRoute } from "./routes.ts";
+import { mergeRequestError, stopMerges } from "./merge-api.ts";
+import type { MergeEnv, PostResult } from "./merge-api.ts";
+import { handleApi, handlePost, isMergePostRoute, isPostRoute } from "./routes.ts";
 
 const DEFAULT_PORT = 8780;
 const HOST = "127.0.0.1";
 
-type Options = { repos: string[]; port: number; allowHosts: string[]; webDir: string; timeoutMs?: number; maxBytes?: number };
+type Options = {
+	repos: string[];
+	port: number;
+	allowHosts: string[];
+	webDir: string;
+	timeoutMs?: number;
+	maxBytes?: number;
+	/** 統合を許可する（既定で無効）。値を取らない旗 */
+	allowMerge: boolean;
+	/** リスクパスを読む rules.json（既定: ~/.config/pi/harness/rules.json。試験で差し替える） */
+	rulesFile: string;
+	/** 試験用: ff の直前に入れる遅延（競合・停止の再現） */
+	mergeDelayMs: number;
+};
 
 function parseArgs(argv: string[]): Options | null {
 	const o: Options = {
@@ -21,9 +38,16 @@ function parseArgs(argv: string[]): Options | null {
 		port: DEFAULT_PORT,
 		allowHosts: [],
 		webDir: join(dirname(fileURLToPath(import.meta.url)), "web"),
+		allowMerge: false,
+		rulesFile: join(homedir(), ".config", "pi", "harness", "rules.json"),
+		mergeDelayMs: 0,
 	};
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
+		if (a === "--allow-merge") {
+			o.allowMerge = true; // 値を取らない。`--allow-merge=1` は未知の旗として断る
+			continue;
+		}
 		const v = argv[i + 1];
 		if (v === undefined) return null;
 		if (a === "--repo") o.repos.push(v);
@@ -32,9 +56,13 @@ function parseArgs(argv: string[]): Options | null {
 			o.port = Number(v);
 		} else if (a === "--allow-host") o.allowHosts.push(v.toLowerCase());
 		else if (a === "--web-dir") o.webDir = resolve(v);
+		else if (a === "--rules-file") o.rulesFile = resolve(v);
 		else if (a === "--git-timeout-ms") o.timeoutMs = Number(v); // 試験用
 		else if (a === "--git-max-bytes") o.maxBytes = Number(v); // 試験用
-		else return null;
+		else if (a === "--merge-test-delay-ms") {
+			if (!/^\d+$/.test(v) || Number(v) > 60_000) return null; // 試験用
+			o.mergeDelayMs = Number(v);
+		} else return null;
 		i++;
 	}
 	return o;
@@ -67,8 +95,8 @@ function sendJson(res: ServerResponse, status: number, value: unknown, extra: Re
 	send(res, status, "application/json; charset=utf-8", JSON.stringify(value), extra);
 }
 
-function sendError(res: ServerResponse, status: number, code: string, message: string, extra: Record<string, string> = {}): void {
-	sendJson(res, status, { error: { code, message } }, extra);
+function sendError(res: ServerResponse, status: number, code: string, message: string, extra: Record<string, string> = {}, conflicts?: string[]): void {
+	sendJson(res, status, { error: { code, message, ...(conflicts !== undefined ? { conflicts } : {}) } }, extra);
 }
 
 // 許可リスト: ディレクトリを走査しない。名前は index.html・app.css・*.js だけ
@@ -134,9 +162,12 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
 	});
 }
 
-/** 書き込み（POST）。共通の規則を検査してから routes.ts へ渡す。 */
-async function servePost(repos: Repo[], req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
-	if (!originAllowed(req.headers.origin, req.headers.host)) {
+/** 書き込み（POST）。共通の規則を検査してから routes.ts へ渡す。統合系は Origin 必須・--allow-merge が要る（先に断る）。 */
+async function servePost(repos: Repo[], req: IncomingMessage, res: ServerResponse, pathname: string, opts: Options): Promise<void> {
+	if (isMergePostRoute(pathname)) {
+		const denied = mergeRequestError(req.headers, opts.allowMerge);
+		if (denied) return sendError(res, denied.status, denied.code, denied.message);
+	} else if (!originAllowed(req.headers.origin, req.headers.host)) {
 		return sendError(res, 403, "forbidden_origin", "この Origin は許可されていません。");
 	}
 	if (req.headers["x-prv"] !== "1" || !JSON_TYPE_RE.test(req.headers["content-type"] ?? "")) {
@@ -161,10 +192,53 @@ async function servePost(repos: Repo[], req: IncomingMessage, res: ServerRespons
 	if (typeof body !== "object" || body === null || Array.isArray(body)) {
 		return sendError(res, 400, "bad_request", "リクエストの形が正しくありません。");
 	}
-	sendJson(res, 201, await handlePost(repos, pathname, body as Record<string, unknown>));
+	const env: MergeEnv = { rulesFile: opts.rulesFile, testDelayMs: opts.mergeDelayMs };
+	const result: PostResult = await handlePost(repos, pathname, body as Record<string, unknown>, env);
+	sendJson(res, result.status, result.body);
+}
+
+/** 統合の処理が終わった後、応答を送り終えるのを待つ上限（ミリ秒）。 */
+const FLUSH_WAIT_MS = 5000;
+/** 実行中の統合の要求。停止のとき、これらが応答を書き終えるのを待つ（途中で止めると、状態ファイルが残って復旧が要る）。 */
+const activeMerges = new Set<Promise<void>>();
+
+async function drainMerges(): Promise<void> {
+	while (activeMerges.size > 0) await Promise.allSettled([...activeMerges]);
+}
+
+function isMergePost(req: IncomingMessage): boolean {
+	if (req.method !== "POST") return false;
+	try {
+		return isMergePostRoute(new URL(req.url ?? "", "http://localhost").pathname);
+	} catch {
+		return false;
+	}
 }
 
 function makeHandler(repos: Repo[], opts: Options) {
+	const handle = makeInnerHandler(repos, opts);
+	return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+		if (!isMergePost(req)) return await handle(req, res);
+		let settle: () => void = () => {};
+		const tracked = new Promise<void>((done) => (settle = done));
+		activeMerges.add(tracked);
+		try {
+			await handle(req, res); // 内側で結果（エラーを含む）を送る
+			// 応答を送り終える（または接続が切れている）まで待つ。応答を読まないクライアントで停止が終わらないよう、上限を設ける
+			if (!res.writableFinished && !res.destroyed) {
+				await Promise.race([
+					new Promise<void>((done) => res.once("close", () => done())),
+					new Promise<void>((done) => setTimeout(done, FLUSH_WAIT_MS).unref()),
+				]);
+			}
+		} finally {
+			activeMerges.delete(tracked);
+			settle();
+		}
+	};
+}
+
+function makeInnerHandler(repos: Repo[], opts: Options) {
 	return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
 		try {
 			if (!hostAllowed(req.headers.host, opts.allowHosts)) {
@@ -177,7 +251,7 @@ function makeHandler(repos: Repo[], opts: Options) {
 				} catch {
 					pathname = "";
 				}
-				if (isPostRoute(pathname)) return await servePost(repos, req, res, pathname);
+				if (isPostRoute(pathname)) return await servePost(repos, req, res, pathname, opts);
 			}
 			if (req.method !== "GET" && req.method !== "HEAD") {
 				return sendError(res, 405, "method_not_allowed", "GET と HEAD だけ使えます。", { Allow: "GET, HEAD" });
@@ -193,10 +267,11 @@ function makeHandler(repos: Repo[], opts: Options) {
 			const p = url.pathname;
 			if (p === "/") return await serveStatic(res, opts.webDir, "index.html");
 			if (p.startsWith("/web/")) return await serveStatic(res, opts.webDir, p.slice("/web/".length));
+			if (p === "/api/capabilities") return sendJson(res, 200, { merge: opts.allowMerge, targets: ["develop"] });
 			if (p.startsWith("/api/")) return sendJson(res, 200, await handleApi(repos, p, url.searchParams));
 			return sendError(res, 404, "not_found", "見つかりません。");
 		} catch (e) {
-			if (e instanceof ApiError) return sendError(res, e.status, e.code, e.message);
+			if (e instanceof ApiError) return sendError(res, e.status, e.code, e.message, {}, e.conflicts);
 			return sendError(res, 500, "internal", "内部エラーです。"); // 例外の中身は返さない
 		}
 	};
@@ -205,7 +280,9 @@ function makeHandler(repos: Repo[], opts: Options) {
 async function main(): Promise<void> {
 	const opts = parseArgs(process.argv.slice(2));
 	if (!opts || opts.repos.length === 0) {
-		process.stderr.write("使い方: node server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>]\n");
+		process.stderr.write(
+			"使い方: node server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>] [--allow-merge] [--rules-file <パス>]\n",
+		);
 		process.exit(2);
 	}
 	const repos: Repo[] = [];
@@ -224,9 +301,23 @@ async function main(): Promise<void> {
 		const port = typeof addr === "object" && addr ? addr.port : opts.port;
 		process.stdout.write(`listening http://${HOST}:${port}\n`);
 	});
+	// 停止: 新しい統合は受けず、実行中の統合は終わる（応答を書き終える）まで待つ。途中で止めると、状態ファイルが残って recover が要る。
+	// 一律の強制終了は設けない（強制するなら SIGKILL。そのときは recover）
+	let stopped = false;
 	const stop = () => {
-		server.close(() => process.exit(0));
-		server.closeAllConnections();
+		if (stopped) return; // 重複した SIGTERM・SIGINT でも、実行中の統合は止めない
+		stopped = true;
+		stopMerges();
+		// 終了は 1 本の順序だけで行う: 実行中の統合の完了 → 接続を閉じる → server が閉じる → exit。
+		// server.close の callback で直接 exit すると、通信が切れた統合の途中で終わってしまう
+		const closed = new Promise<void>((done) => server.close(() => done()));
+		server.closeIdleConnections();
+		void (async () => {
+			await drainMerges();
+			server.closeAllConnections();
+			await closed;
+			process.exit(0);
+		})();
 	};
 	process.on("SIGINT", stop);
 	process.on("SIGTERM", stop);

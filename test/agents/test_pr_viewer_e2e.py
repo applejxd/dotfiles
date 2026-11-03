@@ -12,6 +12,7 @@ from __future__ import annotations
 import http.client
 import json
 import re
+import subprocess
 
 import pytest
 from agents_common import ROOT
@@ -183,5 +184,163 @@ def test_old_expect_submit_after_the_branch_moved_is_409(tmp_path):
         fresh = {"source": now["sourceOid"], "target": now["targetOid"], "base": now["baseOid"]}
         assert fresh["source"] != shown["source"]
         assert _post(server, path, {"kind": "approve", "expect": fresh})[0] == 201
+    finally:
+        server.stop()
+
+
+# ---------------------------------------------------------------- 統合 API（段 A2）: 実サーバの応答が、画面の fixture と同じ形
+
+
+def _merge_world(tmp_path, *, rules: str | None = None):
+    """--allow-merge つきの実サーバ。feature/add-search は統合できる。名前・メールは架空。"""
+    repo = _init(tmp_path / "example-app")
+    for key, value in (
+        ("user.name", "Example Dev"),
+        ("user.email", "you@example.com"),
+        ("gc.auto", "0"),
+        ("maintenance.auto", "false"),
+    ):
+        _git(repo, "config", key, value)
+    _commit(repo, {"README.md": "hello\n", "AGENTS.md": "rules\n"}, "init")
+    _git(repo, "switch", "-q", "-c", "feature/add-search")
+    _commit(repo, {"docs/search.md": "検索\n", "AGENTS.md": "rules 2\n"}, "feat: 検索を追加")
+    _git(repo, "switch", "-q", "develop")
+    rules_file = tmp_path / "rules.json"
+    if rules is not None:
+        rules_file.write_text(rules, encoding="utf-8")
+    server = Server(
+        ["--repo", str(repo), "--port", "0", "--allow-merge", "--rules-file", str(rules_file)]
+    )
+    return repo, server
+
+
+def _post_merge(server, path: str, payload: dict):
+    """Origin・Host を正しく付けた統合系の POST（ブラウザと同じ）。"""
+    host = f"127.0.0.1:{server.port}"
+    conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=60)
+    conn.request(
+        "POST",
+        path,
+        body=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Host": host,
+            "Origin": f"http://{host}",
+            "Content-Type": "application/json",
+            "X-PRV": "1",
+        },
+    )
+    resp = conn.getresponse()
+    data = json.loads(resp.read().decode("utf-8"))
+    conn.close()
+    return resp.status, data
+
+
+RULES = json.dumps({"judge": {"common": {"pi": {"integrate": {"risk_paths": ["AGENTS.md"]}}}}})
+
+
+def test_real_merge_responses_have_the_same_shape_as_the_fixtures(tmp_path):
+    """画面（merge.js）が読む capabilities・merge-plan・merge の形を、実サーバの応答で確かめる。
+
+    画面の試験は契約から作った fixture（偽サーバ）で動くので、片方だけ契約からずれても、それぞれの試験は通ってしまう。
+    """
+    _repo, server = _merge_world(tmp_path, rules=RULES)
+    try:
+        status, caps = server.get("/api/capabilities")
+        assert status == 200
+        _same_shape(caps, _load("capabilities.json"), "capabilities")
+        pr = server.get("/api/prs")[1]["prs"][0]
+        plan_path = f"/api/prs/{pr['id']}/merge-plan"
+        # 統合できる計画（リスクのあるパス AGENTS.md・警告は無し）
+        status, plan = _post_merge(server, plan_path, {})
+        assert status == 200 and plan["mergeable"] is True and plan["plan"]["risks"], plan
+        _same_shape(plan, _load("merge_plan_ok.json"), "merge-plan")
+        # 統合する（画面が送る 3 キー）と、その応答
+        status, done = _post_merge(
+            server,
+            f"/api/prs/{pr['id']}/merge",
+            {
+                "expect": {"source": pr["sourceOid"], "target": pr["targetOid"]},
+                "message": plan["defaults"]["message"],
+                "cleanup": "none",
+            },
+        )
+        assert status == 200, done
+        _same_shape(done, _load("merge_ok.json"), "merge")
+        assert done["merge"]["recorded"] is True
+    finally:
+        server.stop()
+
+
+def test_real_merge_plan_variants_have_the_same_shape_as_the_fixtures(tmp_path):
+    """リスク設定なし・衝突・旧経路の blockers の、実サーバの応答の形。"""
+    repo, server = _merge_world(tmp_path)  # rules.json 無し
+    try:
+        pr = server.get("/api/prs")[1]["prs"][0]
+        path = f"/api/prs/{pr['id']}/merge-plan"
+        status, plan = _post_merge(server, path, {})
+        assert status == 200 and plan["plan"]["riskConfig"] == "unavailable", plan
+        _same_shape(plan, _load("merge_plan_riskcfg.json"), "merge-plan(riskcfg)")
+        # 旧経路の保留（同じ枝）→ blockers
+        pend = tmp_path / "pending.json"
+        pend.write_text(
+            json.dumps(
+                {"schema": 1, "action": "git_integrate", "params": {"source": "feature/add-search"}}
+            ),
+            encoding="utf-8",
+        )
+        blob = _git(repo, "hash-object", "-w", str(pend)).strip()
+        tree_in = tmp_path / "tree.txt"
+        tree_in.write_text(f"100644 blob {blob}\trecord.json\n", encoding="utf-8")
+        tree = subprocess.run(
+            ["git", "mktree"],
+            cwd=repo,
+            stdin=tree_in.open(),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+        ).stdout.strip()
+        _git(
+            repo,
+            "update-ref",
+            "refs/pi/pending/001793000000001",
+            _git(repo, "commit-tree", tree, "-m", "x").strip(),
+        )
+        status, blocked = _post_merge(server, path, {})
+        assert status == 200 and blocked["blockers"], blocked
+        _same_shape(blocked, _load("merge_plan_blocked.json"), "merge-plan(blocked)")
+        status, err = _post_merge(
+            server,
+            f"/api/prs/{pr['id']}/merge",
+            {
+                "expect": {"source": pr["sourceOid"], "target": pr["targetOid"]},
+                "message": "feat: x\n",
+                "cleanup": "none",
+            },
+        )
+        assert (
+            status == 409 and set(err) == {"error"} and set(err["error"]) == {"code", "message"}
+        ), err
+        _git(repo, "update-ref", "-d", "refs/pi/pending/001793000000001")
+        # 衝突: 統合先と同じファイルを変える
+        _commit(repo, {"AGENTS.md": "develop 側\n"}, "develop 側の変更")
+        pr = server.get("/api/prs")[1]["prs"][0]
+        status, conflict = _post_merge(server, f"/api/prs/{pr['id']}/merge-plan", {})
+        assert status == 200 and conflict["mergeable"] is False, conflict
+        _same_shape(conflict, _load("merge_plan_conflict.json"), "merge-plan(conflict)")
+        status, err = _post_merge(
+            server,
+            f"/api/prs/{pr['id']}/merge",
+            {
+                "expect": {"source": pr["sourceOid"], "target": pr["targetOid"]},
+                "message": "feat: x\n",
+                "cleanup": "none",
+            },
+        )
+        assert (
+            status == 409
+            and err["error"]["code"] == "conflict"
+            and err["error"]["conflicts"] == ["AGENTS.md"]
+        ), err
     finally:
         server.stop()

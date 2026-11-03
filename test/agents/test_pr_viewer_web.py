@@ -2118,6 +2118,101 @@ def flow_merge_sp(br, check) -> None:
     srv.shutdown()
 
 
+def flow_merge_real(br, check) -> None:
+    """実サーバ（--allow-merge）+ 実画面: 計画 → 確認 → 統合 → 結果 → 統合済みの表示まで通す。
+
+    ほかの flow は契約から作った偽サーバで動くので、実サーバとの形のずれ・Origin / Host の食い違い
+    （画面の fetch がブラウザの付ける Origin で通るか）は、ここで初めて見える。
+    """
+    import tempfile
+
+    from test_pr_viewer_server import Server, _commit, _git, _init
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        repo = _init(root / "example-app")
+        for key, value in (
+            ("user.name", "Example Dev"),
+            ("user.email", "you@example.com"),
+            ("gc.auto", "0"),
+            ("maintenance.auto", "false"),
+        ):
+            _git(repo, "config", key, value)
+        _commit(repo, {"README.md": "hello\n"}, "init")
+        _git(repo, "switch", "-q", "-c", "feature/real")
+        _commit(repo, {"docs/real.md": "実サーバ\n"}, "feat: 実サーバで統合する")
+        _git(repo, "switch", "-q", "develop")
+        before = _git(repo, "rev-parse", "develop").strip()
+        server = Server(
+            [
+                "--repo",
+                str(repo),
+                "--port",
+                "0",
+                "--allow-merge",
+                "--rules-file",
+                str(root / "rules.json"),
+            ]
+        )
+        ctx = None
+        try:
+            base = f"http://127.0.0.1:{server.port}"
+            pr_id = server.get("/api/prs")[1]["prs"][0]["id"]
+            ctx = br.new_context(viewport={"width": 1280, "height": 900}, color_scheme="light")
+            page = ctx.new_page()
+            errs: list[str] = []
+            page.on("pageerror", lambda e: errs.append(f"pageerror: {e}"))
+            page.on(
+                "response",
+                lambda r: errs.append(f"HTTP {r.status}: {r.url}") if r.status >= 400 else None,
+            )
+            page.goto(f"{base}/#/pr/{pr_id}")
+            page.wait_for_selector(".mergecard button")
+            page.locator(".mergecard button").click()
+            page.wait_for_selector(".mergesheet .mergenext:not([disabled])")
+            full = page.locator(".mergesheet").text_content() or ""
+            for s in (
+                "統合できます",
+                "feature/real",
+                "develop",
+                "docs/real.md",
+                "リスク設定を読み込めません",
+            ):
+                check(s in full, f"merge-real: 手順 1 に {s!r} が無い")
+            msg = page.locator(".mergesheet textarea").input_value()
+            check(
+                msg.startswith("feat: 実サーバで統合する"),
+                f"merge-real: 既定のメッセージが違う: {msg!r}",
+            )
+            merge_confirm(page)
+            merge_go(page)
+            page.wait_for_selector(".mergesheet .mergeresult, .mergesheet .formerr:not(:empty)")
+            t = page.locator(".mergesheet").inner_text()
+            check("統合しました" in t, f"merge-real: 成功の表示でない: {t!r}")
+            after = _git(repo, "rev-list", "--parents", "-n", "1", "develop").split()
+            check(
+                len(after) == 3 and after[1] == before,
+                f"merge-real: develop が merge commit になっていない: {after}",
+            )
+            check(
+                _git(repo, "log", "-1", "--format=%s", "develop").strip()
+                == "feat: 実サーバで統合する",
+                "merge-real: 統合コミットの件名が違う",
+            )
+            check((repo / "docs" / "real.md").exists(), "merge-real: 作業ツリーが更新されていない")
+            page.locator(".mergesheet button", has_text="最新の状態を読み込む").click()
+            page.wait_for_selector(".prhead .chip:has-text('統合済み')")
+            check(
+                page.locator(".mergecard button, .mergebar button").count() == 0,
+                "merge-real: 統合済みなのにボタンがある",
+            )
+            check(errs == [], f"merge-real: エラー: {errs}")
+        finally:
+            if ctx is not None:
+                ctx.close()
+            server.stop()
+
+
 def browser_main(shots: pathlib.Path | None) -> int:
     """子プロセスで動く本体。失敗は JSON で標準出力へ。"""
     from playwright.sync_api import sync_playwright
@@ -2322,6 +2417,7 @@ def browser_main(shots: pathlib.Path | None) -> int:
             flow_merge_slow_plan,
             flow_merge_stale,
             flow_merge_sp,
+            flow_merge_real,
         ):
             flow(br, check)
         br.close()

@@ -248,6 +248,63 @@ export async function postComment(c: PrCtx, input: Record<string, unknown>): Pro
 	return { comment: { id: e.id, thread: e.d.thread, by: e.by, at: e.at, body: e.d.body, anchor: e.d.anchor } };
 }
 
+// ---- 統合の補助（表示用の読み出しと、成功の記録） ----
+
+export type ReviewHints = { summaryMessage: string | null; summaryStale: boolean; warnings: { code: string; message: string }[] };
+
+/**
+ * 統合の承認シートに出す、レビュー記録からの表示用の情報（下書きのメッセージ・古さ・警告）。
+ * 権限の根拠にはしない。記録が無い・壊れているときは、何も言わない（拒否の理由にしない）。
+ */
+export async function reviewHints(c: PrCtx): Promise<ReviewHints> {
+	const none: ReviewHints = { summaryMessage: null, summaryStale: false, warnings: [] };
+	const r = await readPr(gitAdapter(c.repo), c.prKey);
+	if (r.kind !== "ok") return none;
+	const st = foldState(r.meta, r.events, currentVs(c));
+	const s = st.summary;
+	const msg = s && typeof s.d.mergeMessage === "string" ? s.d.mergeMessage : null;
+	const stale = s ? s.vs.source !== c.sourceOid || s.vs.target !== c.targetOid || s.vs.base !== c.baseOid : false;
+	const warnings: { code: string; message: string }[] = [];
+	if (st.review === "changes") warnings.push({ code: "review_changes", message: "変更依頼のままです。" });
+	if (st.review !== "none" && st.reviewStale) warnings.push({ code: "review_stale", message: "最後のレビューの後に PR が更新されています。" });
+	const sent = new Set(st.batches.flatMap((b) => b.items));
+	const unsent = st.threads.flatMap((t) => t.comments).filter((e) => e.by === "app" && !sent.has(e.id)).length;
+	if (unsent > 0) warnings.push({ code: "unsent_comments", message: `未送信のコメントが ${unsent} 件あります。` });
+	return { summaryMessage: msg, summaryStale: stale, warnings };
+}
+
+/**
+ * 成功した統合を、表示用に記録する（merge_request と merge_result を 1 回の追記で書く）。権限の根拠にはしない。
+ * 書けなかったときは false（統合の成功は取り消さない）。
+ */
+export async function recordMerge(c: PrCtx, m: { requestId: string; message: string; cleanup: string; commit: string }): Promise<boolean> {
+	const res = await appendEvents(
+		gitAdapter(c.repo),
+		c.prKey,
+		metaOf(c),
+		() => [
+			{
+				...baseOf(c),
+				id: newId(),
+				t: "merge_request",
+				d: {
+					requestId: m.requestId,
+					sourceRef: `refs/heads/${c.branch}`,
+					sourceOid: c.sourceOid,
+					targetRef: `refs/heads/${c.target}`,
+					targetOid: c.targetOid,
+					baseOid: c.baseOid,
+					message: m.message,
+					cleanup: m.cleanup,
+				},
+			} as ReviewEvent,
+			{ ...baseOf(c), id: newId(), t: "merge_result", d: { requestId: m.requestId, outcome: "success", doneOid: m.commit } } as ReviewEvent,
+		],
+		{ current: currentVs(c) },
+	);
+	return res.ok === true;
+}
+
 // ---- POST …/submit ----
 
 export async function postSubmit(c: PrCtx, input: Record<string, unknown>): Promise<unknown> {
