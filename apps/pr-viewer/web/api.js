@@ -37,8 +37,8 @@
     );
   }
 
-  function get(path) {
-    return request(path, { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" });
+  function get(path, signal) {
+    return request(path, { method: "GET", headers: { Accept: "application/json" }, cache: "no-store", signal: signal });
   }
 
   /* 書き込み: 独自ヘッダー X-PRV と JSON の Content-Type が必須（契約 C10・C14） */
@@ -83,9 +83,9 @@
         return get(idPath(id) + "/diff?path=" + encodeURIComponent(path));
       });
     },
-    review: function (id) {
+    review: function (id, signal) {
       return guard(function () {
-        return get(idPath(id) + "/review");
+        return get(idPath(id) + "/review", signal);
       });
     },
     comment: function (id, c) {

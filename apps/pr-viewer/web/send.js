@@ -20,6 +20,10 @@
     }
   };
 
+  PRV.sheetOpen = function () {
+    return !!current;
+  };
+
   function destName(w) {
     return String(w.name || "") + (w.isMain ? "（親）" : "");
   }
@@ -117,8 +121,8 @@
       return bar;
     }
     var main = h("div", { class: "revmain" });
-    main.appendChild(h("strong", { text: "未送信 " + (rv.unsent || 0) + " 件" }));
-    PRV.append(main, [PRV.mainChip(ctx.pr, rv), PRV.staleReviewChip(rv)]);
+    main.appendChild(h("strong", { class: "revcount", text: "未送信 " + (rv.unsent || 0) + " 件" }));
+    main.appendChild(h("span", { class: "revchips" }, PRV.mainChip(ctx.pr, rv), PRV.staleReviewChip(rv)));
     var open = h("button", { class: "btn primary", type: "button", text: "レビューを送る…" });
     open.addEventListener("click", function () {
       openSheet(ctx, open);

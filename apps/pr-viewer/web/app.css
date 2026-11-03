@@ -207,3 +207,5 @@ td.code.can { cursor: pointer; }
   table.diff { font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+.livebar { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.livebar [hidden] { display: none; }

@@ -134,6 +134,7 @@
     var isCurrent = function () {
       return tok === PRV.token;
     };
+    if (PRV.liveStop) PRV.liveStop();
     if (PRV.closeSheet) PRV.closeSheet();
     window.scrollTo(0, 0);
     if (r.view === "list") {

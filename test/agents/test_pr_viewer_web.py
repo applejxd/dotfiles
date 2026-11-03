@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import urllib.parse
 
 import pytest
@@ -28,6 +29,11 @@ FIX = pathlib.Path(__file__).resolve().parent / "pr_viewer_fixtures"
 MAX_LINES = 800
 SKIP_CODE = 77  # ブラウザが使えないときの終了コード
 BUMPED_OID = "9" * 40  # PR が更新された後の source (架空の値)
+
+POLL_MS = 3000  # 画面の自動更新の間隔 (live.js の POLL_MS)
+POLL_MAX_MS = 30000
+LIVE_KEY = "paaaaaaaaaaaaaaa1"
+LIVE_ID = f"r1a2b3c4d/{LIVE_KEY}"
 
 # ---------------------------------------------------------------- 静的検査 ---
 
@@ -249,7 +255,15 @@ def test_write_checker_rejects_fetch_outside_api() -> None:
 
 def test_web_dir_has_files() -> None:
     names = {p.name for p in web_files()}
-    assert {"index.html", "app.css", "api.js", "core.js", "review.js", "send.js"} <= names
+    assert {
+        "index.html",
+        "app.css",
+        "api.js",
+        "core.js",
+        "review.js",
+        "send.js",
+        "live.js",
+    } <= names
 
 
 def test_only_allowed_file_kinds() -> None:
@@ -371,6 +385,8 @@ class ReviewState:
         self.seq = 0
         self.bumped: set[str] = set()  # PR が更新された (source が変わった) ことにする key
         self.missing_expect: list[str] = []  # expect を付けずに届いた書き込み
+        self.review_gets: dict[str, int] = {}  # GET …/review の回数 (自動更新の試験用)
+        self.fail_review = False  # True の間、GET …/review は 500 を返す
         self.last_expect: dict | None = None
         self.last_submit: dict | None = None
         self.submit_log: list[dict] = []  # 受け付けた submit の全件
@@ -387,6 +403,35 @@ class ReviewState:
     def view(self, key: str) -> dict:
         rv = self.get(key)
         return {**rv, "unsent": len(self.pending[key])}
+
+    def pi_reply(self, key: str, thread_id: str, body: str) -> None:
+        """pi がスレッドへ返信した (新しい comment と replied)。"""
+        t = next(t for t in self.get(key)["threads"] if t["id"] == thread_id)
+        self.seq += 1
+        t["comments"].append(
+            {
+                "id": f"pi{self.seq}",
+                "by": "pi",
+                "at": "2099-02-02T00:00:00+00:00",
+                "body": body,
+                "anchor": None,
+            }
+        )
+        t["status"] = "replied"
+
+    def mark_received(self, key: str) -> None:
+        """pi が送信を受け取った (batch が受領済み)。"""
+        for b in self.get(key)["batches"]:
+            b["received"] = True
+
+    def mark_stale(self, key: str) -> None:
+        """レビューの後に PR が進んだ (変更依頼 + 古いレビュー)。"""
+        rv = self.get(key)
+        rv["review"], rv["reviewStale"] = "changes", True
+
+    def mark_merged(self, key: str) -> None:
+        """PR が統合済みになった (書き込めなくなる)。"""
+        self.get(key)["merged"] = True
 
     def add_comment(self, key: str, payload: dict) -> tuple[int, dict]:
         rv = self.get(key)
@@ -489,6 +534,9 @@ def api_response(path: str, state: ReviewState | None = None) -> tuple[int, dict
         if len(parts) == 4:
             return 200, {"pr": pr, **load_fixture(f"detail_{parts[3]}.json")}
         if parts[4] == "review":
+            state.review_gets[parts[3]] = state.review_gets.get(parts[3], 0) + 1
+            if state.fail_review:
+                return 500, err_body("internal", "内部エラー（試験）")
             return 200, state.view(parts[3])
         if parts[4] == "diff":
             q = urllib.parse.parse_qs(u.query)
@@ -956,6 +1004,348 @@ def flow_hostile_review(page, kind: str, check) -> None:
     page.wait_for_selector(".sheet", state="detached")
 
 
+def flow_live(br, check) -> None:
+    """画面の自動更新 (CHG-0061 S1)。Playwright の時計を止め、進める時間を試験が決める。"""
+    srv, base = serve()
+    st: ReviewState = srv.state  # type: ignore[attr-defined]
+    ctx = br.new_context(viewport={"width": 1280, "height": 900})
+    page = ctx.new_page()
+    errs: list[str] = []
+    page.on("pageerror", lambda e: errs.append(f"pageerror: {e}"))
+    # タブの見え方を試験から変えられるようにする
+    page.add_init_script(
+        "window.__vis = 'visible';"
+        "Object.defineProperty(document, 'visibilityState', {configurable: true, get: () => window.__vis});"
+        "Object.defineProperty(document, 'hidden', {configurable: true, get: () => window.__vis !== 'visible'});"
+    )
+
+    def gets(key: str = LIVE_KEY) -> int:
+        return st.review_gets.get(key, 0)
+
+    def until(fn, what: str, timeout: float = 5.0) -> bool:
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if fn():
+                return True
+            time.sleep(0.05)
+        check(False, f"live: 待ち切れない: {what}")
+        return False
+
+    def js(expr: str):
+        return page.evaluate(expr)
+
+    def vis(v: str) -> None:
+        js(f"window.__vis = '{v}'; document.dispatchEvent(new Event('visibilitychange'))")
+
+    def step(ms: int, expect_calls: int, what: str, key: str = LIVE_KEY) -> None:
+        """時計を ms 進め、取り直しがちょうど expect_calls 回だけ増えることを確かめる。"""
+        n = gets(key)
+        page.clock.run_for(ms)
+        if expect_calls:
+            until(lambda: gets(key) >= n + expect_calls, what)
+        time.sleep(0.25)  # 応答が処理されて次のタイマーが置かれるまで
+        check(
+            gets(key) == n + expect_calls,
+            f"live: {what}: 取り直しが {gets(key) - n} 回 (期待 {expect_calls})",
+        )
+
+    def anchor() -> None:
+        """時計を止めたまま、見える状態へ戻してすぐ 1 回取り直させる (この時刻から次の間隔を数える)。"""
+        n = gets()
+        vis("hidden")
+        vis("visible")
+        until(lambda: gets() >= n + 1, "anchor")
+        time.sleep(0.25)
+
+    page.clock.install(time=int(time.time() * 1000))
+    page.goto(f"{base}/#/{'pr/' + LIVE_ID}")
+    page.wait_for_selector(".revbar button")
+    page.clock.pause_at(int(time.time() * 1000) + 5000)
+    time.sleep(0.4)
+    anchor()
+    sel_general = ".card:has(h2:text-is('PR 全体のコメント (1)')) textarea"
+
+    # 1. 状態が変わらないとき: 3 秒ごとに取り直すが、DOM は作り直されない
+    js(
+        "for (const s of ['#app textarea', '.prhead', '.revbar', '.thread', '.summary', '.live-batches li'])"
+        " document.querySelector(s).setAttribute('data-mark', '1');"
+    )
+    step(POLL_MS - 1, 0, "3 秒の前は取り直さない")
+    step(1, 1, "3 秒で 1 回")
+    step(POLL_MS, 1, "続けて 3 秒で 1 回")
+    check(
+        js("document.querySelectorAll('[data-mark]').length") == 6,
+        "live: 状態が同じのに DOM が作り直された",
+    )
+
+    # 2. 受領済みになる: 入力中の文字・フォーカス・カーソル位置が残る (反例)
+    page.locator(sel_general).fill("入力中の文字です")
+    js(
+        "(() => { const t = document.querySelector('#app textarea'); t.focus(); t.setSelectionRange(2, 4); })()"
+    )
+    check("未受信" in page.inner_text(".live-batches"), "live: 前提: 最初は未受信")
+    st.mark_received(LIVE_KEY)
+    step(POLL_MS, 1, "受領済みを取り直す")
+    until(lambda: "pi が受け取り済み" in page.inner_text(".live-batches"), "受領済みの表示")
+    got = js(
+        "(() => { const t = document.querySelector('#app textarea'); return [t.value, document.activeElement === t,"
+        " t.selectionStart, t.selectionEnd, t.hasAttribute('data-mark')]; })()"
+    )
+    check(
+        got == ["入力中の文字です", True, 2, 4, True],
+        f"live: 受領済みの反映で入力欄が壊れた: {got}",
+    )
+    check(
+        js(
+            "!!document.querySelector('.revbar[data-mark]') && !!document.querySelector('.thread[data-mark]')"
+        ),
+        "live: 受領済みで固定バー・スレッドが作り直された",
+    )
+
+    # 3. pi の返信: 入力がある間はバナーだけ。押すと反映。入力が空なら自動で反映
+    st.pi_reply(LIVE_KEY, "c3", "pi の返信です")
+    step(POLL_MS, 1, "pi の返信を取り直す")
+    banner = page.locator(".livebar button")
+    until(banner.is_visible, "バナーが出る")
+    check(
+        "pi の返信です" not in page.inner_text(".threads"), "live: 入力中なのにスレッドが変わった"
+    )
+    check(
+        js("document.querySelector('#app textarea').value") == "入力中の文字です",
+        "live: バナーを出したとき入力が消えた",
+    )
+    banner.click()
+    check("pi の返信です" in page.inner_text(".threads"), "live: バナーを押しても反映されない")
+    check(not banner.is_visible(), "live: 反映後もバナーが残る")
+    check(
+        js("document.querySelector('#app textarea').value") == "入力中の文字です",
+        "live: 反映したとき入力が消えた",
+    )
+    page.locator("#app textarea").first.fill("")
+    st.pi_reply(LIVE_KEY, "c3", "空のときの返信")
+    step(POLL_MS, 1, "入力が空のときの返信を取り直す")
+    until(lambda: "空のときの返信" in page.inner_text(".threads"), "入力が空なら自動で反映")
+    check(not banner.is_visible(), "live: 自動で反映したのにバナーが出ている")
+
+    # 4. タブが見えない間は止まり、見える状態に戻るとすぐ 1 回
+    vis("hidden")
+    step(POLL_MS * 4, 0, "非表示の間は取り直さない")
+    n = gets()
+    vis("visible")
+    until(lambda: gets() == n + 1, "見える状態に戻ったときにすぐ 1 回")
+    time.sleep(0.25)
+    check(gets() == n + 1, "live: 見える状態に戻った直後に 2 回以上取り直した")
+    step(POLL_MS, 1, "戻った後は 3 秒間隔に戻る")
+
+    # 7. 取り直しで PR が「進んだ (stale)」と分かっても、表示している版 (expect) は変えない
+    st.mark_stale(LIVE_KEY)
+    step(POLL_MS, 1, "stale の状態を取り直す")
+    until(lambda: "古いレビュー" in page.inner_text(".prhead h1"), "stale のチップ")
+    check("変更依頼" in page.inner_text(".revbar"), "live: 固定バーのチップが更新されない")
+    pr = find_pr(["api", "prs", "r1a2b3c4d", LIVE_KEY]) or {}
+    page.locator(".revbar button", has_text="レビューを送る").click()
+    page.wait_for_selector(".sheet")
+    page.locator(".sheet button", has_text="変更を依頼").click()
+    page.locator(".sheet button", has_text="送る").click()
+    page.wait_for_selector(".sheet", state="detached")
+    until(lambda: st.last_expect is not None, "送信の expect")
+    want = {"source": pr.get("sourceOid"), "target": pr.get("targetOid"), "base": pr.get("baseOid")}
+    check(st.last_expect == want, f"live: 送信の expect が開いた版でない: {st.last_expect}")
+    until(lambda: page.locator(".revnotice").count() == 1, "送信後の案内")
+    time.sleep(0.25)
+
+    # 6. 失敗: 間隔が 3 → 6 → 12 → 24 → 30 秒で頑打ち。成功で 3 秒に戻り、表示も消える
+    note = page.locator(".livebar span")
+    check(not note.is_visible(), "live: 失敗していないのに注意書きが出ている")
+    st.fail_review = True
+    anchor()  # この取り直しが 500 (1 回目の失敗)
+    until(note.is_visible, "失敗の表示")
+    check("更新できません" in note.inner_text(), "live: 失敗の表示が日本語でない")
+    for wait_ms in (6000, 12000, 24000, 30000, 30000):
+        step(wait_ms - 1, 0, f"失敗後の {wait_ms} ms の前は取り直さない")
+        step(1, 1, f"失敗後の {wait_ms} ms で 1 回")
+    check(note.is_visible(), "live: 失敗の間、表示が消えた")
+    st.fail_review = False
+    step(POLL_MAX_MS, 1, "上限 30 秒の次で成功する")
+    until(lambda: not note.is_visible(), "成功で表示が消える")
+    step(POLL_MS - 1, 0, "成功後は 3 秒間隔に戻る (前)")
+    step(1, 1, "成功後は 3 秒間隔に戻る")
+
+    # 5. 一覧へ戻る・別の PR へ移ると、旧ページの取り直しは止まる
+    js("location.hash = '#/'")
+    page.wait_for_selector(".prlist")
+    time.sleep(0.6)
+    step(POLL_MS * 5, 0, "一覧では取り直さない")
+    vis("hidden")
+    vis("visible")
+    step(POLL_MS, 0, "一覧で見える状態に戻っても取り直さない")
+    other = "p1111111111111111"
+    js(f"location.hash = '#/pr/r1a2b3c4d/{other}'")
+    page.wait_for_selector(".revbar")
+    time.sleep(0.25)
+    anchor_n = gets(other)
+    step(POLL_MS, 1, "別の PR では、その PR を取り直す", other)
+    check(gets(other) == anchor_n + 1, "live: 別の PR の取り直しが始まらない")
+    old = gets()
+    step(POLL_MS, 1, "別の PR の 2 回目", other)
+    step(POLL_MS, 1, "別の PR の 3 回目", other)
+    check(gets() == old, "live: 別の PR へ移ったのに旧の PR を取り直している")
+    js("location.hash = '#/'")
+    page.wait_for_selector(".prlist")
+    time.sleep(0.6)  # 一覧はチップのために各 PR の review を一度読む (自動更新ではない)
+    n_other = gets(other)
+    n_old = gets()
+    page.clock.run_for(POLL_MS * 5)
+    time.sleep(0.4)
+    check(gets(other) == n_other and gets() == n_old, "live: 一覧へ戻った後も取り直している")
+    check(errs == [], f"live: ページのエラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_live_guards(br, check) -> None:
+    """自動更新が、入力途中・開いた送信シート・開いた返信欄・書き込み可否の変化で画面を壊さない。
+
+    flow_live の補強 (変異試験で見つかった穴)。
+    """
+    srv, base = serve()
+    st: ReviewState = srv.state  # type: ignore[attr-defined]
+    ctx = br.new_context(viewport={"width": 1280, "height": 900})
+    page = ctx.new_page()
+    errs: list[str] = []
+    page.on("pageerror", lambda e: errs.append(f"pageerror: {e}"))
+    page.add_init_script(
+        "window.__vis = 'visible';"
+        "Object.defineProperty(document, 'visibilityState', {configurable: true, get: () => window.__vis});"
+        "Object.defineProperty(document, 'hidden', {configurable: true, get: () => window.__vis !== 'visible'});"
+    )
+
+    def gets() -> int:
+        return st.review_gets.get(LIVE_KEY, 0)
+
+    def until(fn, what: str, timeout: float = 5.0) -> bool:
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if fn():
+                return True
+            time.sleep(0.05)
+        check(False, f"live-guards: 待ち切れない: {what}")
+        return False
+
+    def js(expr: str):
+        return page.evaluate(expr)
+
+    def vis(v: str) -> None:
+        js(f"window.__vis = '{v}'; document.dispatchEvent(new Event('visibilitychange'))")
+
+    def anchor() -> None:
+        """時計を止めたまま、見える状態へ戻してすぐ 1 回取り直させる (この時刻から次の間隔を数える)。"""
+        n = gets()
+        vis("hidden")
+        vis("visible")
+        until(lambda: gets() >= n + 1, "anchor")
+        time.sleep(0.25)
+
+    def poll(what: str) -> None:
+        """時計を 1 間隔進め、取り直しが 1 回増えるのを待つ。"""
+        n = gets()
+        page.clock.run_for(POLL_MS)
+        until(lambda: gets() >= n + 1, what)
+        time.sleep(0.25)
+
+    page.clock.install(time=int(time.time() * 1000))
+    page.goto(f"{base}/#/{'pr/' + LIVE_ID}")
+    page.wait_for_selector(".revbar button")
+    page.clock.pause_at(int(time.time() * 1000) + 5000)
+    time.sleep(0.4)
+    anchor()
+    sel_general = ".card:has(h2:text-is('PR 全体のコメント (1)')) textarea"
+    banner = page.locator(".livebar button")
+
+    # A. 状態が変わらないときは、チップを含めて DOM を作り直さない (チップはレビューがあるときだけ出るので、先に変更依頼にする)
+    st.mark_stale(LIVE_KEY)
+    poll("変更依頼の状態を取り直す")
+    until(
+        lambda: (
+            page.locator(".revchips > *").count() >= 1 and page.locator(".hchips > *").count() >= 1
+        ),
+        "チップが出る",
+    )
+    js(
+        "document.querySelector('.revchips > *').setAttribute('data-mark', '1');"
+        "document.querySelector('.hchips > *').setAttribute('data-mark', '1');"
+    )
+    poll("変化なしの取り直し 1")
+    poll("変化なしの取り直し 2")
+    check(
+        js("document.querySelectorAll('[data-mark]').length") == 2,
+        "live-guards: 状態が同じのにチップが作り直された",
+    )
+
+    # B. 送信シートが開いている間は、pi の返信でスレッドを差し替えない。閉じてバナーを押すと反映する
+    page.locator(".revbar button", has_text="レビューを送る").click()
+    page.wait_for_selector(".sheet")
+    st.pi_reply(LIVE_KEY, "c3", "シート中の返信です")
+    poll("シート中の返信を取り直す")
+    until(banner.is_visible, "シート中はバナー")
+    check(
+        "シート中の返信です" not in page.inner_text(".threads"),
+        "live-guards: 送信シートが開いているのにスレッドが変わった",
+    )
+    check(page.locator(".sheet").count() == 1, "live-guards: 取り直しで送信シートが閉じた")
+    page.locator(".sheet button", has_text="閉じる").click()
+    page.wait_for_selector(".sheet", state="detached")
+    banner.click()
+    check(
+        "シート中の返信です" in page.inner_text(".threads"),
+        "live-guards: バナーを押しても反映されない (シート)",
+    )
+    check(not banner.is_visible(), "live-guards: 反映後もバナーが残る (シート)")
+
+    # C. 開いた返信欄がある間は、中身が空でもスレッドを差し替えない
+    page.locator(".thread .reply button", has_text="返信").first.click()
+    page.wait_for_selector(".thread textarea")
+    st.pi_reply(LIVE_KEY, "c3", "返信欄中の返信です")
+    poll("返信欄が開いている間の返信を取り直す")
+    until(banner.is_visible, "返信欄が開いている間はバナー")
+    check(
+        "返信欄中の返信です" not in page.inner_text(".threads"),
+        "live-guards: 返信欄が開いているのにスレッドが変わった",
+    )
+    check(
+        page.locator(".thread textarea").count() == 1, "live-guards: 取り直しで開いた返信欄が消えた"
+    )
+    page.locator(".thread button", has_text="キャンセル").first.click()
+    banner.click()
+    check(
+        "返信欄中の返信です" in page.inner_text(".threads"),
+        "live-guards: バナーを押しても反映されない (返信欄)",
+    )
+
+    # D. 書き込めるかが変わっても (統合済みになる)、書きかけの欄がある間は全体を描き直さない
+    page.locator(sel_general).fill("書きかけの文です")
+    st.mark_merged(LIVE_KEY)
+    poll("統合済みの状態を取り直す")
+    until(banner.is_visible, "書き込み可否が変わるとバナー")
+    kept = js("(document.querySelector('#app textarea') || {}).value")
+    check(
+        kept == "書きかけの文です", f"live-guards: 書き込み可否の変化で書きかけが消えた: {kept!r}"
+    )
+    page.locator(sel_general).fill("")
+    banner.click()
+    until(
+        lambda: page.locator("#app textarea").count() == 0,
+        "バナーを押すと書き込めない画面に描き直される",
+    )
+    check(
+        "統合済みの PR には書き込めません" in page.inner_text(".revbar"),
+        "live-guards: 統合済みの表示にならない",
+    )
+    check(errs == [], f"live-guards: ページのエラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
 def browser_main(shots: pathlib.Path | None) -> int:
     """子プロセスで動く本体。失敗は JSON で標準出力へ。"""
     from playwright.sync_api import sync_playwright
@@ -1148,6 +1538,8 @@ def browser_main(shots: pathlib.Path | None) -> int:
             check(errs == [], f"{kind} console/通信の異常: {errs}")
             ctx.close()
             srv.shutdown()
+        flow_live(br, check)
+        flow_live_guards(br, check)
         br.close()
     print(json.dumps({"fails": fails}, ensure_ascii=False))
     return 1 if fails else 0
