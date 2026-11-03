@@ -48,7 +48,8 @@ $GpuPowerScript = Join-Path $GpuPowerDir 'set-power-limit.ps1'
 # Scope = 'machine' passes --scope machine; '' passes none (the manifest declares no scope).
 # Inventory: docs/spec/windows-admin.md#winget-パッケージの-user--machine-の振り分け
 $WingetMachinePackages = [ordered]@{
-  'Chrome'         = @{ Id = 'Google.Chrome'; Scope = 'machine' }
+  # Chrome: MSI 版の Google.Chrome は winget の配布元から消えていた (2026-11-03、終了コード -1978335212)。EXE 版を使う。自己更新するので、検出は winget list ではなくファイルで行う
+  'Chrome'         = @{ Id = 'Google.Chrome.EXE'; Scope = 'machine'; File = 'Google\Chrome\Application\chrome.exe' }
   'JapaneseIME'    = @{ Id = 'Google.JapaneseIME'; Scope = 'machine' }
   '7zip'           = @{ Id = '7zip.7zip'; Scope = 'machine' }
   'HackFonts'      = @{ Id = 'SourceFoundry.HackFonts'; Scope = 'machine' }

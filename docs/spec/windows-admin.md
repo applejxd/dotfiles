@@ -58,7 +58,8 @@ winget の既定は user scope なので、user 版があるものは UAC なし
 
 | 分類 | パッケージ | 扱い |
 | --- | --- | --- |
-| machine 版しかない（user 版なし） | Chrome・Google 日本語入力・7-Zip・Hack フォント・Google Drive・Dropbox・Ditto・Tailscale | `309_admin` が `--scope machine` で導入（Google Drive 以降は `applejxd` だけ） |
+| machine 版しかない（user 版なし） | Google 日本語入力・7-Zip・Hack フォント・Google Drive・Dropbox・Ditto・Tailscale | `309_admin` が `--scope machine` で導入（Google Drive 以降は `applejxd` だけ） |
+| 両 scope 対応だが machine を維持 | Chrome（`Google.Chrome.EXE`） | `309_admin` が `--scope machine` で導入。**検出は `winget list` ではなく `Program Files` の `chrome.exe`**（自己更新するので、Id の一致に頼らない）。下の「Chrome の Id」 |
 | scope 未宣言の MSI | Python Launcher（`launcher.msi`） | `309_admin` が `--scope` なしで導入。付けると `No applicable installer` になる。MSI の既定が全ユーザーかは**未確認**（導入後に UAC が出るか・導入先で確かめる） |
 | machine 版しかない・特定の PC だけ | Elgato Stream Deck（`wix` の MSI。user 版なし）・Wacom ドライバー・Steam・iTunes | `309_admin` が `--scope machine` で導入。**applejxd かつ hostname が一致する PC だけ**（下の「hostname で限定するもの」） |
 | 両 scope 対応 | PowerShell・Obsidian・Oh My Posh・PowerToys・Git・mise・Python 3.12・Bitwarden（本体・CLI） | 既定（user）のまま `310_winget` |
@@ -116,3 +117,10 @@ winget の既定は user scope なので、user 版があるものは UAC なし
   導入済みの確認を飛ばす。この組み合わせは実機で未確認）。MSI 版が無いときは `DefaultShell` を設定しない（無いシェルを指さない）。
   `DefaultShellCommandOption` は既定（`-c`）のまま。一発実行（`ssh host command`）は `pwsh -c` になり、プロファイルの対話判定が非対話と見なすため、
   PATH・文字コード・git の環境変数までが入る（対話ブロックは入らない）
+- **Chrome の Id**: MSI 版の `Google.Chrome` は、2026-11-03 に winget の配布元（`winget source update` の後）から見つからなかった
+  （`winget install --id Google.Chrome --exact --scope machine` が `-1978335212`＝`0x8A150014`「パッケージが見つからない」で失敗）。
+  GitHub の winget-pkgs には同じ版のマニフェストがあるので、索引から外れているらしいが、理由は未確認。
+  MSI の URL は版ごとに変わらず、Google がファイルを差し替えるたびにハッシュが合わなくなる
+  （[報告](https://github.com/J-MaFf/winget-app-setup/issues/314)）ので、版つきの URL を持つ `Google.Chrome.EXE`（`--scope machine`。user 版もある）に切り替えた。
+  EXE 版は自己更新し、`winget list` に出ないことがあるので、導入判定は `Program Files` の `chrome.exe`（`File` の指定。WinSCP などと同じ仕組み）で行う。
+  EXE 版は両 scope に対応する（上の「machine を維持」の行）。UAC を避けたくなったら、`310_winget` の user scope へ移す選択肢がある

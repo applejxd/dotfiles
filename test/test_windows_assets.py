@@ -570,7 +570,7 @@ def test_subprocess_text_mode_specifies_encoding():
 
 
 MACHINE_WINGET_IDS = [
-    "Google.Chrome",
+    "Google.Chrome.EXE",
     "Google.JapaneseIME",
     "7zip.7zip",
     "SourceFoundry.HackFonts",
@@ -601,6 +601,26 @@ def test_machine_only_winget_packages_are_installed_by_the_admin_step():
     for package_id in ("Git.Git", "Microsoft.PowerToys", "Discord.Discord"):
         assert f"winst {package_id}" in winget, package_id
         assert package_id not in admin, package_id
+
+
+def test_chrome_is_installed_as_the_exe_package_and_detected_by_file():
+    admin = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+    winget = (
+        ROOT / "home/.chezmoiscripts/300_windows/310_packages/run_once_before_310_winget.ps1.tmpl"
+    ).read_text(encoding="utf-8-sig")
+
+    # MSI 版の Google.Chrome は winget の配布元から消えていた (2026-11-03、-1978335212 = パッケージなし)。入れ直そうとして毎回失敗する
+    assert "Id = 'Google.Chrome';" not in admin and "winst Google.Chrome\n" not in winget
+    # EXE 版は winget list で見つからないことがある (自己更新)。Id の一致ではなく、ファイルで検出する
+    assert (
+        "'Chrome'         = @{ Id = 'Google.Chrome.EXE'; Scope = 'machine'; "
+        "File = 'Google\\Chrome\\Application\\chrome.exe' }"
+    ) in admin
+    assert (
+        "if ($entry.ContainsKey('File'))" in admin and "Test-ProgramFilesFile $entry.File" in admin
+    )
+    # Chrome を 310 で重ねて入れない (UAC は 309 に 1 回だけ)
+    assert "Google.Chrome" not in winget
 
 
 def test_admin_setup_enables_openssh_server_without_opening_public():
