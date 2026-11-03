@@ -157,6 +157,24 @@ export function runGit(args: string[], opts: RunOpts = {}): Promise<GitRun> {
 	});
 }
 
+// 最小の git の版。merge-tree --write-tree（2.38）と check-attr --source（2.40）を使う。git は最新版を使う前提なので、古い版への互換は作らない
+const MIN_GIT: readonly [number, number] = [2, 40];
+let gitVersionCache: Promise<boolean> | null = null;
+
+/** git の版が最小以上か。版を確認できないときも false（安全側）。プロセス内で版は変わらないので、結果を覚える。 */
+export function gitVersionOk(): Promise<boolean> {
+	gitVersionCache ??= (async () => {
+		const r = await runGit(["--version"]);
+		// "git version 2.43.0"、"git version 2.39.3 (Apple Git-145)"、"git version 2.43.0.windows.1"
+		const m = r.out.match(/^git version (\d+)\.(\d+)/);
+		if (r.code !== 0 || !m) return false;
+		const major = Number(m[1]);
+		const minor = Number(m[2]);
+		return major > MIN_GIT[0] || (major === MIN_GIT[0] && minor >= MIN_GIT[1]);
+	})();
+	return gitVersionCache;
+}
+
 /** 共通ディレクトリ（realpath）。リポジトリでなければ null。 */
 export async function resolveCommonDir(repo: string): Promise<string | null> {
 	let cwd: string;
@@ -206,6 +224,26 @@ export async function configHasExternalCode(file: string): Promise<boolean> {
 }
 
 export type Identity = { name: string; email: string };
+
+/**
+ * 統合器が扱わない設定があるか（外部コードの設定とは別。安全のためではなく、結果が変わるため）。
+ * sparse checkout: 統合器は core.sparseCheckout=false で動かすので、sparse のリポジトリでは作業ツリーの展開が変わる。
+ * ファイルが無いときは false。読めないときは true（安全側）。
+ */
+export async function configHasUnsupported(file: string): Promise<boolean> {
+	if (!existsSync(file)) return false;
+	const r = await runGit(["config", "--file", file, "--list", "-z"]);
+	if (r.code !== 0) return true;
+	for (const entry of r.out.split("\0")) {
+		if (!entry) continue;
+		const nl = entry.indexOf("\n");
+		const key = (nl < 0 ? entry : entry.slice(0, nl)).toLowerCase();
+		const value = nl < 0 ? "" : entry.slice(nl + 1);
+		// 値の省略（"[core] sparseCheckout" だけ）は true として扱う（git も同じ）
+		if (key === "core.sparsecheckout" && !/^(?:false|no|off|0)$/i.test(value)) return true;
+	}
+	return false;
+}
 
 /** コミットの作者。対象リポジトリの通常の設定（global を含む）を読み取りで 1 回だけ読む。外部のコードは動かない。
  * worktree があれば、その worktree の設定 (config.worktree) も読むように、worktree のパスを cwd にする。 */
