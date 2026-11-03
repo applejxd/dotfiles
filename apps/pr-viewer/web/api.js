@@ -114,6 +114,7 @@
           var why = b.jobsReason === "unsupported_platform" || b.jobsReason === "pis_missing" ? b.jobsReason : null;
           return {
             merge: b.merge === true,
+            create: b.create === true,
             targets: Array.isArray(b.targets) ? b.targets : [],
             jobs: b.jobs === true,
             jobsReason: why,
@@ -121,9 +122,16 @@
           };
         },
         function () {
-          return { merge: false, targets: [], jobs: false, jobsReason: null, jobLimits: null };
+          return { merge: false, create: false, targets: [], jobs: false, jobsReason: null, jobLimits: null };
         }
       );
+    },
+    /* 起票（CHG-0062 段 B1）。本文は契約どおり {kind, name, requestId, expect:{target}, brief} */
+    createFeature: function (repoId, c) {
+      return guard(function () {
+        if (!/^r[0-9a-f]{8}$/.test(repoId)) throw fail("リポジトリの指定が正しくありません。");
+        return post("/api/repos/" + repoId + "/features", { kind: "feature", name: c.name, requestId: c.requestId, expect: { target: c.target }, brief: c.brief });
+      });
     },
     mergePlan: function (id) {
       return guard(function () {

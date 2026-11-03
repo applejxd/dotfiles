@@ -1,6 +1,6 @@
 // PR ビューアのサーバ（段 1: 読み取り専用、段 2: レビューの書き込み、段 A2: 統合）。
 // 起動: node apps/pr-viewer/server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>]
-//       [--allow-merge] [--rules-file <パス>]
+//       [--allow-merge] [--allow-create] [--rules-file <パス>]
 //       [--allow-jobs] [--job-timeout-ms <N>] [--test-platform <名前>] [--pis-command <絶対パス>]
 //       [--state-dir <パス>] [--job-model <提供元/モデル>]
 // 設計: docs/change/0060-local-pr-viewer.md・docs/change/0062-pr-hub-simplify.md。契約: .tmp/keep/prv-app/api-contract.md
@@ -14,7 +14,8 @@ import { ApiError, configureLimits, openRepo } from "./git-view.ts";
 import type { Repo } from "./git-view.ts";
 import { mergeRequestError, stopMerges } from "./merge-api.ts";
 import type { MergeEnv, PostResult } from "./merge-api.ts";
-import { handleApi, handlePost, isJobGetRoute, isJobPostRoute, isMergePostRoute, isPostRoute } from "./routes.ts";
+import { createRequestError, stopCreates } from "./feature-api.ts";
+import { handleApi, handlePost, isFeaturePostRoute, isJobGetRoute, isJobPostRoute, isMergePostRoute, isPostRoute } from "./routes.ts";
 import { DEFAULT_JOB_TIMEOUT_MS, MAX_JOB_TIMEOUT_MS, jobCapabilities, jobRequestError, recoverJobs, stateDirIsolated, stopJobs } from "./job-api.ts";
 import type { JobsConfig } from "./job-api.ts";
 import { buildArgv } from "./job-runner.ts";
@@ -48,6 +49,12 @@ type Options = {
 	stateDir: string;
 	/** pis へ渡す --model（既定は pi の既定に任せる） */
 	jobModel: string | null;
+	/** 起票を許可する（既定で無効）。値を取らない旗 */
+	allowCreate: boolean;
+	/** 試験用: 起票の検証の後（記録の前）に入れる遅延 */
+	createDelayMs: number;
+	/** 試験用: 起票の失敗の注入（add: 枝だけ残る失敗・record: 記録の失敗） */
+	createFail: string | null;
 };
 
 function parseArgs(argv: string[]): Options | null {
@@ -65,11 +72,18 @@ function parseArgs(argv: string[]): Options | null {
 		pisCommand: join(homedir(), ".local", "bin", "pis"),
 		stateDir: defaultStateDir(),
 		jobModel: null,
+		allowCreate: false,
+		createDelayMs: 0,
+		createFail: null,
 	};
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
 		if (a === "--allow-merge") {
 			o.allowMerge = true; // 値を取らない。`--allow-merge=1` は未知の旗として断る
+			continue;
+		}
+		if (a === "--allow-create") {
+			o.allowCreate = true; // 値を取らない
 			continue;
 		}
 		if (a === "--allow-jobs") {
@@ -105,6 +119,12 @@ function parseArgs(argv: string[]): Options | null {
 		} else if (a === "--job-model") {
 			if (v.startsWith("-") || buildArgv("x", v) === null) return null; // "<provider>/<model>" の形だけ（先頭の - は旗と紛れるので不可）
 			o.jobModel = v;
+		} else if (a === "--create-test-delay-ms") {
+			if (!/^\d+$/.test(v) || Number(v) > 60_000) return null; // 試験用
+			o.createDelayMs = Number(v);
+		} else if (a === "--create-test-fail") {
+			if (v !== "add" && v !== "record") return null; // 試験用
+			o.createFail = v;
 		} else return null;
 		i++;
 	}
@@ -220,7 +240,10 @@ function jobsOf(opts: Options): JobsConfig {
 
 /** 書き込み（POST）。共通の規則を検査してから routes.ts へ渡す。統合系・ジョブ系は Origin 必須・--allow-merge / --allow-jobs が要る（先に断る）。 */
 async function servePost(repos: Repo[], req: IncomingMessage, res: ServerResponse, pathname: string, opts: Options): Promise<void> {
-	if (isMergePostRoute(pathname)) {
+	if (isFeaturePostRoute(pathname)) {
+		const denied = createRequestError(req.headers, opts.allowCreate);
+		if (denied) return sendError(res, denied.status, denied.code, denied.message);
+	} else if (isMergePostRoute(pathname)) {
 		const denied = mergeRequestError(req.headers, opts.allowMerge);
 		if (denied) return sendError(res, denied.status, denied.code, denied.message);
 	} else if (isJobPostRoute(pathname)) {
@@ -252,7 +275,10 @@ async function servePost(repos: Repo[], req: IncomingMessage, res: ServerRespons
 		return sendError(res, 400, "bad_request", "リクエストの形が正しくありません。");
 	}
 	const env: MergeEnv = { rulesFile: opts.rulesFile, testDelayMs: opts.mergeDelayMs };
-	const result: PostResult = await handlePost(repos, pathname, body as Record<string, unknown>, env, jobsOf(opts));
+	const result: PostResult = await handlePost(repos, pathname, body as Record<string, unknown>, env, jobsOf(opts), {
+		testDelayMs: opts.createDelayMs,
+		testFail: opts.createFail,
+	});
 	sendJson(res, result.status, result.body);
 }
 
@@ -269,7 +295,7 @@ function isMergePost(req: IncomingMessage): boolean {
 	if (req.method !== "POST") return false;
 	try {
 		const p = new URL(req.url ?? "", "http://localhost").pathname;
-		return isMergePostRoute(p) || isJobPostRoute(p); // ジョブの起動・停止も、応答を書き終えるまで停止を待つ
+		return isMergePostRoute(p) || isJobPostRoute(p) || isFeaturePostRoute(p); // ジョブや起票も、応答を書き終えるまで停止を待つ
 	} catch {
 		return false;
 	}
@@ -328,7 +354,12 @@ function makeInnerHandler(repos: Repo[], opts: Options) {
 			if (p === "/") return await serveStatic(res, opts.webDir, "index.html");
 			if (p.startsWith("/web/")) return await serveStatic(res, opts.webDir, p.slice("/web/".length));
 			if (p === "/api/capabilities") {
-				return sendJson(res, 200, { merge: opts.allowMerge, targets: ["develop"], ...jobCapabilities(jobsOf(opts)) });
+				return sendJson(res, 200, {
+					merge: opts.allowMerge,
+					create: opts.allowCreate,
+					targets: ["develop"],
+					...jobCapabilities(jobsOf(opts)),
+				});
 			}
 			if (isJobGetRoute(p)) {
 				const denied = jobRequestError(req.headers, jobsOf(opts), "GET");
@@ -347,7 +378,7 @@ async function main(): Promise<void> {
 	const opts = parseArgs(process.argv.slice(2));
 	if (!opts || opts.repos.length === 0) {
 		process.stderr.write(
-			"使い方: node server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>] [--allow-merge] [--allow-jobs] [--rules-file <パス>]\n",
+			"使い方: node server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>] [--allow-merge] [--allow-create] [--allow-jobs] [--rules-file <パス>]\n",
 		);
 		process.exit(2);
 	}
@@ -387,6 +418,7 @@ async function main(): Promise<void> {
 		if (stopped) return; // 重複した SIGTERM・SIGINT でも、実行中の統合は止めない
 		stopped = true;
 		stopMerges();
+		stopCreates();
 		// 終了は 1 本の順序だけで行う: 実行中の統合の完了 → 接続を閉じる → server が閉じる → exit。
 		// server.close の callback で直接 exit すると、通信が切れた統合の途中で終わってしまう
 		const closed = new Promise<void>((done) => server.close(() => done()));
