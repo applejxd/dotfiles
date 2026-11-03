@@ -1129,6 +1129,67 @@ def flow_hostile_review(page, kind: str, check) -> None:
     page.wait_for_selector(".sheet", state="detached")
 
 
+def flow_hub_light(br, check) -> None:
+    """CHG-0062 A3: 統合先が進んだ・衝突の可能性・未 push の表示。パスは文字として出る。"""
+    srv, base = serve()
+    for kind, size in (
+        ("pc", {"width": 1280, "height": 900}),
+        ("sp", {"width": 390, "height": 844}),
+    ):
+        sp = kind == "sp"
+        ctx = br.new_context(viewport=size, has_touch=sp, is_mobile=sp, color_scheme="light")
+        page = ctx.new_page()
+        page.goto(base + "/")
+        page.wait_for_selector(".prlist")
+        row = page.locator(".prrow", has_text="feature/add-search")
+        check(
+            "develop が 3 進んだ" in row.inner_text(),
+            f"{kind} hub: 一覧に「develop が N 進んだ」が無い",
+        )
+        check(
+            page.locator(".prrow .behind").count() == 1,
+            f"{kind} hub: 進んだ表示が開いている PR だけでない",
+        )
+        note = page.inner_text(".unpushed") if page.locator(".unpushed").count() else ""
+        check(
+            "2 件先" in note and "最後に取得" in note,
+            f"{kind} hub: 「origin より N 件先」が無い: {note!r}",
+        )
+        row.locator("a").click()
+        page.wait_for_selector(".behindcard")
+        check(
+            "develop が 3 コミット進みました" in page.inner_text(".behindcard h2"),
+            f"{kind} hub: PR 画面に進んだ表示が無い",
+        )
+        check(
+            "衝突の可能性: 25 件" in page.inner_text(".behindcard summary"),
+            f"{kind} hub: 「衝突の可能性: N 件」が無い",
+        )
+        page.locator(".behindcard summary").click()
+        check(
+            page.locator(".behindcard li").count() == 3,
+            f"{kind} hub: パス 2 件 + 「ほか N 件」の 3 行でない",
+        )
+        check(
+            EVIL in page.inner_text(".behindcard"),
+            f"{kind} hub: 敵対的なパスが文字として出ていない",
+        )
+        check(
+            page.locator("#app img, #app script").count() == 0,
+            f"{kind} hub: パスから img/script ができた",
+        )
+        check(
+            page.evaluate("window.__pwned === undefined"),
+            f"{kind} hub: パスの文字列が実行された",
+        )
+        check(
+            page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"),
+            f"{kind} hub: 横にはみ出している",
+        )
+        ctx.close()
+    srv.shutdown()
+
+
 def flow_live(br, check) -> None:
     """画面の自動更新 (CHG-0061 S1)。Playwright の時計を止め、進める時間を試験が決める。"""
     srv, base = serve()
@@ -2407,6 +2468,7 @@ def browser_main(shots: pathlib.Path | None) -> int:
             srv.shutdown()
         flow_live(br, check)
         flow_live_guards(br, check)
+        flow_hub_light(br, check)
         for flow in (
             flow_merge_caps,
             flow_merge_steps,

@@ -249,7 +249,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 - `effort` は `minimal | low | medium | high | xhigh | max`。`off` は不可。
 - `todo` ツールが有効なとき、`explore` / `review` / `worker` の新規起動には `todo` の ID が必須。
 - `isolation:"worktree"` は新規の `worker` 1 件だけで、`keep` とは併用できない。
-- 同時に生かせる子は最大 4。1 往復の既定上限は 15 分で、`plan` だけ 30 分。
+- 同時に生かせる子は最大 6。1 往復の既定上限は 15 分で、`plan` だけ 30 分。
 - `/plan`（計画モード）の間は、読み取り専用の役割の子（`explore` / `review` / `plan`）だけ起動・続行できる。
 
 - 詳細: [guard/pi-extensions.md](guard/pi-extensions.md)（`guarded_action`）、[guard/pi-subagents.md](guard/pi-subagents.md)（`guarded_task`）

@@ -22,6 +22,8 @@ const MAX_COMMITS = 200;
 const MAX_FILE_DIFF_BYTES = 200 * 1024;
 const MAX_PATH_LEN = 4096;
 const MAX_PRS_PER_REPO = 200;
+const OVERLAP_SHOW = 20; // 画面へ返すパスの上限
+const OVERLAP_SCAN = 2000; // 統合先側の変更がこれを超えたら「多数」として打ち切る
 
 type LastCommit = { oid: string; subject: string; author: string; at: string };
 export type PrSummary = {
@@ -40,7 +42,12 @@ export type PrSummary = {
 	sourceOid: string;
 	targetOid: string;
 	baseOid: string;
+	/** 分岐後に統合先が進んだコミット数（0 なら進んでいない） */
+	behind: number;
+	/** 分岐後に PR の枝と統合先の両方が変更したファイル（衝突の可能性の目安。判定ではない） */
+	overlap: Overlap;
 };
+export type Overlap = { count: number; paths: string[]; truncated: boolean };
 type Commit = LastCommit;
 
 type Computed = { summary: PrSummary; files: FileEntry[] };
@@ -70,6 +77,36 @@ async function diffFiles(repo: Repo, base: string, source: string): Promise<File
 	});
 }
 
+const NO_OVERLAP: Overlap = { count: 0, paths: [], truncated: false };
+
+/** 統合先が分岐後に変えたファイルと、PR 側の変更ファイルの積集合。読み取りだけ。 */
+async function overlapOf(repo: Repo, base: string, targetOid: string, files: FileEntry[]): Promise<Overlap> {
+	const r = await git(repo, ["diff", "--name-only", "-z", "--no-ext-diff", "--no-textconv", base, targetOid, "--"]);
+	const theirs = r.out.split("\0").filter((p) => p !== "");
+	if (theirs.length > OVERLAP_SCAN) return { count: theirs.length, paths: [], truncated: true };
+	const mine = new Set<string>();
+	for (const f of files) {
+		mine.add(f.path);
+		if (f.oldPath) mine.add(f.oldPath);
+	}
+	const both = theirs.filter((p) => mine.has(p)).sort();
+	return { count: both.length, paths: both.slice(0, OVERLAP_SHOW), truncated: both.length > OVERLAP_SHOW };
+}
+
+/** 統合先が上流（<target>@{upstream}、なければ origin/<target>）より先にある件数。上流が読めないときは null。 */
+async function unpushedOf(repo: Repo, target: string): Promise<number | null> {
+	let up = await git(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${target}@{upstream}`], true);
+	let ref = up.out.trim();
+	if (up.code !== 0 || !isOid(ref)) {
+		up = await git(repo, ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${target}`], true);
+		ref = up.out.trim();
+		if (up.code !== 0 || !isOid(ref)) return null;
+	}
+	const n = await git(repo, ["rev-list", "--count", `${ref}..refs/heads/${target}`], true);
+	const count = Number(n.out.trim());
+	return n.code === 0 && Number.isFinite(count) ? count : null;
+}
+
 async function compute(repo: Repo, b: BranchRef, target: { name: string; oid: string }): Promise<Computed | null> {
 	const key = `${repo.repoId}:${b.oid}:${target.oid}:${target.name}:${b.branch}`;
 	const hit = cache.get(key);
@@ -80,6 +117,9 @@ async function compute(repo: Repo, b: BranchRef, target: { name: string; oid: st
 	const anc = await git(repo, ["merge-base", "--is-ancestor", b.oid, target.oid], true);
 	const count = await git(repo, ["rev-list", "--count", `${target.oid}..${b.oid}`]);
 	const files = await diffFiles(repo, base, b.oid);
+	const behindOut = anc.code === 0 ? null : await git(repo, ["rev-list", "--count", `${base}..${target.oid}`]); // 統合済みの枝は進みを数えない
+	const behind = Number(behindOut?.out.trim()) || 0;
+	const overlap = behind > 0 ? await overlapOf(repo, base, target.oid, files) : NO_OVERLAP;
 	const prKey = prKeyOf(b.branch);
 	const summary: PrSummary = {
 		repoId: repo.repoId,
@@ -97,6 +137,8 @@ async function compute(repo: Repo, b: BranchRef, target: { name: string; oid: st
 		sourceOid: b.oid,
 		targetOid: target.oid,
 		baseOid: base,
+		behind,
+		overlap,
 	};
 	const value = { summary, files };
 	if (cache.size >= CACHE_MAX) cache.clear();
@@ -257,10 +299,10 @@ export async function handlePost(
 /** API の入口。成功なら応答の本体、失敗なら ApiError を投げる。 */
 export async function handleApi(repos: Repo[], pathname: string, query: URLSearchParams): Promise<unknown> {
 	if (pathname === "/api/repos") {
-		const out: Array<{ repoId: string; name: string; target: string }> = [];
+		const out: Array<{ repoId: string; name: string; target: string; unpushed: number | null }> = [];
 		for (const r of repos) {
 			const t = await resolveTarget(r);
-			if (t) out.push({ repoId: r.repoId, name: r.name, target: t.name });
+			if (t) out.push({ repoId: r.repoId, name: r.name, target: t.name, unpushed: await unpushedOf(r, t.name) });
 		}
 		return { repos: out };
 	}

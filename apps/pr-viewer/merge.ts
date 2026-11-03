@@ -15,6 +15,8 @@ import {
 	type Identity,
 	type StatusEntry,
 	configHasExternalCode,
+	configHasUnsupported,
+	gitVersionOk,
 	listWorktrees,
 	parseStatus,
 	readIdentity,
@@ -70,6 +72,9 @@ const REASONS: Record<string, string> = {
 	dirty: "統合が触るファイルに未コミットの変更があります。",
 	ignored: "統合が作るファイルと同名の無視ファイルがあります。",
 	external_code: "外部のコードを動かしうる設定があるため、統合しません。",
+	git_version: "git の版が古い（2.40 以上が要ります）か、版を確認できません。",
+	unsupported_repo: "この統合器が扱わないリポジトリの設定（sparse checkout）があるため、統合しません。",
+	unsupported_change: "サブモジュール、または filter 属性を持つファイルを含む変更は、統合しません。",
 	busy: "別の統合が実行中です。",
 	recover_needed: "前回の統合が異常終了した可能性があります。他の git が動いていないことを確かめて、復旧（recover）を実行してください。",
 	not_ff: "統合先が先に進んでいます。",
@@ -151,9 +156,11 @@ async function prepare(input: MergeInput, policy: Policy): Promise<Ctx | Refusal
 	}
 	if (!policy.sources.some((p) => source.startsWith(p) && source.length > p.length)) return refuse("policy_source");
 	if (!policy.targets.includes(target)) return refuse("policy_target");
+	if (!(await gitVersionOk())) return refuse("git_version");
 	const gitDir = await resolveCommonDir(input.repo);
 	if (!gitDir) return refuse("bad_input");
 	if (await repoConfigHasExternalCode(gitDir)) return refuse("external_code");
+	if (await repoConfigHasUnsupported(gitDir)) return refuse("unsupported_repo");
 	return {
 		gitDir,
 		source: { ref: `refs/heads/${source}`, short: source },
@@ -166,6 +173,34 @@ async function prepare(input: MergeInput, policy: Policy): Promise<Ctx | Refusal
 
 async function repoConfigHasExternalCode(gitDir: string): Promise<boolean> {
 	return (await configHasExternalCode(join(gitDir, "config"))) || (await configHasExternalCode(join(gitDir, "config.worktree")));
+}
+
+async function repoConfigHasUnsupported(gitDir: string): Promise<boolean> {
+	return (await configHasUnsupported(join(gitDir, "config"))) || (await configHasUnsupported(join(gitDir, "config.worktree")));
+}
+
+/**
+ * 統合器が正しく扱えない変更を含むか: サブモジュール（gitlink = mode 160000）と、filter 属性（LFS など）を持つファイル。
+ * 統合器は利用者の global 設定と filter の設定を読まないので、filter を持つファイルを作業ツリーへ展開すると、
+ * 内容ではなくポインターテキストが書かれうる。読めなかったときは undefined。
+ */
+async function unsupportedChange(gitDir: string, targetOid: string, resultTree: string, touched: string[]): Promise<boolean | undefined> {
+	const raw = await runGit(["diff-tree", "-r", "-z", "--raw", "--no-renames", "--no-ext-diff", "--no-textconv", targetOid, resultTree], { gitDir });
+	if (raw.code !== 0) return undefined;
+	const rawTokens = raw.out.split("\0");
+	for (let i = 0; i + 1 < rawTokens.length; i += 2) {
+		// 「:旧mode 新mode 旧sha 新sha 状態」と「パス」の 2 つ組
+		const m = rawTokens[i].match(/^:(\d{6}) (\d{6}) /);
+		if (m && (m[1] === "160000" || m[2] === "160000")) return true;
+	}
+	if (touched.length === 0) return false;
+	const ca = await runGit(["check-attr", "-z", "--stdin", "--source", resultTree, "filter"], { gitDir, input: `${touched.join("\0")}\0` });
+	if (ca.code !== 0) return undefined;
+	const t = ca.out.split("\0");
+	for (let i = 0; i + 2 < t.length; i += 3) {
+		if (t[i + 2] !== "unspecified" && t[i + 2] !== "unset") return true; // 「path, filter, 値」の 3 つ組
+	}
+	return false;
 }
 
 // ---- 計画 ----
@@ -280,6 +315,9 @@ async function computePlan(ctx: Ctx): Promise<Planned | Refusal> {
 	const t = dt.out.split("\0");
 	for (let i = 0; i + 1 < t.length; i += 2) all.push({ status: t[i], path: t[i + 1] });
 	const touched = all.map((f) => f.path);
+	const unsupported = await unsupportedChange(ctx.gitDir, targetOid, resultTree, touched);
+	if (unsupported === undefined) return refuse("failed");
+	if (unsupported) return refuse("unsupported_change");
 	const added = all.filter((f) => f.status === "A").map((f) => f.path);
 
 	const wt = await findWorktree(ctx.gitDir, ctx.target.ref);

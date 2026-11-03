@@ -244,7 +244,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 
 1. 作業を、**ファイルの範囲が重ならない**単位に分ける（同じファイルを 2 つの単位が触ると、`finish` で衝突する）。単位ごとに、変更してよいパス（`--owned` に渡す glob）を決める。
 2. 単位ごとの feature と worktree（`name` は小文字・数字・`.`・`_`・`-`）は、**親が** `git flow feature start <name> --worktree --no-fetch` で起票する（起票は機械では止めない。[CHG-0050](../../change/0050-slim-guarded-action.md)）。
-3. 単位ごとに `guarded_task`（`agent: "worker"`、`background: true`。同時に 4 本まで）で子を起動する。依頼文は下の雛形。`isolation` は付けない。
+3. 単位ごとに `guarded_task`（`agent: "worker"`、`background: true`。同時に 6 本まで）で子を起動する。依頼文は下の雛形。`isolation` は付けない。
 4. 子の完了の通知ごとに、**取り込み前の検査**: `python3 scripts/parallel_check.py --owned <名前>=<glob>,… …`（本体の変更・範囲の外・重複を見る。終了コード 1 なら、原因を確かめるまでコミットしない）。あわせて、その worktree の差分を確かめる（親が `cd <wt> && git diff --stat`・`git diff`）。
 5. 検査を通った単位だけ、親が `git add` する（**整形 hook の直後は数秒待ち**、`git diff --cached --numstat` で空のファイルや行数の急減がないか見る）。続けて `git_commit`（`dir` に worktree。`message` は 1200 字以下。feature の linked worktree は確認なし。[CHG-0053](../../change/0053-worktree-integration-gate.md)）。子は `git add`/`commit` できない（deny）。新しい試験ファイルは `scripts/verify.py` の `_PI_TESTS` へ、`index.ts` から import される新しい `.ts` は試験用のコピー一覧へ、親が登録する（登録漏れは全件検査の後で落ちる。`test/test_verify.py` が 2 秒で先に見つける）。
 6. 全件検査（`mise run verify:all`）は親が 1 回（`bg_run`。同時に 1 本。同じリポジトリの全 worktree・全会話で、排他ロックが機械的に保証する。[検証の方針](../development.md#全件検査の排他)）。通ったら、単位ごとに順番に `git flow feature finish <name> --squash …` で取り込む（**cd を付けず本体のルートで実行する。先頭が `git flow feature finish` でないと、確認画面に squash メッセージと衝突の事前検査が出ない**。**`bypass` でも必須確認**。承認画面が出る。承認が時間切れなら、再試行せず利用者の指示を待つ）。先に `finish` した単位の後で残りが衝突するなら、解決して `git add` し、`git flow feature finish --continue <ブランチ名>`（名前なしでは失敗する）。

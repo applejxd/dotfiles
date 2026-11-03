@@ -87,6 +87,10 @@ select, input[type=search] { font: inherit; color: var(--fg); background: var(--
 .rm { display: flex; flex-wrap: nowrap; align-items: baseline; gap: 0 2px; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
 .rm .br { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rm .rm2 { flex: none; white-space: nowrap; }
+.rw { margin-top: 2px; color: var(--warn); overflow-wrap: anywhere; }
+.unpushed { margin: 6px 0; }
+.overlap summary { cursor: pointer; padding: 6px 0; min-height: 24px; }
+.overlap .fp { overflow-wrap: anywhere; }
 
 /* 詳細（概要・差分共通） */
 .crumb { font-size: 13px; }
