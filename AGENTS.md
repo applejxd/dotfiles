@@ -198,6 +198,7 @@ worker は実行せず、報告の「次の候補」に書く（worker は sandb
   ほかの会話は feature のコミットまで。全件検査は排他ロックが自動で 1 本ずつにする。
   規則は [複数の会話を並行して使う運用](docs/spec/guard/pi-subagents.md#複数の会話を並行して使う運用)
 - 子の結果は、パスと行・コマンドの出力で確かめてから採用する（子は「通った」を実行できないことが多い）
+- **並列度を保つ。** 親は、子の完了・利用者の応答のたびに子の一覧（`guarded_task` の list）を見て、**空きをキュー（`.tmp/keep/queue/`）の先頭の依頼文で埋める**。次の依頼文は空きを待つ間に先に書く。子の返答は結論と申し送りだけを読む。手順は スキル `feature-orchestration` の [parallel-ops.md](.agents/skills/feature-orchestration/references/parallel-ops.md)
 - 手順・依頼文の雛形・踏みやすい落とし穴は、スキル `feature-orchestration`（`.agents/skills/`）と
   [並列実装の運用](docs/spec/guard/pi-subagents.md#並列実装の運用隔離なしの-worktree)。worker への依頼文は、共通の約束をファイルで参照させて短くする
 
