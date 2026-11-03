@@ -42,7 +42,7 @@ export function mergeRequestError(headers: IncomingHttpHeaders, allowMerge: bool
 }
 
 /** Origin は必須。`null`・形の悪い値・別のホストは断る（既存の書き込み系は Origin 無しを許すが、統合は許さない）。 */
-function strictOriginOk(origin: string | undefined, host: string | undefined): boolean {
+export function strictOriginOk(origin: string | undefined, host: string | undefined): boolean {
 	if (origin === undefined || origin === "null" || host === undefined) return false;
 	try {
 		const u = new URL(origin);

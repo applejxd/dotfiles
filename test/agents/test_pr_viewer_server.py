@@ -267,6 +267,7 @@ def test_repos_lists_name_and_target_but_not_paths(world):
         "repoId": _repo_id(world.repo),
         "name": "example-app",
         "target": "develop",
+        "targetOid": _git(world.repo, "rev-parse", "develop").strip(),
     }
     # 統合先が無いリポジトリ (trunk だけ) は一覧に出さない
     assert "app-none" not in by_name

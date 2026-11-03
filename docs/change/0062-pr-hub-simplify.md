@@ -121,6 +121,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | A3 | 合流可否・「develop が N 進んだ」・「未 push N 件」の表示（読み取りのみ） | A2 |
 | A4 | 「変更を依頼」「衝突を解決」（`pis -p` の起動） | X3 合格 |
 | A5 | 撤去（保留・受信箱・`git_integrate`・`/pending approve` など。約 2,900 行 + 試験約 20 ファイル） | A2〜A4 の運用で足りること |
+| B1 | 起票: アプリが新しい feature（枝と worktree）を作り、依頼文 brief をレビュー記録へ残す（`POST /api/repos/<repoId>/features`。LLM・pis は呼ばない）。**実装済み・既定で無効**（`--allow-create`）。設計は [pr-viewer.md §6「起票」](../spec/pr-viewer.md) | A2 |
 | B | アプリのジョブ実行（worktree の作成・worker の起動・コミット・検査）とマネージャー役（計画・review・衝突） | A の運用。`pis -p` の役割の試験 |
 | C | pi 側の撤去（`guarded_task`・`git_commit` の guarded_action 統合系・盤面など）。pi をガード + 通常のツールへ戻す | B が実際に回ってから |
 

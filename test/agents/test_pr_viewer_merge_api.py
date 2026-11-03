@@ -365,7 +365,7 @@ def test_merge_routes_are_disabled_without_allow_merge(make):
     assert status == 403 and resp["error"]["code"] == "merge_disabled"
     assert snapshot(w) == before
     status, caps = w.server.get("/api/capabilities")
-    assert status == 200 and caps == {"merge": False, "targets": ["develop"]}
+    assert status == 200 and caps == {"merge": False, "create": False, "targets": ["develop"]}
 
 
 def test_allow_merge_takes_no_value_and_unknown_flags_are_refused(tmp_path):
@@ -390,7 +390,7 @@ def test_allow_merge_takes_no_value_and_unknown_flags_are_refused(tmp_path):
 
 def test_capabilities_has_no_paths_and_reports_merge(w):
     status, caps = w.server.get("/api/capabilities")
-    assert status == 200 and caps == {"merge": True, "targets": ["develop"]}
+    assert status == 200 and caps == {"merge": True, "create": False, "targets": ["develop"]}
 
 
 # ---------------------------------------------------------------- 4 Origin（merge 経路だけ必須）

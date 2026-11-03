@@ -44,7 +44,7 @@
 
   /* PR の主状態チップ。統合済みは最優先（統合後に変更依頼は残らない）。段 2 は 統合済み・変更依頼・承認だけ */
   PRV.mainChip = function (pr, rv) {
-    if (pr.state === "merged") return PRV.stateChip(pr);
+    if (pr.state === "merged" || pr.state === "empty") return PRV.stateChip(pr);
     if (rv && rv.review === "changes") return h("span", { class: "chip c-bad", text: "✎ 変更依頼" });
     if (rv && rv.review === "approve") return h("span", { class: "chip c-ok", text: "✓ 承認" });
     return null;
