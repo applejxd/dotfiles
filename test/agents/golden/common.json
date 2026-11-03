@@ -1295,7 +1295,8 @@
     "scripts/agents/**",
     ".gitflow",
     ".agents/config/pi.json",
-    ".github/workflows/**"
+    ".github/workflows/**",
+    "apps/pr-viewer/**"
    ],
    "skip_confirm_in_free_zone": true,
    "target": "develop"

@@ -69,6 +69,22 @@ def _resolve_http_long_option(token: str, options: set[str]) -> tuple[str, bool]
     return resolved, False
 
 
+# PR ビューアの書き込み API を示すヘッダー (大文字小文字を区別しない)。
+# 呼び出しの辞書には、見つかったときだけ ``x_prv`` を足す (見つからない呼び出しの形は変えない)
+_PRV_HEADER_RE = re.compile(r"\s*x-prv\s*[:;]", re.IGNORECASE)
+
+
+def _note_prv_header(call: dict[str, object], value: str | None) -> None:
+    if value is not None and _PRV_HEADER_RE.match(value):
+        call["x_prv"] = True
+
+
+def _is_header_long_option(token: str) -> bool:
+    """``--header`` と、その曖昧でない省略形 (``--heade``) か。``--head`` は別の option。"""
+    name = token.split("=", 1)[0]
+    return len(name) >= 7 and "--header".startswith(name)
+
+
 def _new_http_call(tool: str) -> dict[str, object]:
     return {
         "tool": tool,
@@ -269,6 +285,13 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
             None,
         )
         if value_flag:
+            if value_flag in {"-H", "--header"}:
+                if token == value_flag:
+                    _note_prv_header(call, args[i + 1] if i + 1 < len(args) else None)
+                elif token.startswith(f"{value_flag}="):
+                    _note_prv_header(call, token[len(value_flag) + 1 :])
+                else:
+                    _note_prv_header(call, token[len(value_flag) :])
             if value_flag in _CURL_LOCAL_BLOCKING_FLAGS:
                 call["blocks_local"] = True
             i += 2 if token == value_flag else 1
@@ -285,6 +308,8 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
         if value_cluster:
             prefix, option, attached = value_cluster.groups()
             _apply_curl_no_value_flags(call, prefix)
+            if option == "H":
+                _note_prv_header(call, attached or (args[i + 1] if i + 1 < len(args) else None))
             if f"-{option}" in _CURL_LOCAL_BLOCKING_FLAGS:
                 call["blocks_local"] = True
             if not attached:
@@ -295,6 +320,11 @@ def _parse_curl_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
                 i += 1
             continue
         if token.startswith("--"):
+            if _is_header_long_option(token):
+                if "=" in token:
+                    _note_prv_header(call, token.split("=", 1)[1])
+                else:
+                    _note_prv_header(call, args[i + 1] if i + 1 < len(args) else None)
             i += 1
             continue
         if token.startswith("-") and len(token) > 1:
@@ -387,6 +417,14 @@ def _parse_wget_tokens(tokens: list[str], command_index: int) -> list[dict[str, 
                     call["payload_sources"].append(source)
             i = next_i
             continue
+
+        # wget の --header は値を読み飛ばさない (従来の解析を変えず、X-PRV の検出だけ足す)
+        long_name = token.split("=", 1)[0]
+        if token.startswith("--") and len(long_name) >= 5 and "--header".startswith(long_name):
+            if "=" in token:
+                _note_prv_header(call, token.split("=", 1)[1])
+            else:
+                _note_prv_header(call, args[i + 1] if i + 1 < len(args) else None)
 
         if any(token == flag or token.startswith(f"{flag}=") for flag in _WGET_CONFIG_FLAGS):
             call["ambiguous"] = True
@@ -602,6 +640,17 @@ def check_http_dangerous_output(cmd: str) -> str | None:
                     f"`{call['tool']}` が起動・認証設定ファイル `{output}` を"
                     "上書きしようとしています。"
                 )
+    return None
+
+
+def check_pr_viewer_api(cmd: str) -> str | None:
+    """PR ビューアの統合・書き込み API を示す ``X-PRV`` ヘッダーつきの curl / wget は、宛先に依らず拒否する。
+
+    統合の権限は人のブラウザ操作だけにある。loopback の免除 (ask 層) より先に効かせる。
+    """
+    for call in _http_transfer_calls(cmd):
+        if call.get("x_prv") is True:
+            return "PR ビューアの統合・書き込み API は、人がブラウザで操作するものです。エージェントは呼べません。"
     return None
 
 

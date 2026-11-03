@@ -6,7 +6,12 @@
 // node の型除去でそのまま動く書き方だけを使う。
 // see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
-import { checkCurlFileSend, checkCurlWgetMutation, checkHttpDangerousOutput } from "./http.ts";
+import {
+	checkCurlFileSend,
+	checkCurlWgetMutation,
+	checkHttpDangerousOutput,
+	checkPrViewerApi,
+} from "./http.ts";
 import {
 	checkEncodedCommand,
 	checkInterpreterInlineCode,
@@ -22,6 +27,7 @@ import {
 	checkGitConfigWrite,
 	checkGlobalEnvMutation,
 	checkGuardTampering,
+	checkPrViewerMergeCli,
 	checkPrivilegeEscalation,
 	checkShellStartupWrite,
 	checkToolSelfUpdate,
@@ -50,6 +56,8 @@ export const DENY_NAMES: readonly string[] = [
 	"check_reverse_shell",
 	"check_shell_startup_write",
 	"check_http_dangerous_output",
+	"check_pr_viewer_api",
+	"check_pr_viewer_merge_cli",
 	"check_privilege_escalation",
 	"check_docker_host_escape",
 	"check_tool_self_update",
@@ -91,6 +99,8 @@ export const CHECKS = new Map<string, Check>([
 	["check_curl_file_send", checkCurlFileSend],
 	["check_curl_wget_mutation", checkCurlWgetMutation],
 	["check_http_dangerous_output", checkHttpDangerousOutput],
+	["check_pr_viewer_api", checkPrViewerApi],
+	["check_pr_viewer_merge_cli", checkPrViewerMergeCli],
 	["check_xargs_pipe", checkXargsPipe],
 	["check_pipe_to_shell", checkPipeToShell],
 	["check_interpreter_inline_code", checkInterpreterInlineCode],

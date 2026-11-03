@@ -29,7 +29,23 @@ export type HttpCall = {
 	ambiguous: boolean;
 	// localhost 例外を無効化する要因があるか (proxy / socket / redirect 等)。wget は既定でリダイレクトを追うため常に無効化する
 	blocksLocal: boolean;
+	// X-PRV ヘッダーを付けたときだけ true (PR ビューアの統合 API を示す。従来の形を変えないため、無いときは値を持たない)
+	xPrv?: boolean;
 };
+
+// PR ビューアの書き込み API を示すヘッダー (大文字小文字を区別しない)
+const PRV_HEADER_RE = /^\s*x-prv\s*[:;]/iu;
+
+function notePrvHeader(call: HttpCall, value: string | null | undefined): void {
+	if (value !== null && value !== undefined && PRV_HEADER_RE.test(value)) call.xPrv = true;
+}
+
+/** `--header` と、その曖昧でない省略形 (`--heade`)。`--head` は別の option。 */
+function isHeaderLongOption(token: string): boolean {
+	const eq = token.indexOf("=");
+	const name = eq === -1 ? token : token.slice(0, eq);
+	return name.length >= 7 && "--header".startsWith(name);
+}
 
 const CURL_NO_VALUE_SHORT_FLAGS = new Set(Array.from("012346#BaJMRZfFsSLIikvVqgGNnO"));
 
@@ -249,6 +265,11 @@ function parseCurlTokens(ctx: Ctx, tokens: readonly string[], commandIndex: numb
 				(Array.from(flag).length === 2 && token.startsWith(flag) && token !== flag),
 		);
 		if (valueFlag) {
+			if (valueFlag === "-H" || valueFlag === "--header") {
+				if (token === valueFlag) notePrvHeader(call, i + 1 < args.length ? args[i + 1] : null);
+				else if (token.startsWith(`${valueFlag}=`)) notePrvHeader(call, token.slice(valueFlag.length + 1));
+				else notePrvHeader(call, token.slice(valueFlag.length));
+			}
 			if (localBlocking.has(valueFlag)) call.blocksLocal = true;
 			i += token === valueFlag ? 2 : 1;
 			if (i > args.length) call.ambiguous = true;
@@ -258,6 +279,7 @@ function parseCurlTokens(ctx: Ctx, tokens: readonly string[], commandIndex: numb
 		if (vc) {
 			const [, prefix, option, attached] = vc;
 			applyCurlNoValueFlags(call, prefix);
+			if (option === "H") notePrvHeader(call, attached || (i + 1 < args.length ? args[i + 1] : null));
 			if (localBlocking.has(`-${option}`)) call.blocksLocal = true;
 			if (!attached) {
 				i += 2;
@@ -268,6 +290,11 @@ function parseCurlTokens(ctx: Ctx, tokens: readonly string[], commandIndex: numb
 			continue;
 		}
 		if (token.startsWith("--")) {
+			if (isHeaderLongOption(token)) {
+				const eq = token.indexOf("=");
+				if (eq !== -1) notePrvHeader(call, token.slice(eq + 1));
+				else notePrvHeader(call, i + 1 < args.length ? args[i + 1] : null);
+			}
 			i += 1;
 			continue;
 		}
@@ -371,6 +398,16 @@ function parseWgetTokens(ctx: Ctx, tokens: readonly string[], commandIndex: numb
 			}
 			i = nextI;
 			continue;
+		}
+
+		// wget の --header は値を読み飛ばさない (従来の解析を変えず、X-PRV の検出だけ足す)
+		if (token.startsWith("--")) {
+			const eq = token.indexOf("=");
+			const name = eq === -1 ? token : token.slice(0, eq);
+			if (name.length >= 5 && "--header".startsWith(name)) {
+				if (eq !== -1) notePrvHeader(call, token.slice(eq + 1));
+				else notePrvHeader(call, i + 1 < args.length ? args[i + 1] : null);
+			}
 		}
 
 		if ([...configFlags].some((flag) => token === flag || token.startsWith(`${flag}=`))) {
@@ -731,6 +768,14 @@ export function checkHttpDangerousOutput(ctx: Ctx, cmd: string): string | null {
 				return `\`${call.tool}\` が起動・認証設定ファイル \`${output}\` を上書きしようとしています。`;
 			}
 		}
+	}
+	return null;
+}
+
+/** PR ビューアの統合・書き込み API を示す `X-PRV` ヘッダーつきの curl / wget は、宛先に依らず拒否する。 */
+export function checkPrViewerApi(ctx: Ctx, cmd: string): string | null {
+	for (const call of httpTransferCalls(ctx, cmd)) {
+		if (call.xPrv === true) return "PR ビューアの統合・書き込み API は、人がブラウザで操作するものです。エージェントは呼べません。";
 	}
 	return null;
 }

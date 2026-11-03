@@ -38,6 +38,7 @@ from .http import (
     check_curl_file_send,
     check_curl_wget_mutation,
     check_http_dangerous_output,
+    check_pr_viewer_api,
 )
 from .policy import check_policy_ask, check_policy_deny, check_policy_loaded
 from .rm import check_find_dangerous, check_find_root_guard, check_rm_root_guard
@@ -59,6 +60,7 @@ from .rules_guard import (
     check_git_config_write,
     check_global_env_mutation,
     check_guard_tampering,
+    check_pr_viewer_merge_cli,
     check_privilege_escalation,
     check_shell_startup_write,
     check_tool_self_update,
@@ -88,6 +90,8 @@ DENY_CHECKS = [
     check_reverse_shell,  # /dev/tcp や nc -e の類
     check_shell_startup_write,  # .bashrc / authorized_keys への追記
     check_http_dangerous_output,  # curl -o / wget -O で起動・認証設定を上書き
+    check_pr_viewer_api,  # X-PRV ヘッダーつきの curl / wget (PR ビューアの統合 API)
+    check_pr_viewer_merge_cli,  # PR ビューアの統合 CLI の merge / recover
     check_privilege_escalation,  # setuid 付与・sudoers 変更
     check_docker_host_escape,  # docker run --privileged / -v /:... の権限昇格
     check_tool_self_update,  # mise self-update / implode

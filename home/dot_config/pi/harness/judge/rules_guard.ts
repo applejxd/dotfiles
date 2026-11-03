@@ -10,10 +10,12 @@ import { tableSet } from "./context.ts";
 import { expandUser, isAbsolute, join, normpath, sep } from "./pathutil.ts";
 import { basename, pyRegex, shlexSplit, ShlexError, split, stripChars } from "./pystr.ts";
 import { argv } from "./shellparse.ts";
+import { splitCommandSegments } from "./normalize.ts";
 import { inlineCodeHead } from "./rules_exec.ts";
 import {
 	baseName,
 	clip200,
+	cmdName,
 	commands,
 	normalizeGuardPath,
 	redirectWriteTargets,
@@ -380,6 +382,30 @@ export function checkBlockDeviceWrite(ctx: Ctx, cmd: string): string | null {
 		const m = pyRegex("\\bof=(/dev/\\S+)").exec(segment);
 		if (m && !pyRegex("^/dev/(?:null|stdout|stderr|tty|zero)$").test(m[1])) {
 			return `ブロックデバイス \`${m[1]}\` へ直接書き込もうとしています。\nディスクを破壊する操作は許可されていません。`;
+		}
+	}
+	return null;
+}
+
+// PR ビューアの統合 CLI (merge-cli.ts) を起動するランタイムと、実行しない先頭のコマンド
+const MERGE_CLI_RUNTIMES = new Set(["node", "nodejs", "tsx", "ts-node", "bun", "bunx", "deno", "npx", "pnpx", "pnpm", "yarn", "npm"]);
+const MERGE_CLI_NON_EXECUTING = new Set(["echo", "printf", "grep", "rg", "cat", "man", "which", "type"]);
+const MERGE_CLI_DENIED_SUBCOMMANDS = new Set(["merge", "recover"]);
+
+/** PR ビューアの統合 CLI の `merge` / `recover` を、エージェントが叩く操作を拒否する (`plan` と参照は拒否しない)。 */
+export function checkPrViewerMergeCli(ctx: Ctx, cmd: string): string | null {
+	for (const segment of segments(ctx, cmd)) {
+		for (const part of splitCommandSegments(segment)) {
+			let tokens = shlexOrSplit(part);
+			while (tokens.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(tokens[0])) tokens = tokens.slice(1);
+			if (tokens.length === 0 || MERGE_CLI_NON_EXECUTING.has(baseName(tokens[0]))) continue;
+			const script = tokens.findIndex((t) => t.endsWith("merge-cli.ts"));
+			if (script === -1) continue;
+			if (script > 0 && !tokens.slice(0, script).some((t) => MERGE_CLI_RUNTIMES.has(cmdName(t)))) continue;
+			const subcommand = tokens.slice(script + 1).find((t) => !t.startsWith("-"));
+			if (subcommand !== undefined && MERGE_CLI_DENIED_SUBCOMMANDS.has(subcommand)) {
+				return "PR ビューアの統合 CLI の merge / recover は、人が操作するものです。エージェントは実行できません。";
+			}
 		}
 	}
 	return null;

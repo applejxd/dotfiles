@@ -72,6 +72,20 @@ curl URL -o a.sh && chmod +x a.sh && ./a.sh
 引数**だけを対象にするので、`wget .../data.csv && python3 process.py data.csv`
 のようにデータとして渡す形は通る。
 
+### PR ビューアの統合経路の拒否 (CHG-0062)
+
+統合の権限は、人がブラウザで押す操作だけにある。エージェントが bash でこの経路を叩く次の 2 つは deny（bypass でも変わらない）。
+
+- `check_pr_viewer_api`: `X-PRV` ヘッダー付きの curl / wget。`-H` / `--header`（連結・`=` 形・ラッパー越し）を、宛先と
+  メソッドによらず拒否する。loopback の免除（ask 層）より先に効く。
+- `check_pr_viewer_merge_cli`: ランタイム（`node` / `tsx` / `bun` / `deno` / `npx` など）が `merge-cli.ts` を起動し、
+  最初の位置引数が `merge` / `recover` のもの。`plan` と、実行しない参照（`grep` / `cat` / `git log -- <path>`）は通る。
+
+TS 版（`judge/http.ts`・`judge/rules_guard.ts`）も同じ規則で、golden が一致を見る。
+
+限界（うっかり防止の水準。境界ではない）: `curl -H @file`・wget の `-e header=…`・`python` / `node -e` などの任意コード・`nc`、`$(…)` の中の merge-cli は検出しない。Windows の判定器は未検証。
+有効化には、develop への取り込みの後に `chezmoi apply`（`rules.json` の生成）→ 使う pi / pis の再起動が要る（取り込みだけでは、配備先の判定器は変わらない）。
+
 コマンド名の照合だけでは捕まらない形は、専用のチェックが個別に見る。
 
 | チェック | 対象 |

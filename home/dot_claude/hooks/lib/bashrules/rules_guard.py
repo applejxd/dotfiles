@@ -13,8 +13,10 @@ import shlex
 from . import tables
 from ._shared import (
     _basename,
+    _cmd_name,
     _commands,
     _normalize_guard_path,
+    _policy,
     _redirect_write_targets,
     _segments,
     _workspace_root,
@@ -415,4 +417,50 @@ def check_block_device_write(cmd: str) -> str | None:
                 f"ブロックデバイス `{m.group(1)}` へ直接書き込もうとしています。\n"
                 "ディスクを破壊する操作は許可されていません。"
             )
+    return None
+
+
+# PR ビューアの統合 CLI (merge-cli.ts) を起動するランタイムと、実行しない先頭のコマンド
+_MERGE_CLI_RUNTIMES = {
+    "node",
+    "nodejs",
+    "tsx",
+    "ts-node",
+    "bun",
+    "bunx",
+    "deno",
+    "npx",
+    "pnpx",
+    "pnpm",
+    "yarn",
+    "npm",
+}
+_MERGE_CLI_NON_EXECUTING = {"echo", "printf", "grep", "rg", "cat", "man", "which", "type"}
+_MERGE_CLI_DENIED_SUBCOMMANDS = {"merge", "recover"}
+
+
+def check_pr_viewer_merge_cli(cmd: str) -> str | None:
+    """PR ビューアの統合 CLI の `merge` / `recover` を、エージェントが叩く操作を拒否する。
+
+    統合の権限は人のブラウザ操作だけにある。`plan` や、スクリプトを実行しない
+    参照 (`grep` / `cat` / `git log -- <path>`) は拒否しない。
+    """
+    for segment in _segments(cmd):
+        for part in _policy.split_command_segments(segment) if _policy is not None else [segment]:
+            try:
+                tokens = shlex.split(part)
+            except ValueError:
+                tokens = part.split()
+            while tokens and re.match(r"[A-Za-z_][A-Za-z0-9_]*=", tokens[0]):
+                tokens = tokens[1:]
+            if not tokens or _basename(tokens[0]) in _MERGE_CLI_NON_EXECUTING:
+                continue
+            script = next((i for i, t in enumerate(tokens) if t.endswith("merge-cli.ts")), None)
+            if script is None:
+                continue
+            if script > 0 and not any(_cmd_name(t) in _MERGE_CLI_RUNTIMES for t in tokens[:script]):
+                continue
+            subcommand = next((t for t in tokens[script + 1 :] if not t.startswith("-")), None)
+            if subcommand in _MERGE_CLI_DENIED_SUBCOMMANDS:
+                return "PR ビューアの統合 CLI の merge / recover は、人が操作するものです。エージェントは実行できません。"
     return None
