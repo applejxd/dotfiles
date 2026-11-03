@@ -23,6 +23,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { release as releaseOwner } from "./worktree-owner.ts";
 
 export const JOB_STATES = [
 	"starting",
@@ -592,6 +593,34 @@ export function findByJobId(jobId: string, procRoot = "/proc", worktree: string 
 	return out;
 }
 
+/** cwd が worktree の中のプロセスの pid（このプロセスとその祖先を除く）。起動前の検査（他の利用者がいないか）に使う。 */
+export function findByCwd(worktree: string, procRoot = "/proc"): number[] {
+	let wt: string;
+	try {
+		const r = realpathSync(worktree);
+		wt = r.endsWith("/") ? r : `${r}/`;
+	} catch {
+		return [];
+	}
+	let names: string[];
+	try {
+		names = readdirSync(procRoot);
+	} catch {
+		return [];
+	}
+	const skip = selfAndAncestors();
+	const out: number[] = [];
+	for (const name of names) {
+		if (!/^\d+$/.test(name) || skip.has(Number(name))) continue;
+		try {
+			if (`${realpathSync(`${procRoot}/${name}/cwd`)}/`.startsWith(wt)) out.push(Number(name));
+		} catch {
+			// cwd が読めない・既に終了
+		}
+	}
+	return out;
+}
+
 /** 停止の対象へシグナルを送る。送った数を返す（runner と回復で共通）。 */
 export function signalByJobId(jobId: string, sig: NodeJS.Signals, procRoot = "/proc", worktree: string | null = null): number {
 	let n = 0;
@@ -655,6 +684,10 @@ export async function recover(store: Store, opts: { graceMs?: number; now?: numb
 		if (survivors.has(j.id)) continue;
 		updateJob(store, j.id, { state: "interrupted", reasons: ["shutdown"] }, now);
 		res.interrupted.push(j.id);
+		const pre = (j.internal as { pre?: { gitDir?: unknown; worktree?: unknown } } | null | undefined)?.pre;
+		if (typeof pre?.gitDir === "string" && typeof pre.worktree === "string") {
+			await releaseOwner(pre.gitDir, pre.worktree, j.id).catch(() => false); // 所有の lock の解除（自分の id のものだけ）
+		}
 	}
 	for (const name of readdirSync(store.locksDir)) {
 		const p = join(store.locksDir, name);

@@ -667,3 +667,68 @@ def test_runner_imports_are_node_builtins_and_local_only():
     src = JOB_RUNNER.read_text(encoding="utf-8")
     for spec in re.findall(r'from "([^"]+)"', src):
         assert spec.startswith(("node:", "./")), spec
+
+
+# ---- worktree の所有の表明（git worktree lock。scripts/wt_owner.py と同じ規則） ----
+
+_WT_LIST = 'execFileSync("git", ["-C", arg.repo, "worktree", "list", "--porcelain"], {{ encoding: "utf8" }})'
+
+
+def _lock_reason(w: World) -> str | None:
+    cur = None
+    for line in _git(w.repo, "worktree", "list", "--porcelain", "-z").split("\0"):
+        if line.startswith("worktree "):
+            cur = Path(line[9:]).resolve()
+        elif cur == w.wt.resolve() and (line == "locked" or line.startswith("locked ")):
+            return line[6:].strip()
+    return None
+
+
+def test_job_claims_the_worktree_while_running_and_releases_it_after(w):
+    w.mode("slow")
+    body = f'await waitLog("slow started");\nextra.during = {_WT_LIST.format()};\nh.cancel();'
+    res = w.run(body=body)
+    job = res["job"]
+    assert f"locked owner=job id={job['id']} pid=" in res["extra"]["during"]
+    assert job["state"] == "cancelled"
+    assert _lock_reason(w) is None  # 終了後に lock が残らない
+
+
+def test_job_releases_the_lock_after_success_and_failure(w):
+    w.mode("edit")
+    assert w.run()["job"]["state"] == "succeeded"
+    assert _lock_reason(w) is None
+    w.mode("fail")
+    assert w.run()["job"]["state"] == "failed"
+    assert _lock_reason(w) is None
+
+
+def test_job_is_refused_when_another_live_owner_took_the_worktree(w):
+    other = f"owner=worker id=w1 pid={os.getpid()} started=1"
+    pre = (
+        'execFileSync("git", ["-C", arg.repo, "worktree", "lock", "--reason", '
+        f'"{other}", {json.dumps(str(w.wt))}]);'
+    )
+    res = w.run(pre=pre)
+    job = res["job"]
+    assert job["state"] == "failed" and job["reasons"] == ["worktree_busy"]
+    assert job["pid"] is None  # pis は起動していない
+    assert _lock_reason(w) == other  # 他人の lock は解除しない
+
+
+def test_job_takes_over_a_stale_lock_and_releases_it(w):
+    p = subprocess.Popen([sys.executable, "-c", "pass"])
+    p.wait()
+    other = f"owner=worker id=w1 pid={p.pid} started=1"
+    _git(w.repo, "worktree", "lock", "--reason", other, str(w.wt))
+    w.mode("edit")
+    assert w.run()["job"]["state"] == "succeeded"
+    assert _lock_reason(w) is None
+
+
+def test_shutdown_during_a_job_releases_the_lock(w):
+    w.mode("slow")
+    body = 'await waitLog("slow started");\nawait R.shutdown();'
+    res = w.run(body=body)
+    assert res["job"]["state"] == "interrupted"
+    assert _lock_reason(w) is None

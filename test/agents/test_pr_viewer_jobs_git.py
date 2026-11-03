@@ -221,6 +221,43 @@ def test_preflight_rejects_operation_in_progress(w, name):
     assert w.preflight()["code"] == "in_progress"
 
 
+def _lock(w, reason: str | None = None) -> None:
+    args = ["worktree", "lock", *(["--reason", reason] if reason else []), str(w.wt)]
+    _git(w.repo, *args)
+
+
+def test_preflight_rejects_a_worktree_owned_by_a_live_owner(w):
+    _lock(w, f"owner=worker id=w1 pid={os.getpid()} started=1")
+    assert w.preflight()["code"] == "worktree_busy"
+
+
+def test_preflight_rejects_a_human_lock_and_a_reasonless_lock(w):
+    _lock(w, "手で守っています")
+    assert w.preflight()["code"] == "worktree_busy"
+    _git(w.repo, "worktree", "unlock", str(w.wt))
+    _lock(w)
+    assert w.preflight()["code"] == "worktree_busy"
+
+
+def test_preflight_ignores_a_stale_owner_with_a_dead_pid(w):
+    p = subprocess.Popen(["true"])
+    p.wait()
+    _lock(w, f"owner=worker id=w1 pid={p.pid} started=1")
+    assert w.preflight()["ok"] is True
+
+
+def test_preflight_rejects_a_process_whose_cwd_is_in_the_worktree(w):
+    sub = w.wt / "sub"
+    sub.mkdir()
+    proc = subprocess.Popen(["sleep", "30"], cwd=sub)
+    try:
+        assert w.preflight()["code"] == "worktree_busy"
+    finally:
+        proc.kill()
+        proc.wait()
+    assert w.preflight()["ok"] is True
+
+
 def test_preflight_rejects_external_code_in_worktree_config(w):
     w.evil_filter(w.admin / "config.worktree")
     assert w.preflight()["code"] == "external_code"

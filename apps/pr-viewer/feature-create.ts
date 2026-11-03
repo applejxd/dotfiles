@@ -8,6 +8,7 @@ import { basename, dirname, join } from "node:path";
 import { prKeyOf, LIMITS } from "../../home/dot_config/pi/harness/review-log.ts";
 import { ApiError } from "./git-view.ts";
 import { configHasExternalCode, runGit } from "./merge-git.ts";
+import { formatReason, release as releaseOwner } from "./worktree-owner.ts";
 
 const NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 // Windows の予約名（拡張子つきも同じ扱いになるので、最初の「.」までを見る）
@@ -225,7 +226,9 @@ export async function createFeature(input: CreateInput, record: (baseOid: string
 			// 試験用: git が枝だけ作って失敗した状態を再現する
 			await runGit(["branch", "--no-track", branch, baseOid], { gitDir: input.gitDir, write: true });
 		} else {
-			const r = await runGit(["worktree", "add", "-b", branch, layout.wt, baseOid], { gitDir: input.gitDir, write: true, timeoutMs: 120_000 });
+			const reason = formatReason({ kind: "create", id: input.name, pid: process.pid, started: Math.floor(Date.now() / 1000) });
+			// 作成中だけ lock して所有を表明する（add と同時。解除は下の releaseOwner）
+			const r = await runGit(["worktree", "add", "--lock", "--reason", reason, "-b", branch, layout.wt, baseOid], { gitDir: input.gitDir, write: true, timeoutMs: 120_000 });
 			added = r.code === 0;
 		}
 		ok = added;
@@ -245,6 +248,7 @@ export async function createFeature(input: CreateInput, record: (baseOid: string
 	} catch {
 		ok = false;
 	}
+	if (added) await releaseOwner(input.gitDir, layout.wt, input.name).catch(() => false); // 作成後は lock を残さない（巻き戻しも解除が先）
 	if (ok) return { branch, baseOid };
 	const residue = added && !unknown ? await rollback(input, layout, baseOid) : await diagnose(input, layout);
 	if (residue.length === 0) throw new ApiError(500, "create_failed", "起票に失敗しました（作ったものは元に戻しました）。");

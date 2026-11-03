@@ -37,6 +37,7 @@
 ## 検査と承認の直列を減らす
 
 - 全件検査は feature ごとに 1 回。日常は `mise run verify`。docs のみ・小さな変更は関連試験で代えてよい（その旨を報告に書く）。
+- **worktree の所有**: worker を起動する直前に `python3 scripts/wt_owner.py claim <worktree の絶対パス> --kind worker --id <名前>`、worker 完了・commit 後に `release <絶対パス> --id <名前>`。**全件検査を回す前に `python3 scripts/wt_owner.py status`** で worker の lock が無いことを確かめる（検査中の編集による誤失敗を防ぐ）。残骸は `reap`。仕様: [orchestration.md](../../../../docs/spec/orchestration.md#worktree-の所有の表明)。
 - 全件検査は `bg_run` で始め、待つ間に次の作業を進める。複数の枝が待つときは排他で順番待ちになる。
 - 承認は直列になる。保存（`git_integrate`）は、検査が通った順にすぐ行い、承認の依頼は **1 つの応答に一覧**にして出す（保留の ID と中身の一言）。
 - 複数の feature を 1 本の統合用の枝にまとめて、検査と承認を 1 回にする方式は、まだ試していない（利用者の判断を待つ）。
