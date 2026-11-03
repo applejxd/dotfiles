@@ -5,7 +5,7 @@
 
 **状態の凡例**: 実装済（試験あり）/ 試作（実機の確認が一部）/ 運用（手順として使う。強制はしない）/ 保留（案件で止めている）。実機の確認が済んでいない範囲は、各行に書く。
 
-`pi` の機能全体の中の位置は [機能の地図](pi-features.md)。
+`pi` の機能全体の中の位置は [機能の地図](pi-features.md)。pi 単独と PR ビューア併用の使い分けは [運用モード](operation-modes.md)。
 
 対象は、フルガードを付けた `pi`（Unix）。Windows の子エージェント・素の `pi` での違いは [pi の子エージェント](guard/pi-subagents.md#windows-の子エージェント)。
 
@@ -49,7 +49,7 @@
 
 | 機能 | 状態 | 内容 | 正本 |
 | --- | --- | --- | --- |
-| ブランチモデル | 運用 | main / develop / feature（squash。release・hotfix なし）。リポジトリごとに `.gitflow` で決める。feature の起票・クローズと `main` への取り込み・push は利用者が自分のシェルで行う。AI は feature の worktree で起動した `pi` から `git_commit`（確認あり） | [CHG-0047](../change/0047-gitflow.md)、[開発](development.md#ブランチモデルgitflow-lite)、[CHG-0050](../change/0050-slim-guarded-action.md) |
+| ブランチモデル | 運用 | main / develop / feature（squash。release・hotfix なし）。リポジトリごとに `.gitflow` で決める。feature の起票は親が行い、feature の linked worktree の `git_commit` は確認なしで実行される（自由区）。統合は利用者（TUI の必須確認・`merge-cli`・ビューアのボタン。[運用モード](operation-modes.md)）、`main` への取り込み・push は利用者が自分のシェルで行う | [CHG-0047](../change/0047-gitflow.md)、[開発](development.md#ブランチモデルgitflow-lite)、[CHG-0050](../change/0050-slim-guarded-action.md) |
 | develop / main の直接編集・コミット | 機械では止めない（指示で運用） | `edit` / `write` / `git_commit` の gate と `/gitflow-allow`、`gitflow_feature_*` の 4 操作、`git flow` の bash 拒否は 2026-10-31 に撤去 | [CHG-0050](../change/0050-slim-guarded-action.md)、[ADR-0021](../adr/0021-conventions-as-instructions-slim-guarded-action.md) |
 | 隔離なしの worktree | 運用 | 親が feature の分割を決め、子には worktree の中だけで作業させる。起票は利用者。強制の囲いではない | [並列実装の運用](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
 | 子の隔離（`isolation: "worktree"`） | 保留（素の `pi` では認証のロックの書き込みが拒否される） | Landlock で書き込みを狭める。`pis` では認証の写しが既にある | [CHG-0029](../change/0029-worktree-isolation.md) |

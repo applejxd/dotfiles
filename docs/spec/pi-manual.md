@@ -2,11 +2,13 @@
 
 - **目的**: `pi`（このリポジトリが配るフルガード付きの pi）と `pis`（サンドボックス付きの起動）の、**今ある機能・設定の変え方・独自コマンド**を、忘れたときに見直す
 - **詳しい仕様**: 各節と末尾の正本の文書。機能の地図は [pi の機能](pi-features.md)
+- **運用モード**: pi 単独 / PR ビューア併用の使い分けは [運用モード](operation-modes.md)
 
-> **状態（2026-11-01 時点）**
+> **状態（2026-11-05 時点）**
 >
 > - 記載した既定値は、リポジトリに同梱された設定の値
-> - 保留の承認（`/pending approve`・`git_integrate`）は撤去済み。統合は PR ビューアの「統合する」ボタン（[CHG-0062](../change/0062-pr-hub-simplify.md)、履歴は [guard/pi-pending.md](guard/pi-pending.md)）
+> - 保留の承認（`/pending approve`・`git_integrate`）は撤去済み。統合は必須確認（TUI）か PR ビューアの「統合する」ボタン（[CHG-0062](../change/0062-pr-hub-simplify.md)、履歴は [guard/pi-pending.md](guard/pi-pending.md)）
+> - PR ビューアの書き込み系の旗（`--allow-merge`・`--allow-create`・`--allow-jobs`）は既定で無効。ジョブ・起票・markdown 描画・worktree の所有（`wt_owner.py`）・統合用の枝（`train.py`）・掃除（`wt_clean.py`）の道具が入った。使い分けは [運用モード](operation-modes.md)
 > - 反映は `chezmoi apply` と pi の再起動の後
 
 ## 早見（1 画面）
@@ -186,7 +188,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `list` / `show [<id>]` | 一覧 / 表示 |
 | `drop [<id>]` | 破棄 |
 
-- 承認して実行する経路（`approve`・`resolve`・`unlock`・`log`・巡回）は撤去済み（[guard/pi-pending.md](guard/pi-pending.md)）。統合は PR ビューアの「統合する」ボタン
+- 承認して実行する経路（`approve`・`resolve`・`unlock`・`log`・巡回）は撤去済み（[guard/pi-pending.md](guard/pi-pending.md)）。統合は、TUI の必須確認、`merge-cli`（利用者が端末で実行）、PR ビューアの「統合する」ボタンのいずれか（[運用モード](operation-modes.md)）
 - pi 本体の組み込みコマンド（`/compact`・`/reload`・`/model` など）はこのリポジトリの管轄外で、ここでは扱いません。
 
 - 詳細: [guard/pi-extensions.md](guard/pi-extensions.md)、[guard/pi-subagents.md](guard/pi-subagents.md)、[guard/pi-pending.md](guard/pi-pending.md)
@@ -261,7 +263,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | plan（計画モード） | `/plan`。状態はセッションに保存され、再開時に復元される | `⏸ plan` | 書き込み・実行のツールを外す |
 
 - `/plan`（計画モード）と、子エージェントの `plan`（計画役）は別物です。
-- 非同期承認の方針（ask 層と bypass をなくす案）は検討中です。結論が出るまで現行仕様のままです。
+- 非同期承認は撤去済みです（履歴は [CHG-0055](../change/closed/0055-async-approval.md)）。
 
 ### 6.2 役割（`[pi.profiles.*]`）
 

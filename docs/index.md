@@ -45,6 +45,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
 | pi のガードの判定器（`decide`）を変える | [判定 API](spec/guard/pi-decide.md) |
 | pi / pis の機能・設定の変え方・独自コマンドを見直す（忘れたときの早見） | [pi / pis マニュアル](spec/pi-manual.md) |
+| pi 単独と PR ビューア併用の、運用の違い・手順・旗の使い分けを知る | [運用モード](spec/operation-modes.md) |
 | pi のガード（`pis`）を起動する・変える | [pi のガード](spec/guard/pi-guard.md) |
 | gitflow-lite の運用（起票は利用者、AI は feature の worktree から `git_commit`）を知る | [開発ガイドのブランチモデル](spec/development.md#ブランチモデルgitflow-lite) |
 | `common.toml` の書き方と生成先の所有権を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
