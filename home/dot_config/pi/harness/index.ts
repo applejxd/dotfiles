@@ -155,11 +155,22 @@ function describeCall(tool: string, input: any): string {
 // 引き継ぎで外すと復帰できなくなる点を足す (旧 checkpoint の雛形の要点)。
 const COMPACT_INSTRUCTIONS = [
 	"【圧縮の指示】この要約は、前任者の会話を持たない読み手が作業を再開するために使う。",
-	"- Next Steps は「何を」だけでなく「どうやって」まで書く (手順と合格条件)。",
+	"- 長さ: 要約全体を 1 万 5 千字 (日本語) 以内にする。前回の要約が長くても、そのまま引き継がずに作り直し、" +
+		"完了済みの項目・古い経緯は 1 行に畳む。実測値・ログ・日付つきの履歴は書かない。",
+	"- 詳細な記録が作業ツリーの引き継ぎ文書や docs にある場合は、パス (と見出し) だけを示して要約に写さない。無い場合は、再開に要る要点だけを書く。",
+	"- 表を使わず、短い箇条書きにする。",
+	"- Next Steps は「何を」だけでなく「どうやって」まで書く (手順と合格条件)。ただし最優先の 3〜5 件だけ詳しく、残りは 1 行ずつ。",
 	"- 略語・独自の用語は展開するか、参照先 (パス・文書名) を示す。",
 	"- 未作成の文書を参照に挙げるときは「未作成」と明記する。",
-	"- 利用者が指定した制約と、却下済みの方針を 1 行ずつ残す。",
+	"- 利用者が指定した制約と、却下済みの方針は、再開に必要なものだけ 1 行ずつ残す (上限 30 行)。",
 ].join("\n");
+
+// 要約の時間は出力の長さが支配的で、深い思考は要らないので上限を掛ける。
+// 思考を無効にすると受け付けないモデルがあるので、off には落とさない (low より深いときだけ low にする)
+const COMPACT_THINKING_CAP = "low";
+const THINKING_ORDER = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+const capCompactThinking = (level: any): any =>
+	THINKING_ORDER.indexOf(level) > THINKING_ORDER.indexOf(COMPACT_THINKING_CAP) ? COMPACT_THINKING_CAP : level;
 
 // ─── 判定 ───────────────────────────────────────────────────────────
 
@@ -883,7 +894,7 @@ export default async function (pi: ExtensionAPI) {
 			const instructions = event.customInstructions
 				? `${COMPACT_INSTRUCTIONS}\n\n【利用者の指定】${event.customInstructions}`
 				: COMPACT_INSTRUCTIONS;
-			const run = (preparation: any, level: any = pi.getThinkingLevel()) =>
+			const run = (preparation: any, level: any = capCompactThinking(pi.getThinkingLevel())) =>
 				compact(
 					preparation,
 					requestModel,

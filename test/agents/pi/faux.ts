@@ -45,6 +45,7 @@ export default async function (pi: ExtensionAPI) {
 		if (getCurrentSystemPrompt(messages).includes("context summarization assistant")) {
 			const instr = JSON.stringify(messages).includes("【圧縮の指示】") ? "yes" : "no";
 			const custom = JSON.stringify(messages).includes("【利用者の指定】") ? "yes" : "no";
+			const budget = JSON.stringify(messages).includes("1 万 5 千字") ? "yes" : "no";
 			// 最初の依頼だけ出力の上限で切れた応答にする (切れた要約は保存されない)
 			if (process.env.FAUX_SUMMARY_LENGTH_ONCE === "1" && !(globalThis as any).__fauxLengthDone) {
 				(globalThis as any).__fauxLengthDone = true;
@@ -61,7 +62,7 @@ export default async function (pi: ExtensionAPI) {
 					errorMessage: '400 {"error":{"message":"To turn thinking off on this model, send thinking between_tools instead of disabled"}}',
 				});
 			}
-			return fauxAssistantMessage(fauxText(`SUMMARY INSTR=${instr} CUSTOM=${custom} THINK=${(globalThis as any).__fauxReasoning ?? "none"}`));
+			return fauxAssistantMessage(fauxText(`SUMMARY INSTR=${instr} CUSTOM=${custom} BUDGET=${budget} THINK=${(globalThis as any).__fauxReasoning ?? "none"}`));
 		}
 		// 利用者の発言をそのまま返す (プロンプトテンプレートの展開を見る)
 		if (process.env.FAUX_ECHO_USER === "1" && last?.role === "user") {

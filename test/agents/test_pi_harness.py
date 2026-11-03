@@ -1283,6 +1283,7 @@ def test_compaction_carries_the_handover_instructions_and_file_lists(env):
     assert compactions, proc.stdout + proc.stderr
     entry = compactions[-1]
     assert "INSTR=yes" in entry["summary"], f"圧縮の指示が要約の依頼に入っていない: {proc.stderr}"
+    assert "BUDGET=yes" in entry["summary"], entry["summary"]
     assert "圧縮の指示を付けられなかった" not in proc.stderr, (
         proc.stderr
     )  # 既定の圧縮へ落ちていない
@@ -1388,8 +1389,15 @@ def test_compaction_failure_reason_is_cut_at_4000_chars(env):
     assert len(head2) == 4000 and note2.endswith("字は省略)"), failed[0]["errorMessage"][-80:]
 
 
-def test_compaction_sends_the_session_thinking_level(env):
-    """思考レベルを渡さないと「thinking: disabled」で送られ、受け付けないモデルで指示つきの圧縮が失敗して既定に落ちる。"""
+@pytest.mark.parametrize(
+    ("session_level", "expected"),
+    [("minimal", "minimal"), ("low", "low"), ("medium", "low"), ("high", "low")],
+)
+def test_compaction_sends_the_session_thinking_level(env, session_level, expected):
+    """思考レベルを渡さないと「thinking: disabled」で送られ、受け付けないモデルで指示つきの圧縮が失敗して既定に落ちる。
+
+    要約の時間は出力の長さが支配的なので、セッションの思考レベルは上限 low で渡す (low 以下はそのまま)。
+    """
     settings = env["proj"] / ".pi"
     settings.mkdir()
     small = '{"compaction": {"keepRecentTokens": 1}}'
@@ -1408,7 +1416,7 @@ def test_compaction_sends_the_session_thinking_level(env):
         extra=(
             "--approve",
             "--thinking",
-            "medium",
+            session_level,
             "--session-dir",
             str(sessions),
             "-e",
@@ -1422,7 +1430,7 @@ def test_compaction_sends_the_session_thinking_level(env):
     assert "INSTR=yes" in summary, (
         proc.stderr
     )  # 指示つきの圧縮が保存された (既定に落ちたら INSTR=no)
-    assert "THINK=medium" in summary, summary
+    assert set(re.findall(r"THINK=(\w+)", summary)) == {expected}, summary
     assert "圧縮の指示を付けられなかった" not in proc.stderr, proc.stderr
 
 
