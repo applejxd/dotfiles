@@ -25,10 +25,10 @@
   }
 
   /* ctx = { id, review, reload(notice) } */
-  function openSheet(ctx, opener) {
+  function openSheet(ctx, opener, presetKind) {
     PRV.closeSheet();
     var rv = ctx.review;
-    var kind = "comment";
+    var kind = presetKind || "comment";
     var unsent = rv.unsent || 0;
     var sheet = h("div", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": "レビューを送る" });
     var backdrop = h("div", { class: "backdrop" }, sheet);
@@ -123,9 +123,13 @@
     open.addEventListener("click", function () {
       openSheet(ctx, open);
     });
+    var approve = h("button", { class: "btn", type: "button", text: "承認して送る…" });
+    approve.addEventListener("click", function () {
+      openSheet(ctx, approve, "approve");
+    });
     bar.appendChild(main);
     bar.appendChild(h("span", { class: "revnote small", text: DELIVERY }));
-    bar.appendChild(open);
+    bar.appendChild(h("div", { class: "revbtns" }, open, approve));
     if (notice) bar.appendChild(h("div", { class: "revnotice", role: "status", text: notice }));
     return bar;
   };

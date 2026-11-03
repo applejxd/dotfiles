@@ -13,7 +13,7 @@
   }
 }
 * { box-sizing: border-box; }
-html { color-scheme: light dark; }
+html { color-scheme: light dark; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: var(--fs)/1.55 system-ui, "Hiragino Sans", "Noto Sans CJK JP", "Yu Gothic UI", sans-serif; }
 a { color: var(--acc); }
 code, kbd { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK JP", monospace; font-size: .92em; }
@@ -170,6 +170,7 @@ td.code.can { cursor: pointer; }
 /* レビューを送る: 固定バーとシート */
 .page.withbar { padding-bottom: 8px; }
 .revbar { position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--bd); border-radius: 8px; background: var(--bg2); box-shadow: 0 -2px 8px rgba(0, 0, 0, .12); }
+.revbtns { display: flex; flex-wrap: wrap; gap: 6px 8px; }
 .revmain { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .revnote { flex: 1 1 220px; color: var(--muted); }
 .revnotice { flex: 1 1 100%; color: var(--ok); font-weight: 600; }
@@ -202,5 +203,7 @@ td.code.can { cursor: pointer; }
   .sheet { width: 100%; border-radius: 12px 12px 0 0; max-height: 85vh; }
   tr.thr > td, tr.editor > td { padding-left: 8px; }
   .revbar .btn { flex: 1 1 100%; }
+  .revbtns { flex: 1 1 100%; }
+  table.diff { font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

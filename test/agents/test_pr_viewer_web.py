@@ -310,6 +310,16 @@ def test_css_is_safe() -> None:
     assert css_problems((WEB / "app.css").read_text(encoding="utf-8")) == []
 
 
+def test_css_disables_ios_text_autosizing() -> None:
+    """iOS Safari は横にはみ出す表の文字を自動で拡大するので、html の規則で止める。"""
+    css = (WEB / "app.css").read_text(encoding="utf-8")
+    m = re.search(r"(?m)^html\s*\{([^}]*)\}", css)
+    assert m is not None, "html の規則が無い"
+    body = m.group(1)
+    assert "-webkit-text-size-adjust: 100%" in body
+    assert re.search(r"(?<![-\w])text-size-adjust: 100%", body)
+
+
 @pytest.mark.parametrize("path", web_files(), ids=lambda p: p.name)
 def test_file_is_under_line_limit(path: pathlib.Path) -> None:
     n = len(path.read_text(encoding="utf-8").splitlines())
@@ -363,6 +373,7 @@ class ReviewState:
         self.missing_expect: list[str] = []  # expect を付けずに届いた書き込み
         self.last_expect: dict | None = None
         self.last_submit: dict | None = None
+        self.submit_log: list[dict] = []  # 受け付けた submit の全件
 
     def get(self, key: str) -> dict:
         if key not in self.rv:
@@ -417,6 +428,7 @@ class ReviewState:
         if kind not in ("comment", "changes", "approve"):
             return 400, err_body("bad_kind", "種別が正しくありません。")
         self.last_submit = payload
+        self.submit_log.append(payload)
         resend = payload.get("resendOf")
         if resend:
             old = next((b for b in rv["batches"] if b["batchId"] == resend), None)
@@ -837,6 +849,44 @@ def flow_send(page, kind: str, base: str, check, shots) -> None:
     )
 
 
+def flow_approve_only(page, kind: str, base: str, state, check) -> None:
+    """未送信 0 件でも「承認して送る…」から承認だけを 1 回で送れる。「レビューを送る…」の既定は変わらない。"""
+    page.goto(f"{base}/#/pr/r1a2b3c4d/paaaaaaaaaaaaaaa1")
+    page.wait_for_function(
+        "() => document.querySelector('.revbar')?.innerText.includes('未送信 0 件')"
+    )
+    # 反例: 通常の入口は、これまでどおり「コメントのみ」で「送る」が無効
+    page.locator(".revbar button", has_text="レビューを送る").click()
+    page.wait_for_selector(".sheet")
+    check(
+        page.locator(".sheet button", has_text="送る").is_disabled(), f"{kind} 既定で「送る」が有効"
+    )
+    pressed = page.locator(".sheet .seg button[aria-pressed='true']").inner_text()
+    check(pressed == "コメントのみ", f"{kind} 既定の種別が変わった: {pressed}")
+    page.locator(".sheet button", has_text="閉じる").click()
+    page.wait_for_selector(".sheet", state="detached")
+    # 承認の入口
+    btn = page.locator(".revbar button", has_text="承認して送る")
+    check(btn.count() == 1, f"{kind} 「承認して送る…」が 1 つでない")
+    w = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
+    check(w[0] <= w[1], f"{kind} 概要の固定バーで横にはみ出している {w}")
+    btn.click()
+    page.wait_for_selector(".sheet")
+    pressed = page.locator(".sheet .seg button[aria-pressed='true']")
+    check(pressed.count() == 1 and pressed.inner_text() == "承認", f"{kind} 承認が選ばれていない")
+    send = page.locator(".sheet .cact button", has_text="送る")
+    check(send.is_enabled(), f"{kind} 承認なのに「送る」が無効")
+    before = len(state.submit_log)
+    send.click()
+    page.wait_for_selector(".sheet", state="detached")
+    page.wait_for_selector(".revnotice")
+    sent = state.submit_log[before:]
+    check(len(sent) == 1, f"{kind} submit が 1 回でない: {len(sent)}")
+    if sent:
+        check(sent[0].get("kind") == "approve", f"{kind} kind が approve でない: {sent[0]}")
+        check(bool(sent[0].get("expect")), f"{kind} expect が付いていない: {sent[0]}")
+
+
 def flow_stale_and_resend(page, kind: str, base: str, state, check) -> None:
     """表示中に PR が更新されたときは 409 を日本語で示し、取り直してから送れる。送信履歴の再送。"""
     key = "paaaaaaaaaaaaaaa1"
@@ -1005,6 +1055,11 @@ def browser_main(shots: pathlib.Path | None) -> int:
             t = text()
             for s in ("export function search(q: string) {", "@@ -1,3 +1,5 @@", "src/search.ts"):
                 check(s in t, f"{kind} 差分に {s!r} が無い")
+            fs = page.evaluate("getComputedStyle(document.querySelector('table.diff')).fontSize")
+            if sp:  # 幅 719px 以下は 12px 以下（iOS の自動拡大の対策と合わせる）
+                check(float(fs[:-2]) <= 12, f"sp 差分の文字が 12px 以下でない: {fs}")
+            else:
+                check(float(fs[:-2]) == 13, f"pc 差分の文字が 13px でない: {fs}")
             split_btn = page.locator("button", has_text="左右並び")
             if sp:
                 check(not split_btn.is_visible(), "sp で左右並びのボタンが見えている")
@@ -1037,6 +1092,7 @@ def browser_main(shots: pathlib.Path | None) -> int:
                 f"{kind} app.ts の未送信スレッドが表示されない",
             )
             flow_send(page, kind, base, check, shots)
+            flow_approve_only(page, kind, base, srv.state, check)
             flow_stale_and_resend(page, kind, base, srv.state, check)
 
             # 統合済みの PR
@@ -1049,6 +1105,10 @@ def browser_main(shots: pathlib.Path | None) -> int:
                 "統合済み" in page.inner_text(".revbar")
                 and page.locator(".revbar button, #app textarea").count() == 0,
                 f"{kind} 統合済みの PR で入力や送信ができてしまう",
+            )
+            check(
+                "承認して送る" not in page.inner_text(".revbar"),
+                f"{kind} 統合済みの PR に「承認して送る…」が出ている",
             )
 
             # 敵対的な PR: 概要・差分
