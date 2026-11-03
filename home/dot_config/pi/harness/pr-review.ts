@@ -213,52 +213,71 @@ async function readState(git: Git, key: string, current?: Vs): Promise<Reader | 
 	return { key, state: foldState(r.meta, r.events, current ?? last), branch: r.meta.branch, current: last };
 }
 
-/** 次の入力の前に渡す、未受領の batch。受領を (前提条件つきで) 記録できたものだけを渡す */
-export async function collectInjection(git: Git, sessionId: string, now: () => string): Promise<string | null> {
+/** 注入・受信箱・取り込みが共有する、未受領の batch の候補。文面の生成に要る状態 (state・current) を持つ */
+export type Candidate = { key: string; branch: string; batch: Batch; state: State; current: Vs };
+
+/**
+ * 読み取りだけ (ref を一切書かない)。宛先が自分の作業ツリーの未受領の batch と、自分の worktreeId を返す。
+ * 読めない PR は飛ばす。自分の worktreeId が決まらなければ mine は null
+ */
+export async function listCandidates(git: Git, limit = 200): Promise<{ mine: string | null; candidates: Candidate[] }> {
 	const mine = await myWorktreeId(git);
-	if (!mine) return null;
-	const keys = (await listPrKeys(git)).slice(0, 200);
-	const parts: string[] = [];
-	const limit = { n: MAX_COMMENTS };
-	let batches = 0;
-	for (const key of keys) {
-		if (batches >= MAX_BATCHES) break;
+	if (!mine) return { mine: null, candidates: [] };
+	const candidates: Candidate[] = [];
+	for (const key of (await listPrKeys(git)).slice(0, limit)) {
 		const st = await readState(git, key);
 		if (!st || "error" in st) continue;
-		for (const b of unreadBatches(st.state, mine)) {
-			if (batches >= MAX_BATCHES) break;
-			// 受領の記録が先。同じ batch を別の pi が先に受領していたら (null)、渡さない
-			const res = await appendEvents(
-				git,
-				key,
-				null,
-				(s) => {
-					const cur = s.batches.find((x) => x.batchId === b.batchId);
-					if (!cur || cur.received) return null;
-					const ev: ReviewEvent = {
-						v: 1,
-						id: newId(),
-						t: "receipt",
-						by: "pi",
-						at: now(),
-						vs: st.current,
-						d: { batchId: b.batchId, sessionId },
-					};
-					return [ev];
-				},
-				{ current: st.current },
-			);
-			if (!("commit" in res)) continue;
-			batches++;
-			const ids = new Set(b.items);
-			const threads = sentView(st.state)
-				.map((t) => ({ ...t, comments: t.comments.filter((c) => ids.has(c.id) || c.by === "pi") }))
-				.filter((t) => t.comments.some((c) => ids.has(c.id)));
-			parts.push(
-				// 囲みの外は固定の案内だけ (batch ID は UUID、種別は列挙値)。branch 名やパスなどの入力由来の文字列は、すべて囲みの中へ入れる (C14)
-				`レビュー: ${kindLabel(b.kind)} (batch ${b.batchId}${b.resendOf ? "、再送" : ""})${b.items.length === 0 ? "。コメントはありません" : ""}\n${fenced(`PR: ${st.branch}\n${threadLines(threads, limit)}`)}`,
-			);
+		for (const batch of unreadBatches(st.state, mine)) {
+			candidates.push({ key, branch: st.branch, batch, state: st.state, current: st.current });
 		}
+	}
+	return { mine, candidates };
+}
+
+/** 未受領の件数だけ (通知用。読み取りだけで、受領は書かない) */
+export async function countUnread(git: Git): Promise<number> {
+	return (await listCandidates(git)).candidates.length;
+}
+
+/** 受領 (receipt) を前提条件つきで追記する。取れたら true。同じ batch を別の pi が先に受領していたら false (何も書かない) */
+export async function claimCandidate(git: Git, c: Candidate, sessionId: string, now: () => string): Promise<boolean> {
+	const res = await appendEvents(
+		git,
+		c.key,
+		null,
+		(s) => {
+			const cur = s.batches.find((x) => x.batchId === c.batch.batchId);
+			if (!cur || cur.received) return null;
+			const ev: ReviewEvent = {
+				v: 1,
+				id: newId(),
+				t: "receipt",
+				by: "pi",
+				at: now(),
+				vs: c.current,
+				d: { batchId: c.batch.batchId, sessionId },
+			};
+			return [ev];
+		},
+		{ current: c.current },
+	);
+	return "commit" in res;
+}
+
+/** 受領できた候補から、注入の文面を作る (純粋関数)。無ければ null */
+export function renderInjection(claimed: Candidate[]): string | null {
+	const parts: string[] = [];
+	const limit = { n: MAX_COMMENTS };
+	for (const c of claimed) {
+		const b = c.batch;
+		const ids = new Set(b.items);
+		const threads = sentView(c.state)
+			.map((t) => ({ ...t, comments: t.comments.filter((x) => ids.has(x.id) || x.by === "pi") }))
+			.filter((t) => t.comments.some((x) => ids.has(x.id)));
+		parts.push(
+			// 囲みの外は固定の案内だけ (batch ID は UUID、種別は列挙値)。branch 名やパスなどの入力由来の文字列は、すべて囲みの中へ入れる (C14)
+			`レビュー: ${kindLabel(b.kind)} (batch ${b.batchId}${b.resendOf ? "、再送" : ""})${b.items.length === 0 ? "。コメントはありません" : ""}\n${fenced(`PR: ${c.branch}\n${threadLines(threads, limit)}`)}`,
+		);
 	}
 	if (parts.length === 0) return null;
 	return [
@@ -266,6 +285,18 @@ export async function collectInjection(git: Git, sessionId: string, now: () => s
 		"対応を判断し、`pr_comments` の reply でスレッドに返信してください。作業が終わったら `pr_summary` で報告します。長い本文はここでは先頭だけで、全文は `pr_comments` の list で読めます。",
 		...parts,
 	].join("\n\n");
+}
+
+/** 次の入力の前に渡す、未受領の batch。受領を (前提条件つきで) 記録できたものだけを渡す (上限は受領できた件数) */
+export async function collectInjection(git: Git, sessionId: string, now: () => string): Promise<string | null> {
+	const { candidates } = await listCandidates(git);
+	const claimed: Candidate[] = [];
+	for (const c of candidates) {
+		if (claimed.length >= MAX_BATCHES) break;
+		// 受領の記録が先。同じ batch を別の pi が先に受領していたら、渡さない
+		if (await claimCandidate(git, c, sessionId, now)) claimed.push(c);
+	}
+	return renderInjection(claimed);
 }
 
 export type PrDeps = {
