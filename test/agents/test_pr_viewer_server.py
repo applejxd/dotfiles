@@ -284,20 +284,18 @@ def test_unusable_repo_is_an_error_for_its_prs(world):
     assert status == 404 and body["error"]["code"] == "repo_unusable"
 
 
-def test_prs_cover_feature_and_bugfix_and_merged_and_are_newest_first(world):
+def test_prs_cover_feature_and_bugfix_and_are_newest_first(world):
     status, body = world.server.get("/api/prs")
     assert status == 200
     mine = [p for p in body["prs"] if p["repoId"] == _repo_id(world.repo)]
+    # feature/done は統合済み (develop の祖先で 0 コミット) でレビューの記録も無いので、一覧に出さない
     assert {p["branch"] for p in mine} == {
         "feature/alpha",
         "feature/beta",
         "bugfix/gamma",
-        "feature/done",
     }
     times = [p["lastCommit"]["at"] for p in body["prs"]]
     assert times == sorted(times, reverse=True)
-    done = _pr(world, world.repo, "feature/done")
-    assert done["state"] == "merged" and done["commits"] == 0 and done["files"] == 0
     alpha = _pr(world, world.repo, "feature/alpha")
     assert alpha["state"] == "open" and alpha["commits"] == 2 and alpha["target"] == "develop"
     assert (
@@ -373,9 +371,11 @@ def test_huge_diff_is_truncated_at_a_whole_line(world):
 
 
 def test_merged_pr_detail_is_empty(world):
-    done = _pr(world, world.repo, "feature/done")
-    status, body = world.server.get(f"/api/prs/{done['id']}")
+    # 一覧には出ないが、ID を直接指定すれば読める (統合済みで 0 コミットなので中身は空)
+    done_id = f"{_repo_id(world.repo)}/{_pr_key('feature/done')}"
+    status, body = world.server.get(f"/api/prs/{done_id}")
     assert status == 200 and body["files"] == [] and body["commits"] == []
+    assert body["pr"]["state"] == "merged" and body["pr"]["commits"] == 0
 
 
 # ---------------------------------------------------------------- 読み取り専用

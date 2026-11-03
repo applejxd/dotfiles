@@ -1216,6 +1216,41 @@ def test_event_limit_is_413(world, tmp_path):
     assert len(rv["threads"]) >= 1000
 
 
+def _prkey(branch: str) -> str:
+    return "p" + hashlib.sha256(f"v1\0refs/heads/{branch}".encode()).hexdigest()[:16]
+
+
+RECORD_JS = """
+const key = L.prKeyOf(arg.branch);
+const r = await G.appendEvents(git, key, meta(arg.branch), () => [cm("記録", { by: "app", vs: arg.vs })]);
+out(r.ok);
+"""
+
+
+def test_zero_commit_branch_is_listed_only_when_it_has_a_review_record(world, tmp_path):
+    repo = world.repo
+    hidden, reviewed = "feature/zero-hidden", "feature/zero-reviewed"
+    for n in (hidden, reviewed):
+        _git(repo, "branch", n, "develop")  # develop と同じ先頭 (差分無し・0 コミット)
+    try:
+        listed = {p["branch"] for p in world.server.get("/api/prs")[1]["prs"]}
+        assert hidden not in listed and reviewed not in listed  # 記録が無いのでどちらも出ない
+        # ID を直接指定すれば読める (一覧に出さないだけ)
+        status, body = world.server.get(f"/api/prs/{_repo_id(repo)}/{_prkey(hidden)}")
+        assert status == 200 and body["pr"]["state"] == "merged" and body["pr"]["commits"] == 0
+        # レビューの記録 (refs/pi/review/<prKey>) が付くと、統合済みとして出る
+        tip = _git(repo, "rev-parse", "develop").strip()
+        vs = {"source": tip, "target": tip, "base": tip}
+        assert run_js(tmp_path, repo, RECORD_JS, {"branch": reviewed, "vs": vs}) is True
+        listed = {p["branch"]: p for p in world.server.get("/api/prs")[1]["prs"]}
+        assert hidden not in listed  # 他の PR の記録では出ない
+        assert reviewed in listed and listed[reviewed]["state"] == "merged"
+        assert listed[reviewed]["commits"] == 0
+    finally:
+        for n in (hidden, reviewed):
+            _git(repo, "branch", "-D", n)
+
+
 # ---------------------------------------------------------------- 敵対的な設定
 
 

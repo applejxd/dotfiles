@@ -108,14 +108,31 @@ async function requireTarget(repo: Repo): Promise<{ name: string; oid: string }>
 	return t;
 }
 
+/** レビューの記録 (refs/pi/review/<prKey>) がある PR の prKey。読めないときは null (隠さない側に倒す) */
+async function reviewedKeys(repo: Repo): Promise<Set<string> | null> {
+	const r = await git(repo, ["for-each-ref", "--format=%(refname)", "refs/pi/review/"], true);
+	if (r.code !== 0) return null;
+	const keys = new Set<string>();
+	for (const line of r.out.split("\n")) {
+		const m = /^refs\/pi\/review\/(p[0-9a-f]{16})$/.exec(line.trim());
+		if (m) keys.add(m[1]);
+	}
+	return keys;
+}
+
 async function listRepoPrs(repo: Repo): Promise<PrSummary[]> {
 	const target = await resolveTarget(repo);
 	if (!target) return []; // 使えないリポジトリは一覧に出さない
 	const branches = (await listBranches(repo)).sort((a, b) => b.atUnix - a.atUnix).slice(0, MAX_PRS_PER_REPO);
+	const reviewed = await reviewedKeys(repo);
 	const out: PrSummary[] = [];
 	for (const b of branches) {
 		const c = await compute(repo, b, target);
-		if (c) out.push(c.summary);
+		if (!c) continue;
+		// 差分が無く (0 コミット。統合先と同じか祖先)、レビューの記録も無い枝は、PR として一覧に出さない (ID を直接指定すれば読める)。
+		// 記録の有無を読めなかったとき (reviewed が null) は、隠さずに出す。
+		if (c.summary.commits === 0 && reviewed && !reviewed.has(c.summary.prKey)) continue;
+		out.push(c.summary);
 	}
 	return out;
 }
