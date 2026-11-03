@@ -113,6 +113,8 @@ export type AppendOpts = {
 	jitterMs?: number;
 	/** 読める schema の上限 (既定 SCHEMA_MAX。古い読み手の模擬用) */
 	maxSchema?: number;
+	/** 新規専用: 既存の ref があれば拒否し (refused: "exists")、更新は旧値ゼロの CAS だけにする */
+	createOnly?: boolean;
 };
 export type AppendResult =
 	| { ok: true; commit: string }
@@ -135,6 +137,7 @@ export async function appendEvents(
 		if (attempt > 0) await sleep(Math.random() * (opts.jitterMs ?? 8) * attempt);
 		const cur = await readPr(git, prKey, { maxSchema: opts.maxSchema });
 		if (cur.kind === "bad") return { ok: false, refused: "bad" };
+		if (opts.createOnly && cur.kind !== "none") return { ok: false, refused: "exists" };
 		if (cur.kind === "readonly") return { ok: false, refused: "readonly" };
 		let meta: Meta;
 		let metaText: string;

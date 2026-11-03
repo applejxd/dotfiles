@@ -123,7 +123,7 @@ function parseArgs(argv: string[]): Options | null {
 			if (!/^\d+$/.test(v) || Number(v) > 60_000) return null; // 試験用
 			o.createDelayMs = Number(v);
 		} else if (a === "--create-test-fail") {
-			if (v !== "add" && v !== "record") return null; // 試験用
+			if (!["add", "record", "race", "record-lost", "record-unknown"].includes(v)) return null; // 試験用
 			o.createFail = v;
 		} else return null;
 		i++;

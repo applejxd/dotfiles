@@ -528,7 +528,10 @@
       var prKey = /^p[0-9a-f]{16}$/.test(String(f.prKey || "")) ? f.prKey : "";
       var href = prKey ? "#/pr/" + snap.repoId + "/" + prKey : "#/";
       var rel = f.worktree && /^\.tmp\/worktrees\/[a-z0-9][a-z0-9._-]*$/.test(String(f.worktree.rel || "")) ? f.worktree.rel : ".tmp/worktrees/" + snap.name;
-      var cmd = "cd " + snap.repoName + "/" + rel + " && pis --new";
+      var dir = snap.repoName + "/" + rel;
+      // repo 名に空白・特殊文字があっても壊れないよう、必要なときだけ単引用符で囲む
+      if (!/^[A-Za-z0-9._\/-]+$/.test(dir)) dir = "'" + dir.replace(/'/g, "'\\''") + "'";
+      var cmd = "cd " + dir + " && pis --new";
       var kids = [h("h2", { text: f.replay === true ? "起票済みでした（同じ依頼の再送）" : "起票しました" })];
       kids.push(h("p", null, "枝 ", code(String(f.branch || "feature/" + snap.name)), " ・ 基点 ", code("develop@" + PRV.short(f.base && f.base.oid ? f.base.oid : snap.oid))));
       (Array.isArray(f.warnings) ? f.warnings : []).forEach(function (w) {
