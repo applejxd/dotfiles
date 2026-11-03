@@ -48,3 +48,24 @@
 
 - **結論**: Fence の内側からのコミットは、pre-commit と相性が悪く、信頼できない。**コミットは、Fence の外のアプリが、範囲を検査してから行う**。worker は編集だけをする（CHG-0062 の方針と一致する）。
 - 未測定: トークン数・費用、役割ごと（計画・review・衝突解消）の構造化出力、Windows の素の `pi -p`。
+
+## X3-a: `pis -p` の実機実測
+
+手順: 使い捨ての repo と worktree で、`pis --role worker --allowlist -p <依頼>`（stdin は `/dev/null`）を実機で動かし、7 項目を測った（2026-11-04。WSL2）。記録は `.tmp/keep/x3a/`（`<repo>` 内。公開しない）。
+
+| # | 項目 | 結果 |
+| --- | --- | --- |
+| 1 | worktree で編集を依頼する | 合格（終了 0・約 10 秒・編集は worktree に入った） |
+| 2 | 最終応答の取り出し | 参考。標準出力の**最終行**が最終応答（先頭に境界チェックの `OK …` が約 20 行） |
+| 3 | `-p` がセッションを残すか | 合格。既定で残し、`--no-session` で残らない |
+| 4 | worktree の `.opencode/sandbox.toml` | 合格。置くと隔離が**広がる**ので、起動前の拒否（A4a の preflight）が要る |
+| 5 | worktree の外・共通 `.git` への書き込み | 合格。ref は書け、`hooks`・`config` は書けない（設計の前提どおり） |
+| 6 | プロセスグループへ SIGTERM → 5 秒 → SIGKILL の後に残るもの | **不合格**。2 秒後にも Fence の子孫（`envoy`・`fence`・`bwrap`・`socat`・モデルが起動した `sleep`）が残って見えた |
+| 7 | `--model` の受理 | 合格。有効なモデルは 0、無効は非 0 |
+
+追試（印の確認）: `pis -p` の子は `timeout` → `pis`（python3）→ `fence` → `socat` で、**印（`PR_VIEWER_JOB_ID`）を環境に持つ**。ただし通信の中継 `envoy` は、印が無く別のセッション・プロセスグループにいる。印を持つプロセスを SIGKILL した 3 秒後には、作業場所を cwd にするプロセスは全て消えた（親が死ぬと自然に畳まれる）。
+
+結論と反映:
+
+- 取り残しは、「印の無い `envoy` が畳まれるまでの数秒」に限られる。停止処理は、印に加えて **cwd が当該ジョブの worktree の中のプロセス**（realpath の前方一致。アプリ自身とその祖先は除く）も対象にし、消滅の確認を最大 10 秒のポーリングにした（`job-store.ts` の `findByJobId`・`signalByJobId`・`recover`、`job-runner.ts` の `killByJobId`）。
+- 未確認: Fence の内側のプロセス（`bwrap` の中の `sleep` など）が環境の印を持つか。cwd 走査が拾えるのは、cwd が worktree のものだけ（cwd を外へ変えたプロセスは拾えない）。
