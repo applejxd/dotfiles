@@ -22,6 +22,7 @@ sops (age) に置き、リポジトリにはそれを引くテンプレートと
 | Git の `user.name` / `user.email` | Bitwarden の Login 項目 `gitconfig`（Username と、カスタムフィールド `email`） | `~/.config/git/user` |
 | sops 用の age 秘密鍵 | Bitwarden の Secure Note `SOPS age identity personal`（ノートに鍵の行） | `~/.config/sops/age/keys.txt`（mode 600） |
 | Web 検索の API キー（Brave・Exa・Tavily・OpenAlex） | Bitwarden の Login 項目 `websearch-<名前>`（Password 欄） | `~/.config/agents/websearch-keys.json`（`apply` が `websearch.py sync-keys` で作る。[仕様](web-search.md#鍵)） |
+| Hugging Face のアクセストークン | Bitwarden の Login 項目 `huggingface-token`（Password 欄） | `~/.cache/huggingface/token`（`apply` が `uvx hf auth login` で作らせる。[仕様](#hugging-face-のトークンの-login)） |
 | プロジェクトの API キー | 各プロジェクトの `.env.json`（sops で暗号化してコミット） | ファイルには出さない。mise がプロジェクト内でだけ環境変数に載せる |
 | sudo パスワード | どこにも保存しない | スクリプトの `sudo -v` が実行時に尋ねる（`home/.chezmoitemplates/sudo-keepalive.sh.tmpl` を使うスクリプトと、短い `130` の先頭の `sudo -v`。変数に持たない） |
 
@@ -76,6 +77,57 @@ Windows は `.config/*` を丸ごと除外しているので、`.chezmoiignore.t
   失敗したときは、回避策として `launchctl load -w /System/Library/LaunchDaemons/ssh.plist` で daemon を直接読み込む（同記事）。
   この場合、システム設定の「リモートログイン」のスイッチの表示が、再起動まで追従しないことがある（同記事のコメント。この仕組みでの実機の確認は未実施）
 - どちらも失敗したら警告だけ出して続ける（`run_once_` なので再実行はされない。手動: システム設定 > 一般 > 共有 > リモートログイン）
+
+### Hugging Face のトークンの login
+
+`applejxd` の機械で、Bitwarden の Login 項目 `huggingface-token` の Password 欄にあるトークンを使い、`uvx hf auth login --token …` を実行する。
+スクリプトは `400_unix/run_after_442_hf_login.sh.tmpl`（Ubuntu / WSL / macOS）と
+`300_windows/run_after_352_hf_login.ps1.tmpl`（Windows）で、`apply` のたびに走る（ログイン済みなら何もしない）。
+
+**Bitwarden の項目**（トークンはこの形で保存する）:
+
+| 欄 | 値 |
+| --- | --- |
+| 種別 | Login |
+| 名前 | `huggingface-token`（完全一致。大文字小文字は無視。`huggingface-token-old` のような部分一致の別項目は数えない） |
+| ユーザー名 | 任意（Hugging Face のユーザー名。スクリプトは読まない） |
+| パスワード | アクセストークン（`hf_` で始まる User Access Token）。前後の空白と改行は落とす |
+| URI | 任意（`https://huggingface.co`） |
+| メモ | 任意（トークンの名前・権限・作成日・期限の控え） |
+
+- トークンは [Hugging Face の設定画面](https://huggingface.co/settings/tokens)で作る。権限は用途に絞る（モデルやデータの取得だけなら Read）。
+  組織のトークン（`api_org_…`）は `hf` が拒否する
+- Secure Note や SSH 鍵など Login 以外の種別は数えない。同名の Login が 2 件以上あるときは曖昧なので使わない（1 件に減らす）
+- **通常ログインの項目とは分ける**。Hugging Face のアカウントのログイン（名前 `huggingface` など。Password はアカウントのパスワード）とは別の項目にする。
+  スクリプトは名前が `huggingface-token` と完全に一致する項目だけを見るので、通常ログインの項目は読まない。
+  カスタムフィールドで 1 項目にまとめる方式は採らない（アカウントのパスワードと同じ JSON を読むことになり、既存の項目名を決めておく必要もある。トークンの入れ替えも独立してできる）
+
+| 条件 | 動作 |
+| --- | --- |
+| 保存先（`HF_TOKEN_PATH` → `HF_HOME` → `XDG_CACHE_HOME` → `~/.cache/huggingface/token`）に空でないファイルがある | 何もしない（ログイン済み。`bw` も呼ばない） |
+| `bw`・`uvx`（Unix は `jq` も）が無い・`BW_SESSION` が未設定・ロック中 | 何もしない（apply を入力待ちにしない）。有効にするには `export BW_SESSION="$(bw unlock --raw)" && chezmoi apply`（PowerShell は `$env:BW_SESSION = (bw unlock --raw)`） |
+| 名前が `huggingface-token` の Login 項目が 0 件・2 件以上 | 何もしない |
+| Password 欄が `hf_` + 英数字の形ではない | 何もしない |
+| それ以外 | `bw sync` の後に `uvx hf auth login --token <トークン>` を実行する。失敗しても apply は止めない（出力に含まれうるトークンは `***` に伏せる） |
+
+- トークンを取り直す（Bitwarden 側で差し替えた）ときは `DOTFILES_RESYNC_HF_TOKEN=1 chezmoi apply`（PowerShell は `$env:DOTFILES_RESYNC_HF_TOKEN = '1'`）
+- 保存は `hf` に任せる。スクリプトはトークンをファイルにもログにも書かない。`--add-to-git-credential` は付けない
+  （平文の `~/.git-credentials` を作らせない。git で Hub を直接使うなら、手元で `hf auth login --add-to-git-credential` を打つ）
+- **ログイン済みの判定を自前で持つ理由**: `hf auth login --token` は、ログイン済みでも毎回 Hub へ通信して保存し直す
+  （`--force` の「ログイン済みならやめる」は、トークンを渡さない対話のログインだけに効く。huggingface_hub 1.7.1 の `login()`）。
+  そのため保存先のファイルを見て、通信せずに判断する
+- `hf` は PyPI の `hf`（Hugging Face, Inc. が出している公式のパッケージ。`huggingface_hub` と同じ版に固定されている。2026-11-03 の `uvx hf` は 2.4.0）。
+  `uvx` は版を固定しないので、ログインのたびに新しい版を解決する
+- **受容している点**: `hf auth login` の入口は `--token` 引数だけ（標準入力・環境変数の口が無い。2.4.0 の `--help`）。
+  そのため、ログインの数秒のあいだ、トークンが同じ機械の他のプロセスから見える（`ps`・タスクマネージャ）。個人の機械の前提
+- 実測（2026-11-03、Ubuntu）: 架空のトークンで `uvx hf auth login --token …` は `Invalid user token.` で終了コード 1、何も保存しない
+- Windows 版は、WSL から呼ぶ Windows PowerShell 5.1（2026-11-03）で、偽物の `bw`・`uvx`（`.cmd`）を使って確かめた:
+  成功・失敗（トークンを伏せて出す）・`bw` が標準エラーに警告を出しても止まらない・ログイン済み・`DOTFILES_RESYNC_HF_TOKEN=1`。
+  この確認で、Stop のまま `2>$null` や `2>&1 | Out-String` を使うと、PowerShell 5.1 は標準エラーの 1 行で例外にして止まり、
+  Out-String が作る ErrorRecord の体裁はトークンを途中省略して伏せ字を漏らすことが分かった。
+  そのため外部コマンドは `Invoke-Native`（呼ぶ間だけ Continue、出力は行の文字列）を通す
+- **未検証**: 本物のトークンでのログイン、実際の Bitwarden の項目との組み合わせ、Windows での `uvx hf` の実行
+- **未対応**: `~/.cache/huggingface/token` は、エージェントの読み取り拒否（permission・sandbox の deny 一覧）にまだ入れていない
 
 ### 脅威と守らないもの
 

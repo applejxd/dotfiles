@@ -1,0 +1,68 @@
+{{- /*
+  Bitwarden の Login 項目 huggingface-token の Password 欄 (Hugging Face のアクセストークン) で uvx hf auth login を実行する。
+  通常ログインの項目 (名前 huggingface など) とは別の項目で、名前が完全に一致するものだけを使う。
+  applejxd の機械だけ。ログイン済み・BW_SESSION が無い・bw / jq / uvx が無い・項目が無い・曖昧・失敗のときは何もせず 0 で終わる (apply を止めない)。
+  トークンは変数の中だけに置き、ファイルにも出力にも出さない。再ログインは DOTFILES_RESYNC_HF_TOKEN=1。
+  Windows 版: .chezmoiscripts/300_windows/run_after_352_hf_login.ps1.tmpl
+  see docs/spec/security.md#hugging-face-のトークンの-login
+*/ -}}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username -}}
+#!/bin/bash
+
+set -eu
+
+item="huggingface-token"
+
+skip() {
+    echo "hf-login: $1 (skip)"
+    exit 0
+}
+
+# ログイン済みか。hf の既定の保存先 (HF_TOKEN_PATH > HF_HOME > XDG_CACHE_HOME > ~/.cache) を見る。通信しない
+hf_home="${HF_HOME:-${XDG_CACHE_HOME:-${HOME}/.cache}/huggingface}"
+token_file="${HF_TOKEN_PATH:-${hf_home}/token}"
+if [[ -s "$token_file" && "${DOTFILES_RESYNC_HF_TOKEN:-}" != "1" ]]; then
+    skip "ログイン済み (取り直すときは DOTFILES_RESYNC_HF_TOKEN=1)"
+fi
+
+command -v bw >/dev/null 2>&1 || skip "bw が無い"
+command -v jq >/dev/null 2>&1 || skip "jq が無い"
+command -v uvx >/dev/null 2>&1 || skip "uvx が無い"
+# 認証は求めない (apply を入力待ちにしない)。有効にするには:
+#   export BW_SESSION="$(bw unlock --raw)" && chezmoi apply
+[[ -n "${BW_SESSION:-}" ]] || skip "BW_SESSION が無い (bw unlock 済みの環境で apply するとログインする)"
+
+# 追加したばかりの項目が Vault の未同期で見えないことがあるので、ログインが要るときだけ同期する (失敗しても続ける)
+bw sync --nointeraction >/dev/null 2>&1 || true
+items="$(bw list items --search "$item" --nointeraction 2>/dev/null)" || skip "bw から取得できない (ロック中か未ログイン)"
+
+# type 1 = Login。名前が huggingface-token と大文字小文字を無視して一致するものがちょうど 1 件のときだけ使う
+count="$(printf '%s' "$items" | jq -r --arg n "$item" \
+    '[.[] | select(.type == 1 and ((.name | ascii_downcase) == ($n | ascii_downcase)))] | length')"
+if [[ "$count" != "1" ]]; then
+    unset items
+    skip "Login 項目 '${item}' が ${count} 件 (ちょうど 1 件のときだけ使う)"
+fi
+token="$(printf '%s' "$items" | jq -r --arg n "$item" \
+    '[.[] | select(.type == 1 and ((.name | ascii_downcase) == ($n | ascii_downcase)))][0].login.password // empty')"
+unset items
+
+# トークンの形 (hf_ + 英数字) だけを受け付ける。組織のトークン (api_org_) や空・別の文字列は使わない (前後の空白と改行だけは落とす)
+token="${token#"${token%%[![:space:]]*}"}"
+token="${token%"${token##*[![:space:]]}"}"
+if [[ ! "$token" =~ ^hf_[A-Za-z0-9]+$ ]]; then
+    unset token
+    skip "Password 欄がトークンの形 (hf_...) ではない"
+fi
+
+# git の credential helper には保存しない (hf の既定。平文の ~/.git-credentials を作らせない)
+if out="$(uvx hf auth login --token "$token" 2>&1)"; then
+    echo "hf-login: ログインした (${token_file})"
+else
+    # 念のため、出力に含まれうるトークンは伏せる
+    printf '%s\n' "${out//"$token"/***}" | tail -n 5 >&2
+    unset token
+    skip "hf auth login に失敗した (トークンが無効か、通信できない)"
+fi
+unset token
+{{- end }}

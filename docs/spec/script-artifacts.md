@@ -48,6 +48,7 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 | `000_unix/run_before_005_python.sh.tmpl` | `~/.local/bin/chezmoi-python3`（実体の Python への symlink） | 状態（`ln -sfn` で毎回張り直す） | 消すと次の apply で張り直す。その前の `modify_` スクリプトが一時的に失敗しうる |
 | 同上 | `mktemp` の一時ファイル（uv のインストーラ） | 一時 | uv も Python も無いときだけ。使い終えたら `rm -f`（`trap` なし） |
 | `400_unix/run_after_440_authorized_keys.sh.tmpl` | `~/.ssh/`（700）・`~/.ssh/authorized_keys`（600） | 生成物（追記のみ） | 消すと鍵認証が効かなくなる。次の apply（`BW_SESSION` あり）で戻す。[仕様](security.md#ssh-公開鍵の-authorized_keys-への追加) |
+| `400_unix/run_after_442_hf_login.sh.tmpl` | `~/.cache/huggingface/token`（と `stored_tokens`。保存先は `HF_TOKEN_PATH` 等で変わる。作るのは `uvx hf auth login`） | 生成物（認証情報。スクリプト自身は書かない） | 消すと未ログインに戻り、次の apply（`BW_SESSION` あり）でログインし直す。[仕様](security.md#hugging-face-のトークンの-login) |
 | `modify_json.py.tmpl`（約 17 本の `modify_*.json.py.tmpl` が使う。全 OS） | 一時ディレクトリ内の `common.toml`（描画済みの内容） | 一時 | `with tempfile.TemporaryDirectory()` で自動削除 |
 
 ## Ubuntu / WSL
@@ -84,6 +85,7 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 | `300_windows/310_packages/run_once_after_315_keypirinha_extensions.ps1` | `%APPDATA%\Keypirinha\InstalledPackages\*.keypirinha-package.download` と、成果の `*.keypirinha-package` | 一時・生成物 | 未導入のものだけ。`.download` は `Move-Item` で本体へ置き、`finally` で削除。既存ファイルは上書きしない |
 | `300_windows/run_after_345_powershell_profile.ps1.tmpl` | `MyDocuments` の実体の下の `PowerShell\profile.ps1`・`WindowsPowerShell\profile.ps1` | 生成物（OneDrive の既知フォルダー移動時だけ置く、BOM 付きのローダー） | 内容が違うときだけ上書き |
 | `300_windows/run_after_342_copilot_skills.ps1.tmpl` | `~\.copilot\skills`（Junction） | 生成物 | 正しければ維持。空ディレクトリや意図しないものは `rmdir` して作り直す（実体は消さない） |
+| `300_windows/run_after_352_hf_login.ps1.tmpl` | `~\.cache\huggingface\token`（と `stored_tokens`。保存先は `HF_TOKEN_PATH` 等で変わる。作るのは `uvx hf auth login`） | 生成物（認証情報。スクリプト自身は書かない） | 消すと未ログインに戻り、次の apply（`BW_SESSION` あり）でログインし直す。実トークンでの動作は未検証。[仕様](security.md#hugging-face-のトークンの-login) |
 
 `320_regkey/` と `331_power`（毎回走る `run_after_`）はレジストリと `powercfg` の設定だけで、ファイルを作らない。
 

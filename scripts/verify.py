@@ -428,6 +428,7 @@ RULES: tuple[Rule, ...] = (
         (
             "test_bootstrap_scripts",
             "test_authorized_keys",
+            "test_hf_login",
             "test_wsl_timesync_script",
             "test_chezmoi_templates",
         ),

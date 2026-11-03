@@ -1,0 +1,92 @@
+﻿{{- /*
+  Bitwarden の Login 項目 huggingface-token の Password 欄 (Hugging Face のアクセストークン) で uvx hf auth login を実行する。
+  通常ログインの項目 (名前 huggingface など) とは別の項目で、名前が完全に一致するものだけを使う。
+  applejxd の機械だけ。ログイン済み・BW_SESSION が無い・bw / uvx が無い・項目が無い・曖昧・失敗のときは何もせず 0 で終わる (apply を止めない)。
+  トークンは変数の中だけに置き、ファイルにも出力にも出さない。再ログインは DOTFILES_RESYNC_HF_TOKEN=1。
+  Unix 版: .chezmoiscripts/400_unix/run_after_442_hf_login.sh.tmpl
+  see docs/spec/security.md#hugging-face-のトークンの-login
+*/ -}}
+{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username -}}
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$itemName = 'huggingface-token'
+
+function Skip {
+  param([string]$Reason)
+  Write-Host "hf-login: $Reason (skip)"
+  exit 0
+}
+
+function Invoke-Native {
+  # 外部コマンドを呼ぶ。Windows PowerShell 5.1 は Stop のままだと、標準エラーに 1 行出るだけで（Node の警告など）例外にして止まる。
+  # 呼ぶ間だけ Continue にする。既定は標準エラーを捨てる。-MergeStderr は行の文字列に混ぜる (ErrorRecord の体裁は付けない)
+  param([string]$Path, [string[]]$Arguments, [switch]$MergeStderr)
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    if ($MergeStderr) { $lines = @(& $Path @Arguments 2>&1 | ForEach-Object { "$_" }) }
+    else { $lines = @(& $Path @Arguments 2>$null) }
+    $code = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previous
+  }
+  return @{ Code = $code; Lines = $lines }
+}
+
+# ログイン済みか。hf の既定の保存先 (HF_TOKEN_PATH > HF_HOME > XDG_CACHE_HOME > ~\.cache) を見る。通信しない
+$hfHome = if ($env:HF_HOME) { $env:HF_HOME }
+          elseif ($env:XDG_CACHE_HOME) { Join-Path $env:XDG_CACHE_HOME 'huggingface' }
+          else { Join-Path $HOME '.cache\huggingface' }
+$tokenFile = if ($env:HF_TOKEN_PATH) { $env:HF_TOKEN_PATH } else { Join-Path $hfHome 'token' }
+$loggedIn = (Test-Path -LiteralPath $tokenFile -PathType Leaf) -and ((Get-Item -LiteralPath $tokenFile).Length -gt 0)
+if ($loggedIn -and $env:DOTFILES_RESYNC_HF_TOKEN -ne '1') { Skip 'ログイン済み (取り直すときは DOTFILES_RESYNC_HF_TOKEN=1)' }
+
+$bw = @(Get-Command bw -CommandType Application -ErrorAction SilentlyContinue)[0]
+if (-not $bw) { Skip 'bw が無い' }
+$uvx = @(Get-Command uvx -CommandType Application -ErrorAction SilentlyContinue)[0]
+if (-not $uvx) { Skip 'uvx が無い' }
+# 認証は求めない (apply を入力待ちにしない)。有効にするには:
+#   $env:BW_SESSION = (bw unlock --raw); chezmoi apply
+if (-not $env:BW_SESSION) { Skip 'BW_SESSION が無い (bw unlock 済みの環境で apply するとログインする)' }
+
+# 追加したばかりの項目が Vault の未同期で見えないことがあるので、ログインが要るときだけ同期する (失敗しても続ける)
+[void](Invoke-Native $bw.Path @('sync', '--nointeraction'))
+$listed = Invoke-Native $bw.Path @('list', 'items', '--search', $itemName, '--nointeraction')
+if ($listed.Code -ne 0) { Skip 'bw から取得できない (ロック中か未ログイン)' }
+$json = $listed.Lines | Out-String
+$listed = $null
+
+# type 1 = Login。名前が huggingface-token と大文字小文字を無視して一致するものがちょうど 1 件のときだけ使う
+$items = @(($json | ConvertFrom-Json) |
+    Where-Object { $_.type -eq 1 -and $_.name -ieq $itemName })
+$json = $null
+if ($items.Count -ne 1) {
+  $count = $items.Count
+  $items = $null
+  Skip "Login 項目 '$itemName' が $count 件 (ちょうど 1 件のときだけ使う)"
+}
+$login = $items[0].PSObject.Properties['login']
+$token = if ($login -and $login.Value -and $login.Value.PSObject.Properties['password']) { ([string]$login.Value.password).Trim() } else { '' }
+$items = $null
+
+# トークンの形 (hf_ + 英数字) だけを受け付ける。組織のトークン (api_org_) や空・別の文字列は使わない
+if ($token -notmatch '^hf_[A-Za-z0-9]+$') {
+  $token = $null
+  Skip 'Password 欄がトークンの形 (hf_...) ではない'
+}
+
+# git の credential helper には保存しない (hf の既定)。uv の進捗は stderr に出るので、混ぜて受ける
+$loginResult = Invoke-Native $uvx.Path @('hf', 'auth', 'login', '--token', $token) -MergeStderr
+
+if ($loginResult.Code -eq 0) {
+  $token = $null
+  Write-Host "hf-login: ログインした ($tokenFile)"
+} else {
+  # 念のため、出力に含まれうるトークンは伏せる
+  $masked = @($loginResult.Lines | ForEach-Object { $_.Replace($token, '***') } | Select-Object -Last 5)
+  $token = $null
+  Write-Host ($masked -join "`n")
+  Skip 'hf auth login に失敗した (トークンが無効か、通信できない)'
+}
+{{- end }}
