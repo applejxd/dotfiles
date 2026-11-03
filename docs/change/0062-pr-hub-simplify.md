@@ -79,6 +79,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | 守る条件 | hook・外部の merge driver・filter・fsmonitor・`include` を動かさない（固定の先頭引数・絞った環境変数。設定に外部のコードを動かしうる項目があれば、書く前に `external_code` で拒否）。ref の書き込みは CAS だけ（`merge --ff-only`、または旧先頭を渡した `update-ref`）。入力（枝名・OID・cleanup・メッセージ）は検査を通ったものだけを git に渡す。出力（reason・例外）に絶対パス・git の生の出力を出さない |
 | 事前検査 | policy（source は `feature/`・`bugfix/`、target は `develop`）、ref 名の形、存在、`expect`（古い版は `stale`）、統合済み、衝突、HEAD が target、進行中の操作が無い、`index.lock` が無い、統合が触るパスが dirty・untracked・ignored と重ならない（無関係な dirty は通す）。ff の直前に、ロックの保持と HEAD をもう一度確かめる |
 | 排他 | `<common-dir>/pr-viewer-merge.lock`（中身を書いた一時ファイルを `link` で置く。待たずに `busy`）。**持ち主の pid が死んだ古いロックは奪わない**（`recover_needed`。奪う処理は確認と削除の間で競合し、両方が保護区間に入るため）。解除は利用者が実行する `recover` だけ |
+| 結果の tree（P2） | `git merge-tree --write-tree` に `--attr-source=<target の OID>`（git 2.40 以上）を付け、target の `.gitattributes` を読ませる。worktree の外で動かすと属性（`binary` など）が読まれず、素の `git merge` と結果が変わる（差分試験で発見）。差分試験 `test_pr_viewer_merge_oracle.py`（既定 40 シナリオ、`MERGE_ORACLE_N`・`MERGE_ORACLE_SEED` で増やせる。oracle の git が merge-ort の BUG で abort する seed は skip）と、失敗注入 `test_pr_viewer_merge_faults.py`（git の全呼び出しを失敗・実行後失敗・クラッシュの 4 方式で壊し、どこで止まっても「統合前」か「統合後」の整合した状態であるか、`recover` が診断することを確かめる）。反映の確認だけ失敗したときは `unverified`（状態ファイルを残し、`recover` が統合済みと確かめる）を返す |
 | 状態ファイル | ff の直前に `<common-dir>/pr-viewer-merge.state` を書く（統合が触るパス・新しく作られるパス・コミット・旧先頭）。成功で消し、失敗でも作業ツリーが無傷だと確かめられたときだけ消す。残っている間は新しい統合を断る（`recover_needed`） |
 | `recover` | **確かめて、状態を解除するだけ**。ref が統合後の先頭なら `completed`、旧先頭のままで、統合が触るパスに差（変更・untracked・ignored）・`index.lock`・進行中の操作が無ければ `cleared`、状態が無ければ `clean`。差があれば何も変えず、診断（`details`: 差のあるパスの一覧・`indexLock`・`operation`・`cause`）を返す。**`index.lock` も消さない**（他の git が使っているかもしれない） |
 | cleanup | `none`・`branch`・`branch_and_worktree`。枝は、どの worktree でも checkout されていないときだけ、承認した先頭を指定した `update-ref -d`（CAS）で消す（`branch -d` は upstream 基準の判定で、統合していない先頭を消しうる）。worktree は、source の worktree に未コミットの変更・untracked・ignored・外部のコードを動かしうる設定が無いときだけ `git worktree remove`（git 自身は ignored を守らず再帰的に消すため、検査は `--ignored` 込み）。失敗は警告で、統合の成功は取り消さない |
@@ -95,6 +96,8 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 3. 診断が返ったら、`details.paths` の一覧と `git status` を見て、統合が書いたものを手で戻す（利用者のファイルを消さない）。`index.lock` は、他の git が無いことを確かめてから手で消す。
 4. もう一度 `recover` を実行する。
 5. どうしても解除できない（状態ファイルが壊れている等）ときは、手で確認してから `<common-dir>/pr-viewer-merge.state` と `<common-dir>/pr-viewer-merge.lock` を削除する。
+
+**統合は成功したが取り消したい**ときは `recover` ではなく、[統合を取り消す手順](../spec/pr-viewer.md)（`reset --keep`・`update-ref` の期待値つき・`revert -m 1`、消えた枝の復元）を使う。統合の結果を確認できなかった（`unverified`）ときも、状態ファイルが残るので `recover` を実行する（統合済みなら「統合済み」として解除される）。
 
 ### 3.6 pi を通常のコーディングエージェントへ戻す（段 C）
 

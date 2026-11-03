@@ -216,6 +216,19 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 3. 配備先で、判定器が `X-PRV` 付きの curl と `merge-cli.ts merge` を deny することを確かめる。tailnet や funnel で公開するなら、`~/.config/agents/local.toml` の `[pis.network] deny` に自分の公開名を足し、Fence の内側から届かないことを確かめる（上流プロキシが名前解決する経路では、中継が内部アドレスを止められない: [pi-sandbox](guard/pi-sandbox.md)）。
 4. `--allow-merge` を付けてアプリを起動し、安全な試験用リポジトリで統合を 1 回試す。異常終了の後は CHG-0062 §3.5 の手順で `recover` する。
 
+#### 統合を取り消す（巻き戻し。利用者が行う。手順は試験 `test_pr_viewer_merge_undo.py` が実 git で固定）
+
+統合は merge commit を develop の先頭へ進めるだけなので、**失うものが無く、元に戻せる**。戻す先は次で分かる: 統合の応答の `merge.targetOld`（統合前の develop）と `merge.commit`（統合コミット）、画面の「旧 → 新」の OID、レビュー記録の `merge_request.targetOid`（= `targetOld`）と `merge_result.doneOid`（= `commit`）、`git reflog show develop`（作業ツリーありのリポジトリ。bare は reflog が無いので、応答の OID を控える）。まず `git rev-parse <commit>^1` が `targetOld` に等しいことを確かめる。
+
+| 状況 | 手順 |
+| --- | --- |
+| 未 push（一覧の「origin より N 件先」が残っている）で、統合の後に develop へ他のコミットが無い・develop を checkout している | `git status` で、統合を戻すと上書きされるファイルに手元の変更が無いことを確かめ、`git reset --keep <targetOld>`。`--hard` ではなく `--keep` を使う（手元の未コミットの変更と重なると、何も変えずに中止する）。無関係な未コミットの作業・未追跡・無視ファイルは残る |
+| 同じで、develop をどの worktree も checkout していない | `git update-ref refs/heads/develop <targetOld> <統合コミット>`。末尾の期待値を必ず付ける（統合のあとに develop が進んでいれば、期待値が合わず何も変えない） |
+| push 済み、または統合の後に他のコミットがある | 履歴を巻き戻さず、`git revert -m 1 <統合コミット>`（第 1 親 = develop 側を残す）。統合前の tree へ戻す新しいコミットができる。**同じ枝をもう一度統合したいときは、その revert コミットを revert してから**でないと、変更が入らない（git の仕様） |
+| cleanup で枝を消した | `git branch <枝> <統合コミット>^2`（第 2 親 = feature の先頭）。worktree は `git worktree add <パス> <枝>` で作り直す。**削除された worktree の中の未追跡・無視ファイル（`.tmp` など）は戻らない** |
+
+これは利用者が自分の端末で行う手順で、エージェント（pi）に任せることは想定しない。復旧できない異常終了（状態ファイルが残った）は、取り消しではなく `recover`（CHG-0062 §3.5）。統合の結果を確認できなかった（`unverified`）ときも `recover` が「統合済み」と確かめて状態を解除する。
+
 ## 7 ペアリングと制御（段 4。未実装）
 
 > **置き換え予定（2026-11-03）**: ペアリング・制御ポート・long-poll・共有の秘密は採らない。通信は ref の追記と、pi 内の受信箱で行う（[CHG-0061](../change/0061-pr-inbox.md) の決定 D2）。以下は置き換え前の設計で、実装しない。
