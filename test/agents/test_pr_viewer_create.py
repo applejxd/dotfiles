@@ -575,6 +575,49 @@ def test_record_failure_rolls_branch_and_worktree_back(make):
     assert create(w)[0] == 201
 
 
+def _lock_reason(w: W) -> str | None:
+    cur = None
+    for line in _git(w.repo, "worktree", "list", "--porcelain", "-z").split("\0"):
+        if line.startswith("worktree "):
+            cur = Path(line[9:]).resolve()
+        elif cur == wt_path(w).resolve() and (line == "locked" or line.startswith("locked ")):
+            return line[6:].strip()
+    return None
+
+
+def test_worktree_is_locked_only_while_creating(make):
+    w = make(delay_ms=2500)
+    t, out = post_async(w)
+    assert wait_for(lambda: (wt_path(w) / ".git").exists())
+    time.sleep(0.3)
+    reason = _lock_reason(w) or ""
+    assert re.fullmatch(r"owner=create id=alpha pid=\d+ started=\d+", reason), reason
+    t.join(30)
+    assert out["r"][0] == 201
+    assert _lock_reason(w) is None  # 作成後は lock を残さない
+
+
+def test_lock_is_released_before_rollback_on_failure(make):
+    w = make(fail="record")
+    status, body = create(w)
+    assert (status, body["error"]["code"]) == (500, "create_failed")
+    assert not wt_path(w).exists() and _lock_reason(w) is None
+
+
+def test_sigkill_midway_leaves_a_lock_that_points_at_a_dead_owner(make):
+    w = make(delay_ms=8000)
+    t, _out = post_async(w)
+    assert wait_for(lambda: (wt_path(w) / ".git").exists())
+    time.sleep(0.5)
+    pid = w.server.proc.pid
+    w.server.proc.kill()
+    t.join(30)
+    w.server.proc.wait()
+    assert f"owner=create id=alpha pid={pid} " in (
+        _lock_reason(w) or ""
+    )  # pid が死んでいれば残骸と判定できる
+
+
 def test_record_is_not_written_before_the_worktree_is_verified(make):
     w = make(delay_ms=2500)
     t, out = post_async(w)

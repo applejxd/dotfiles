@@ -175,3 +175,4 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 - 2026-11-04: 起票（B1）の独立 review の指摘 M1〜M4 を直した。競合に負けた側は相手の枝・worktree を消さない（`worktree add` 失敗は診断のみ）・brief は新規専用 CAS（既存 ref に追記しない）・記録結果を recorded / not_recorded / unknown に分けて unknown は読み直し（確定できなければ残して `create_partial`）・巻き戻しの外部コード設定の検査を `git status` より先に。検査後の symlink 差し替え（TOCTOU）は対象外のまま（[pr-viewer.md §12](../spec/pr-viewer.md)）。
 - 2026-11-03: 段 A5（旧い統合経路の撤去）を実装。`integrate-plan.ts`・`integrate-exec.ts` も全削除した（§6 を訂正）。`pending-store.ts`・`integrate-profile-load.ts` は残す。共存期間（§8）は解消。
 - 2026-11-04: X3-a の実測を受け、ジョブの停止を cwd 走査（印に加えて cwd が worktree の中のプロセス）と消滅確認 10 秒のポーリングへ拡張した（[X3-a](../research/agents/pr-merge-spike.md#x3-a-pis--p-の実機実測)）。
+- 2026-11-04: worktree の所有を `git worktree lock` の理由欄（`owner=<kind> id=<id> pid=<pid> started=<秒>`）で表明する方針 P1 を実装。`scripts/wt_owner.py`・`apps/pr-viewer/worktree-owner.ts`・ジョブの起動前検査（`worktree_busy`）・起票の作成中 lock。親の運用はスキルに追記（[仕様](../spec/orchestration.md#worktree-の所有の表明)）。

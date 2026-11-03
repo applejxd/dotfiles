@@ -10,7 +10,8 @@ import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, readlink
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { type ChangedFile, type CheckResult, LIMITS, checkChanges, parseNumstatBinary, parseRaw } from "./job-check.ts";
-import { assertStateDirIsolated } from "./job-store.ts";
+import { assertStateDirIsolated, findByCwd } from "./job-store.ts";
+import { readOwner } from "./worktree-owner.ts";
 import { configHasExternalCode, listWorktrees, parseStatus, readIdentity, resolveCommonDir, runGit } from "./merge-git.ts";
 
 export type Refusal = { ok: false; code: string; reason: string };
@@ -68,6 +69,7 @@ const REASONS: Record<string, string> = {
 	fence_request_present: "worktree に .opencode があるため、実行しません。",
 	tampered: "worktree の管理情報が想定と違います。",
 	failed: "失敗しました。",
+	worktree_busy: "この作業ツリーをほかの作業（子エージェント・対話の pi・別の依頼）が使っています。",
 };
 
 function refuse(code: string): Refusal {
@@ -249,6 +251,10 @@ export async function preflight(input: PreflightInput): Promise<{ ok: true; pre:
 		const layout = checkLayout(common, mine[0].path);
 		if ("ok" in layout) return layout;
 		const adminDir = layout.adminDir;
+		// 所有: 他の有効な owner（不明の lock を含む）と、cwd が worktree の中のプロセスがいれば拒否
+		const own = await readOwner(common, mine[0].path);
+		if (own !== null && (own.state === "unknown" || (own.state === "owner" && own.alive))) return refuse("worktree_busy");
+		if (findByCwd(worktree).length > 0) return refuse("worktree_busy");
 
 		if (await externalCodeIn(common, adminDir)) return refuse("external_code");
 		if (IN_PROGRESS.some((n) => existsSync(join(adminDir, n))) || existsSync(join(adminDir, "index.lock"))) return refuse("in_progress");

@@ -54,6 +54,17 @@
 | 隔離なしの worktree | 運用 | 親が feature の分割を決め、子には worktree の中だけで作業させる。起票は利用者。強制の囲いではない | [並列実装の運用](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
 | 子の隔離（`isolation: "worktree"`） | 保留（素の `pi` では認証のロックの書き込みが拒否される） | Landlock で書き込みを狭める。`pis` では認証の写しが既にある | [CHG-0029](../change/0029-worktree-isolation.md) |
 
+### worktree の所有の表明
+
+調査: `.tmp/keep/wt-research/synthesis.md` の P1（利用者の選択）。他ツールで所有を機械で強制するものはなく、`git worktree lock` を表明に使うのは一部（pid 付きのものがある）。
+
+- **理由欄**は 1 行 `owner=<kind> id=<id> pid=<pid> started=<unix 秒>`。`id` は空白を含まない 1 語。
+- **kind**: `worker`（親が起動した子エージェント）・`job`（PR ビューアのジョブ）・`create`（起票の作成中だけ）・`train`（統合用の枝の組み立て）・`interactive`（人の対話 pi。任意）。
+- **生死**: `pid` が生きている間だけ「有効」（`kill -0`）。死んでいれば「残骸」で、引き継ぐ・解除してよい。`owner=` で始まらない lock（人が付けたもの・理由なし）は「不明の lock」として自動では解除しない。
+- **道具**: `scripts/wt_owner.py`（`claim <wt> --kind <k> --id <id> [--pid N]`・`release <wt> [--id <id>]`・`status [<wt>]`・`reap`。他の有効な owner・不明の lock で終了コード 3）。同じ規則の TS 実装が `apps/pr-viewer/worktree-owner.ts`。`--pid` を省くと、シェルではない最初の祖先（= 呼び出した AI）の pid になる。
+- **4 経路**: (1) 子エージェント = 親が起動の直前に手で `claim`、commit 後に `release`（ハーネスは改造しない）。(2) ジョブ = 起動前検査（`preflight`）が他の有効な owner・不明の lock・cwd が worktree の中のプロセスを `worktree_busy`（HTTP 409）で拒否し、開始で `claim(kind=job, id=<jobId>)`、終了・失敗・キャンセル・回復で `release`。(3) 起票 = `worktree add --lock` で作成中だけ `kind=create`、終われば解除（巻き戻しより先）。(4) 人の対話 pi = 任意。
+- **限界**: lock を忘れた経路は検出できない。cwd 走査は、cwd が別の場所の子エージェントを見つけられない。pid の再利用は見分けない（`kill -0` だけ）。全件検査の前に `status` で worker の lock が無いことを確かめる（検査中の編集による誤失敗の防止）。
+
 ## 5. ガードとの接点（承認・確認・保留）
 
 ガードの機能の正本は [ガード](guard/index.md)。ここには、並列作業で効く点だけを置く（[機能の地図](pi-features.md#柱をまたぐ機能の置き場)）。

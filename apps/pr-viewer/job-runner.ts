@@ -7,6 +7,7 @@ import { mkdirSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { type FinalizeDeps, type Pre, type Snapshot, finalizeJob } from "./job-git.ts";
 import { CONFIRM_MS, type JobPatch, type JobRecord, type Store, appendLog, findByJobId, readJob, releaseLock, signalByJobId, updateJob } from "./job-store.ts";
+import { claim as claimOwner, release as releaseOwner } from "./worktree-owner.ts";
 
 export const OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024;
 export const KILL_GRACE_MS = 15_000;
@@ -182,6 +183,9 @@ export function runJob(o: RunOptions): RunHandle {
 	};
 
 	const exec = async (): Promise<JobRecord> => {
+		// 所有の表明（git worktree lock）。取れないときは pis を起動しない。解除は handle.done の finally
+		const got = await claimOwner(pre.gitDir, pre.worktree, { kind: "job", id: job.id, pid: process.pid }).catch(() => ({ ok: false as const }));
+		if (!got.ok) return conclude({ state: "failed", reasons: ["worktree_busy"] });
 		const argv = buildArgv(o.argvTail.prompt, o.argvTail.model);
 		if (argv === null) return conclude({ state: "failed", reasons: ["bad_argv"] });
 		if (!isAbsolute(o.pisCommand) || o.pisCommand.includes("\0")) return conclude({ state: "failed", reasons: ["spawn_failed"] });
@@ -282,7 +286,8 @@ export function runJob(o: RunOptions): RunHandle {
 	active.add(entry);
 	handle.done = exec()
 		.catch(() => conclude({ state: "failed", reasons: ["exception"] }))
-		.finally(() => {
+		.finally(async () => {
+			await releaseOwner(pre.gitDir, pre.worktree, job.id).catch(() => false);
 			phase = "done";
 			active.delete(entry);
 		});

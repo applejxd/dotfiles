@@ -27,7 +27,7 @@ description: "feature を起票して worker に実装を切り出し、成果�
    依存があるときは、案件の「実施計画」表の「前提」列（計画）と todo の note（状態）に置く。
 2. **起票**: `git flow feature start <名前> --worktree --no-fetch`（名前は小文字・数字・`.`・`_`・`-`）。
    worktree は `.tmp/worktrees/<名前>/`。
-3. **依頼**: `guarded_task`（`agent: "worker"`、`background: true`、`todo` に項目 ID）。依頼文は雛形に従い、次を必ず入れる。
+3. **依頼**: `guarded_task`（`agent: "worker"`、`background: true`、`todo` に項目 ID）。**起動の直前に `python3 scripts/wt_owner.py claim <worktree の絶対パス> --kind worker --id <名前>`、commit 後に `release`**（[parallel-ops.md](references/parallel-ops.md)）。依頼文は雛形に従い、次を必ず入れる。
    - worktree の絶対パスと、**担当ファイル（これだけ編集）** と読み取りだけのファイル。同じ worktree に別の worker がいるなら、そのファイル。
    - 優先順位つきの「作ること」、「変えてはいけないもの」、合格条件（実行するコマンド）。
    - **共通の約束は [references/worker-common.md](references/worker-common.md) を読ませる**（ツールの制約・報告形式・時間制限を毎回書かない）。
