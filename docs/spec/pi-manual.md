@@ -188,7 +188,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `list` / `show [<id>]` | 一覧 / 表示 |
 | `drop [<id>]` | 破棄 |
 
-- 承認して実行する経路（`approve`・`resolve`・`unlock`・`log`・巡回）は撤去済み（[guard/pi-pending.md](guard/pi-pending.md)）。統合は PR ビューアの「統合する」ボタン
+- 承認して実行する経路（`approve`・`resolve`・`unlock`・`log`・巡回）は撤去済み（[guard/pi-pending.md](guard/pi-pending.md)）。統合は、TUI の必須確認、`merge-cli`（利用者が端末で実行）、PR ビューアの「統合する」ボタンのいずれか（[運用モード](operation-modes.md)）
 - pi 本体の組み込みコマンド（`/compact`・`/reload`・`/model` など）はこのリポジトリの管轄外で、ここでは扱いません。
 
 - 詳細: [guard/pi-extensions.md](guard/pi-extensions.md)、[guard/pi-subagents.md](guard/pi-subagents.md)、[guard/pi-pending.md](guard/pi-pending.md)
@@ -263,7 +263,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | plan（計画モード） | `/plan`。状態はセッションに保存され、再開時に復元される | `⏸ plan` | 書き込み・実行のツールを外す |
 
 - `/plan`（計画モード）と、子エージェントの `plan`（計画役）は別物です。
-- 非同期承認の方針（ask 層と bypass をなくす案）は検討中です。結論が出るまで現行仕様のままです。
+- 非同期承認は撤去済みです（履歴は [CHG-0055](../change/closed/0055-async-approval.md)）。
 
 ### 6.2 役割（`[pi.profiles.*]`）
 
