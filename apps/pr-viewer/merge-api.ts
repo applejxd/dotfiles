@@ -12,7 +12,7 @@ import type { Cleanup, Refusal } from "./merge.ts";
 import { recordMerge, reviewHints } from "./review-api.ts";
 import type { PrCtx } from "./review-api.ts";
 
-export type MergeEnv = { rulesFile: string; testDelayMs: number };
+export type MergeEnv = { rulesFile: string; testDelayMs: number; backupDir?: string };
 /** PR の概要から、統合に要る数字（PrCtx に無いもの）。 */
 export type MergePr = { commits: number; additions: number; deletions: number };
 export type PostResult = { status: number; body: unknown };
@@ -307,6 +307,7 @@ export async function mergeExecute(ctx: PrCtx, body: Record<string, unknown>, en
 				target: ctx.target,
 				message: input.message,
 				cleanup: input.cleanup,
+				...(env.backupDir ? { backupDir: env.backupDir } : {}),
 				expect: { sourceOid: input.expect.source, targetOid: input.expect.target },
 			},
 			undefined,

@@ -274,7 +274,7 @@ async function servePost(repos: Repo[], req: IncomingMessage, res: ServerRespons
 	if (typeof body !== "object" || body === null || Array.isArray(body)) {
 		return sendError(res, 400, "bad_request", "リクエストの形が正しくありません。");
 	}
-	const env: MergeEnv = { rulesFile: opts.rulesFile, testDelayMs: opts.mergeDelayMs };
+	const env: MergeEnv = { rulesFile: opts.rulesFile, testDelayMs: opts.mergeDelayMs, backupDir: join(opts.stateDir, "cleanup-backups") };
 	const result: PostResult = await handlePost(repos, pathname, body as Record<string, unknown>, env, jobsOf(opts), {
 		testDelayMs: opts.createDelayMs,
 		testFail: opts.createFail,

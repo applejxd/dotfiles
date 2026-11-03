@@ -65,6 +65,18 @@
 - **4 経路**: (1) 子エージェント = 親が起動の直前に手で `claim`、commit 後に `release`（ハーネスは改造しない）。(2) ジョブ = 起動前検査（`preflight`）が他の有効な owner・不明の lock・cwd が worktree の中のプロセスを `worktree_busy`（HTTP 409）で拒否し、開始で `claim(kind=job, id=<jobId>)`、終了・失敗・キャンセル・回復で `release`。(3) 起票 = `worktree add --lock` で作成中だけ `kind=create`、終われば解除（巻き戻しより先）。(4) 人の対話 pi = 任意。
 - **限界**: lock を忘れた経路は検出できない。cwd 走査は、cwd が別の場所の子エージェントを見つけられない。pid の再利用は見分けない（`kill -0` だけ）。全件検査の前に `status` で worker の lock が無いことを確かめる（検査中の編集による誤失敗の防止）。
 
+### worktree の掃除の規則
+
+取り込み済みの worktree を、PR ビューアの統合の cleanup（[後始末](pr-viewer.md)）と CLI `scripts/wt_clean.py <名前>... [--dry-run] [--repo <パス>]` で同じ規則で消す。
+
+1. **統合済み**（枝が統合先の祖先）だけが対象。未統合・追跡ファイルの変更・未追跡（無視されないもの）は拒否。
+2. 無視ファイル（`__pycache__`・`.pytest_cache`・`node_modules` など）だけなら、それごと削除する。`git worktree remove`（`--force` なし）が無視ファイルごと消す。status が空と確かめた後だけ呼ぶ。`filter`・hooks など外部コードが動きうる設定があれば、status も動かさず残す。
+3. 削除前に無視ファイルを tgz へ退避する（ビューアは `--state-dir` 配下の `cleanup-backups/`、CLI は `<共通 git-dir>/pi-cleanup-backups/`。`<名前>-<時刻>.tgz`）。200 MB 超・数えられない・失敗なら worktree を残して警告。退避は新しい順に 5 件まで。
+4. **有効な owner の lock**（pid が生きている）と人が付けた lock は消さない。残骸の lock は解除して消す。
+5. 枝は `git branch -d`（ビューアは承認した先頭を指定した CAS で削除）。
+
+CLI の終了コード: 0 = 全て処理、3 = 一部を残した・拒否、2 = 使い方の誤り。
+
 ## 5. ガードとの接点（承認・確認・保留）
 
 ガードの機能の正本は [ガード](guard/index.md)。ここには、並列作業で効く点だけを置く（[機能の地図](pi-features.md#柱をまたぐ機能の置き場)）。

@@ -393,7 +393,7 @@
           ? "統合後、枝と作業ツリーは残します。"
           : snap.cleanup === "branch"
             ? "統合後、枝 " + snap.sb + " を削除します（作業ツリーは残します）。"
-            : "統合後、枝 " + snap.sb + " を削除し、作業ツリーも削除します（未コミットがあれば残します）。";
+            : "統合後、枝 " + snap.sb + " を削除し、作業ツリーも削除します（追跡ファイルの変更・未追跡のファイルがあれば残します。無視ファイルは退避してから消します）。";
       var cb = h("input", { type: "checkbox" });
       var go = h("button", { class: "btn primary mergego", type: "button", text: "統合する" });
       var status = h("p", { class: "attn", role: "status" });

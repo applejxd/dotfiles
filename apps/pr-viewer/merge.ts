@@ -5,8 +5,12 @@ import { randomUUID } from "node:crypto";
 import {
 	existsSync,
 	linkSync,
+	lstatSync,
+	mkdirSync,
 	readFileSync,
+	readdirSync,
 	renameSync,
+	statSync,
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -22,7 +26,9 @@ import {
 	readIdentity,
 	resolveCommonDir,
 	runGit,
+	tarFiles,
 } from "./merge-git.ts";
+import { readOwner } from "./worktree-owner.ts";
 
 export type Cleanup = "none" | "branch" | "branch_and_worktree";
 export type MergeInput = {
@@ -31,6 +37,8 @@ export type MergeInput = {
 	target?: string;
 	message: string;
 	cleanup?: Cleanup;
+	/** 掃除で worktree を消す前に、無視ファイルの tgz を置く場所（絶対パス）。無ければ <共通 git-dir>/pi-cleanup-backups/。 */
+	backupDir?: string;
 	expect?: { sourceOid?: string; targetOid?: string };
 };
 export type Policy = { sources: string[]; targets: string[] };
@@ -125,6 +133,7 @@ type Ctx = {
 	target: { ref: string; short: string };
 	message: string;
 	cleanup: Cleanup;
+	backupDir: string;
 	expect: { sourceOid?: string; targetOid?: string };
 };
 
@@ -167,6 +176,7 @@ async function prepare(input: MergeInput, policy: Policy): Promise<Ctx | Refusal
 		target: { ref: `refs/heads/${target}`, short: target },
 		message: input.message,
 		cleanup: cleanup as Cleanup,
+		backupDir: typeof input.backupDir === "string" && input.backupDir.startsWith("/") ? input.backupDir : join(gitDir, "pi-cleanup-backups"),
 		expect,
 	};
 }
@@ -648,6 +658,40 @@ async function advanceTarget(ctx: Ctx, oldOid: string, commit: string, w: Wt | n
 	return r.code === 0 ? "ok" : "failed";
 }
 
+const BACKUP_LIMIT = 200 * 1024 * 1024;
+const BACKUP_KEEP = 5;
+
+/** 無視ファイルを tgz に退避する。無視ファイルが無いか、退避できたら true。上限超え・数えられない・失敗は false。 */
+async function backupIgnored(wt: string, short: string, dir: string, hasIgnored: boolean): Promise<boolean> {
+	if (!hasIgnored) return true;
+	try {
+		const ls = await runGit(["ls-files", "-z", "--others", "--ignored", "--exclude-standard"], { cwd: wt });
+		if (ls.code !== 0) return false;
+		const files = ls.out.split("\0").filter((x) => x !== "");
+		let total = 0;
+		for (const f of files) {
+			const t = lstatSync(join(wt, f));
+			if (t.isFile()) total += t.size;
+			if (total > BACKUP_LIMIT) return false;
+		}
+		mkdirSync(dir, { recursive: true, mode: 0o700 });
+		const d = new Date();
+		const p2 = (n: number) => String(n).padStart(2, "0");
+		const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
+		const name = short.replace(/^feature\//, "").replace(/[^A-Za-z0-9._-]/g, "-");
+		const out = join(dir, `${name}-${stamp}.tgz`);
+		if (!tarFiles(wt, out, files)) return false;
+		const olds = readdirSync(dir)
+			.filter((x) => x.endsWith(".tgz"))
+			.map((x) => ({ x, t: statSync(join(dir, x)).mtimeMs }))
+			.sort((a, b) => b.t - a.t);
+		for (const o of olds.slice(BACKUP_KEEP)) unlinkSync(join(dir, o.x));
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 /** cleanup。失敗は統合の成功を取り消さず、warnings に載せる。 */
 async function runCleanup(ctx: Ctx, sourceOid: string, warnings: string[]): Promise<string[]> {
 	const done: string[] = [];
@@ -660,12 +704,19 @@ async function runCleanup(ctx: Ctx, sourceOid: string, warnings: string[]): Prom
 			const gd = g.out.split("\n")[0];
 			// source 固有の設定 (filter など) が外部のコードを動かすかもしれないので、status を動かす前に検査する
 			const risky = g.code !== 0 || !gd || (await configHasExternalCode(join(gd, "config.worktree")));
-			// 無視ファイル (ignored) も入れて確かめる: git worktree remove は ignored を守らず再帰的に消す
+			// 無視ファイル (ignored) も入れて確かめる。追跡ファイルの変更・未追跡 (無視されないもの) があれば残す。無視ファイルだけなら、退避して消す
 			const st = risky ? null : await statusPaths({ path: sw.path, gitDir: gd }, true);
 			const busy = risky || IN_PROGRESS.some((n) => existsSync(join(gd, n)));
-			if (st === null || st.length > 0 || busy) {
-				warnings.push("統合元の worktree に未コミットの変更・無視ファイル、または確かめられない設定があるため、worktree を残しました。");
+			const owner = await readOwner(ctx.gitDir, sw.path);
+			if (st === null || busy || st.some((e) => e.code !== "!!")) {
+				warnings.push("統合元の worktree に未コミットの変更・未追跡のファイル、または確かめられない設定があるため、worktree を残しました。");
+			} else if (owner === null || owner.state === "unknown" || (owner.state === "owner" && owner.alive)) {
+				warnings.push("統合元の worktree は、別の持ち主が使用中（または確かめられない lock）のため、worktree を残しました。");
+			} else if (!(await backupIgnored(sw.path, ctx.source.short, ctx.backupDir, st.length > 0))) {
+				warnings.push("無視ファイルを退避できなかった（上限 200 MB 超など）ため、worktree を残しました。");
 			} else {
+				if (owner.state === "owner") await runGit(["worktree", "unlock", sw.path], { gitDir: ctx.gitDir, write: true }); // 残骸の lock
+				// 統合元の worktree に --force を使わない: 無視ファイルだけなら git worktree remove が再帰的に消す（status が空と確かめた後だけ呼ぶ）
 				const r = await runGit(["worktree", "remove", sw.path], { gitDir: ctx.gitDir, write: true });
 				if (r.code === 0) done.push("worktree");
 				else warnings.push("統合元の worktree を削除できませんでした。");
