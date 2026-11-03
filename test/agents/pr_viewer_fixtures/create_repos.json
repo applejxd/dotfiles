@@ -1,0 +1,4 @@
+{"repos": [
+  {"repoId": "r1a2b3c4d", "name": "example-app", "target": "develop", "targetOid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "unpushed": 0},
+  {"repoId": "r5e6f7a8b", "name": "example-docs", "target": "main", "targetOid": "1111111111111111111111111111111111111111", "unpushed": 0}
+]}

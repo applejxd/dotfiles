@@ -1,1 +1,1 @@
-{"merge": true, "targets": ["develop"]}
+{"merge": true, "create": false, "targets": ["develop"]}

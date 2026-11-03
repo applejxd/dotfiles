@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import glob
+import hashlib
 import http.server
 import json
 import pathlib
@@ -265,6 +266,7 @@ def test_web_dir_has_files() -> None:
         "send.js",
         "live.js",
         "merge.js",
+        "create.js",
     } <= names
 
 
@@ -476,6 +478,87 @@ def test_fake_server_job_routes() -> None:
     )
 
 
+def test_create_api_and_screen_are_wired() -> None:
+    """起票 (CHG-0062 段 B1): API ・画面の接続と、form を使わないこと。"""
+    api = (WEB / "api.js").read_text(encoding="utf-8")
+    assert '"/api/repos/" + repoId + "/features"' in api and "requestId: c.requestId" in api
+    assert re.search(r"expect\s*:\s*\{\s*target\s*:\s*c\.target", api)
+    assert (
+        "create: b.create === true" in api and "create: false" in api
+    )  # 古いサーバ・通信断は create=false
+    create = (WEB / "create.js").read_text(encoding="utf-8")
+    assert (
+        "PRV.openSheet" in create
+        and "PRV.api.createFeature" in create
+        and "sessionStorage" in create
+    )
+    assert "PRV.api.submit" not in create and "PRV.api.merge" not in create
+    for attr in ("autocapitalize", "autocorrect", "spellcheck"):
+        assert attr in create
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    assert (
+        html.index("/web/merge.js") < html.index("/web/create.js") < html.index("/web/view-list.js")
+    )
+    assert "PRV.createEntry" in (WEB / "view-list.js").read_text(encoding="utf-8")
+    assert "PRV.briefCard" in (WEB / "view-pr.js").read_text(encoding="utf-8")
+
+
+def test_create_fixtures_follow_contract() -> None:
+    repos = load_fixture("create_repos.json")["repos"]
+    assert all(re.fullmatch(r"[0-9a-f]{40}", r["targetOid"]) for r in repos)
+    assert {r["target"] for r in repos} == {"develop", "main"}  # develop 以外は起票先にしない試験用
+    assert load_fixture("create_pr_empty.json")["state"] == "empty"
+    brief = load_fixture("create_review_empty.json")["brief"]
+    assert {
+        "rev",
+        "title",
+        "goal",
+        "constraints",
+        "scope",
+        "acceptance",
+        "digest",
+        "bytes",
+        "at",
+    } <= set(brief)
+    f = load_fixture("create_ok.json")["feature"]
+    assert {
+        "branch",
+        "prKey",
+        "id",
+        "base",
+        "worktree",
+        "brief",
+        "recorded",
+        "replay",
+        "warnings",
+    } <= set(f)
+    assert f["worktree"]["rel"].startswith(".tmp/worktrees/")  # 絶対パスを出さない
+
+
+def test_fake_server_create_routes() -> None:
+    """にせ物サーバ自身の確認: 起票 → state=empty の PR → 同じ requestId の再送は replay → 名前重複は 409。"""
+    st = ReviewState()
+    path = "/api/repos/r1a2b3c4d/features"
+    body = {
+        "name": "x",
+        "requestId": "r1",
+        "expect": {"target": "b" * 40},
+        "brief": {"title": "t", "goal": "g"},
+    }
+    assert post_response(path, body, st)[0] == 403  # 既定では無効
+    st.create_mode = "on"
+    assert api_response("/api/capabilities", st)[1]["create"] is True
+    code, res = post_response(path, body, st)
+    assert code == 201 and res["feature"]["replay"] is False
+    key = res["feature"]["prKey"]
+    assert [p["state"] for p in api_response("/api/prs", st)[1]["prs"]][-1] == "empty"
+    assert api_response(f"/api/prs/r1a2b3c4d/{key}/review", st)[1]["brief"]["title"] == "t"
+    code, res = post_response(path, body, st)
+    assert code == 200 and res["feature"]["replay"] is True
+    assert post_response(path, {**body, "requestId": "r2"}, st)[1]["error"]["code"] == "name_used"
+    assert post_response(path, {**body, "name": "y", "expect": {"target": "c" * 40}}, st)[0] == 409
+
+
 def test_html_has_no_inline_code() -> None:
     assert scan((WEB / "index.html").read_text(encoding="utf-8"), HTML_RULES) == []
 
@@ -579,6 +662,65 @@ class ReviewState:
         self.start_gate: threading.Event | None = None
         self.cancel_log: list[str] = []
         self.cancel_error: tuple[int, str, str] | None = None
+        # --- 起票 (CHG-0062 段 B1) ---
+        self.create_mode = (
+            "off"  # off: create=false / on: create=true（repos に targetOid を付ける）
+        )
+        self.create_resp = "ok"  # ok / error / drop (応答を返さず切断)
+        self.create_error: tuple[int, str, str] = (500, "create_failed", "")
+        self.create_gate: threading.Event | None = None  # セットされるまで POST の応答を保留
+        self.create_log: list[dict] = []  # 届いた起票の本文の全件
+        self.create_base = "b" * 40  # develop の現在の OID（変えると stale_view）
+        self.taken: set[str] = {"taken"}  # 使用済みの名前
+        self.created: dict[str, dict] = {}  # prKey → {pr, review, name, rid}
+
+    def create_feature(self, payload: dict) -> tuple[int, dict]:
+        """契約の POST /api/repos/<id>/features のにせ物。作った PR は state=empty で一覧に出る。"""
+        self.create_log.append(payload)
+        if self.create_gate is not None:
+            self.create_gate.wait(10)
+        if self.create_resp == "drop":
+            raise DropConnection
+        if self.create_resp == "error":
+            status, code, msg = self.create_error
+            return status, err_body(code, msg)
+        if (payload.get("expect") or {}).get("target") != self.create_base:
+            return 409, err_body("stale_view", "develop が更新されています。")
+        name = payload["name"]
+        key = "p" + hashlib.sha1(name.encode()).hexdigest()[:16]
+        old = self.created.get(key)
+        if old is not None and old["rid"] == payload["requestId"]:
+            res = self._create_out(key, name)
+            res["feature"]["replay"] = True
+            return 200, res
+        if old is not None or name in self.taken:
+            return 409, err_body("name_used", "同じ名前の枝があります。")
+        b = payload["brief"]
+        pr = load_fixture("create_pr_empty.json")
+        pr.update(prKey=key, id=f"r1a2b3c4d/{key}", branch=f"feature/{name}")
+        rv = load_fixture("create_review_empty.json")
+        rv["brief"].update(
+            title=b["title"],
+            goal=b["goal"],
+            constraints=b.get("constraints", ""),
+            scope=b.get("scope", []),
+            acceptance=b.get("acceptance", ""),
+        )
+        self.created[key] = {"pr": pr, "review": rv, "name": name, "rid": payload["requestId"]}
+        res = self._create_out(key, name)
+        if (
+            self.create_resp == "replay"
+        ):  # 同じ依頼の再送として返す（応答を取り損なった後の表示の試験）
+            res["feature"]["replay"] = True
+            return 200, res
+        return 201, res
+
+    def _create_out(self, key: str, name: str) -> dict:
+        res = load_fixture("create_ok.json")
+        f = res["feature"]
+        f.update(branch=f"feature/{name}", prKey=key, id=f"r1a2b3c4d/{key}")
+        f["worktree"] = {"name": name, "rel": f".tmp/worktrees/{name}"}
+        return res
 
     def set_job(self, idx: int, **over) -> None:
         self.jobs[idx].update(over)
@@ -701,6 +843,8 @@ class ReviewState:
 
 
 def find_pr(parts: list[str], state: ReviewState | None = None) -> dict | None:
+    if state is not None and parts[3] in state.created:
+        return state.created[parts[3]]["pr"]
     pr = next(
         (p for p in load_fixture("prs.json")["prs"] if p["id"] == f"{parts[2]}/{parts[3]}"), None
     )
@@ -721,9 +865,15 @@ def api_response(path: str, state: ReviewState | None = None) -> tuple[int, dict
     parts = [p for p in u.path.split("/") if p]
     err = (404, {"error": {"code": "not_found", "message": "見つかりません。"}})
     if parts == ["api", "repos"]:
+        if state.create_mode == "on":
+            repos = load_fixture("create_repos.json")
+            repos["repos"][0]["targetOid"] = state.create_base
+            return 200, repos
         return 200, load_fixture("repos.json")
     if parts == ["api", "prs"]:
-        return 200, load_fixture("prs.json")
+        prs = load_fixture("prs.json")
+        prs["prs"] += [c["pr"] for c in state.created.values()]
+        return 200, prs
     if parts == ["api", "capabilities"]:
         if state.caps_mode == "404":
             return err
@@ -731,14 +881,17 @@ def api_response(path: str, state: ReviewState | None = None) -> tuple[int, dict
             **load_fixture("capabilities.json"),
             "merge": state.caps_mode == "on",
             **job_caps(state),
+            "create": state.create_mode == "on",
         }
     if len(parts) in (4, 5, 6) and parts[:2] == ["api", "prs"]:
         pr = find_pr(parts, state)
         if pr is None:
             return err
+        made = state.created.get(parts[3])
         if len(parts) == 4:
             state.pr_gets[parts[3]] = state.pr_gets.get(parts[3], 0) + 1
-            return 200, {"pr": pr, **load_fixture(f"detail_{parts[3]}.json")}
+            detail = load_fixture("create_detail_empty.json" if made else f"detail_{parts[3]}.json")
+            return 200, {"pr": pr, **detail}
         if parts[4] in ("job-input", "jobs"):
             return job_get(parts, u.query, state)
         if len(parts) == 6:
@@ -747,6 +900,8 @@ def api_response(path: str, state: ReviewState | None = None) -> tuple[int, dict
             state.review_gets[parts[3]] = state.review_gets.get(parts[3], 0) + 1
             if state.fail_review:
                 return 500, err_body("internal", "内部エラー（試験）")
+            if made:
+                return 200, made["review"]
             return 200, state.view(parts[3])
         if parts[4] == "diff":
             q = urllib.parse.parse_qs(u.query)
@@ -886,6 +1041,10 @@ def post_response(path: str, payload: dict, state: ReviewState) -> tuple[int, di
         if pr is None:
             return 404, err_body("not_found", "見つかりません。")
         return job_post(parts, payload, state, pr)
+    if len(parts) == 4 and parts[:2] == ["api", "repos"] and parts[3] == "features":
+        if state.create_mode != "on":
+            return 403, err_body("create_disabled", "起票できません。")
+        return state.create_feature(payload)
     if len(parts) == 5 and parts[:2] == ["api", "prs"] and parts[4] in ("merge-plan", "merge"):
         pr = find_pr(parts, state)
         if pr is None:
@@ -2503,6 +2662,41 @@ def job_page(br, kind: str = "pc"):
     sp = kind == "sp"
     size = {"width": 390, "height": 844} if sp else {"width": 1280, "height": 900}
     ctx = br.new_context(viewport=size, has_touch=sp, is_mobile=sp, color_scheme="light")
+    return _page_finish(srv, base, st, ctx)
+
+
+# ----------------------------------------------------------------- 起票 ---
+
+HOSTILE_TITLE = '<img src=x onerror="window.__pwned=1">題'
+HOSTILE_GOAL = "<script>window.__pwned=1</script>\n2 行目"
+UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+L_NAME, L_TITLE, L_GOAL = "名前（枝名・作業ツリー名）", "題名", "目的"
+L_CONS, L_SCOPE, L_ACC = (
+    "守る条件（任意）",
+    "担当範囲（任意。1 行に 1 つの glob）",
+    "完了条件（任意）",
+)
+
+
+def create_page(br, kind: str = "pc"):
+    """起票の試験用のサーバとページ。create=true。pc はクリップボードの読み書きを許可する。"""
+    srv, base = serve()
+    st: ReviewState = srv.state  # type: ignore[attr-defined]
+    st.create_mode = "on"
+    sp = kind == "sp"
+    size = {"width": 390, "height": 844} if sp else {"width": 1280, "height": 900}
+    ctx = br.new_context(
+        viewport=size,
+        has_touch=sp,
+        is_mobile=sp,
+        color_scheme="light",
+        permissions=None if sp else ["clipboard-read", "clipboard-write"],
+    )
+    return _page_finish(srv, base, st, ctx)
+
+
+def _page_finish(srv, base, st, ctx):
+    """job_page / create_page 共通: ページを開き、エラーと外部通信を集める。"""
     page = ctx.new_page()
     errs: list[str] = []
     page.on("pageerror", lambda e, errs=errs: errs.append(f"pageerror: {e}"))
@@ -2578,6 +2772,71 @@ def flow_job_caps(br, check) -> None:
     page.wait_for_selector("text=変更ファイル (1)")
     check(page.locator(".jobcard").count() == 0, "job-caps: 統合済みの PR にカードがある")
     check(errs == [], f"job-caps: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def create_open(page, base: str) -> None:
+    """一覧を開いて「＋ 起票」でシートを開く。"""
+    page.goto(f"{base}/#/")
+    page.reload()
+    page.wait_for_selector(".prlist")
+    page.locator(".createopenbtn").click()
+    page.wait_for_selector(".createsheet .createnext")
+
+
+def create_fill(
+    page, name="my-feat", title="題名です", goal="目的です", cons="", scope="", acc=""
+) -> None:
+    sheet = page.locator(".createsheet")
+    for label, v in (
+        (L_NAME, name),
+        (L_TITLE, title),
+        (L_GOAL, goal),
+        (L_CONS, cons),
+        (L_SCOPE, scope),
+        (L_ACC, acc),
+    ):
+        sheet.get_by_label(label, exact=True).fill(v)
+
+
+def create_confirm(page) -> None:
+    page.locator(".createsheet .createnext").click()
+    page.wait_for_selector(".createsheet .createsubmit")
+
+
+def create_go(page) -> None:
+    page.locator(".createsheet input[type=checkbox]").check()
+    page.locator(".createsheet .createsubmit").click()
+
+
+def flow_create_caps(br, check) -> None:
+    """capabilities.create が真のときだけ「＋ 起票」を出す。古いサーバ（404）・起票先が develop でない repo は出さない。"""
+    srv, base, st, ctx, page, errs = create_page(br)
+    btn = ".createopenbtn"
+    for mode, caps in ("off", "on"), ("on", "404"):
+        st.create_mode, st.caps_mode = mode, caps
+        page.goto(f"{base}/#/")
+        page.reload()
+        page.wait_for_selector(".prlist")
+        check(
+            page.locator(btn).count() == 0, f"create-caps: create={mode} caps={caps} でボタンがある"
+        )
+    st.create_mode, st.caps_mode = "on", "off"
+    page.reload()
+    page.wait_for_selector(".prlist")
+    check(page.locator(btn).count() == 1, "create-caps: create=true でボタンが 1 つでない")
+    check("＋ 起票" in page.locator(btn).inner_text(), "create-caps: ボタンの文言が違う")
+    page.locator(btn).click()
+    page.wait_for_selector(".createsheet .createnext")
+    t = page.locator(".createsheet").inner_text()
+    check("example-app" in t, "create-caps: 起票先の repo が無い")
+    check("example-docs" not in t, "create-caps: develop でない repo が起票先に出ている")
+    check(
+        page.locator(".createsheet select").count() == 0,
+        "create-caps: 起票先が 1 つなのに選択欄がある",
+    )
+    check(errs == [], f"create-caps: エラー: {errs}")
     ctx.close()
     srv.shutdown()
 
@@ -2662,6 +2921,354 @@ def flow_job_steps(br, check) -> None:
     page.wait_for_selector(".jobcard .jobhist li")
     check("コミットしました" in page.locator(".jobhist").inner_text(), "job: 履歴に結果が無い")
     check(errs == [], f"job: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_create_form(br, check) -> None:
+    """手順 1: 入力欄の属性・プレビュー・サーバと同じ検査・文字数・下書き・フォーカス。"""
+    srv, base, st, ctx, page, errs = create_page(br)
+    create_open(page, base)
+    sheet = page.locator(".createsheet")
+    check(sheet.get_attribute("role") == "dialog", "create-form: role=dialog でない")
+    check(sheet.get_attribute("aria-modal") == "true", "create-form: aria-modal でない")
+    check(sheet.locator("form").count() == 0, "create-form: form 要素がある")
+    name = sheet.get_by_label(L_NAME, exact=True)
+    for attr, want in (("autocapitalize", "none"), ("autocorrect", "off"), ("spellcheck", "false")):
+        check(name.get_attribute(attr) == want, f"create-form: 名前欄の {attr} が {want} でない")
+    check(
+        "公開リポジトリに書けない内容（秘密・組織の具体）は書かない。書いた内容は LLM と worktree に届く。"
+        in sheet.inner_text(),
+        "create-form: 固定文が無い",
+    )
+    nxt = page.locator(".createnext")
+    check(nxt.is_disabled(), "create-form: 空のまま「確認へ」が有効")
+    # プレビュー
+    name.fill("my-feat")
+    pv = page.locator(".createpreview").inner_text()
+    check(
+        "feature/my-feat" in pv and ".tmp/worktrees/my-feat/" in pv,
+        f"create-form: プレビューが違う: {pv!r}",
+    )
+    # 必須を埋めると進める
+    create_fill(page)
+    check(nxt.is_enabled(), "create-form: 必須を埋めても「確認へ」が無効")
+
+    def invalid(label, value, want, why) -> None:
+        """label の欄に value を入れると、want を含む誤りが出て進めない。最後に直す。"""
+        box = sheet.get_by_label(label, exact=True)
+        old = box.input_value()
+        box.fill(value)
+        t = sheet.inner_text()
+        check(want in t, f"create-form: {why}: {want!r} が表示されない")
+        check(nxt.is_disabled(), f"create-form: {why}: 「確認へ」が有効")
+        box.fill(old)
+        check(nxt.is_enabled(), f"create-form: {why}: 直しても「確認へ」が無効")
+
+    for bad in (
+        "Bad",
+        "a..b",
+        "x.lock",
+        "x.",
+        "x.git",
+        "con",
+        "com1.txt",
+        "-x",
+        "a" * 65,
+        "a b",
+        "名前",
+    ):
+        invalid(L_NAME, bad, "名前", f"名前 {bad[:12]!r}")
+        check(
+            name.get_attribute("aria-invalid") == "false",
+            f"create-form: {bad[:12]!r} の後も無効表示",
+        )
+    invalid(L_TITLE, "x" * 101, "100 文字まで", "題名 101 字")
+    invalid(L_GOAL, "x" * 1501, "1500 文字まで", "目的 1501 字")
+    invalid(L_CONS, "x" * 1501, "1500 文字まで", "守る条件 1501 字")
+    invalid(L_ACC, "x" * 801, "800 文字まで", "完了条件 801 字")
+    invalid(L_SCOPE, "\n".join(f"a{i}" for i in range(21)), "20 行まで", "担当範囲 21 行")
+    invalid(L_SCOPE, "/etc/passwd", "相対パス", "絶対パス")
+    invalid(L_SCOPE, "a/../b", "相対パス", "親への参照")
+    invalid(L_SCOPE, "C:\\x", "相対パス", "ドライブ文字")
+    invalid(L_SCOPE, "x" * 121, "120 文字まで", "担当範囲 121 字")
+    invalid(L_GOAL, "a\u0007b", "使えない文字", "制御文字")
+    invalid(L_GOAL, "a\u202eb", "使えない文字", "双方向制御文字")
+    for secret, kind in (
+        ("password=hunter2", "password"),
+        ("-----BEGIN RSA PRIVATE KEY-----", "private_key"),
+        ("ghp_" + "a" * 36, "github_token"),
+        ("https://user:pw@example.com/", "url_userinfo"),
+        ("Bearer " + "a" * 20, "bearer"),
+    ):
+        invalid(
+            L_GOAL,
+            f"x {secret} y",
+            f"秘密らしい文字列が含まれています（種類: {kind}",
+            f"秘密 {kind}",
+        )
+    invalid(L_SCOPE, "password=hunter2", "秘密らしい", "担当範囲の秘密")
+    # 合計の上限: 各欄は上限内でも、合計 4000 字を超えれば断る
+    sheet.get_by_label(L_GOAL, exact=True).fill("あ" * 1500)
+    sheet.get_by_label(L_CONS, exact=True).fill("い" * 1500)
+    sheet.get_by_label(L_ACC, exact=True).fill("う" * 800)
+    check(nxt.is_enabled(), "create-form: 合計が上限以下なのに無効")
+    invalid(L_SCOPE, "\n".join("s" * 120 for _ in range(3)), "合計は 4000 文字まで", "合計 4000 字")
+    # 文字数の表示と、サロゲートペア（絵文字）は 1 文字と数える
+    create_fill(page, title="😀" * 100, scope="a\nb")
+    t = sheet.inner_text()
+    check(
+        "100 / 100 文字" in t and "2 / 20 行" in t, f"create-form: 文字数表示が違う: {t[-400:]!r}"
+    )
+    check(nxt.is_enabled(), "create-form: 絵文字 100 個の題名が断られる")
+    # 下書き: 再読み込み後、シートを開くと入力が戻る
+    create_fill(page, name="draft-name", title="下書き題", goal="下書き目的", scope="x/**")
+    page.reload()
+    page.wait_for_selector(".prlist")
+    page.locator(".createopenbtn").click()
+    page.wait_for_selector(".createsheet .createnext")
+    sheet = page.locator(".createsheet")
+    check(
+        sheet.get_by_label(L_NAME, exact=True).input_value() == "draft-name",
+        "create-form: 名前の下書きが戻らない",
+    )
+    check(
+        sheet.get_by_label(L_GOAL, exact=True).input_value() == "下書き目的",
+        "create-form: 目的の下書きが戻らない",
+    )
+    check(
+        sheet.get_by_label(L_SCOPE, exact=True).input_value() == "x/**",
+        "create-form: 担当範囲の下書きが戻らない",
+    )
+    # 背景は操作できない。Tab はシートの外へ出ない。Esc で閉じ、開いたボタンへフォーカスが戻る
+    check(
+        page.evaluate("document.getElementById('app').inert") is True,
+        "create-form: シート中も背景が操作できる",
+    )
+    outside = 0
+    for _ in range(30):
+        page.keyboard.press("Tab")
+        if not page.evaluate("!!document.activeElement.closest('.createsheet')"):
+            outside += 1
+    check(outside == 0, f"create-form: Tab でシートの外へ出た ({outside} 回)")
+    page.keyboard.press("Escape")
+    page.wait_for_selector(".createsheet", state="detached")
+    check(
+        page.evaluate("document.getElementById('app').inert") is False,
+        "create-form: 閉じた後も背景が inert",
+    )
+    check(
+        page.evaluate("document.activeElement.classList.contains('createopenbtn')"),
+        "create-form: 閉じた後にフォーカスがボタンへ戻らない",
+    )
+    page.locator(".createopenbtn").click()
+    page.wait_for_selector(".createsheet .createnext")
+    page.mouse.click(5, 5)
+    page.wait_for_selector(".createsheet", state="detached")
+    check(st.create_log == [], "create-form: 入力だけで POST が飛んだ")
+    check(errs == [], f"create-form: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_create_submit(br, check) -> None:
+    """確認 → 二重送信の防止 → 結果 → PR 画面の依頼文カード → 一覧（起票のみ・題名）。敵対的な文字列も通す。"""
+    srv, base, st, ctx, page, errs = create_page(br)
+    page.on(
+        "console",
+        lambda m, errs=errs: (
+            errs.append(f"console: {m.text}")
+            if m.type == "error"
+            and "404" not in m.text  # favicon など、意図しない資源の 404 は除く
+            else None
+        ),
+    )
+    create_open(page, base)
+    create_fill(
+        page,
+        name="evil-feat",
+        title=HOSTILE_TITLE,
+        goal=HOSTILE_GOAL,
+        cons="守る\n条件",
+        scope=" apps/**\n\n docs/*.md \n",
+        acc="完了",
+    )
+    create_confirm(page)
+    sheet = page.locator(".createsheet")
+    full = sheet.text_content() or ""
+    for s in (
+        "example-app",
+        "feature/evil-feat",
+        ".tmp/worktrees/evil-feat/",
+        "develop@bbbbbbb",
+        HOSTILE_TITLE,
+        HOSTILE_GOAL,
+    ):
+        check(s in full, f"create-submit: 確認に {s!r} が無い")
+    body = page.locator(".createtext").text_content() or ""
+    for s in ("## 守る条件", "守る\n条件", "- apps/**", "- docs/*.md", "## 完了条件"):
+        check(s in body, f"create-submit: 依頼文の全文に {s!r} が無い")
+    check(
+        sheet.locator("img, script, form").count() == 0,
+        "create-submit: 確認に img/script/form ができた",
+    )
+    check(
+        page.evaluate("window.__pwned === undefined"),
+        "create-submit: 確認で敵対的な文字列が実行された",
+    )
+    go = page.locator(".createsubmit")
+    cb = sheet.locator("input[type=checkbox]")
+    check(go.is_disabled(), "create-submit: 確認前に「起票する」が有効")
+    check(
+        "公開できない内容" in sheet.locator(".confirmrow").inner_text(),
+        "create-submit: 確認チェックの文言が無い",
+    )
+    cb.check()
+    check(go.is_enabled(), "create-submit: チェック後も「起票する」が無効")
+    cb.uncheck()
+    check(go.is_disabled(), "create-submit: チェックを外したのに有効")
+    # 「戻る」で入力を保ったまま手順 1 へ。もう一度進むとチェックは外れている
+    page.locator(".createbackbtn").click()
+    page.wait_for_selector(".createsheet .createnext")
+    check(
+        sheet.get_by_label(L_TITLE, exact=True).input_value() == HOSTILE_TITLE,
+        "create-submit: 戻ったとき入力を失った",
+    )
+    create_confirm(page)
+    check(not cb.is_checked(), "create-submit: 戻った後にチェックが残る")
+    # 二重送信: 応答を保留した状態で 2 回押しても POST は 1 回
+    st.create_gate = threading.Event()
+    cb.check()
+    page.evaluate(
+        "() => { const b = document.querySelector('.createsubmit'); b.click(); b.click(); }"
+    )
+    waitfor(lambda: len(st.create_log) >= 1, "起票の POST", check)
+    time.sleep(0.3)
+    check(len(st.create_log) == 1, f"create-submit: 二重送信: {len(st.create_log)} 回")
+    check("起票中" in sheet.inner_text(), "create-submit: 実行中の表示が無い")
+    check(page.locator(".createsubmit").is_disabled(), "create-submit: 実行中に「起票する」が有効")
+    page.keyboard.press("Escape")  # 実行中は閉じられない
+    check(page.locator(".createsheet").count() == 1, "create-submit: 実行中にシートが閉じた")
+    st.create_gate.set()
+    page.wait_for_selector(".createsheet .createopen")
+    check(len(st.create_log) == 1, f"create-submit: POST が {len(st.create_log)} 回")
+    sent = st.create_log[0]
+    check(
+        set(sent) == {"kind", "name", "requestId", "expect", "brief"},
+        f"create-submit: 本文のキー: {sorted(sent)}",
+    )
+    check(
+        sent["kind"] == "feature" and sent["name"] == "evil-feat", "create-submit: kind/name が違う"
+    )
+    check(
+        bool(UUID_RE.fullmatch(str(sent["requestId"]))),
+        f"create-submit: requestId が uuid でない: {sent['requestId']}",
+    )
+    check(sent["expect"] == {"target": "b" * 40}, f"create-submit: expect が違う: {sent['expect']}")
+    want = {
+        "title": HOSTILE_TITLE,
+        "goal": HOSTILE_GOAL,
+        "constraints": "守る\n条件",
+        "scope": ["apps/**", "docs/*.md"],
+        "acceptance": "完了",
+    }
+    check(sent["brief"] == want, f"create-submit: brief が違う: {sent['brief']}")
+    t = sheet.inner_text()
+    for s in (
+        "起票しました",
+        "cd example-app/.tmp/worktrees/evil-feat && pis --new",
+        "develop@bbbbbbb",
+        "PR を開く",
+        "依頼文をコピー",
+    ):
+        check(s in t, f"create-submit: 結果に {s!r} が無い")
+    check("/home" not in t and "C:\\" not in t, f"create-submit: 結果に絶対パス: {t!r}")
+    key = next(iter(st.created))
+    href = page.locator(".createopen").get_attribute("href")
+    check(href == f"#/pr/r1a2b3c4d/{key}", f"create-submit: PR を開くのリンクが違う: {href}")
+    check(
+        page.evaluate("sessionStorage.getItem('prv.create.draft')") is None,
+        "create-submit: 成功後も下書きが残る",
+    )
+    page.locator(".createcopy").click()
+    waitfor(lambda: "コピーしました" in sheet.inner_text(), "コピーの結果", check)
+    clip = page.evaluate("navigator.clipboard.readText()")
+    check(
+        clip.startswith("# " + HOSTILE_TITLE) and HOSTILE_GOAL in clip and "- docs/*.md" in clip,
+        f"create-submit: クリップボードが違う: {clip!r}",
+    )
+    check(sheet.locator("img, script").count() == 0, "create-submit: 結果に img/script ができた")
+    # PR 画面
+    page.locator(".createopen").click()
+    page.wait_for_selector(".briefcard")
+    check(page.locator(".createsheet").count() == 0, "create-submit: PR を開いてもシートが残る")
+    head = page.inner_text(".prhead")
+    check(
+        "起票のみ" in head and "統合済み" not in head,
+        f"create-submit: PR の状態チップが違う: {head!r}",
+    )
+    card = page.locator(".briefcard")
+    check(
+        "rev 1" in card.inner_text() and "01234567" in card.inner_text(),
+        f"create-submit: rev/digest が無い: {card.inner_text()!r}",
+    )
+    check("89abcdef" not in card.inner_text(), "create-submit: digest が 8 桁を超えている")
+    check(
+        card.locator("details").count() == 1
+        and card.locator("details").get_attribute("open") is None,
+        "create-submit: 依頼文が <details>（折りたたみ）でない",
+    )
+    card.locator("summary").click()
+    bt = page.locator(".briefbody").text_content() or ""
+    check(
+        HOSTILE_TITLE in bt and HOSTILE_GOAL in bt and "- apps/**" in bt,
+        f"create-submit: 依頼文が文字として出ていない: {bt!r}",
+    )
+    check(
+        page.locator("#app img, #app script").count() == 0,
+        "create-submit: PR 画面に img/script ができた",
+    )
+    check(
+        page.evaluate("window.__pwned === undefined"),
+        "create-submit: PR 画面で敵対的な文字列が実行された",
+    )
+    check(
+        page.locator(".mergecard, .mergebar").count() == 0,
+        "create-submit: 起票のみの PR に統合ボタンがある",
+    )
+    # 一覧: 題名・「起票のみ」チップ・フィルター。「統合済み」とは別
+    page.locator(".crumb a").click()
+    page.wait_for_selector(".prlist .rtitle")
+    row = page.locator(".prrow", has_text="feature/evil-feat")
+    check(
+        HOSTILE_TITLE in row.inner_text(), f"create-submit: 一覧に題名が無い: {row.inner_text()!r}"
+    )
+    check(
+        row.locator(".chip").count() == 1 and "起票のみ" in row.inner_text(),
+        "create-submit: 一覧の起票のみチップが違う",
+    )
+    check("統合済み" not in row.inner_text(), "create-submit: 起票のみが統合済みと表示される")
+    check(
+        page.locator("#app img, #app script").count() == 0,
+        "create-submit: 一覧に img/script ができた",
+    )
+    flt = page.locator(".seg button", has_text="起票のみ")
+    check("1" in flt.inner_text(), f"create-submit: 起票のみの件数: {flt.inner_text()!r}")
+    flt.click()
+    check(
+        page.locator(".prrow").count() == 1,
+        f"create-submit: 起票のみフィルターの行数: {page.locator('.prrow').count()}",
+    )
+    page.locator(".seg button", has_text="統合済み").click()
+    check(
+        page.locator(".prrow", has_text="evil-feat").count() == 0,
+        "create-submit: 統合済みフィルターに起票のみが出る",
+    )
+    check(
+        page.evaluate("window.__pwned === undefined"),
+        "create-submit: 一覧で敵対的な文字列が実行された",
+    )
+    check(errs == [], f"create-submit: エラー: {errs}")
     ctx.close()
     srv.shutdown()
 
@@ -2813,6 +3420,108 @@ def flow_job_errors(br, check) -> None:
     srv.shutdown()
 
 
+# (コード, HTTP, サーバの文言, 画面に出る文言, 「入力に戻って直す」が出るか, 再送できるか)
+CREATE_ERRORS = [
+    ("create_disabled", 403, "", "起票を許可していません", False, False),
+    ("forbidden_funnel", 403, "", "公開経由", False, False),
+    ("forbidden_origin", 403, "", "接続元", False, False),
+    (
+        "secret_like",
+        400,
+        "秘密らしい文字列が含まれています（種類: jwt）。",
+        "取り除いて",
+        True,
+        False,
+    ),
+    ("bad_brief", 400, "", "依頼文の形が正しくありません", True, False),
+    ("brief_too_large", 400, "", "上限", True, False),
+    ("bad_name", 400, "", "名前が正しくありません", True, False),
+    ("bad_expect", 400, "", "入力に誤り", False, False),
+    ("name_used", 409, "", "既に使われています", True, False),
+    ("busy", 409, HOSTILE_TITLE, "別の起票が実行中", False, True),
+    ("unsupported_repo", 409, "", "起票できません", False, False),
+    ("bad_layout", 409, "", "配置", False, False),
+    ("external_code", 409, "", "外部コード", False, False),
+    ("worktree_registered", 409, "", "別の名前", True, False),
+    ("limit", 409, "", "上限", False, False),
+    ("too_large", 413, "", "大きすぎ", False, True),
+    ("create_partial", 500, "枠が残っています（試験）", "途中で止まりました", False, False),
+    ("create_failed", 500, "", "結果を確認できません", False, True),
+    ("internal", 500, "", "結果を確認できません", False, True),
+    ("shutting_down", 503, "", "停止中", False, True),
+]
+
+
+def flow_create_errors(br, check) -> None:
+    """エラーコードごとの日本語の文言と、戻り先・再送の可否。サーバの文言は文字として出る。"""
+    srv, base, st, ctx, page, errs = create_page(br)
+    page.on("console", lambda m, errs=errs: errs.append(m.text) if m.type == "error" else None)
+    for code, status, msg, want, to_form, _resend in CREATE_ERRORS:
+        st.create_resp, st.create_error = "error", (status, code, msg)
+        create_open(page, base)
+        create_fill(page, name="err-feat")
+        create_confirm(page)
+        create_go(page)
+        page.wait_for_selector(".createsheet .formerr:not(:empty)")
+        sheet = page.locator(".createsheet")
+        t = page.locator(".createsheet .formerr").inner_text()
+        check(want in t, f"create-errors[{code}]: {want!r} が無い: {t!r}")
+        check(
+            not re.search(r"[A-Za-z_]{6,}_[a-z]+", t.replace(HOSTILE_TITLE, "")),
+            f"create-errors[{code}]: コードをそのまま出している: {t!r}",
+        )
+        if msg and code != "create_partial":
+            check(msg in t, f"create-errors[{code}]: サーバの文言が無い")
+        back = sheet.locator("button", has_text="入力に戻って直す")
+        check(
+            (back.count() == 1) == to_form,
+            f"create-errors[{code}]: 「入力に戻って直す」の有無が違う",
+        )
+        cb = sheet.locator("input[type=checkbox]")
+        check(not cb.is_checked(), f"create-errors[{code}]: 失敗後にチェックが残る")
+        check(
+            page.locator(".createsubmit").is_disabled(),
+            f"create-errors[{code}]: 失敗後に「起票する」が有効",
+        )
+        if code == "create_partial":
+            check(cb.is_disabled(), "create-errors[create_partial]: 残骸があるのに再送できる")
+            check(
+                sheet.locator("button", has_text="再読み込み").count() == 1,
+                "create-errors[create_partial]: 再読み込みが無い",
+            )
+        else:
+            cb.check()
+            check(
+                page.locator(".createsubmit").is_enabled(),
+                f"create-errors[{code}]: チェックしても「起票する」が有効にならない",
+            )
+        check(
+            page.locator("#app img, .createsheet img").count() == 0,
+            f"create-errors[{code}]: img ができた",
+        )
+        check(
+            page.evaluate("window.__pwned === undefined"),
+            f"create-errors[{code}]: 敵対的な文字列が実行された",
+        )
+        if code == "name_used":
+            back.click()
+            page.wait_for_selector(".createsheet .createnext")
+            check(
+                page.evaluate("document.activeElement.classList.contains('createname')"),
+                "create-errors[name_used]: 名前欄にフォーカスが無い",
+            )
+            check(
+                page.locator(".createname").input_value() == "err-feat",
+                "create-errors[name_used]: 入力を失った",
+            )
+    check(
+        errs == [] or all("status of" in e or "Failed to load resource" in e for e in errs),
+        f"create-errors: エラー: {errs}",
+    )
+    ctx.close()
+    srv.shutdown()
+
+
 # (終端の状態, 画面に出る文言)
 JOB_RESULTS: list[tuple[str, tuple[str, ...]]] = [
     ("job_succeeded.json", ("コミットしました", "完了")),
@@ -2868,6 +3577,94 @@ def flow_job_results(br, check) -> None:
             f"job: {job['state']} が再読み込み後も進行表示に残る",
         )
     check(errs == [], f"job-results: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_create_resend(br, check) -> None:
+    """結果が分からない失敗の再送は同じ requestId。内容を変えると別の requestId。replay の表示。stale_view。"""
+    srv, base, st, ctx, page, errs = create_page(br)
+    page.on("console", lambda m, errs=errs: errs.append(m.text) if m.type == "error" else None)
+    create_open(page, base)
+    create_fill(page, name="resend-feat")
+    create_confirm(page)
+    st.create_resp = "drop"
+    create_go(page)
+    page.wait_for_selector(".createsheet .formerr:not(:empty)")
+    check(
+        "結果を確認できません" in page.locator(".createsheet .formerr").inner_text(),
+        "create-resend: 通信断の文言が無い",
+    )
+    check(st.created == {}, "create-resend: 通信断で作られたことになっている")
+    st.create_resp = "replay"
+    create_go(page)
+    page.wait_for_selector(".createsheet .createopen")
+    ids = [x["requestId"] for x in st.create_log]
+    check(
+        len(ids) == 2 and ids[0] == ids[1],
+        f"create-resend: 同じ依頼の再送で requestId が変わった: {ids}",
+    )
+    check(
+        "起票済みでした" in page.locator(".createsheet").inner_text(),
+        "create-resend: replay の表示が無い",
+    )
+    # 内容を変えると別の依頼
+    create_open(page, base)
+    create_fill(page, name="resend-two")
+    create_confirm(page)
+    st.create_resp = "drop"
+    create_go(page)
+    page.wait_for_selector(".createsheet .formerr:not(:empty)")
+    page.locator(".createbackbtn").click()
+    page.wait_for_selector(".createsheet .createnext")
+    page.get_by_label(L_TITLE, exact=True).fill("変えた題名")
+    create_confirm(page)
+    st.create_resp = "ok"
+    create_go(page)
+    page.wait_for_selector(".createsheet .createopen")
+    ids = [x["requestId"] for x in st.create_log[2:]]
+    check(
+        len(ids) == 2 and ids[0] != ids[1], f"create-resend: 内容を変えたのに同じ requestId: {ids}"
+    )
+    # develop が進んだ (stale_view): 最新の基点を読み直し、入力を保ったまま確認をやり直す
+    create_open(page, base)
+    create_fill(page, name="stale-feat", goal="古い基点")
+    create_confirm(page)
+    st.create_base = "c" * 40
+    create_go(page)
+    page.wait_for_selector(".createsheet .formerr:not(:empty)")
+    check(
+        "develop が更新されました" in page.locator(".createsheet .formerr").inner_text(),
+        "create-resend: stale_view の文言が無い",
+    )
+    page.locator(".createsheet button", has_text="最新の基点を読み込む").click()
+    page.wait_for_selector(".createsheet .createnext")
+    t = page.locator(".createsheet").inner_text()
+    check("develop@ccccccc" in t, f"create-resend: 最新の基点が表示されない: {t[:200]!r}")
+    check(
+        page.locator(".createname").input_value() == "stale-feat",
+        "create-resend: 基点を読み直して入力を失った",
+    )
+    create_confirm(page)
+    check(
+        "develop@ccccccc" in page.locator(".createsheet").inner_text(),
+        "create-resend: 確認の基点が古い",
+    )
+    create_go(page)
+    page.wait_for_selector(".createsheet .createopen")
+    last = st.create_log[-1]
+    check(
+        last["expect"] == {"target": "c" * 40},
+        f"create-resend: 再送の expect が古い: {last['expect']}",
+    )
+    check(
+        st.create_log[-2]["requestId"] != last["requestId"],
+        "create-resend: 基点が変わったのに同じ requestId",
+    )
+    check(
+        errs == [] or all("Failed to load resource" in e for e in errs),
+        f"create-resend: エラー: {errs}",
+    )
     ctx.close()
     srv.shutdown()
 
@@ -3233,6 +4030,184 @@ def flow_job_real(br, check) -> None:
                     os.kill(pid, signal.SIGKILL)
 
 
+def flow_create_sp(br, check) -> None:
+    """スマホ幅 (390px): 入力・確認・結果の各手順で横にはみ出さない。タップ領域は 44px 以上。"""
+    srv, base, _st, ctx, page, errs = create_page(br, "sp")
+
+    def narrow(step: str) -> None:
+        w = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
+        check(w[0] <= w[1], f"create-sp[{step}]: 横にはみ出している {w}")
+        s = page.evaluate(
+            "(() => { const e = document.querySelector('.createsheet'); return [e.scrollWidth, e.clientWidth]; })()"
+        )
+        check(s[0] <= s[1], f"create-sp[{step}]: シートが横にはみ出している {s}")
+        small = page.evaluate(
+            "[...document.querySelectorAll('.createsheet button, .createsheet input.cbox, .createsheet summary, "
+            ".createsheet label.confirmrow, .createopen')]"
+            ".filter(e => e.getBoundingClientRect().width > 0 && e.getBoundingClientRect().height < 43.5)"
+            ".map(e => (e.textContent || e.className).trim() + ':' + e.getBoundingClientRect().height)"
+        )
+        check(small == [], f"create-sp[{step}]: タップ領域が 44px 未満: {small}")
+
+    page.goto(f"{base}/#/")
+    page.wait_for_selector(".prlist")
+    check(
+        page.locator(".createopenbtn").bounding_box()["height"] >= 43.5,
+        "create-sp: 「＋ 起票」の高さが 44px 未満",
+    )
+    w = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
+    check(w[0] <= w[1], f"create-sp: 一覧が横にはみ出している {w}")
+    page.locator(".createopenbtn").click()
+    page.wait_for_selector(".createsheet .createnext")
+    long_name = "n" * 64
+    create_fill(
+        page,
+        name=long_name,
+        title="t" * 100,
+        goal="g" * 300,
+        cons="c" * 300,
+        scope="\n".join(["s" * 120, "apps/pr-viewer/web/" + "d" * 90]),
+        acc="a" * 300,
+    )
+    narrow("form")
+    create_confirm(page)
+    narrow("confirm")
+    create_go(page)
+    page.wait_for_selector(".createsheet .createopen")
+    narrow("result")
+    check(
+        "cd example-app/.tmp/worktrees/" + long_name in page.locator(".createcmd").inner_text(),
+        "create-sp: 結果のコマンドが無い",
+    )
+    page.locator(".createopen").click()
+    page.wait_for_selector(".briefcard")
+    page.locator(".briefcard summary").click()
+    w = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
+    check(w[0] <= w[1], f"create-sp: PR 画面が横にはみ出している {w}")
+    check(
+        page.locator(".briefcard summary").bounding_box()["height"] >= 43.5,
+        "create-sp: 依頼文の summary が 44px 未満",
+    )
+    check(errs == [], f"create-sp: エラー: {errs}")
+    ctx.close()
+    srv.shutdown()
+
+
+def flow_create_real(br, check) -> None:
+    """実サーバ（--allow-create）+ 実画面: 起票 → 枝・作業ツリー・記録 → PR 画面（起票のみ・依頼文）→ 同名の再起票は断る。
+
+    契約から作った偽サーバとの形のずれ（capabilities.create・repos[].targetOid・state=empty・brief）は、ここで初めて見える。
+    """
+    import tempfile
+
+    from test_pr_viewer_server import Server, _commit, _git, _init
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        repo = _init(root / "example-app")
+        for key, value in (
+            ("user.name", "Example Dev"),
+            ("user.email", "you@example.com"),
+            ("gc.auto", "0"),
+            ("maintenance.auto", "false"),
+        ):
+            _git(repo, "config", key, value)
+        _commit(repo, {"README.md": "hello\n", ".gitignore": ".tmp/\n"}, "init")
+        server = Server(
+            [
+                "--repo",
+                str(repo),
+                "--port",
+                "0",
+                "--allow-create",
+                "--rules-file",
+                str(root / "rules.json"),
+            ]
+        )
+        ctx = None
+        try:
+            base = f"http://127.0.0.1:{server.port}"
+            ctx = br.new_context(viewport={"width": 1280, "height": 900}, color_scheme="light")
+            page = ctx.new_page()
+            errs: list[str] = []
+            page.on("pageerror", lambda e: errs.append(f"pageerror: {e}"))
+            page.on(
+                "response",
+                lambda r: (
+                    errs.append(f"HTTP {r.status}: {r.url}")
+                    if r.status >= 400 and not r.url.endswith("favicon.ico")
+                    else None
+                ),
+            )
+            page.goto(f"{base}/")
+            page.wait_for_selector(".createopenbtn")
+            develop = _git(repo, "rev-parse", "develop").strip()
+            page.locator(".createopenbtn").click()
+            page.wait_for_selector(".createsheet .createnext")
+            create_fill(
+                page, name="real-feat", title="実サーバで起票", goal="目的の文", scope="docs/**"
+            )
+            create_confirm(page)
+            check(
+                f"develop@{develop[:7]}" in page.locator(".createsheet").inner_text(),
+                "create-real: 基点の表示が実際の develop と違う",
+            )
+            create_go(page)
+            page.wait_for_selector(".createsheet .createopen, .createsheet .formerr:not(:empty)")
+            t = page.locator(".createsheet").inner_text()
+            check("起票しました" in t, f"create-real: 成功の表示でない: {t!r}")
+            check(str(root) not in t, "create-real: 結果に絶対パスが出ている")
+            check(
+                _git(repo, "rev-parse", "feature/real-feat").strip() == develop,
+                "create-real: 枝が develop から作られていない",
+            )
+            check(
+                (repo / ".tmp" / "worktrees" / "real-feat").is_dir(),
+                "create-real: 作業ツリーが無い",
+            )
+            refs = _git(repo, "for-each-ref", "refs/pi/review", "--format=%(refname)")
+            check(len(refs.split()) == 1, f"create-real: レビュー記録の ref: {refs!r}")
+            page.locator(".createopen").click()
+            page.wait_for_selector(".briefcard")
+            check("起票のみ" in page.inner_text(".prhead"), "create-real: 起票のみのチップが無い")
+            page.locator(".briefcard summary").click()
+            bt = page.locator(".briefbody").text_content() or ""
+            check(
+                "実サーバで起票" in bt and "- docs/**" in bt, f"create-real: 依頼文が無い: {bt!r}"
+            )
+            page.locator(".crumb a").click()
+            page.wait_for_selector(".prlist .rtitle")
+            row = page.locator(".prrow", has_text="feature/real-feat")
+            check(
+                "起票のみ" in row.inner_text() and "実サーバで起票" in row.inner_text(),
+                "create-real: 一覧の行が違う",
+            )
+            check("統合済み" not in row.inner_text(), "create-real: 起票のみが統合済みと表示される")
+            # 同じ名前の再起票は断られる（name_used）。枝・作業ツリーは増えない
+            check(errs == [], f"create-real: 400 以上の応答かエラー（再起票の前）: {errs}")
+            page.locator(".createopenbtn").click()
+            page.wait_for_selector(".createsheet .createnext")
+            create_fill(page, name="real-feat", title="二回目", goal="二回目")
+            create_confirm(page)
+            create_go(page)
+            page.wait_for_selector(".createsheet .formerr:not(:empty)")
+            check(
+                "既に使われています" in page.locator(".createsheet .formerr").inner_text(),
+                "create-real: 同名の再起票が断られない",
+            )
+            heads = _git(repo, "for-each-ref", "refs/heads/feature", "--format=%(refname)").split()
+            check(heads == ["refs/heads/feature/real-feat"], f"create-real: 枝が増えた: {heads}")
+            # 400 以上の応答は失敗。ただし、この再起票の 409 1 件だけは意図したもの
+            check(
+                len(errs) == 1 and errs[0].startswith("HTTP 409:") and "/features" in errs[0],
+                f"create-real: 想定外の 400 以上の応答・エラー: {errs}",
+            )
+        finally:
+            if ctx is not None:
+                ctx.close()
+            server.stop()
+
+
 def browser_main(shots: pathlib.Path | None) -> int:
     """子プロセスで動く本体。失敗は JSON で標準出力へ。"""
     from playwright.sync_api import sync_playwright
@@ -3439,6 +4414,13 @@ def browser_main(shots: pathlib.Path | None) -> int:
             flow_merge_stale,
             flow_merge_sp,
             flow_merge_real,
+            flow_create_caps,
+            flow_create_form,
+            flow_create_submit,
+            flow_create_errors,
+            flow_create_resend,
+            flow_create_sp,
+            flow_create_real,
         ):
             flow(br, check)
         for flow in (

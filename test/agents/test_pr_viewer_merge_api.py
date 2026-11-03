@@ -365,7 +365,11 @@ def test_merge_routes_are_disabled_without_allow_merge(make):
     assert status == 403 and resp["error"]["code"] == "merge_disabled"
     assert snapshot(w) == before
     status, caps = w.server.get("/api/capabilities")
-    assert status == 200 and (caps["merge"], caps["targets"]) == (False, ["develop"])
+    assert status == 200 and (caps["merge"], caps["create"], caps["targets"]) == (
+        False,
+        False,
+        ["develop"],
+    )
     assert caps["jobs"] is False  # ジョブは別の旗（--allow-jobs）。ここでは無効のまま
 
 
@@ -391,7 +395,11 @@ def test_allow_merge_takes_no_value_and_unknown_flags_are_refused(tmp_path):
 
 def test_capabilities_has_no_paths_and_reports_merge(w):
     status, caps = w.server.get("/api/capabilities")
-    assert status == 200 and (caps["merge"], caps["targets"]) == (True, ["develop"])
+    assert status == 200 and (caps["merge"], caps["create"], caps["targets"]) == (
+        True,
+        False,
+        ["develop"],
+    )
     assert caps["jobs"] is False  # ジョブは --allow-jobs を付けない限り無効
 
 

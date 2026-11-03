@@ -4,6 +4,23 @@
 import { createHash, randomUUID } from "node:crypto";
 
 export const SCHEMA = 1;
+/** この版の読み手が読める meta.schema の上限。これより大きい ref は「版が新しい」読み取り専用として扱う */
+export const SCHEMA_MAX = 2;
+/** brief を書ける最小の schema。起票で作る ref はこの版にする */
+export const SCHEMA_BRIEF = 2;
+
+/** brief の字数 (コードポイント数) の上限。合計は題名・目的・守る条件・完了条件・担当範囲の和 */
+export const BRIEF_LIMITS = {
+	title: 100,
+	goal: 1500,
+	constraints: 1500,
+	acceptance: 800,
+	scopeItems: 20,
+	scopeItem: 120,
+	total: 4000,
+	name: 64,
+	via: 32,
+} as const;
 
 export const LIMITS = {
 	/** 1 イベントの本文 (d の JSON) の最大バイト数 */
@@ -20,6 +37,8 @@ export const LIMITS = {
 	metaBytes: 4096,
 	/** events.jsonl の末尾に、終端の種別 (receipt・merge_*) 専用に残すバイト数。通常のイベントはここを使えない */
 	reserveBytes: 32768,
+	/** brief 1 件の d の最大バイト数 (日本語は 1 字 3 バイトなので、字数の上限とは別に検査する) */
+	briefBytes: 15000,
 } as const;
 
 /** 余裕の範囲でも追記できる種別 */
@@ -61,6 +80,21 @@ export type MergeResultEvent = Base & {
 	t: "merge_result";
 	d: { requestId: string; outcome: Outcome; reason?: string; doneOid?: string };
 };
+export type BriefEvent = Base & {
+	t: "brief";
+	d: {
+		requestId: string;
+		rev: number;
+		kind: "feature";
+		name: string;
+		title: string;
+		goal: string;
+		constraints: string;
+		scope: string[];
+		acceptance: string;
+		via: string;
+	};
+};
 export type ReviewEvent =
 	| CommentEvent
 	| SummaryEvent
@@ -68,12 +102,17 @@ export type ReviewEvent =
 	| ReceiptEvent
 	| MergeRequestEvent
 	| MergeStartedEvent
-	| MergeResultEvent;
+	| MergeResultEvent
+	| BriefEvent;
 
 const OID_RE = /^[0-9a-f]{40}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
-const KNOWN = ["comment", "summary", "submit", "receipt", "merge_request", "merge_started", "merge_result"];
+const KNOWN = ["comment", "summary", "submit", "receipt", "merge_request", "merge_started", "merge_result", "brief"];
+const BRIEF_KEYS = ["requestId", "rev", "kind", "name", "title", "goal", "constraints", "scope", "acceptance", "via"];
+const BRIEF_NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+/** コードポイント数 (絵文字などのサロゲートペアを 1 字と数える) */
+const cpLen = (s: string): number => [...s].length;
 
 /** ブランチ名から PR の鍵を作る。API 契約と同じ: "p" + sha256("v1\0refs/heads/<branch>") の先頭 16 桁 */
 export function prKeyOf(branch: string): string {
@@ -108,9 +147,31 @@ function validAnchor(a: unknown): boolean {
 	return isStr(a.path) && (a.side === "old" || a.side === "new") && isOid(a.blob) && isInt(a.line) && isInt(a.lineEnd);
 }
 
+/** brief の d の検査。形の問題は "bad_brief"、バイト数の超過は "body_too_large" (入力の本文を含めない) */
+function validBrief(d: Record<string, unknown>): string | null {
+	if (Object.keys(d).length !== BRIEF_KEYS.length || !BRIEF_KEYS.every((k) => Object.hasOwn(d, k))) return "bad_brief";
+	const L = BRIEF_LIMITS;
+	const { name, title, goal, constraints, acceptance, via, scope } = d;
+	if (!isUuid(d.requestId) || !isInt(d.rev) || d.rev < 1 || d.kind !== "feature") return "bad_brief";
+	if (!isStr(name) || !BRIEF_NAME_RE.test(name) || cpLen(name) > L.name) return "bad_brief";
+	if (!isStr(title) || title === "" || cpLen(title) > L.title) return "bad_brief";
+	if (!isStr(goal) || goal === "" || cpLen(goal) > L.goal) return "bad_brief";
+	if (!isStr(constraints) || cpLen(constraints) > L.constraints) return "bad_brief";
+	if (!isStr(acceptance) || cpLen(acceptance) > L.acceptance) return "bad_brief";
+	if (!isStr(via) || via === "" || cpLen(via) > L.via) return "bad_brief";
+	if (!isStrArr(scope) || scope.length > L.scopeItems) return "bad_brief";
+	if (!scope.every((s) => s !== "" && cpLen(s) <= L.scopeItem)) return "bad_brief";
+	const total = cpLen(title) + cpLen(goal) + cpLen(constraints) + cpLen(acceptance) + scope.reduce((n, s) => n + cpLen(s), 0);
+	if (total > L.total) return "bad_brief";
+	if (Buffer.byteLength(JSON.stringify(d), "utf8") > LIMITS.briefBytes) return "body_too_large";
+	return null;
+}
+
 /** d の形の検査。問題があれば短い理由 (入力の本文を含めない)、無ければ null */
 function validD(t: string, d: Record<string, unknown>): string | null {
 	switch (t) {
+		case "brief":
+			return validBrief(d);
 		case "comment":
 			return isStr(d.thread) && d.thread !== "" && validAnchor(d.anchor) && isStr(d.body) ? null : "bad_comment";
 		case "summary": {
@@ -161,6 +222,7 @@ export function parseEvents(text: string): ParseResult {
 	const ids = new Set<string>();
 	const batches = new Set<string>();
 	const requests = new Set<string>();
+	const briefRevs = new Set<number>();
 	for (let i = 0; i < lines.length; i++) {
 		const at = `line ${i + 1}`;
 		let o: unknown;
@@ -192,6 +254,10 @@ export function parseEvents(text: string): ParseResult {
 		} else if (o.t === "merge_request") {
 			if (requests.has(d.requestId as string)) return { ok: false, reason: `${at}: duplicate_request` };
 			requests.add(d.requestId as string);
+		} else if (o.t === "brief") {
+			// 版 (rev) は ref の中で一意。最大のものが現在の依頼文になる
+			if (briefRevs.has(d.rev as number)) return { ok: false, reason: `${at}: duplicate_brief_rev` };
+			briefRevs.add(d.rev as number);
 		} else if (o.t === "merge_started" || o.t === "merge_result") {
 			if (!requests.has(d.requestId as string)) return { ok: false, reason: `${at}: merge_without_request` };
 		}
@@ -205,6 +271,7 @@ export type AppendCheck = { ok: true } | { ok: false; reason: "body_too_large" |
 /** 追記の前の上限の検査。1900 件以上と、末尾の 32 KB は、終端の種別以外を断る (終端記録用の余裕) */
 export function checkAppend(currentBytes: number, currentCount: number, event: ReviewEvent): AppendCheck {
 	if (bodyBytesOf(event) > LIMITS.bodyBytes) return { ok: false, reason: "body_too_large" };
+	if (event.t === "brief" && bodyBytesOf(event) > LIMITS.briefBytes) return { ok: false, reason: "body_too_large" };
 	if (currentCount >= LIMITS.events) return { ok: false, reason: "too_many_events" };
 	const terminal = TERMINAL_TYPES.includes(event.t);
 	if (currentCount >= LIMITS.reservedFrom && !terminal) return { ok: false, reason: "reserved" };
@@ -240,6 +307,8 @@ export type State = {
 	stale: boolean;
 	staleParts: { source: boolean; target: boolean; base: boolean };
 	summary: SummaryEvent | null;
+	/** rev が最大の brief (無ければ null) */
+	brief: BriefEvent | null;
 	merge: {
 		status: MergeStatus;
 		request: MergeRequestEvent | null;
@@ -264,6 +333,7 @@ export function foldState(meta: Meta, events: ReviewEvent[], current: Vs): State
 	let review: ReviewState = "none";
 	let reviewVs: Vs | null = null;
 	let summary: SummaryEvent | null = null;
+	let brief: BriefEvent | null = null;
 	let request: MergeRequestEvent | null = null;
 	let started: string | null = null;
 	let result: MergeResultEvent | null = null;
@@ -273,6 +343,9 @@ export function foldState(meta: Meta, events: ReviewEvent[], current: Vs): State
 		switch (e.t) {
 			case "comment":
 				comments.push({ e, idx });
+				break;
+			case "brief":
+				if (brief === null || e.d.rev >= brief.d.rev) brief = e;
 				break;
 			case "summary":
 				summary = e;
@@ -358,6 +431,7 @@ export function foldState(meta: Meta, events: ReviewEvent[], current: Vs): State
 		stale: parts.source || parts.target || parts.base,
 		staleParts: parts,
 		summary,
+		brief,
 		merge: { status, request, pendingId: started, result, succeeded },
 		count: events.length,
 	};

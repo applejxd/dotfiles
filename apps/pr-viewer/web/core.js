@@ -68,6 +68,8 @@
   /* 主状態のチップ。既定値（open）は何も出さない */
   PRV.stateChip = function (pr) {
     if (pr.state === "merged") return PRV.h("span", { class: "chip c-merged", text: "✓ 統合済み" });
+    /* 0 コミットで依頼文だけがある PR（統合済みとは別） */
+    if (pr.state === "empty") return PRV.h("span", { class: "chip c-info", text: "◌ 起票のみ" });
     return null;
   };
 
