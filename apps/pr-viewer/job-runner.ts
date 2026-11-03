@@ -6,7 +6,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { type FinalizeDeps, type Pre, type Snapshot, finalizeJob } from "./job-git.ts";
-import { type JobPatch, type JobRecord, type Store, appendLog, readJob, releaseLock, signalByJobId, updateJob } from "./job-store.ts";
+import { CONFIRM_MS, type JobPatch, type JobRecord, type Store, appendLog, findByJobId, readJob, releaseLock, signalByJobId, updateJob } from "./job-store.ts";
 
 export const OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024;
 export const KILL_GRACE_MS = 15_000;
@@ -46,6 +46,8 @@ export type RunDeps = {
 	graceMs?: number;
 	/** 終了後、出力の pipe が閉じるのを待つ時間（既定 1 秒）。 */
 	drainMs?: number;
+	/** SIGKILL 後に消滅をポーリングする上限（既定 10 秒。試験で短縮する）。 */
+	confirmMs?: number;
 	/** /proc の場所（試験用）。 */
 	procRoot?: string;
 	/** finalizeJob の差し込み口（試験用）。 */
@@ -91,9 +93,12 @@ function killGroup(pid: number, sig: NodeJS.Signals): void {
 	}
 }
 
-/** PR_VIEWER_JOB_ID を持つプロセスを SIGKILL する（setsid で抜けた子孫の掃除）。kill した数を返す。探索と送信は回復側と共通（job-store.ts）。 */
-export function killByJobId(jobId: string, procRoot = "/proc"): number {
-	return signalByJobId(jobId, "SIGKILL", procRoot);
+/**
+ * 印つき・cwd が worktree の中のプロセスを SIGKILL する（setsid で抜けた子孫・印のない envoy の掃除）。kill した数を返す。
+ * 探索と送信は回復側と共通（job-store.ts）。
+ */
+export function killByJobId(jobId: string, procRoot = "/proc", worktree: string | null = null): number {
+	return signalByJobId(jobId, "SIGKILL", procRoot, worktree);
 }
 
 /**
@@ -140,6 +145,8 @@ export function runJob(o: RunOptions): RunHandle {
 	const drainMs = deps.drainMs ?? 1000;
 	const limit = o.outputLimitBytes ?? OUTPUT_LIMIT_BYTES;
 	const procRoot = deps.procRoot ?? "/proc";
+	const confirmMs = deps.confirmMs ?? CONFIRM_MS;
+	const wt = pre.worktree;
 	let phase: Phase = "running";
 	let stopReason: StopReason | null = null;
 	let graceTimer: NodeJS.Timeout | null = null;
@@ -153,7 +160,7 @@ export function runJob(o: RunOptions): RunHandle {
 			killGroup(pgid, "SIGTERM");
 			graceTimer = setTimeout(() => {
 				if (pgid !== null) killGroup(pgid, "SIGKILL");
-				killByJobId(job.id, procRoot);
+				killByJobId(job.id, procRoot, wt);
 			}, graceMs);
 		}
 		return true;
@@ -235,8 +242,13 @@ export function runJob(o: RunOptions): RunHandle {
 		// 正常終了でも、残った子孫がワークツリーを書き換えうる。検査の前に、グループと印つきの残りを必ず掃除する
 		await Promise.race([closed, sleep(drainMs)]);
 		killGroup(pgid, "SIGKILL");
-		killByJobId(job.id, procRoot);
+		killByJobId(job.id, procRoot, wt);
 		await Promise.race([closed, sleep(2000)]);
+		// 消えるまでポーリングする（印のない中継プロセスが畳まれるまでの数秒。残れば再度 SIGKILL）
+		for (let end = Date.now() + confirmMs; Date.now() < end && findByJobId(job.id, procRoot, wt).length > 0; ) {
+			killByJobId(job.id, procRoot, wt);
+			await sleep(50);
+		}
 		if (graceTimer) clearTimeout(graceTimer);
 		child.stdout?.destroy();
 		child.stderr?.destroy();

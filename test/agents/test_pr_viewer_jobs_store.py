@@ -46,7 +46,7 @@ const out = (x) => console.log(JSON.stringify(x));
     return script
 
 
-def js(tmp: Path, body: str, arg: dict | None = None) -> dict:
+def js(tmp: Path, body: str, arg: dict | None = None, cwd: Path | None = None) -> dict:
     """job-store.ts と job-prompt.ts を import する node スクリプトを実行し、最後の行の JSON を返す。"""
     proc = subprocess.run(
         [_node(), str(_script(tmp, body)), json.dumps(arg or {})],
@@ -54,6 +54,7 @@ def js(tmp: Path, body: str, arg: dict | None = None) -> dict:
         text=True,
         encoding="utf-8",
         check=False,
+        cwd=cwd,
     )
     assert proc.returncode == 0, proc.stderr
     return json.loads(proc.stdout.strip().splitlines()[-1])
@@ -854,6 +855,56 @@ out({ r, state: S.readJob(s, arg.id).state });""",
     assert res["r"]["survivors"] == [jid] and res["r"]["interrupted"] == []
     assert res["state"] == "running"  # 状態を変えない
     assert len(list((state / REPO / "locks").iterdir())) == 1  # ロックも残す
+
+
+def test_recover_stops_unmarked_descendants_in_the_worktree_only(st):
+    tmp, state = st
+    wt, near, outside = tmp / "wt", tmp / "wt2", tmp / "outside"
+    for d in (wt / "sub", near, outside):
+        d.mkdir(parents=True)
+    link = tmp / "wt-link"
+    link.symlink_to(wt)  # realpath で照合する（経路の文字列ではない）
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    jid = _new_running_job(tmp, state, dead.pid)
+    env = {k: v for k, v in os.environ.items() if k != "PR_VIEWER_JOB_ID"}
+
+    def sleeper(cwd: Path) -> subprocess.Popen:  # 印なし・別セッション（envoy と同じ形）
+        p = subprocess.Popen(
+            ["sleep", "60"], cwd=cwd, env=env, start_new_session=True, stdin=subprocess.DEVNULL
+        )
+        threading.Thread(target=p.wait, daemon=True).start()
+        return p
+
+    inside, deeper, lookalike, away = (
+        sleeper(wt),
+        sleeper(wt / "sub"),
+        sleeper(near),
+        sleeper(outside),
+    )
+    time.sleep(0.3)
+    try:
+        # アプリ自身（node）の cwd も worktree にする: 自分を撃たない
+        res = js(
+            tmp,
+            """const s = S.openStore(arg.state, arg.repo);
+S.updateJob(s, arg.id, { internal: { pre: { worktree: arg.wt } } });
+const r = await S.recover(s, { graceMs: 300, confirmMs: 3000 });
+out({ r, state: S.readJob(s, arg.id).state });""",
+            {"state": str(state), "repo": REPO, "id": jid, "wt": str(link)},
+            cwd=wt,
+        )
+        time.sleep(0.2)
+        assert not _alive(inside.pid) and not _alive(deeper.pid), (
+            "cwd が worktree の中の印なしプロセスは止まる"
+        )
+        assert _alive(lookalike.pid), "wt2（接頭辞が似た別の場所）は止めない"
+        assert _alive(away.pid), "外のプロセスは止めない"
+    finally:
+        for p in (inside, deeper, lookalike, away):
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(p.pid, signal.SIGKILL)
+    assert res["r"]["survivors"] == [] and res["state"] == "interrupted"
 
 
 # ---- 行境界のログ ----

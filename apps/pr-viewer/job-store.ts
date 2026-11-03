@@ -524,8 +524,35 @@ function signalGroup(pid: number, sig: NodeJS.Signals): void {
 	}
 }
 
-/** 環境に PR_VIEWER_JOB_ID=<id> を持つプロセスの pid（このプロセスを除く）。pid の再利用に影響されない。 */
-export function findByJobId(jobId: string, procRoot = "/proc"): number[] {
+/** このプロセスとその祖先の pid（実 /proc から辿る）。cwd 走査で、アプリ自身や起動元を撃たないために除く。 */
+function selfAndAncestors(): Set<number> {
+	const s = new Set<number>([process.pid]);
+	for (let pid = process.pid; pid > 1; ) {
+		try {
+			const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+			pid = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
+		} catch {
+			break;
+		}
+		if (!Number.isInteger(pid) || pid <= 0 || s.has(pid)) break;
+		s.add(pid);
+	}
+	return s;
+}
+
+/** 記録の internal.pre.worktree（pis の作業場所）。無ければ null。 */
+export function worktreeOf(rec: { internal?: unknown } | null | undefined): string | null {
+	const wt = (rec?.internal as { pre?: { worktree?: unknown } } | null | undefined)?.pre?.worktree;
+	return typeof wt === "string" && wt.startsWith("/") ? wt : null;
+}
+
+/**
+ * 停止の対象の pid（このプロセスとその祖先を除く）。次の 2 系統の和。pid の再利用に影響されない。
+ * (a) 環境に PR_VIEWER_JOB_ID=<id> を持つ。
+ * (b) worktree が与えられたとき、cwd が worktree の中（realpath。末尾 `/` つきの前方一致で wt2 を取り違えない）。
+ *     印を持たない子孫（通信の中継 envoy など）を拾う。
+ */
+export function findByJobId(jobId: string, procRoot = "/proc", worktree: string | null = null): number[] {
 	const mark = `PR_VIEWER_JOB_ID=${jobId}`;
 	const out: number[] = [];
 	let names: string[];
@@ -534,21 +561,41 @@ export function findByJobId(jobId: string, procRoot = "/proc"): number[] {
 	} catch {
 		return out;
 	}
-	for (const name of names) {
-		if (!/^\d+$/.test(name) || Number(name) === process.pid) continue;
+	let wt: string | null = null;
+	if (worktree !== null) {
 		try {
-			if (readFileSync(`${procRoot}/${name}/environ`).toString("latin1").split("\0").includes(mark)) out.push(Number(name));
+			const r = realpathSync(worktree);
+			wt = r.endsWith("/") ? r : `${r}/`;
+		} catch {
+			wt = null; // 作業場所が既に無い: cwd 走査はしない
+		}
+	}
+	const skip = selfAndAncestors();
+	for (const name of names) {
+		if (!/^\d+$/.test(name) || skip.has(Number(name))) continue;
+		try {
+			if (readFileSync(`${procRoot}/${name}/environ`).toString("latin1").split("\0").includes(mark)) {
+				out.push(Number(name));
+				continue;
+			}
 		} catch {
 			// 読めない・既に終了
+		}
+		if (wt === null) continue;
+		try {
+			const cwd = realpathSync(`${procRoot}/${name}/cwd`);
+			if (`${cwd}/`.startsWith(wt)) out.push(Number(name));
+		} catch {
+			// cwd が読めない・既に終了
 		}
 	}
 	return out;
 }
 
-/** 印つきのプロセスへシグナルを送る。送った数を返す（runner と回復で共通）。 */
-export function signalByJobId(jobId: string, sig: NodeJS.Signals, procRoot = "/proc"): number {
+/** 停止の対象へシグナルを送る。送った数を返す（runner と回復で共通）。 */
+export function signalByJobId(jobId: string, sig: NodeJS.Signals, procRoot = "/proc", worktree: string | null = null): number {
 	let n = 0;
-	for (const pid of findByJobId(jobId, procRoot)) {
+	for (const pid of findByJobId(jobId, procRoot, worktree)) {
 		try {
 			process.kill(pid, sig);
 			n++;
@@ -568,10 +615,13 @@ export type RecoverResult = {
 	pruned: string[];
 };
 
+/** SIGKILL 後に消滅を確認する待ち（ポーリング）。 */
+export const CONFIRM_MS = 10_000;
+
 /**
  * 起動時の回復。非終端のジョブは `interrupted`（reasons: shutdown）にする。自動では再開しない。
  * 停止対象は 2 系統の和: (a) pid と開始時刻が一致して生きている親のプロセスグループ、
- * (b) 親の生死に関係なく、環境に PR_VIEWER_JOB_ID=<id> を持つプロセス（/proc 走査。setsid で抜けた子孫を含む）。
+ * (b) 親の生死に関係なく、環境に PR_VIEWER_JOB_ID=<id> を持つか、cwd が当該ジョブの worktree の中のプロセス（/proc 走査。setsid で抜けた子孫・印のない envoy を含む）。
  * SIGTERM → graceMs 待つ → SIGKILL → 消滅を確認する。確認できないジョブは survivors に入れ、
  * 状態もロックも変えない（呼び出し側がそのリポジトリのジョブ受付を止める）。
  * そのうえで古いロックを掃除し、保持の整理をする。
@@ -584,18 +634,18 @@ export async function recover(store: Store, opts: { graceMs?: number; now?: numb
 	const live = listJobs(store).filter((j) => !isTerminal(j.state));
 	const parentOk = (j: JobRecord): boolean => j.pid !== null && sameProcess(j.pid, j.pidStart);
 	const groupTargets = new Set(live.filter(parentOk).map((j) => j.id));
-	const remains = (j: JobRecord): boolean => (groupTargets.has(j.id) && parentOk(j)) || findByJobId(j.id, root).length > 0;
+	const remains = (j: JobRecord): boolean => (groupTargets.has(j.id) && parentOk(j)) || findByJobId(j.id, root, worktreeOf(j)).length > 0;
 	const touched = live.filter(remains);
 	for (const j of touched) {
 		if (groupTargets.has(j.id)) signalGroup(j.pid as number, "SIGTERM");
-		signalByJobId(j.id, "SIGTERM", root);
+		signalByJobId(j.id, "SIGTERM", root, worktreeOf(j));
 	}
 	for (let end = Date.now() + graceMs; Date.now() < end && touched.some(remains); ) await sleep(50);
 	for (const j of touched.filter(remains)) {
 		if (groupTargets.has(j.id) && parentOk(j)) signalGroup(j.pid as number, "SIGKILL"); // 直前に生死と開始時刻を確かめた親だけ
-		signalByJobId(j.id, "SIGKILL", root);
+		signalByJobId(j.id, "SIGKILL", root, worktreeOf(j));
 	}
-	for (let end = Date.now() + (opts.confirmMs ?? 3000); Date.now() < end && touched.some(remains); ) await sleep(50);
+	for (let end = Date.now() + (opts.confirmMs ?? CONFIRM_MS); Date.now() < end && touched.some(remains); ) await sleep(50);
 	const survivors = new Set(touched.filter(remains).map((j) => j.id));
 	for (const j of touched) {
 		if (survivors.has(j.id)) res.survivors.push(j.id);

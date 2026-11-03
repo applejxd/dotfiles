@@ -466,6 +466,38 @@ def test_leftover_descendants_are_killed_after_normal_exit(w):
         other.wait()
 
 
+def _unmarked_sleeper(cwd: Path) -> subprocess.Popen:
+    """印なし・別セッションで、cwd を指定した sleep（無関係なプロセスの代用）。"""
+    env = {k: v for k, v in os.environ.items() if k != "PR_VIEWER_JOB_ID"}
+    return subprocess.Popen(["sleep", "300"], cwd=cwd, start_new_session=True, env=env)
+
+
+def test_unmarked_descendant_in_the_worktree_is_killed_but_lookalikes_are_not(w):
+    near = w.tmp / "wt2"  # 接頭辞が似た別の作業場所（wt と取り違えない）
+    near.mkdir()
+    outside = w.tmp / "elsewhere"
+    outside.mkdir()
+    decoys = [_unmarked_sleeper(near), _unmarked_sleeper(outside)]
+    try:
+        w.mode("leftover_unmarked")
+        res = w.run()
+        assert res["job"]["state"] == "succeeded"
+        assert wait_dead(w.record()["children"])  # 印がなくても cwd が worktree の子孫は止まる
+        assert res["elapsed"] < 8000  # 消えればポーリングを打ち切る（上限 10 秒を使わない）
+        assert all(alive(p.pid) for p in decoys)  # wt2 と外は止めない
+    finally:
+        for p in decoys:
+            p.kill()
+            p.wait()
+
+
+def test_confirm_wait_is_bounded_and_does_not_block_when_nothing_remains(w):
+    # 即時に消えるものしか無いとき、消滅確認の待ち（既定 10 秒）を使わない
+    w.mode("noop")
+    res = w.run()
+    assert res["job"]["state"] == "no_change" and res["elapsed"] < 8000
+
+
 # ---- 検査の結果（commit しない経路） ----
 
 

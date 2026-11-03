@@ -126,6 +126,13 @@ elif mode == "binary":
     write("img.dat", b"\x00\x01\x02binary\x00")
 elif mode == "symlink":
     os.symlink("/etc/passwd", "link")
+elif mode == "leftover_unmarked":
+    # 印を落とし、別セッションで cwd=worktree の子孫を残す（envoy と同じ形）
+    env = {k: v for k, v in os.environ.items() if k != "PR_VIEWER_JOB_ID"}
+    kid = subprocess.Popen(["sleep", "300"], start_new_session=True, env=env)
+    REC["children"] = [kid.pid]
+    save()
+    edit()
 elif mode == "leftover":
     # 正常終了するが、setsid で抜けた子孫を残す（終了後の掃除の確認）
     spawn_children()
