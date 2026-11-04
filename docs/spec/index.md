@@ -93,6 +93,7 @@
 | [コマンド・ファイルの判定](guard/agent-command-policy.md) | 照合規則、allow / ask / deny の使い分けと例外、bash 検査ルールの足し方、CLI 差 |
 | [作業の観測ログ（journal）](work/journal.md) | 作業台帳の観測用イベントの置き場・事象・指標（`work_stats.py`）・限界。観測だけで振る舞いは変えない |
 | [作業台帳の実行時（runtime）](work/runtime.md) | 台帳を開いて持ち続ける接着層。モード・start の順序（lease→load）・submit（reduce 先行）・lease.acquired の自動追記・限界 |
+| [作業台帳の pi への登録（register）](work/register.md) | ツール `work`・`/work`・パネルの登録。`PI_WORK_TOOL=1` のときだけ有効・べき等・読み取り専用の扱い・戻し方 |
 | [継続の調停（arbiter）](work/arbiter.md) | `agent_before_settle` の継続判断の純関数。優先順位表・提案者 4 つ・守る条件（entries ≤1・wake は effects のみ・失敗は閉じる）・限界 |
 | [`/goal` と台帳](work/goal.md) | `/goal` のコマンド → 利用者専用イベントの変換・`GoalState` の導出・arbiter の Facts・守る条件・限界（純関数。配線は別の feature） |
 

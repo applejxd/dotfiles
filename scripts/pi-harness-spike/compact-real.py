@@ -67,7 +67,24 @@ try:
     ):
         shutil.copy2(SRC / name, harness / name)
     (harness / "work").mkdir()
-    for name in ("journal.ts", "types.ts"):
+    for name in (
+        "journal.ts",
+        "types.ts",
+        "register.ts",
+        "runtime.ts",
+        "tool.ts",
+        "panel.ts",
+        "notices.ts",
+        "text-width.ts",
+        "store.ts",
+        "root.ts",
+        "reduce.ts",
+        "events.ts",
+        "invariants.ts",
+        "project.ts",
+        "globs.ts",
+        "transitions.ts",
+    ):
         shutil.copy2(SRC / "work" / name, harness / "work" / name)
     rules = gen.build_pi_harness({}, load_common())
     for agent in rules["agents"].values():

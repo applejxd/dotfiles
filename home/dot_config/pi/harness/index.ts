@@ -48,6 +48,7 @@ import { buildBoard, renderBoard } from "./board.ts";
 import { collectBoardInput } from "./board-collect.ts";
 import { registerAutoCheckpoint } from "./autocheckpoint.ts";
 import { registerJournal } from "./work/journal.ts";
+import { registerWork } from "./work/register.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でフルガードが抜けたとき、組み込みが同じ名前で戻って
@@ -842,6 +843,8 @@ export default async function (pi: ExtensionAPI) {
 	if (!CHILD) registerQuietNotices(pi);
 	// 作業の観測ログ (追記のみ。挙動は変えない。PI_JOURNAL=0 で無効)。todo・autocheckpoint の後に登録して settle の entries を見る
 	registerJournal(pi, { child: CHILD });
+	// 作業台帳のツール work・/work・パネル (既定は無効。PI_WORK_TOOL=1 のときだけ。PI_WORK=0 で一括無効)
+	registerWork(pi, { child: CHILD });
 
 	const agents: Record<string, any> = rules.agents ?? {};
 	if (!CHILD && supportsChildTasks() && roleTools.includes("task") && Object.keys(agents).length > 0) registerTask(pi, agents);
