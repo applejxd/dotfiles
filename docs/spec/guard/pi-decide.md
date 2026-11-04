@@ -152,17 +152,20 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
   `DENY_EXCEPT_WORDS`）が「`git worktree remove`」に固定し、未知の語・配列でない値は `source: error` の deny。`[bash] deny` と `[bash.deny_guide]` は変えない
   （Claude Code・Copilot・OpenCode の生成物は同じ。pi だけの変更）
 - **deny を外す条件**（`judge/bash.ts` の `worktreeRemoveExcepted`、共通の deny を引く前）: `[pi.confirm] local_git` が真で、役割が例外に載っていること。
-  パターンに当たる正規化セグメントの**すべて**で force の有無を確定できること。shlex の失敗、`$` `` ` `` `{` `*` `?` `[` を含む引数、
-  `~` `!` で始まる引数があれば deny のまま（fail closed。`--` 以降は見ない）。`local_git` を切れば例外も無効
+  パターンに当たるセグメント（元の分割と正規化の両方）の**すべてが「単純な文字だけ」**であること（`[A-Za-z0-9_./@%+=:,-]` と空白だけ。
+  引用符・バックスラッシュ・リダイレクト `<>`・パイプ・`;` `&`・括弧・`$` `` ` `` `{` `*` `?` `[` `~` `!`・改行を含むと deny のまま。fail closed）。
+  **代償**: 空白を含むパスなど引用が要る正当なコマンドも deny のまま（この repo の worktree 名は空白を含まない）。
+  引用・リダイレクトが無ければ argv の曖昧さが無いので、例外側と確認側は**同じ解析関数**（`gitdestructive.ts` の `worktreeRemoveArgs`。
+  `simple` と `force` を返す。`--` 以降は数えない）を使い、解釈差で force を見逃さない。`local_git` を切れば例外も無効
 - **force の検出**（`judge/gitdestructive.ts`、[confirm](#confirm) の「元に戻せないローカルの git 操作」の一つ）: `-f`・`-ff`・束ねた形、
   `--force` と git の省略形（`--for` など）。位置は不問（`path -f` も）。`--` 以降は数えない。前置の環境変数・`env`・`command`・`-C`・`--git-dir`・
   `;` `&&` `bash -c` `$()` `xargs` は既存の正規化が読む。引用内の語も拾う（誤検出で確認に倒れる側を許す）
 - **緩めたあとの判定**: force なしは `source: default`（親は ask、bypass で allow、`pis` の境界の中で allow。`[pi.shell] allow` には載せない）。
   force 付きは `mustConfirm` の ask（`worker` は子で UI が無いので実質拒否）
-- **Python 版と golden**: `decide.py` は `deny_except` を知らず deny のまま。`judge_golden.mjs` の `sameAsExpected` が、
-  implementer / worker で正解が `` `git worktree remove` `` の `check_policy_deny` のとき、TS が deny 以外なら一致とみなす
+- **Python 版と golden**: `decide.py` は `deny_except` を知らず deny のまま。`judge_golden.mjs` は一括許容をせず、`golden_worktree.mjs` の
+  標本ごとの期待値で比べる（force 付きの標本は `ask` かつ `mustConfirm` が必須。欠落・通常の ask・allow は不一致。負例は `test_pi_worktree_remove.py`）
 - **残る限界**:
-  - force なしでも、`.gitignore` 対象のファイル（例: `.tmp/`・`.venv`）と detached のコミットは失う。退避（tgz）があるのは `wt_clean.py` だけ
+  - force なしでも、`.gitignore` 対象のファイル（例: `.tmp/`・`.venv`）と detached のコミットは失う。退避（tgz）は `wt_clean.py` と PR ビューアの cleanup（`apps/pr-viewer/merge.ts` の退避）にあるが、bash からの直接実行にはない
   - force なしの `git worktree remove` が守るのは、変更済み・未追跡のファイルがあるときと、`git worktree lock`（所有の表明）したときだけ（後者は `-f` 2 回が要る）。
     claim を忘れた worktree は lock で守られない
   - bypass を継ぐ worker は、claim のない clean な他の worktree を plain で消せる

@@ -26,6 +26,10 @@ const LONG_WITH_VALUE: Record<string, Set<string>> = {
 // `git worktree remove` の --force とその省略形
 const WORKTREE_FORCE_LONG = /^--f(o(r(c(e)?)?)?)?$/;
 
+// 単純な文字だけのセグメント (引用・エスケープ・リダイレクト・展開・空白以外の区切りを含まない)。
+// これだけが `git worktree remove` の deny 例外 (bash.ts) の対象。引用などがあると、シェルと解析器で argv の解釈が分かれうる。
+const SIMPLE_SEGMENT_RE = /^[A-Za-z0-9_./@%+=:, \t-]+$/;
+
 interface Flags {
 	short: Set<string>;
 	long: Set<string>;
@@ -97,13 +101,16 @@ function destructiveReason(sub: string, args: string[]): string | null {
 		case "worktree": {
 			// force の有無は位置不問 (`path -f` も)。長い形は git の省略形 (`--for` など) も広めに見る。`--` 以降は数えない
 			if (args[0] !== "remove") return null;
-			const forced = f.short.has("f") || [...f.long].some((n) => WORKTREE_FORCE_LONG.test(n));
-			if (forced) return "git worktree remove --force (変更済み・ロック済みの worktree を強制的に消す)";
+			if (worktreeForced(f)) return "git worktree remove --force (変更済み・ロック済みの worktree を強制的に消す)";
 			return null;
 		}
 		default:
 			return null;
 	}
+}
+
+function worktreeForced(f: Flags): boolean {
+	return f.short.has("f") || [...f.long].some((n) => WORKTREE_FORCE_LONG.test(n));
 }
 
 function tokensOf(segment: string): string[] {
@@ -117,8 +124,8 @@ function tokensOf(segment: string): string[] {
 	return tokens.flatMap((t) => t.split(/[ \t\n]+/)).filter((t) => t).map((t) => t.replace(/^[({;!]+/, ""));
 }
 
-function inspect(segment: string): string | null {
-	const tokens = tokensOf(segment);
+/** トークン列から git のサブコマンドとその引数を取り出す (グローバルオプションは読み飛ばす)。 */
+function gitSubcommand(tokens: string[]): { sub: string; args: string[] } | null {
 	// env・command・time などの後ろにある場合も拾うため、先頭に限らず最初の git を探す
 	const git = tokens.findIndex((t) => basename(t) === "git");
 	if (git < 0) return null;
@@ -129,7 +136,23 @@ function inspect(segment: string): string | null {
 		if (name === "--") break;
 	}
 	if (i >= tokens.length) return null;
-	return destructiveReason(tokens[i], tokens.slice(i + 1));
+	return { sub: tokens[i], args: tokens.slice(i + 1) };
+}
+
+function inspect(segment: string): string | null {
+	const s = gitSubcommand(tokensOf(segment));
+	return s ? destructiveReason(s.sub, s.args) : null;
+}
+
+/**
+ * `git worktree remove` のセグメントの解析。当たらなければ null。
+ * `simple` は単純な文字だけか。`force` は確認側 (destructiveReason) と同じ解析で求める。
+ * deny 例外 (bash.ts) と必須確認 (inspect) がこの 1 つの解析を共有するので、argv の解釈差が出ない。
+ */
+export function worktreeRemoveArgs(segment: string): { simple: boolean; force: boolean } | null {
+	const s = gitSubcommand(tokensOf(segment));
+	if (!s || s.sub !== "worktree" || s.args[0] !== "remove") return null;
+	return { simple: SIMPLE_SEGMENT_RE.test(segment), force: worktreeForced(collectFlags("worktree", s.args)) };
 }
 
 /** 元に戻せないローカルの git 操作に当たれば、その説明を返す (当たらなければ null)。 */

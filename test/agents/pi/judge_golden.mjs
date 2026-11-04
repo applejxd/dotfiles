@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { worktreeRemoveMatches } from "./golden_worktree.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
@@ -65,7 +66,7 @@ const category = (request) => {
 //  - 本文を確認できない形の deny: Python はそのコマンドを ask / allow として扱う
 //  - 既定が deny の役割 (explorer・reader・committer) で、[bash] ask を deny にしたもの: Python は ask (bypass なら allow)。役割・bash・元の理由・source・check を比べる
 //  - 同じ役割で、元に戻せないローカルの git 操作 ([pi.confirm] local_git) を deny にしたもの: 役割と bash だけを比べる
-//  - implementer / worker で、`git worktree remove` の deny を deny_except で外したもの: Python は deny のまま。TS は deny 以外なら通す
+//  - implementer / worker で、`git worktree remove` の deny を deny_except で外したもの: Python は deny のまま。標本ごとに明示 (ask + mustConfirm)
 const BLIND_PREFIX = "本文を確認できない形";
 const DENY_DEFAULT_ROLES = new Set(["explorer", "reader", "committer"]);
 const DENY_DEFAULT_SUFFIX = "\nこの役割は既定が deny なので、承認で通さない (bypass でも通さない)";
@@ -74,16 +75,9 @@ const askLike = (r) => r?.decision === "ask" || (r?.decision === "allow" && r?.b
 const denyDefaultRoleBash = (request) => request?.tool === "bash" && DENY_DEFAULT_ROLES.has(request?.role);
 const sameAsExpected = (got, expected, request) => {
 	if (stable(got) === stable(expected)) return true;
-	// implementer / worker は deny_except で `git worktree remove` の deny を外す (force なし: ask か allow、force 付き: mustConfirm)。Python は deny のまま
-	if (
-		request?.tool === "bash" &&
-		(request?.role === "implementer" || request?.role === "worker") &&
-		expected?.check === "check_policy_deny" &&
-		typeof expected?.reason === "string" &&
-		expected.reason.startsWith("`git worktree remove`")
-	) {
-		return got?.decision !== "deny";
-	}
+	// implementer / worker は deny_except で `git worktree remove` の deny を外す。標本ごとの明示的な期待値 (golden_worktree.mjs)。Python は deny のまま
+	const wt = worktreeRemoveMatches(got, expected, request);
+	if (wt !== null) return wt;
 	if (got?.decision === "ask" && got.mustConfirm === true) {
 		if (askLike(expected)) return true;
 		return denyDefaultRoleBash(request) && expected?.decision === "deny" && expected?.source === "default";

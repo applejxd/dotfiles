@@ -16,7 +16,7 @@ import { findMatch, normalize, patternMatches, splitCommandSegments } from "./no
 import type { Common } from "./policy.ts";
 import { basename, pyLen, pyRegex, shlexSplit, ShlexError } from "./pystr.ts";
 import { clip200, expandCdTargets, splitHeredocBody } from "./shared.ts";
-import { localGitDestructiveReason } from "./gitdestructive.ts";
+import { localGitDestructiveReason, worktreeRemoveArgs } from "./gitdestructive.ts";
 
 // 検査の上限。check_bash.py と同じ
 const MAX_COMMAND_LEN = 10000;
@@ -381,12 +381,12 @@ function unwrapScp(tokens: string[], targets: readonly string[]): string | null 
 
 // 役割の deny_except で、[bash] deny から外せる語 (decide.ts の DENY_EXCEPT_WORDS と同じ)
 const WORKTREE_REMOVE = "git worktree remove";
-// 引数が展開・グロブ・チルダなどで、force の有無を確定できない形 (安全側で deny のままにする)
-const UNDECIDABLE_ARG_RE = /[$`{*?[]|^[~!]/u;
+// 引数が展開・グロブ・引用・リダイレクトなどで、force の有無を確定できない形は、単純な文字だけではないので deny のままにする
+// (判定は gitdestructive.ts の worktreeRemoveArgs を確認側と共有する)
 
 /**
  * `deny_except` に `git worktree remove` を持つ役割で、`[pi.confirm] local_git` が真のときだけ、この deny を外す。
- * パターンに当たる正規化セグメントのすべてで force の有無を確定できることが条件 (解析失敗・展開を含む引数は false)。
+ * パターンに当たるセグメントのすべてが「単純な文字だけ」であることが条件 (引用・リダイレクト・空白以外の区切り・展開を含むと false)。
  * force 付きは deny を外したあと、`localGitConfirm` (gitdestructive.ts) が mustConfirm の ask にする。
  * see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外
  */
@@ -394,20 +394,9 @@ function worktreeRemoveExcepted(cmd: string, pi: Obj, profile: Obj): boolean {
 	if (pi.confirm?.local_git !== true) return false;
 	const except = profile.deny_except;
 	if (!Array.isArray(except) || !except.includes(WORKTREE_REMOVE)) return false;
-	const headLen = WORKTREE_REMOVE.split(" ").length;
-	for (const segment of normalize(cmd)) {
+	for (const segment of [...splitCommandSegments(cmd), ...normalize(cmd)]) {
 		if (!patternMatches(segment, WORKTREE_REMOVE)) continue;
-		let tokens: string[];
-		try {
-			tokens = shlexSplit(segment);
-		} catch (e) {
-			if (e instanceof ShlexError) return false;
-			throw e;
-		}
-		for (const t of tokens.slice(headLen)) {
-			if (t === "--") break;
-			if (UNDECIDABLE_ARG_RE.test(t)) return false;
-		}
+		if (!worktreeRemoveArgs(segment)?.simple) return false;
 	}
 	return true;
 }
