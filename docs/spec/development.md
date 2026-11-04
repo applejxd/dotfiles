@@ -79,8 +79,13 @@ CI の範囲は [テストと検証の仕組み](testing.md#いつ回すか)。
 python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
 ```
 
-- `--changed`（既定。`mise run verify`）: git の変更（ステージ済み・未ステージ・未追跡）を見て、
-  上の表に当たる試験・検査だけを実行する。この表を自動化したもの
+- `--changed`（既定。`mise run verify`）: 変更したパスを、**統合先（git-flow の startpoint → develop → main → master の順に存在するもの）との merge-base** から数える（commit 済みの差分 ∪ 作業ツリーの差分 ∪ 未追跡）。
+  commit 後でも、対象が選ばれる。上の表に当たる試験・検査だけを実行する。この表を自動化したもの
+  - 先頭に `基準: <統合先> との merge-base <OID>、対象 N 件` を常に 1 行表示する
+  - 基準を決められないときは、HEAD 基準に落とさず「基準を決められません」と表示して**終了コード 2**
+  - 対象 0 件は、HEAD が基準と同一なら「変更なし (基準と同一)」（exit 0）。commit があるのに 0 件なら警告つき
+  - 選んだ試験に PR ビューアの試験（`test_pr_viewer_*`）があり、`node`（22.18 以上）が使えないときは、skip で通ったように見えるため、**「未検証（前提不足: node）」として失敗**にする。
+    `VERIFY_ALLOW_SKIP=1` で警告に下げられる。意図的に skip される試験（ブラウザ smoke など）は対象にしない
 - `--all`（`mise run verify:all`）: 全件
 - `--dry-run`: 実行せずコマンドを列挙する
 - `--list`: 変更パスごとの対応を表示する

@@ -20,6 +20,7 @@ import os
 import posixpath
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -773,10 +774,13 @@ def discover_test_files(root: Path = ROOT) -> list[str]:
     return sorted(p.relative_to(root).as_posix() for p in (root / "test").rglob("test_*.py"))
 
 
-def collect_changed(run: Callable[[list[str]], str]) -> list[str]:
-    """git から変更パスを集める。run はコマンド (引数リスト) を受けて stdout を返す。"""
+def collect_changed(run: Callable[[list[str]], str], base: str = "HEAD") -> list[str]:
+    """git から変更パスを集める。run はコマンド (引数リスト) を受けて stdout を返す。
+
+    base との差分は、commit 済みの変更と作業ツリーの差分の両方を含む。--changed は base に統合先との merge-base を渡す。
+    """
     # --no-renames: リネームを旧パスの削除 + 新パスの追加として両方評価する。-z: 改行を含む名前も安全に
-    out = run(["git", "diff", "--name-only", "--no-renames", "-z", "HEAD"]) + "\0"
+    out = run(["git", "diff", "--name-only", "--no-renames", "-z", base]) + "\0"
     out += run(["git", "ls-files", "-z", "--others", "--exclude-standard"])
     return sorted({name for name in out.split("\0") if name})
 
@@ -787,6 +791,72 @@ def _git(cmd: list[str]) -> str:
         sys.stderr.write(proc.stderr)
         raise SystemExit(f"git が失敗しました: {shlex.join(cmd)}")
     return proc.stdout
+
+
+def _git_try(cmd: list[str]) -> str | None:
+    """git を実行し、成功なら stdout、失敗なら None (落とさない)。"""
+    proc = subprocess.run(
+        cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", check=False
+    )
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def resolve_base(run: Callable[[list[str]], str | None]) -> tuple[str, str, str] | None:
+    """統合先との merge-base を決める。(統合先名, merge-base の OID, HEAD の OID)。決められなければ None。
+
+    統合先は git-flow の設定 (feature の startpoint → develop)、なければ develop → main → master の順で、存在するもの。
+    """
+    names: list[str] = []
+    for key in ("gitflow.branch.feature.startpoint", "gitflow.branch.develop"):
+        value = (run(["git", "config", "--get", key]) or "").strip()
+        if value:
+            names.append(value)
+    names += ["develop", "main", "master"]
+    head = (run(["git", "rev-parse", "--verify", "--quiet", "HEAD^{commit}"]) or "").strip()
+    if not head:
+        return None
+    for name in dict.fromkeys(names):
+        if (
+            run(["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{name}^{{commit}}"])
+            is None
+        ):
+            continue
+        oid = (run(["git", "merge-base", "HEAD", f"refs/heads/{name}"]) or "").strip()
+        if oid:
+            return name, oid, head
+    return None
+
+
+NODE_MIN = (
+    22,
+    18,
+)  # pr-viewer の試験が使う型除去 (test/agents/test_pi_judge_ts.py の _node と同じ)
+
+
+def node_usable() -> bool:
+    node = shutil.which("node")
+    if not node:
+        return False
+    try:
+        out = subprocess.run(
+            [node, "--version"], capture_output=True, text=True, encoding="utf-8", check=False
+        ).stdout
+    except OSError:
+        return False
+    m = re.match(r"v(\d+)\.(\d+)", out.strip())
+    return bool(m) and (int(m.group(1)), int(m.group(2))) >= NODE_MIN
+
+
+def missing_prerequisites(
+    selected: Sequence[str], node_ok: Callable[[], bool] = node_usable
+) -> list[str]:
+    """選んだ試験に必要な前提のうち、足りないものの説明 (空なら足りている)。
+
+    node が無いと pr-viewer の試験はモジュールごと skip され、通ったように見えるため、未検証として扱う。
+    """
+    if any(Path(t).name.startswith("test_pr_viewer_") for t in selected) and not node_ok():
+        return ["PR ビューアの試験 (test_pr_viewer_*)"]
+    return []
 
 
 def tracked_shell_files(
@@ -1003,17 +1073,40 @@ def main(argv: Sequence[str] | None = None) -> int:
             selected=selection.selected,
         )
     else:
-        paths = collect_changed(_git)
+        base = resolve_base(_git_try)
+        if base is None:
+            print(
+                "基準を決められません (統合先の枝が見つからない)。何も検査しません。",
+                file=sys.stderr,
+            )
+            return 2
+        base_name, base_oid, head_oid = base
+        paths = collect_changed(_git, base_oid)
+        print(f"基準: {base_name} との merge-base {base_oid[:8]}、対象 {len(paths)} 件", flush=True)
         result = plan(paths, test_files, shell_files=shell_files)
         if args.list:
             for path, names in result.hits.items():
                 print(f"{path}: {', '.join(names) or '(なし)'}")
             return 0
     if result.no_change:
-        print("変更なし")
+        if not args.all and head_oid != base_oid:
+            print(
+                "警告: 基準と HEAD は異なるが、変更パスが 0 件でした (選択規則は何も当たっていません)"
+            )
+        else:
+            print("変更なし (基準と同一)" if not args.all else "変更なし")
         return 0
     if result.full:
         print("全件を実行します")
+    unverified = missing_prerequisites(result.selected)
+    allow_skip = os.environ.get("VERIFY_ALLOW_SKIP") == "1"
+    for what in unverified:
+        level = "警告" if allow_skip else "未検証"
+        print(
+            f"{level} (前提不足: node 22.18 以上): {what} は skip されるため検証できません",
+            file=sys.stderr,
+        )
+    blocked = bool(unverified) and not allow_skip
 
     if args.dry_run:
         for i, cmd in enumerate(result.commands):
@@ -1039,6 +1132,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("失敗したコマンド:")
         for cmd in failed:
             print(f"  {shlex.join(cmd)}")
+    if blocked:
+        print("未検証: 前提不足 (node)。警告として続けるなら VERIFY_ALLOW_SKIP=1")
+    if failed or blocked:
         return 1
     if result.full:
         _write_stamp(started)

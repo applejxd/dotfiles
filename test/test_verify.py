@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import posixpath
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -649,3 +650,120 @@ def test_import_does_not_take_lock(tmp_path, repo):
     finally:
         p.kill()
         p.wait(5)
+
+
+# --- 変更の基準 (統合先との merge-base) と前提不足 ---
+
+
+def _g(repo: Path, *args: str) -> str:
+    env_args = ["-c", "user.name=Example Dev", "-c", "user.email=you@example.com"]
+    out = subprocess.run(
+        ["git", *env_args, *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    )
+    return out.stdout
+
+
+def _repo(tmp_path: Path, branch: str = "develop") -> Path:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _g(repo, "init", "-q", "-b", branch)
+    (repo / "README.md").write_text("x\n", encoding="utf-8")
+    _g(repo, "add", ".")
+    _g(repo, "commit", "-q", "-m", "init")
+    return repo
+
+
+def _run_main(monkeypatch, repo: Path, *argv: str) -> int:
+    monkeypatch.setattr(verify, "ROOT", repo)
+    return verify.main(["--dry-run", *argv])
+
+
+def test_committed_changes_are_selected_when_the_worktree_is_clean(tmp_path, monkeypatch, capsys):
+    repo = _repo(tmp_path)
+    _g(repo, "switch", "-q", "-c", "feature/x")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "a.md").write_text("a\n", encoding="utf-8")
+    _g(repo, "add", ".")
+    _g(repo, "commit", "-q", "-m", "docs")
+    assert _g(repo, "status", "--short") == ""
+    assert _run_main(monkeypatch, repo) == 0
+    out = capsys.readouterr().out
+    assert "pre-commit run --files docs/a.md" in out
+    assert "変更なし" not in out
+
+
+def test_the_base_line_is_always_printed(tmp_path, monkeypatch, capsys):
+    repo = _repo(tmp_path)
+    _run_main(monkeypatch, repo)
+    base = _g(repo, "rev-parse", "develop").strip()[:8]
+    assert f"基準: develop との merge-base {base}、対象 0 件" in capsys.readouterr().out
+
+
+def test_no_change_when_head_is_the_base(tmp_path, monkeypatch, capsys):
+    repo = _repo(tmp_path)
+    assert _run_main(monkeypatch, repo) == 0
+    assert "変更なし (基準と同一)" in capsys.readouterr().out
+
+
+def test_zero_targets_with_commits_warns(tmp_path, monkeypatch, capsys):
+    repo = _repo(tmp_path)
+    _g(repo, "switch", "-q", "-c", "feature/x")
+    _g(repo, "commit", "-q", "--allow-empty", "-m", "empty")
+    assert _run_main(monkeypatch, repo) == 0
+    out = capsys.readouterr().out
+    assert "警告" in out and "変更なし (基準と同一)" not in out
+
+
+def test_unresolvable_base_exits_2_and_does_not_fall_back_to_head(tmp_path, monkeypatch, capsys):
+    repo = _repo(tmp_path, branch="zzz")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "a.md").write_text("a\n", encoding="utf-8")
+    assert _run_main(monkeypatch, repo) == 2
+    captured = capsys.readouterr()
+    assert "基準を決められません" in captured.err
+    assert "pre-commit" not in captured.out
+
+
+def test_base_is_not_needed_for_all(tmp_path, monkeypatch, capsys):
+    repo = _repo(tmp_path, branch="zzz")
+    assert _run_main(monkeypatch, repo, "--all") == 0
+    assert "基準を決められません" not in capsys.readouterr().err
+
+
+def test_pr_viewer_tests_without_node_are_unverified(tmp_path, monkeypatch, capsys):
+    repo = _repo(tmp_path)
+    _g(repo, "switch", "-q", "-c", "feature/x")
+    (repo / "apps" / "pr-viewer").mkdir(parents=True)
+    (repo / "apps" / "pr-viewer" / "a.ts").write_text("x\n", encoding="utf-8")
+    _g(repo, "add", ".")
+    _g(repo, "commit", "-q", "-m", "ts")
+    bin_dir = tmp_path / "bin"  # git だけがある PATH (node は見つからない)
+    bin_dir.mkdir()
+    (bin_dir / "git").symlink_to(shutil.which("git"))
+    monkeypatch.setenv("PATH", str(bin_dir))
+    monkeypatch.delenv("VERIFY_ALLOW_SKIP", raising=False)
+    monkeypatch.setattr(verify, "ROOT", repo)
+    monkeypatch.setattr(verify, "execute", lambda *a, **k: [])
+    assert verify.main([]) == 1
+    captured = capsys.readouterr()
+    assert "未検証" in captured.err and "node" in captured.err
+    monkeypatch.setenv("VERIFY_ALLOW_SKIP", "1")
+    assert verify.main([]) == 0
+    captured = capsys.readouterr()
+    assert "警告" in captured.err and "未検証" not in captured.err
+
+
+def test_missing_prerequisites_only_for_pr_viewer_tests():
+    pr = ["test/agents/test_pr_viewer_merge.py"]
+    assert verify.missing_prerequisites(pr, node_ok=lambda: False)
+    assert verify.missing_prerequisites(pr, node_ok=lambda: True) == []
+    # 意図的に skip される別の試験は対象にしない
+    assert (
+        verify.missing_prerequisites(["test/agents/test_pi_judge_ts.py"], node_ok=lambda: False)
+        == []
+    )
