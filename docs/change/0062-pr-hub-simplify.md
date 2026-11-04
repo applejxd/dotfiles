@@ -103,6 +103,8 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 
 ### 3.6 pi を通常のコーディングエージェントへ戻す（段 C）
 
+> **2026-11-05 の独立 review の結論**: 段 B・C は「当然の次工程」ではなく、**実運用の結果で再判断する**。当面は親 pi → worker を標準とし、ジョブ・起票の追加開発は止める（[記録](../research/agents/arch-review-2026-11.md)）。
+
 エージェントは git の書き込み（add・commit・merge）をしない。アプリが、範囲を検査してから機械的に行う。pi 側に残るのは、ガード（判定器・Fence・確認画面）と普通のツール、対話用の最小の `git_commit` だけ。`pr_summary`・`pr_comments`・注入・`guarded_task`・盤面・`guarded_action` の統合系は、アプリがジョブの最終出力をサマリーとして保存するようになってから撤去する。
 
 ## 4. 決定（2026-11-03）
@@ -113,7 +115,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | D2 | 統合方式 | **merge commit**（squash の文面をメッセージにする。統合時に hook は走らせない）。X1 が不合格なら見直す |
 | D3 | pi の起動 | **押下契機のヘッドレス**（`pis -p`。X3 に合格してから）。受信箱は撤去する |
 | D4 | 衝突解消に LLM を許すか | **許す**（結果は feature 側のコミットで、人が差分を承認する）。「LLM に直させない」規則（pi-subagents）を改訂する |
-| D5 | 切り出しの理想 | アプリ（機械的な処理）と補助のマネージャーエージェント（判断・生成）でオーケストレーションを賄い、pi を通常のコーディングエージェントへ戻す（段 B・C。段 A の後に、実際に回してから進める） |
+| D5 | 切り出しの理想 | アプリ（機械的な処理）と補助のマネージャーエージェント（判断・生成）でオーケストレーションを賄い、pi を通常のコーディングエージェントへ戻す（段 B・C。**実運用の結果で再判断する**。2026-11-05 の review の結論。段 A の後に、実際に回してから進めるかを決める） |
 | D6 | 実装中・取り込み済みの部品 | 保留のごみ対策（`feature/pending-supersede`）は止め、差分を退避した。受信箱（S2）は配備せず凍結し、押下契機の起動が試験に通ってから撤去する |
 
 ## 5. 段階（各段階で動く状態を保つ。見積りは推測）
@@ -127,8 +129,8 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | A4 | 「変更を依頼」「衝突を解決」（`pis -p` の起動）。**A4a（変更を依頼）は実装済み**（`--allow-jobs` 既定無効・X3-a の実機実測は未実施。設計は [pr-viewer.md §6「ジョブ」](../spec/pr-viewer.md)）。A4b（衝突を解決）は未着手 | X3 合格（X3-a は A4a の有効化の前に実施） |
 | A5 | 撤去（保留・受信箱・`git_integrate`・`/pending approve` など。約 2,900 行 + 試験約 20 ファイル）。**実装済み**（2026-11-03。1 つの feature・1 回の保存で、PR ビューアが作るこの feature の統合 merge commit を `git revert -m 1` すれば旧経路が戻る（履歴には撤去本体・develop の取り込み・後続修正があり、本体 commit だけの revert は後続修正と競合しうる）。残骸の ref の掃除は利用者が `pk pending-clean` で行う。保存は利用者の確認後） | A2〜A4 の運用で足りること |
 | B1 | 起票: アプリが新しい feature（枝と worktree）を作り、依頼文 brief をレビュー記録へ残す（`POST /api/repos/<repoId>/features`。LLM・pis は呼ばない）。**実装済み・既定で無効**（`--allow-create`）。設計は [pr-viewer.md §6「起票」](../spec/pr-viewer.md) | A2 |
-| B | アプリのジョブ実行（worktree の作成・worker の起動・コミット・検査）とマネージャー役（計画・review・衝突） | A の運用。`pis -p` の役割の試験 |
-| C | pi 側の撤去（`guarded_task`・`git_commit` の guarded_action 統合系・盤面など）。pi をガード + 通常のツールへ戻す | B が実際に回ってから |
+| B（再判断） | アプリのジョブ実行（worktree の作成・worker の起動・コミット・検査）とマネージャー役（計画・review・衝突） | A の運用。`pis -p` の役割の試験 |
+| C（再判断） | pi 側の撤去（`guarded_task`・`git_commit` の guarded_action 統合系・盤面など）。pi をガード + 通常のツールへ戻す | B が実際に回ってから |
 
 ## 6. 撤去・残す・縮小
 
@@ -137,7 +139,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | 残す | PR ビューア本体、`review-log.ts`・`review-git.ts`、`git_commit`（自由区。対話用）、`integration-gate.ts`（案内以外）・`[pi.integrate]` の保護（`protected_refs`・`risk_paths`・`skip_confirm_in_free_zone`。素の pi の必須確認）、`pending-store.ts`・`integrate-profile-load.ts`・`freezone.ts`・`review-*`・`pr-review.ts`・`judge/**` |
 | 縮小 | `/pending`（旧 `git_commit` 退避の list・show・drop だけ）、`/board` |
 | 撤去（段 A5。実装済み） | `integrate-plan.ts`・`integrate-exec.ts`（統合器 `merge.ts` が別に実装したので全削除。当初案の「残す・縮小」を訂正）、設定 `[pi.pending]`・`[pi.integrate] enabled`、`pending-ops`・`pending-approve`・`pending-command`（巡回・approve）・`pending-pick`・`pending-owner`・`pending-adapters`・`pending-request`・`native-action`・`integrate-action`・`exclusive-lock`・`pr-inbox`、`git_integrate` 操作 |
-| 撤去（段 C） | `guarded_task`（`children.ts` など）・`/fleet`・`/orchestrate`・`worktree.ts` の隔離など。`pr_summary`・`pr_comments`・注入（アプリが最終出力を保存するようになってから） |
+| 撤去（段 C。実運用の結果で再判断。当然の次工程ではない） | `guarded_task`（`children.ts` など）・`/fleet`・`/orchestrate`・`worktree.ts` の隔離など。`pr_summary`・`pr_comments`・注入（アプリが最終出力を保存するようになってから） |
 
 ## 7. 実験（段 0。使い捨て）
 

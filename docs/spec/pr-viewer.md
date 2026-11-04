@@ -280,7 +280,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 #### 有効化の手順（利用者が行う。取り込みだけでは有効にならない）
 
-1. **実機の実測 X3-a は未実施**。本物の `pis` と LLM では一度も動かしていない（試験は偽の pis だけ）。有効化の前に、補助スクリプト `pk x3a` で、使い捨ての feature に対して `pis --role worker --allowlist -p` が動くこと・所要時間・費用・commit が通ることを実測する（スクリプトは取り込みの後に用意する）。
+1. **実機の実測 X3-a は実施済み**（2026-11-04。結果は [pr-merge-spike.md の X3-a](../research/agents/pr-merge-spike.md)。起動・編集・取り出し・停止の 7 項目。停止後の取り残しは cwd 走査で反映済み）。**実運用での利用はまだ**（実レビュー反映で最後まで回していない）。有効化の前に、補助スクリプト `pk x3a` で、使い捨ての feature に対して `pis --role worker --allowlist -p` の所要時間・費用・commit が通ることを確かめる。
 2. 取り込みの後、使う pi / pis を再起動する。`--allow-jobs` を付けなければ何も変わらない（既定で無効）。
 3. `node apps/pr-viewer/server.ts --repo <パス> --allow-jobs` で起動し、`GET /api/capabilities` の `jobs` が `true` になることを確かめる（`jobsReason` が `pis_missing` なら `--pis-command` で絶対パスを指定する）。
 4. 安全な試験用リポジトリ・小さな feature・1 件のコメントで 1 回試す。結果（`succeeded`・`needs_review` など）と、`git log` の commit を人が確かめる。異常終了したジョブは `interrupted` になり、再開されない（コメントは受領済み。画面の「再送」で送り直す）。
@@ -289,7 +289,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 #### 既知の制限（ジョブ）
 
 - Linux 専用。Windows・macOS では起動を断る（Windows 実機は未検証）。
-- 実機の実測（X3-a）が未実施。偽の pis と実 git の試験だけで確かめている。
+- 実機の実測（X3-a）は実施済み（[pr-merge-spike.md](../research/agents/pr-merge-spike.md)）。実運用の利用は未で、費用・手戻りは未測定。
 - 衝突の解決（段 A4b）は未実装。`address_review` だけ。
 - worktree の外（共通 `.git` の ref など）への pi の書き込みは、OS では止めず、検出するだけ。
 - 同じ worktree に人と pi が同時に書く場合の競合は検知しない。
@@ -399,6 +399,8 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 条件の定義は [CHG-0060 §6](../change/0060-local-pr-viewer.md)。
 
+> 注: C1・C8・C11・C15 の「窓口の pi が保留を作る・ペア・制御ポート」は旧経路の設計で、置き換え済み（CHG-0062）。現行の統合は人の POST でアプリが行う（§6「統合」）。ここは当時の条件の記録として残す。
+
 | # | 満たす設計要素 | 確かめる試験 | 限界 |
 | --- | --- | --- | --- |
 | C1 | アプリは指示を送るだけ。保留の作成も実行も窓口の pi（§8） | 承認の縦断。アプリの import 検査 | 段 5 は未実装。偽ペアの余地（権限は上がらない） |
@@ -438,14 +440,14 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | feature の worktree からの書き込み | `refs/pi/review/*` を feature の worktree の `pis` から書けるか（`refs/pi/pending` は確認済み） |
 | C13 | 保持期限と圧縮は v1 で未実装。上限で止まる |
 | UI ポートは認証なし | tailnet が保証する決定。統合（`--allow-merge`）を有効にすると、到達できるクライアントは統合できる（§6 統合の表）。素の `pi`（Fence なし）では、モデルが変更系の API を直接呼べる（判定器の拒否はうっかり防止の水準） |
-| ジョブ（段 A4a） | **実機の実測（X3-a）は未実施**。本物の `pis`・LLM では動かしていない（偽の `pis` の試験だけ）。`--allow-jobs` は既定で無効。共通 `.git` の改ざんは検出であって防止ではない。commit に pre-commit が走らない。Linux 専用。詳細は §6「ジョブ」の止められるもの・既知の制限 |
+| ジョブ（段 A4a） | **実機の実測（X3-a）は実施済み**（[pr-merge-spike.md](../research/agents/pr-merge-spike.md)）。実運用の利用は未。`--allow-jobs` は既定で無効。共通 `.git` の改ざんは検出であって防止ではない。commit に pre-commit が走らない。Linux 専用。詳細は §6「ジョブ」の止められるもの・既知の制限 |
 | ブランチ削除後 | PR の一覧・詳細は、生きているブランチの ref から作る。ブランチを消した PR は画面から見えない（review ref と最後の source は残る。§2 の「branch と review ref の和集合」は**未実装**。独立 review の指摘 M6） |
 | 起票（B1） | `--allow-create` は既定で無効。アプリが作った worktree が `git flow feature finish` の後 detached で残る可能性は**未実測**。**検査後の symlink 差し替え（TOCTOU）は対象外**（パス名で git を起動するため、能動的なディレクトリ差し替えには保証が無い）。競合相手の枝・worktree は消さない（残骸が手動の片付けになる側に倒す）。秘密らしい文字列の検出は機械的で、漏れうる。Fence 内のエージェントへの判定器の拒否は未実装 |
 | 画面からの「再送」 | 送信履歴の各 batch に「再送」ボタンがある（`resendOf` つきの新しい `submit`）。受領の記録と注入の間に落ちたときの手動の救済 |
 | 段 5 の開始条件 | **判定器でアプリのポートへの変更系の呼び出しを拒否するまで、段 5 は有効化しない** |
 | 偽のペア | モデルもペア要求を送れる。権限は上がらないが、窓口の指示を横取りして断ることはできる（制御ポートは repo の内容を返さない） |
 | 行の再対応づけ | しない。outdated は blob の比較だけ |
-| ref の同期 | 通常の clone / push では同期されない。mirror で流出しうる。削除は即時消去ではない（未決。CHG-0060 §7） |
+| ref の同期 | 通常の clone / push では同期されない（`refs/pi/review/*`）。バックアップするなら ref を明示して push する（例: `git push <remote> 'refs/pi/review/*:refs/pi/review/*'`）。**自動では保存されない**。mirror で流出しうる。削除は即時消去ではない（未決。CHG-0060 §7） |
 
 ## 13 関連
 
