@@ -152,6 +152,7 @@ export function runJob(o: RunOptions): RunHandle {
 	let stopReason: StopReason | null = null;
 	let graceTimer: NodeJS.Timeout | null = null;
 	let pgid: number | null = null;
+	let unconfirmed = false; // 停止を確認できなかった（所有の lock を残す）
 
 	const requestStop = (r: StopReason): boolean => {
 		if (phase !== "running") return false;
@@ -185,7 +186,12 @@ export function runJob(o: RunOptions): RunHandle {
 	const exec = async (): Promise<JobRecord> => {
 		// 所有の表明（git worktree lock）。取れないときは pis を起動しない。解除は handle.done の finally
 		const got = await claimOwner(pre.gitDir, pre.worktree, { kind: "job", id: job.id, pid: process.pid }).catch(() => ({ ok: false as const }));
-		if (!got.ok) return conclude({ state: "failed", reasons: ["worktree_busy"] });
+		if (!got.ok) {
+			// 残骸の lock（pid が死んだ owner）は自動で奪わない。reap で解除してからやり直す
+			const h = got.holder ?? null;
+			const stale = h !== null && h.state === "owner" && !h.alive;
+			return conclude({ state: "failed", reasons: stale ? ["worktree_busy", "stale_lock"] : ["worktree_busy"] });
+		}
 		const argv = buildArgv(o.argvTail.prompt, o.argvTail.model);
 		if (argv === null) return conclude({ state: "failed", reasons: ["bad_argv"] });
 		if (!isAbsolute(o.pisCommand) || o.pisCommand.includes("\0")) return conclude({ state: "failed", reasons: ["spawn_failed"] });
@@ -249,13 +255,27 @@ export function runJob(o: RunOptions): RunHandle {
 		killByJobId(job.id, procRoot, wt);
 		await Promise.race([closed, sleep(2000)]);
 		// 消えるまでポーリングする（印のない中継プロセスが畳まれるまでの数秒。残れば再度 SIGKILL）
-		for (let end = Date.now() + confirmMs; Date.now() < end && findByJobId(job.id, procRoot, wt).length > 0; ) {
+		let remaining = findByJobId(job.id, procRoot, wt).length;
+		for (let end = Date.now() + confirmMs; Date.now() < end && remaining > 0; ) {
 			killByJobId(job.id, procRoot, wt);
 			await sleep(50);
+			remaining = findByJobId(job.id, procRoot, wt).length;
 		}
 		if (graceTimer) clearTimeout(graceTimer);
 		child.stdout?.destroy();
 		child.stderr?.destroy();
+
+		// 停止を確認できなければ fail closed: commit せず、所有の lock も排他も残す（新規受付と掃除が止まる。recover と同じ扱い）
+		if (remaining > 0) {
+			unconfirmed = true;
+			phase = "done";
+			try {
+				updateJob(store, job.id, { state: "failed", reasons: ["stop_unconfirmed"], exitCode: ex.code });
+			} catch {
+				// 回復処理などが先に終端へ進めていた
+			}
+			return readJob(store, job.id) ?? job;
+		}
 
 		if (ex.error) return conclude({ state: "failed", reasons: ["spawn_failed"] });
 		if (stopReason !== null) return conclude({ ...STOP_MAP[stopReason], exitCode: ex.code });
@@ -287,7 +307,7 @@ export function runJob(o: RunOptions): RunHandle {
 	handle.done = exec()
 		.catch(() => conclude({ state: "failed", reasons: ["exception"] }))
 		.finally(async () => {
-			await releaseOwner(pre.gitDir, pre.worktree, job.id).catch(() => false);
+			if (!unconfirmed) await releaseOwner(pre.gitDir, pre.worktree, job.id).catch(() => false);
 			phase = "done";
 			active.delete(entry);
 		});

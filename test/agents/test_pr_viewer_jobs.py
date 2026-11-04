@@ -783,6 +783,19 @@ def test_dirty_worktree_blocks_and_starts_nothing(w):
     no_leak(w, body, inp)
 
 
+def test_stale_owner_lock_blocks_with_worktree_busy_and_is_not_taken_over(w):
+    # 残骸の lock（pid が死んだ owner）は自動で奪わず、何も始めない（reap が要る）
+    pr = feature(w, "feature/a")
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    reason = f"owner=worker id=w1 pid={dead.pid} started=1"
+    _git(w.repo, "worktree", "lock", "--reason", reason, str(pr["wt"]))
+    status, body = start(w, pr)
+    assert status == 409 and body["error"]["code"] == "worktree_busy"
+    assert not pis_ran(w) and locks(w) == []
+    assert reason in _git(w.repo, "worktree", "list", "--porcelain")
+
+
 def test_opencode_in_the_worktree_blocks(w):
     pr = feature(w, "feature/a")
     (pr["wt"] / ".opencode").mkdir()

@@ -389,6 +389,8 @@ async function startJob(ctx: PrCtx, input: StartBody, cfg: JobsConfig, rsv: Rese
 	}
 	rsv.handle = handle;
 	void handle.done.then((rec) => {
+		// 停止を確認できなかったら、このリポジトリの受付を止める（recover で残存があるときと同じ）
+		if (rec.reasons.includes("stop_unconfirmed")) blockedRepos.add(ctx.repo.repoId);
 		reservations.delete(rsv); // 終端と排他の解除が済んでから外す
 		diag({ job: rec.id, pr: ctx.prKey, state: rec.state, exitCode: rec.exitCode, reasons: rec.reasons });
 	});
