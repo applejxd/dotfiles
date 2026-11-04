@@ -5,6 +5,7 @@
 //   {"model":true}                                                   モデル・system の出所で利用者専用のイベントを作る・畳むと拒否されること
 //   {"pure":{"cmds":[...]}}                                          入力 (凍結した state) を変更せず、決定的であること
 //   {"facts":{...}}                                                  settleFactsOfGoal
+//   {"raw":{"events":[...]}}                                          生のイベント列を畳み (拒否は飛ばす)、導出した GoalState と goal ノードを返す
 // see docs/spec/work/goal.md
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -241,6 +242,21 @@ const factsChecks = (p) => {
 	return gl.settleFactsOfGoal(s, p.facts);
 };
 
+const rawChecks = ({ events }) => {
+	let s = rd.emptyState();
+	const steps = [];
+	for (const e of events) {
+		try {
+			s = rd.reduce(s, { ts: s.seq + 1, seq: s.seq + 1, ...e });
+			steps.push({ ok: true });
+		} catch (err) {
+			steps.push({ ok: false, error: `${err.name}: ${err.message}` });
+		}
+	}
+	const id = s.goals[s.goals.length - 1];
+	return { steps, goal: gl.goalStateOf(s), node: id ? s.nodes.get(id) : null };
+};
+
 const input = JSON.parse(await new Promise((res) => {
 	let b = "";
 	process.stdin.setEncoding("utf8");
@@ -254,5 +270,6 @@ else if (input.diff) out = diffRuns(input.diff);
 else if (input.model) out = modelChecks();
 else if (input.pure) out = pureChecks(input.pure);
 else if (input.facts) out = factsChecks(input.facts);
+else if (input.raw) out = rawChecks(input.raw);
 else throw new Error("未知の入力");
 process.stdout.write(JSON.stringify(out));

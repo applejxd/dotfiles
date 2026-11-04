@@ -401,6 +401,10 @@ const apply = (d: Draft, ev: LedgerEvent): void => {
 		}
 		case "verdict": {
 			const n = d.need(id);
+			// I10 の拡張: goal の取り消しは利用者専用 (task の cancel はモデルでも通る)
+			if (n.kind === "goal" && data.verdict === "cancel" && ev.source !== "user") {
+				throw new ReduceError(`I10: goal の cancel は利用者専用 (出所が user でない: ${String(ev.source ?? "system")})`);
+			}
 			const r = next(tkindOf(n.kind), n.state, "verdict", data.verdict);
 			const e = d.edit(id);
 			if (n.kind === "goal") e.evidence.push(`verdict:${ev.seq}:${data.verdict}`);
@@ -435,7 +439,10 @@ const apply = (d: Draft, ev: LedgerEvent): void => {
 			const n = d.goalNode(id);
 			const r = next("goal", n.state, ev.type);
 			const e = d.edit(id);
-			if (ev.type === "goal.resumed") e.attrs.resumes = ((n.attrs.resumes as number | undefined) ?? 0) + 1;
+			if (ev.type === "goal.resumed") {
+				e.attrs.resumes = ((n.attrs.resumes as number | undefined) ?? 0) + 1;
+				delete e.pauseReason;
+			} else e.pauseReason = data.reason;
 			e.state = r.to as never;
 			return;
 		}

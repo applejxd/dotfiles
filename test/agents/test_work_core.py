@@ -1131,7 +1131,7 @@ def test_invalid_payloads_rejected():
 
 
 def test_node_added_to_finished_goal_rejected():
-    pre = [*goal(), E("verdict", "G", verdict="cancel", reason="r")]
+    pre = [*goal(), E("verdict", "G", source="user", verdict="cancel", reason="r")]
     assert "終わった" in rejected([*pre, task("a")])
 
 
@@ -1298,7 +1298,9 @@ def test_goal_pause_resume_and_cancel():
     s = ok([*goal(), E("goal.paused", "G", reason="r"), E("goal.resumed", "G", source="user")])
     assert N(s, "G")["state"] == "active" and N(s, "G")["attrs"]["resumes"] == 1
     assert (
-        N(ok([*goal(), E("verdict", "G", verdict="cancel", reason="r")]), "G")["state"]
+        N(ok([*goal(), E("verdict", "G", source="user", verdict="cancel", reason="r")]), "G")[
+            "state"
+        ]
         == "cancelled"
     )
 
@@ -1465,3 +1467,83 @@ def test_rejected_event_leaves_state_unchanged():
     assert "error" in out["steps"][-1]
     assert out["state"]["seq"] == len(base)  # 拒否された seq は進まない
     assert out["violations"] == []
+
+
+# ── goal の cancel は利用者専用 (I10 の拡張)・pauseReason・Money.rounds ──
+@pytest.mark.parametrize("src", ["model", "system", None])
+def test_goal_cancel_verdict_rejected_from_non_user(src):
+    assert "I10" in rejected([*goal(), E("verdict", "G", source=src, verdict="cancel", reason="r")])
+
+
+def test_goal_cancel_verdict_accepted_from_user():
+    s = ok([*goal(), E("verdict", "G", source="user", verdict="cancel", reason="clear")])
+    assert N(s, "G")["state"] == "cancelled"
+
+
+@pytest.mark.parametrize("src", ["model", "system", "user"])
+def test_task_cancel_verdict_passes_for_any_source(src):
+    s = ok([*goal(), task("a"), E("verdict", "a", source=src, verdict="cancel", reason="r")])
+    assert N(s, "a")["state"] == "cancelled"
+
+
+def test_goal_non_cancel_verdict_from_model_still_passes():
+    s = ok([*goal(), E("verdict", "G", source="model", verdict="continue", reason="r")])
+    assert N(s, "G")["state"] == "active"
+
+
+def test_rejected_goal_cancel_leaves_goal_active():
+    out = play(
+        [*goal(), E("verdict", "G", source="model", verdict="cancel", reason="r")], tolerant=True
+    )
+    assert "error" in out["steps"][-1]
+    assert N(out["state"], "G")["state"] == "active"
+
+
+def test_goal_paused_reason_is_saved():
+    s = ok([*goal(), E("goal.paused", "G", reason="rounds")])
+    assert N(s, "G")["pauseReason"] == "rounds"
+
+
+def test_goal_paused_reason_is_overwritten_by_next_pause():
+    s = ok(
+        [
+            *goal(),
+            E("goal.paused", "G", reason="rounds"),
+            E("goal.resumed", "G"),
+            E("goal.paused", "G", reason="stalled"),
+        ]
+    )
+    assert N(s, "G")["pauseReason"] == "stalled"
+
+
+def test_goal_resumed_clears_pause_reason():
+    s = ok([*goal(), E("goal.paused", "G", reason="tokens"), E("goal.resumed", "G")])
+    assert "pauseReason" not in N(s, "G")
+
+
+def test_goal_created_budget_keeps_rounds():
+    s = ok(goal(budget={"usd": 5, "tokens": 5000, "ms": 60000, "rounds": 20}))
+    assert N(s, "G")["budget"]["rounds"] == 20
+
+
+def test_budget_adjusted_keeps_rounds():
+    s = ok(
+        [
+            *goal(),
+            E("budget.adjusted", "G", budget={"usd": 5, "tokens": 5000, "ms": 60000, "rounds": 7}),
+        ]
+    )
+    assert N(s, "G")["budget"]["rounds"] == 7
+
+
+def test_rounds_survives_run_accounting_without_violations():
+    b = {"usd": 5, "tokens": 5000, "ms": 60000, "rounds": 3}
+    s = ok([*goal(budget=b), task("a"), *complete("a", "r1")])
+    assert N(s, "G")["budget"] == b
+
+
+def test_negative_rounds_is_rejected():
+    out = play(
+        [E("goal.created", "G", title="G", budget={"usd": 1, "tokens": 1, "ms": 1, "rounds": -1})]
+    )
+    assert "error" in out["steps"][-1]

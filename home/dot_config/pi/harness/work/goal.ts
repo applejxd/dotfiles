@@ -2,7 +2,7 @@
 // goal-core.ts の GoalState はここから導出する (写しを 2 つにしない)。コマンド → 利用者専用イベントの変換、導出、arbiter の Facts の写し。
 // 仕様: docs/spec/work/goal.md
 import { DEFAULT_BUDGET, LIMITS, newGoal, renderDetail, setBudget, THRESHOLDS } from "../goal-core.ts";
-import type { Budget, GoalCommand, GoalState } from "../goal-types.ts";
+import type { Budget, GoalCommand, GoalState, PauseReason } from "../goal-types.ts";
 import { EventError, makeEvent } from "./events.ts";
 import type { LedgerState } from "./reduce.ts";
 import type { NewEvent, Node } from "./types.ts";
@@ -64,6 +64,9 @@ const fromMoney = (m: Partial<GoalBudgetMoney> | undefined): Budget => {
 	return typeof t === "number" && t >= LIMITS.tokens[0] && t <= LIMITS.tokens[1] ? { rounds, minutes, tokens: t } : { rounds, minutes };
 };
 
+/** 台帳に保存された停止理由 (goal.paused の reason)。無ければ user */
+const pauseReasonOf = (n: Node): PauseReason => (n.pauseReason ?? "user") as PauseReason;
+
 /** いまの目標のノード (最後の goal。cancelled は破棄済みなので無し) */
 const currentGoal = (state: LedgerState): Node | null => {
 	const id = state.goals[state.goals.length - 1];
@@ -90,7 +93,7 @@ export function goalStateOf(state: LedgerState, rt: GoalRuntime = {}): GoalState
 		createdAt,
 		updatedAt: rt.updatedAt ?? createdAt,
 	};
-	if (n.state === "paused") g.pause = rt.pause ? { ...rt.pause } : { reason: "user" };
+	if (n.state === "paused") g.pause = rt.pause ? { ...rt.pause } : { reason: pauseReasonOf(n) };
 	if (rt.lastTextHash !== undefined) g.lastTextHash = rt.lastTextHash;
 	if (rt.lastReasonHash !== undefined) g.lastReasonHash = rt.lastReasonHash;
 	if (rt.lastVerdict !== undefined) g.lastVerdict = { ...rt.lastVerdict };

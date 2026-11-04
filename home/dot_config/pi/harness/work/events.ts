@@ -96,9 +96,14 @@ export const displayWidth = (s: string): number => {
 export const ZERO: Money = { usd: 0, tokens: 0, ms: 0 };
 
 export const isMoney = (x: unknown): x is Money =>
-	isObj(x) && ["usd", "tokens", "ms"].every((k) => isNum(x[k]) && (x[k] as number) >= 0);
+	isObj(x) &&
+	["usd", "tokens", "ms"].every((k) => isNum(x[k]) && (x[k] as number) >= 0) &&
+	(x.rounds === undefined || (isNum(x.rounds) && x.rounds >= 0));
 
-/** 利用者専用か。user 待ちの解除 (wait.resolved by:"user") も出所は利用者でなければならない */
+/**
+ * 利用者専用か。user 待ちの解除 (wait.resolved by:"user") も出所は利用者でなければならない。
+ * goal の cancel (verdict) は対象の種類 (goal か task か) を知る reducer が拒否する (task の cancel はモデルでも通る)
+ */
 export const isUserOnly = (type: EventType, data?: Record<string, unknown>): boolean =>
 	USER_ONLY_EVENTS.includes(type) || (type === "wait.resolved" && data?.by === "user");
 

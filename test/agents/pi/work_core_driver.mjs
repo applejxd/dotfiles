@@ -83,7 +83,7 @@ const cellEvent = (kind, on, variant) => {
 		case "goal.paused": return { type: on, node, data: { reason: "x" } };
 		case "goal.resumed": return { type: on, node, data: {}, source: "user" };
 		case "goal.done": return { type: on, node, data: {} };
-		case "verdict": return { type: on, node, data: { verdict: variant, reason: "r" } };
+		case "verdict": return { type: on, node, data: { verdict: variant, reason: "r" }, ...(kind === "goal" && variant === "cancel" ? { source: "user" } : {}) };
 		case "note.appended": return { type: on, node, data: { by: "llm", text: "n" } };
 		case "budget.adjusted": return { type: on, node, data: { budget: big }, source: "user" };
 		case "lease.acquired": return { type: on, node, data: { holder: "A", pid: 1 } };

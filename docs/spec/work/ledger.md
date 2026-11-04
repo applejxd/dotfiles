@@ -46,6 +46,9 @@
 - `run.ended` の二重配送は例外で拒否する。証拠の id（`check:<seq>`）に seq が入るので、合流性は seq を除いて成り立つ
 - `globsMayOverlap` は「ディレクトリへの書き込みは配下に及ぶ」と「スラッシュ無しはどの階層にも合致」を保守側に取る（`*.ts` と `*.md` も重なる扱い）
 - `ready` の順序: 臨界路の長さ（降順）→ bundle → 費用の昇順 → id。実行中の `writes` と重なる task は出さない
+- I10 の拡張: 対象が goal ノードの `verdict` cancel（`/goal clear`）は、出所が user でなければ reducer が拒否する（対象の種類を知るのは reducer）。task の cancel はモデルでも通る
+- `goal.paused` の `reason` は goal ノードの `pauseReason` に保存し、`goal.resumed` で消す（`goalStateOf` の停止理由はここから導く）
+- `Money` に任意の `rounds`（goal の予算の往復数）を足した。reducer は budget を丸ごと写し、予約・使用量の合算（`MONEY_KEYS`）には使わない。負の値は拒否
 
 ## 接続と統合試験
 
