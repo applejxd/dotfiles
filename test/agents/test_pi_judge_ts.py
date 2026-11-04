@@ -369,6 +369,25 @@ def test_write_root_dangling_symlinks(tmp_path):
 
 
 @pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_write_root_denies_components_after_regular_file(tmp_path):
+    _main, root, _sib, tmp = _write_root_case(tmp_path)
+    (root / "f").write_text("x")
+    (root / "sub").mkdir()
+    (root / "via_file").symlink_to("f/../x")  # リンクを辿った後で通常ファイルの後に `..`
+    denied = [root / "f" / ".." / "x", root / "f" / "y", root / "via_file", "f/../x"]
+    reqs = [
+        _wreq(root, p, tool=t, bypass=b, tmp=tmp)
+        for p in denied
+        for t in ("write", "edit")
+        for b in (False, True)
+    ]
+    for r, o in zip(reqs, _judge(reqs), strict=True):
+        assert o["decision"] == "deny", (r["input"]["path"], o)
+    ok = _judge([_wreq(root, root / "sub" / ".." / "x", tmp=tmp), _wreq(root, root / "f", tmp=tmp)])
+    assert [o["decision"] for o in ok] == ["allow", "allow"], ok
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
 def test_write_root_ignores_tmp_root_that_contains_it(tmp_path):
     main, root, _sib, _tmp = _write_root_case(tmp_path)
     own = main / ".tmp" / "s" / "ID"  # root を含まない専用の一時領域

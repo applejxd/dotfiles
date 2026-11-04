@@ -90,6 +90,22 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
 - **実機で確かめた**: 適用した機械で動きを観測した。OS と機械を添える。
   テストや Docker だけで見たものは「テストで確かめた」と書く
 
+## 統合と並列運用
+
+- **bundle**（旧称: train）: 複数の feature を 1 本にまとめた統合用の枝 `feature/bundle-N`。
+  1 回の全件検査・1 回の「統合する」で取り込む（[統合用の枝](orchestration.md#統合用の枝bundle)）。
+  旧称は merge train（複数の変更を同じ列車に乗せてまとめて出す）の比喩だったが、意味が伝わりにくいので改めた
+- **自由区**: 確認を省略してよい `feature/*` の linked worktree のコミット
+  （[自由区の fail closed](guard/pi-extensions.md#自由区の-fail-closed)）
+- **窓口**: 取り込み（保護ブランチを進める操作）を行う会話を 1 つに決めたもの。ほかの会話はコミットまで
+  （[複数の会話を並行して使う運用](guard/pi-subagents.md#複数の会話を並行して使う運用)）
+- **claim / release**: worktree の所有を lock の理由欄で表明する操作と、その解除
+  （[worktree の所有の表明](orchestration.md#worktree-の所有の表明)）
+- **ジョブ**: PR ビューアの「変更を依頼」を押したときに、feature の worktree で `pis -p` を 1 回起動する処理
+  （[ジョブ](pr-viewer.md#ジョブ段-a4achg-0062-34)）
+- **cwd**: `guarded_task` の子の実行場所。親のリポジトリの worktree 一覧にある絶対パスだけ指定できる
+  （[子エージェント](guard/pi-subagents.md#子エージェント)）
+
 ## 文書化の分担（`checkpoint` と `sdd-docs`）
 
 - **復帰記録（A1）**: 圧縮を跨ぐためのセッション別の記録。`checkpoint` スキルと

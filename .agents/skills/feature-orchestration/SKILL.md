@@ -65,9 +65,9 @@ B が、まだ develop に入っていない A の変更を要るとき、A の�
 4. **統合は、A・B とも利用者の押下**。統合は merge commit なので、A を先に統合すると B から見て A は祖先になり、順序の問題は起きない（squash では B が衝突した。[CHG-0062](../../../docs/change/0062-pr-hub-simplify.md) の実験 X1 で確かめ、合格）。B を先に押すと A の変更も一緒に入り、あとの A は「統合しても内容が変わらない」状態になる（A のブランチは手で片付ける）。
 5. **全件検査**は B の worktree でも回せる（A の変更を含む。A が壊れていれば B も落ちる）。
 
-## 複数 feature をまとめて取り込む (train)
+## 複数 feature をまとめて取り込む (bundle)
 
-全件検査と「統合する」を 1 回にしたいときは、手で merge せず `python3 scripts/train.py start <a> <b> ...` を使う（衝突は止まる＝終了コード 3。worker に解消させ、`git add -A` 後に `continue`、最後に `verify`・`summary`）。正本は [統合用の枝](../../../docs/spec/orchestration.md#統合用の枝train)。
+全件検査と「統合する」を 1 回にしたいときは、手で merge せず `python3 scripts/bundle.py start <a> <b> ...` を使う（衝突は止まる＝終了コード 3。worker に解消させ、`git add -A` 後に `continue`、最後に `verify`・`summary`）。正本は [統合用の枝](../../../docs/spec/orchestration.md#統合用の枝bundle)。
 
 ## 落とし穴
 

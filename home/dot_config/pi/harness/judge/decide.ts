@@ -171,7 +171,7 @@ function piPathVariants(path: string): string[] {
  * 深さの上限 (40) を超える・lstat が ENOENT 以外で失敗するときは例外 (呼び出し側が deny にする)。
  */
 function strictResolve(path: string): string {
-	let queue = normpath(path).split(sep);
+	let queue = path.split(sep); // normpath しない (`f/..` や `link/..` を字句で畳むと実体と食い違う)
 	let resolved = sep;
 	let hops = 0;
 	while (queue.length > 0) {
@@ -184,7 +184,9 @@ function strictResolve(path: string): string {
 		const next = join(resolved, comp);
 		let link: string | null = null;
 		try {
-			if (lstatSync(next).isSymbolicLink()) link = readlinkSync(next);
+			const st = lstatSync(next);
+			if (st.isSymbolicLink()) link = readlinkSync(next);
+			else if (!st.isDirectory() && queue.some((c) => c !== "" && c !== ".")) throw new Error("通常ファイルの後に成分が続く");
 		} catch (e: any) {
 			if (e?.code !== "ENOENT") throw e;
 		}
@@ -206,7 +208,7 @@ function writeWithinScope(path: string, cwd: string, root: string, tmpRoots: str
 	const tmps = tmpRoots.filter((t) => t !== "").map((t) => realpathLoose(t)).filter((t) => !inside(rootReal, t));
 	try {
 		for (const v of piPathVariants(path)) {
-			const abs = strictResolve(isAbsolute(v) ? v : join(cwd, v));
+			const abs = strictResolve(isAbsolute(v) ? v : `${cwd}${sep}${v}`);
 			if (!inside(abs, rootReal) && !tmps.some((t) => inside(abs, t))) return false;
 		}
 	} catch {

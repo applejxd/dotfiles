@@ -10,7 +10,7 @@ pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結�
 | 層 | 中身 | ビューア |
 | --- | --- | --- |
 | 層 0 | pi + ガード。通常のコーディングエージェント。単独で完結する | 不要 |
-| 層 1 | pi の中のオーケストレーション。親が `guarded_task` で worker を並列に起動する。git-flow の worktree、`scripts/wt_owner.py`・`scripts/train.py`・`scripts/wt_clean.py` | 不要 |
+| 層 1 | pi の中のオーケストレーション。親が `guarded_task` で worker を並列に起動する。git-flow の worktree、`scripts/wt_owner.py`・`scripts/bundle.py`・`scripts/wt_clean.py` | 不要 |
 | 層 2 | PR ビューア。人の操作盤（見る・コメント・統合ボタン・「pi に依頼」ジョブ・起票）。**任意** | 本体 |
 
 ## 2. 段階 × 運用モード
@@ -24,7 +24,7 @@ pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結�
 | レビュー | TUI の会話と差分の確認だけ | 画面でコメント → 送信（`refs/pi/review/<prKey>`）→ 対話 pi またはジョブが受け取る（§4） |
 | 統合 | 人が TUI の必須確認に答える。または `merge-cli`（§3） | 人が画面の「統合する」を 2 段確認で押す（`--allow-merge`） |
 | 掃除 | `git flow feature finish` なら finish が枝と worktree を消す。ビューア/`merge-cli` で統合した場合は `scripts/wt_clean.py <名前>`（§3 の統合の節） | 統合時の cleanup 指定。または `wt_clean.py` |
-| 複数 feature のまとめ取り込み | `scripts/train.py`（統合用の枝 `feature/train-N`）→ 1 回統合 | 同左。train の枝を画面で統合（構成員の枝は、train に含まれている間は PR 一覧に並ばない。切り替えで表示） |
+| 複数 feature のまとめ取り込み | `scripts/bundle.py`（統合用の枝 `feature/bundle-N`）→ 1 回統合 | 同左。bundle の枝を画面で統合（構成員の枝は、bundle に含まれている間は PR 一覧に並ばない。切り替えで表示） |
 
 ## 3. pi 単独の運用
 
@@ -38,7 +38,7 @@ pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結�
 6. コミット前に `mise run verify:all` を 1 回。
 7. `git_commit`（`dir` に worktree）。
 8. 所有の解除: `python3 scripts/wt_owner.py release <worktree> --id <id>`。
-9. 統合（下）。複数をまとめるなら先に `python3 scripts/train.py start <feature>...`（`continue`・`verify`・`status`・`summary`。衝突は止めて終了コード 3。詳細は [統合用の枝](orchestration.md#統合用の枝train)）。
+9. 統合（下）。複数をまとめるなら先に `python3 scripts/bundle.py start <feature>...`（`continue`・`verify`・`status`・`summary`。衝突は止めて終了コード 3。詳細は [統合用の枝](orchestration.md#統合用の枝bundle)）。
 10. 掃除: `git flow feature finish` を使った場合は不要（finish が消す。下の統合の節）。ビューア/`merge-cli` で統合した場合は `python3 scripts/wt_clean.py <名前>`（`--dry-run` あり）。
 
 ### 統合
