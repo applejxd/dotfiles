@@ -216,6 +216,55 @@ def test_diff_classifies_by_strength_and_the_ledger_lets_them_through(tmp_path):
     assert "古い台帳" in proc.stderr
 
 
+def test_a_real_relax_needs_an_approver_even_if_the_ledger_calls_it_neutral(tmp_path):
+    """台帳の class の自己申告 (neutral・false-positive) で、実際の relax の承認者検査を外せない (R2 review の B3)。"""
+    base, old = _mutate(tmp_path)
+    before, now = old["relax"]
+    entry = {
+        "kind": before["kind"],
+        "input": before["input"],
+        "role": before["role"],
+        "mode": before["mode"],
+        "old": _label(before),
+        "new": _label(now),
+        "class": "neutral",
+        "reason": "試験",
+        "approver": "",
+    }
+    ledger = tmp_path / "ledger.jsonl"
+    # relax 以外の 2 件は、承認者つきで台帳に載せる (差が残るのは relax の 1 件だけ)
+    others = []
+    for cls in ("tighten", "reason"):
+        b, n = old[cls]
+        others.append(
+            {
+                "kind": b["kind"],
+                "input": b["input"],
+                "role": b["role"],
+                "mode": b["mode"],
+                "old": _label(b),
+                "new": _label(n),
+                "class": cls if cls == "tighten" else "neutral",
+                "reason": "試験",
+                "approver": "user",
+            }
+        )
+    dump = lambda es: "\n".join(json.dumps(e, ensure_ascii=False) for e in es) + "\n"  # noqa: E731
+    ledger.write_text(dump([entry, *others]), encoding="utf-8")
+    proc = _run("judge_diff.mjs", "--baseline", str(base), "--ledger", str(ledger))
+    assert proc.returncode == 1, proc.stdout[-2000:]
+    assert "承認者" in proc.stdout, proc.stdout
+    # 承認者と理由を埋めれば通る (class が neutral のままでも、承認がある)
+    ok = dict(entry, approver="user")
+    ledger.write_text(dump([ok, *others]), encoding="utf-8")
+    proc = _run("judge_diff.mjs", "--baseline", str(base), "--ledger", str(ledger))
+    assert proc.returncode == 0, proc.stdout[-2000:]
+    # 理由が空でも落とす
+    ledger.write_text(dump([dict(ok, reason=""), *others]), encoding="utf-8")
+    proc = _run("judge_diff.mjs", "--baseline", str(base), "--ledger", str(ledger))
+    assert proc.returncode == 1, proc.stdout[-2000:]
+
+
 def test_corpus_prints_only_a_distribution_without_commands(tmp_path):
     marker = "echo corpus_marker_qzv9"
     corpus = tmp_path / "corpus.json"
