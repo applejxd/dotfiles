@@ -5,7 +5,7 @@
 // see docs/spec/guard/pi-extensions.md#自作の拡張-todo--plan--btw
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { matchesKey, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { callLabel, keyFromChar, paintContentLine, renderOverlay, resultLabel, step, type Key, type Paint, type ViewState } from "./view.ts";
 
@@ -371,7 +371,7 @@ export default function (pi: ExtensionAPI) {
 					render: (width: number) => {
 						frame = renderOverlay(todos, state, width, tui.terminal.rows, themePaint(theme));
 						state = { ...state, top: frame.top };
-						return frame.lines;
+						return frame.lines.map((l) => l + " ".repeat(Math.max(0, width - visibleWidth(l)))); // 幅いっぱいに埋めて、下の画面を透かさない
 					},
 					invalidate: () => {},
 					handleInput: (data: string) => {
@@ -385,7 +385,14 @@ export default function (pi: ExtensionAPI) {
 					},
 				};
 			},
-			{ overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "90%", margin: 1 } },
+			// 狭い端末 (スマホなど) は全画面にして、下のチャットが見えて読みにくくならないようにする
+			{
+				overlay: true,
+				overlayOptions:
+					(process.stdout.columns ?? 120) < 100
+						? { anchor: "center", width: "100%", maxHeight: "100%", margin: 0 }
+						: { anchor: "center", width: "90%", maxHeight: "90%", margin: 1 },
+			},
 		);
 	};
 	pi.registerCommand("todos", {
