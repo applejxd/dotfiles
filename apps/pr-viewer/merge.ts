@@ -734,10 +734,11 @@ async function runCleanup(ctx: Ctx, sourceOid: string, warnings: string[]): Prom
 				warnings.push("統合元の worktree に未コミットの変更・未追跡のファイル、または確かめられない設定があるため、worktree を残しました。");
 			} else if (owner === null || owner.state === "unknown" || (owner.state === "owner" && owner.alive)) {
 				warnings.push("統合元の worktree は、別の持ち主が使用中（または確かめられない lock）のため、worktree を残しました。");
+			} else if (owner.state === "owner") {
+				warnings.push("統合元の worktree に残骸の lock があるため、worktree を残しました。python3 scripts/wt_owner.py reap で解除してから、もう一度掃除してください。");
 			} else if (!(await backupIgnored(sw.path, ctx.source.short, ctx.backupDir, st.length > 0))) {
 				warnings.push("無視ファイルを退避できなかった（上限 200 MB 超など）ため、worktree を残しました。");
 			} else {
-				if (owner.state === "owner") await runGit(["worktree", "unlock", sw.path], { gitDir: ctx.gitDir, write: true }); // 残骸の lock
 				// 統合元の worktree に --force を使わない: 無視ファイルだけなら git worktree remove が再帰的に消す（status が空と確かめた後だけ呼ぶ）
 				const r = await runGit(["worktree", "remove", sw.path], { gitDir: ctx.gitDir, write: true });
 				if (r.code === 0) done.push("worktree");

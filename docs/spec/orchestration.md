@@ -23,7 +23,7 @@
 
 | 機能 | 状態 | 内容 | 正本 |
 | --- | --- | --- | --- |
-| 単発の起動 | 実装済 | `{agent, task}`。完了まで待つ。新しい子（`explore`・`review`・`worker`）は ToDo の項目 ID（`todo`）が必須。`cwd` で実行場所（登録済みの worktree）を指定でき、worker は担当の worktree を `cwd` に指定して起動する | [pi の子エージェント](guard/pi-subagents.md#子エージェント) |
+| 単発の起動 | 実装済 | `{agent, task}`。完了まで待つ。新しい子（`explore`・`review`・`worker`）は ToDo の項目 ID（`todo`）が必須。`cwd` で実行場所（登録済みの worktree）を指定でき、worker は担当の worktree を `cwd` に指定して起動する（edit / write は担当 worktree と明示した一時領域の外を書けない。shell・試験・hook は未強制） | [pi の子エージェント](guard/pi-subagents.md#子エージェント) |
 | バックグラウンド | 実装済 | `background: true`。ID をすぐ返し、完了は通知で届いてターンが再開する | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
 | 並列 | 実装済 | `tasks: [...]`（最大 12 件）。同時に生かす子は 4 まで。超えた分は空きを待つ | 同上 |
 | 保持と追加依頼（job） | 実装済 | `keep: true` で残し、`{jobId, task}` で履歴を保って続ける。`close` で止める | [job](guard/pi-subagents.md#子を保持して追加依頼するjob) |
@@ -73,7 +73,7 @@
 1. **統合済み**（枝が統合先の祖先）だけが対象。未統合・追跡ファイルの変更・未追跡（無視されないもの）は拒否。
 2. 無視ファイル（`__pycache__`・`.pytest_cache`・`node_modules` など）だけなら、それごと削除する。`git worktree remove`（`--force` なし）が無視ファイルごと消す。status が空と確かめた後だけ呼ぶ。`filter`・hooks など外部コードが動きうる設定があれば、status も動かさず残す。
 3. 削除前に無視ファイルを tgz へ退避する（ビューアは `--state-dir` 配下の `cleanup-backups/`、CLI は `<共通 git-dir>/pi-cleanup-backups/`。`<名前>-<時刻>.tgz`）。200 MB 超・数えられない・失敗なら worktree を残して警告。退避は新しい順に 5 件まで。
-4. **有効な owner の lock**（pid が生きている）と人が付けた lock は消さない。残骸の lock は解除して消す。
+4. **有効な owner の lock**（pid が生きている）・人が付けた lock・**残骸の lock**（pid が死んだ lock）は、いずれも掃除しない（worktree も枝も残す）。残骸は解除もしない（古い観測で他方の新しい lock を外しうるため）。「`python3 scripts/wt_owner.py reap` で解除してから、もう一度」と案内する（CLI は拒否・終了コード 3。ビューアは統合の成功のまま警告に載せる）。
 5. 枝は `git branch -d`（ビューアは承認した先頭を指定した CAS で削除）。
 
 CLI の終了コード: 0 = 全て処理、3 = 一部を残した・拒否、2 = 使い方の誤り。

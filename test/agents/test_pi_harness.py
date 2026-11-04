@@ -2566,7 +2566,7 @@ def test_must_confirm_times_out_and_tells_the_model_not_to_retry(env):
     _with_confirm_rules(env, timeout_seconds=1)
     requests, result = _rpc_outcome(env, bash_call(GH_CREATE), [None])
     assert len(requests) == 1 and requests[0].get("timeout") == 1000, requests
-    assert "not approved:" in result and "再試行せず" in result, result
+    assert "not approved:" in result and "再試行しない" in result, result
 
 
 @needs_must_confirm

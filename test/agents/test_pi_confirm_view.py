@@ -151,9 +151,9 @@ def test_confirm_results_are_told_apart_by_elapsed_time(table):
 
 def test_outcome_reasons_tell_the_model_what_to_do(table):
     r = table["reasons"]
-    assert "再試行せず" in r["timeout"] and "新しい指示を待つ" in r["timeout"]
+    assert "再試行しない" in r["timeout"] and "依存しない作業を続け" in r["timeout"]
     assert "同じ操作をくり返さない" in r["denied"]
-    assert "再試行せず" in r["error"]
+    assert "再試行しない" in r["error"]
     assert r["approved"] == ""
 
 
