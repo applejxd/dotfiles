@@ -7,6 +7,5 @@
   },
   "blockers": [],
   "plan": null,
-  "defaults": {"message": "", "messageSource": "generated", "summaryStale": false, "cleanup": "none"},
-  "warnings": []
+  "defaults": {"message": "", "messageSource": "generated", "summaryStale": false, "cleanup": "none"}
 }

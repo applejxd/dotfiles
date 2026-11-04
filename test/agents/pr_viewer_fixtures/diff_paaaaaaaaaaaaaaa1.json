@@ -1,5 +1,5 @@
 {"path": "src/search.ts", "binary": false, "truncated": false,
- "oldBlob": "1111111111111111111111111111111111111111", "newBlob": "2222222222222222222222222222222222222222", "hunks": [
+ "hunks": [
   {"header": "@@ -1,3 +1,5 @@ export function search()", "oldStart": 1, "oldLines": 3, "newStart": 1, "newLines": 5, "lines": [
     {"t": " ", "o": 1, "n": 1, "s": "import { db } from \"./db\";"},
     {"t": "-", "o": 2, "n": null, "s": "export const query = \"\";"},

@@ -16,6 +16,5 @@
     "riskConfig": "unavailable",
     "touchesApp": true
   },
-  "defaults": {"message": "feat: 例", "messageSource": "summary", "summaryStale": true, "cleanup": "none"},
-  "warnings": []
+  "defaults": {"message": "feat: 例", "messageSource": "summary", "summaryStale": true, "cleanup": "none"}
 }

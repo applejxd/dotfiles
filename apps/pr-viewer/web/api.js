@@ -1,4 +1,4 @@
-/* API クライアント（契約: GET 5 本 + POST 2 本。同一オリジンのみ） */
+/* API クライアント(契約: GET 5 本 + POST 2 本。同一オリジンのみ) */
 (function () {
   "use strict";
   var PRV = (window.PRV = window.PRV || {});
@@ -93,16 +93,6 @@
     review: function (id, signal) {
       return guard(function () {
         return get(idPath(id) + "/review", signal);
-      });
-    },
-    comment: function (id, c) {
-      return guard(function () {
-        return post(idPath(id) + "/comments", { thread: c.thread, anchor: c.anchor, body: c.body, expect: c.expect });
-      });
-    },
-    submit: function (id, s) {
-      return guard(function () {
-        return post(idPath(id) + "/submit", { kind: s.kind, dest: s.dest, resendOf: s.resendOf, expect: s.expect });
       });
     },
     /* 統合（CHG-0062 段 A2）。capabilities は 404（古いサーバ）・通信断のとき merge:false 扱い */

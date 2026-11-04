@@ -14,7 +14,7 @@ import {
 import type { BranchRef, FileEntry, Hunk, Repo } from "./git-view.ts";
 import { mergeExecute, mergePlan } from "./merge-api.ts";
 import type { MergeEnv, PostResult } from "./merge-api.ts";
-import { blobsFor, getReview, postComment, postSubmit } from "./review-api.ts";
+import { getReview } from "./review-api.ts";
 import type { PrCtx } from "./review-api.ts";
 
 const MAX_FILES = 400;
@@ -300,11 +300,10 @@ async function fileDiff(
 	repo: Repo,
 	c: Computed,
 	path: string,
-): Promise<{ path: string; binary: boolean; truncated: boolean; hunks: Hunk[]; oldBlob: string | null; newBlob: string | null }> {
+): Promise<{ path: string; binary: boolean; truncated: boolean; hunks: Hunk[] }> {
 	const file = c.files.find((f) => f.path === path);
 	if (!file) throw new ApiError(404, "not_in_diff", "このブランチの差分に含まれないファイルです。");
-	const blobs = await blobsFor(repo, c.summary, file);
-	if (file.binary) return { path, binary: true, truncated: false, hunks: [], ...blobs };
+	if (file.binary) return { path, binary: true, truncated: false, hunks: [] };
 	const specs = file.oldPath !== null ? [file.oldPath, file.path] : [file.path];
 	const r = await gitCapped(
 		repo,
@@ -328,7 +327,7 @@ async function fileDiff(
 		const cut = text.lastIndexOf("\n");
 		text = cut >= 0 ? text.slice(0, cut + 1) : "";
 	}
-	return { path, binary: false, truncated: r.truncated, hunks: parseDiff(text), ...blobs };
+	return { path, binary: false, truncated: r.truncated, hunks: parseDiff(text) };
 }
 
 function ctxOf(repo: Repo, c: Computed): PrCtx {
@@ -341,13 +340,12 @@ function ctxOf(repo: Repo, c: Computed): PrCtx {
 		sourceOid: s.sourceOid,
 		targetOid: s.targetOid,
 		baseOid: s.baseOid,
-		files: c.files,
 	};
 }
 
 /** 書き込み API（POST）の入口。body は検査済みの JSON のオブジェクト。 */
 export function isPostRoute(pathname: string): boolean {
-	return /^\/api\/prs\/[^/]+\/[^/]+\/(?:comments|submit|merge-plan|merge)$/.test(pathname);
+	return /^\/api\/prs\/[^/]+\/[^/]+\/(?:merge-plan|merge)$/.test(pathname);
 }
 
 /** 統合系の POST（Origin 必須・--allow-merge が要る経路）。 */
@@ -361,13 +359,12 @@ export async function handlePost(
 	body: Record<string, unknown>,
 	env: MergeEnv,
 ): Promise<PostResult> {
-	const m = /^\/api\/prs\/([^/]+)\/([^/]+)\/(comments|submit|merge-plan|merge)$/.exec(pathname);
+	const m = /^\/api\/prs\/([^/]+)\/([^/]+)\/(merge-plan|merge)$/.exec(pathname);
 	if (!m) throw notFound();
 	const { repo, c } = await findPr(repos, m[1], m[2]);
 	const ctx = ctxOf(repo, c);
 	if (m[3] === "merge-plan") return await mergePlan(ctx, c.summary, body, env);
-	if (m[3] === "merge") return await mergeExecute(ctx, body, env);
-	return { status: 201, body: m[3] === "comments" ? await postComment(ctx, body) : await postSubmit(ctx, body) };
+	return await mergeExecute(ctx, body, env);
 }
 
 /** API の入口。成功なら応答の本体、失敗なら ApiError を投げる。 */

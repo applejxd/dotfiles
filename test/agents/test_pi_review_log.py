@@ -320,17 +320,13 @@ def test_thread_status_transitions(call):
     assert {t["id"]: t["status"] for t in st["threads"]} == {c["id"]: "read", other["id"]: "unsent"}
 
 
-def test_batches_and_unread(call):
+def test_batches_are_folded_and_receipt_marks_received(call):
     c1, c2 = comment(), comment()
     s1 = submit([c1["id"]], dest="w1")
     s2 = submit([c2["id"]], dest="w2")
     st = fold(call, [c1, c2, s1, s2])
     assert [b["received"] for b in st["batches"]] == [False, False]
-    assert [b["batchId"] for b in call("unreadBatches", [st, "w1"])[0]] == [s1["d"]["batchId"]]
-    assert call("unreadBatches", [st, "w3"])[0] == []
     st = fold(call, [c1, c2, s1, s2, receipt(s1["d"]["batchId"])])
-    assert call("unreadBatches", [st, "w1"])[0] == []
-    assert [b["batchId"] for b in call("unreadBatches", [st, "w2"])[0]] == [s2["d"]["batchId"]]
     assert st["batches"][0]["received"] is True and st["batches"][0]["sessionId"] == "s1"
 
 

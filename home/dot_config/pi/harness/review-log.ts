@@ -437,11 +437,6 @@ export function foldState(meta: Meta, events: ReviewEvent[], current: Vs): State
 	};
 }
 
-/** 宛先が一致し、受領がまだ無い batch */
-export function unreadBatches(state: State, destWorktreeId: string): Batch[] {
-	return state.batches.filter((b) => b.dest.worktreeId === destWorktreeId && !b.received);
-}
-
 export function mergedOk(state: State): boolean {
 	return state.merge.succeeded;
 }
