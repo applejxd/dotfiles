@@ -65,6 +65,17 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 - `btw` は、`--plain` では `ctx.modelRegistry.complete()` を 1 回呼び、既定では `explore` の子を 1 つ起動する。どちらもトークンを消費する（セッションの合計には入らない）
 - **子の入口 `__piAskReadChild`**: 利用者のコマンドが起こす操作なので、`/agent` と同じく判定器は通さない。そのかわり、起動できる役割を**読み取り専用（`reader` / `explorer`）に限る**（`worker` / `commit` は拒否）。答えには伏字化を掛ける（Windows の `subagents` 拡張の入口は、子がフルガード付きで起動するので判定と伏字化が効く想定。実機は未確認。子の出力の貯め込みは 8 MB で止める）。試験は `test_ask_read_child_entry_runs_only_read_only_agents`・`test_btw_asks_an_explore_child_by_default_and_plain_does_not`、表示の部品（上限・窓・スクロールのキー）は `test_btw_view.py`。（実測は上の記録）
 
+### todo の別表示
+
+チャットの履歴が todo の一覧で流れないよう、表示をチャットから分けた（`extensions/todo/view.ts` の純関数 + `index.ts` の配線。試験は `test_pi_todo_view.py`）。
+
+- **チャット**: `renderCall` / `renderResult` は既定で 1 行に畳む（例: `📌 todo update #101 → blocked`、結果は「未完了 18 件・完了 83 件」）。展開（pi の expanded）すると、モデルへ返す本文を行頭の印で色づけして出す。**モデルへ返す `content` の text・`details` は変えない**
+- **`/todos`（引数なし）**: overlay で全件を見る。状態ごとの見出し（進行中・待ち・未着手・完了・中止。件数つき）で区切り、各項目は 1 行目「アイコン `#id` 題名」（進行中は accent の太字、待ちは warning、未着手は通常、完了は success、中止は dim の取り消し線）、2 行目以降に note を dim で 2 行まで（超えたら `…`）
+- **操作**: ↑↓ / j k で 1 行、PgUp / PgDn でページ、g / G で先頭・末尾、`a` で完了・中止の表示を切り替え（既定は未完了だけ）、Esc / q で閉じる
+- **大きさ**: 高さは「内容」と「端末の行数 − 4」の小さい方（描画のたびに `tui.terminal.rows` を読むのでサイズ変更に追従）。桁は表示幅（全角 2）で切る・折り返す。pi-tui に依存しない自前の幅関数を使う（node の試験で単体に動かすため）
+- **TUI 以外**（`ctx.hasUI` が false、または `ctx.mode` が tui 以外）: 従来どおり `ctx.ui.notify` のテキスト。`/todos tidy`・`/todos clear`・ステータス行は変えない
+- **未確認**: 実機の TUI での見た目（色・overlay の位置と大きさ・端末のリサイズ）と Windows。反映には `chezmoi apply` と pi の再起動が要る
+
 ### guarded_action（承認つきの外部操作）
 
 `git commit`・`gh issue comment`・`gh issue edit`（本文とタイトル）を、**1 回の承認で、ハーネスが組み立てた argv を、シェルを通さずに実行する**ツール（[CHG-0038 段 G11](../../change/0038-guard-reclassification.md)）。通常の ask（コマンドを見せて判断）と違い、内容を見せて承認を取り、承認した内容がそのまま使われる。
@@ -301,6 +312,21 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 | 既知の制限 | ① 開始イベントより前の数ミリ秒の窓では保留できない ② `ctx.isIdle()` は圧縮中も false なので、`isIdle` での判定はできない ③ 通知を保留しても、別経路の中断（利用者が圧縮中に Esc を押す、など）は防げない |
 | 試験 | `test/agents/test_pi_compact_defer.py`（harness は `index.ts` の `region compact-defer` の区画を node で実行。activity は偽の `pi`。配線は文字列で確認） |
 
+#### 文脈の使用率による自動の保存と圧縮
+
+文脈の使用率が閾値以上になったら、エージェント自身に保存させてから圧縮を起動する（`harness/autocheckpoint.ts`。親のセッションだけ）。
+
+| 項目 | 内容 |
+| --- | --- |
+| 流れ | `agent_before_settle` で、使用率（`ctx.getContextUsage().percent`）が閾値（既定 80%）以上なら、保存の指示を `custom_message`（利用者にも表示）で積み `continue: true` で 1 回だけ継続する。次の settle で `ctx.compact({ customInstructions })`（上の引き継ぎの指示）を起動する。圧縮の完了・失敗のどちらでも 10 分の冷却に入る |
+| 保存の指示 | sdd-docs で docs へ未反映の決定を反映し、`.tmp/keep/checkpoint/NEXT.md`（私用）を書き直し、todo を更新する。コミットしない・公開リポジトリの規約を守る・本体（develop）の docs は編集しない・サブエージェントを起動しない |
+| ループ防止 | 保存の継続は 1 サイクルに 1 回。圧縮が済むまで、冷却が明けるまで、再び積まない |
+| 何もしない場合 | 子・print / json モード・`PI_AUTOCHECKPOINT=0`・`percent` が null（圧縮直後など）・直前の実行が中断 / エラー |
+| 中断・失敗 | 保存の実行が中断（Esc）されたら、その周期の圧縮は起動しない。保存の実行がエラーで終わっても圧縮は進める。`compact` が例外でも状態は戻る |
+| 調整 | 環境変数 `PI_AUTOCHECKPOINT_PERCENT`（0 超 100 以下。不正値は 80）。無効化は `PI_AUTOCHECKPOINT=0`。設定ファイルには出していない |
+| 限界 | 保存の質は**エージェント次第**で保証しない（指示を守らない・docs の反映が不完全なことがある）。組み込みの自動圧縮（窓 − `reserveTokens` 付近）は**予備として残る**ので、保存より先にそちらが走ることもある。使用率は settle の時点でしか見ないので、1 回の長い実行の途中では働かない |
+| 試験 | `test/agents/test_pi_autocheckpoint.py`（`test/agents/pi/autocheckpoint_driver.mjs` が偽のイベントとコンテキストを handler へ渡す）。実機の確認は未実施 |
+
 ### セッションごとの一時置き場（`.tmp/s/<ID>/`）
 
 [CHG-0042](../../change/0042-tmp-lifecycle.md)。作業ツリーの `.tmp/` に残骸が溜まる（実測で 31 GB）のを防ぐため、
@@ -409,6 +435,41 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
 - Windows にも配る。`.chezmoiignore` は `.config/pi/` を戻し、除外するのは `landlock_exec.py` だけ。Windows 実機は未検証
 - 試験: `test_pi_commit_parse.py`（解釈・表示・退避。node で直接）、`test_pi_commit_confirm.py`
   （pi + 偽のモデル。RPC・非対話・TMUX の TUI）
+
+### 確認画面の手順の一覧
+
+bash の確認（ask・必須確認）に、1 行のコマンドを**手順に解きほぐした一覧**を添える。**表示だけで、判定（`judge/`）には使わない**（案件 [CHG-0062](../../change/0062-pr-hub-simplify.md)・バックログ #98）。
+
+```text
+コマンド (全文):
+cd /abs && git log --oneline | head -3 > /tmp/o
+
+手順:
+  1. 作業場所を `/abs` に変更
+  2. `git log --oneline`（履歴を表示） を実行し、出力を次へ渡す
+  3. `head -3`（先頭を表示） を実行し、標準出力を `/tmp/o` に書き込む（上書き） [副作用の候補: ファイルを書き込む]
+```
+
+- **作り方**: 同梱の `mvdan-sh`（mvdan/sh の GopherJS 版。`home/dot_config/pi/harness/vendor/mvdan-sh/`）の構文木から作る（`explain.ts`）。
+  説明の語（git のサブコマンドなど）・副作用の印・ヒアドキュメントの本文のキーワードは固定の表で、モデルには作らせない
+- **実測**: 実際の bash 呼び出し 8514 件のうち 8513 件を解析できた。1 件あたり約 0.2 ms、読み込みは約 72 ms（初回の 1 回だけ。遅延読み込み）
+- **構造化する形**: `&&` `||` `;` パイプ・リダイレクト・`$(…)`・バッククォート・サブシェル・`{ }`・for / while / if・
+  ヒアドキュメント（本文は命令と分け、Python・Node・シェルの本文は危ない語に印を付ける）・`xargs`・`find -exec`・`bash -c`・
+  `env` / `time` / `nohup` / `sudo` の前置き。上限は手順 16・1 手順 200 字・入れ子 3 階層
+- **原文に倒す形**: プロセス置換・関数定義・`case` / `select`・`eval`・`((`・構文エラー・入れ子の上限超え・mvdan-sh を読み込めないとき。
+  その手順は「解析できない部分: <原文>」と出し、末尾に注意の 1 行を足す
+- **配備**: `chezmoi apply` で `~/.config/pi/harness/vendor/` に入る。反映には pi の再起動が要る
+- **折りたたみ**: 手順が 6 つ（`FOLD_OVER`）を超え、確認の理由に当たった手順があるときだけ、
+  当たった手順・その前後 1 手順・副作用の候補つきの手順・「ほか N 手順」を残し、ほかを「… N 手順を省略 (原文で確認)」の 1 行にまとめる。
+  手順の番号は元のまま。**当たりが取れないとき・6 手順以下のときは全部出す（隠さない）**。原文（全文）は常に画面にある。
+  「当たった」は、規則のパターンを表示の側で照合した近似で、判定器が実際に当てた箇所と一致しないことがある
+  （位置情報つきの判定は、判定の構文木化〔バックログ #100〕のあと）
+- **保証の言い過ぎを避ける**: 一覧は**理解を助ける補助**で、判定ではない。解析が不完全なことがある。**常に原文（全文）を確認する**。
+  mvdan-sh は 2021 年版で、新しい bash の構文に追随していない可能性がある（その場合は構文エラーとして原文に倒れる）。
+  手順の切り出しは Offset（UTF-8 のバイト位置）に依存するので、日本語を含む原文の試験を持つ
+- **更新**: 版を固定して取り込み、`vendor/mvdan-sh/README.md` の版・バイト数・sha256 を書き換える（試験が一致を確かめる）。
+  `index.js` は minified なので、pre-commit の整形の対象から外す（書き換わると sha256 が変わる）
+- 試験: `test/agents/test_pi_explain.py`（`explain_driver.mjs`。反例・日本語・読み込み失敗・代表 30 件の原文倒れ 3 件以下）
 
 ### 整形
 

@@ -71,7 +71,7 @@
 取り込み済みの worktree を、PR ビューアの統合の cleanup（[後始末](pr-viewer.md)）と CLI `scripts/wt_clean.py <名前>... [--dry-run] [--repo <パス>]` で同じ規則で消す。
 
 1. **統合済み**（枝が統合先の祖先）だけが対象。未統合・追跡ファイルの変更・未追跡（無視されないもの）は拒否。
-2. 無視ファイル（`__pycache__`・`.pytest_cache`・`node_modules` など）だけなら、それごと削除する。`git worktree remove`（`--force` なし）が無視ファイルごと消す。status が空と確かめた後だけ呼ぶ。`filter`・hooks など外部コードが動きうる設定があれば、status も動かさず残す。
+2. 無視ファイル（`__pycache__`・`.pytest_cache`・`node_modules` など）だけなら、それごと削除する。`git worktree remove`（`--force` なし）が無視ファイルごと消す。status が空と確かめた後だけ呼ぶ。（pi の親・worker が bash で直接呼べる `git worktree remove` は、単純な 1 行の force なしだけで、退避は無い。[例外と限界](guard/pi-decide.md#git-worktree-remove-の例外)）`filter`・hooks など外部コードが動きうる設定があれば、status も動かさず残す。
 3. 削除前に無視ファイルを tgz へ退避する（ビューアは `--state-dir` 配下の `cleanup-backups/`、CLI は `<共通 git-dir>/pi-cleanup-backups/`。`<名前>-<時刻>.tgz`）。200 MB 超・数えられない・失敗なら worktree を残して警告。退避は新しい順に 5 件まで。
 4. **有効な owner の lock**（pid が生きている）・人が付けた lock・**残骸の lock**（pid が死んだ lock）は、いずれも掃除しない（worktree も枝も残す）。残骸は解除もしない（古い観測で他方の新しい lock を外しうるため）。「`python3 scripts/wt_owner.py reap` で解除してから、もう一度」と案内する（CLI は拒否・終了コード 3。ビューアは統合の成功のまま警告に載せる）。
 5. 枝は `git branch -d`（ビューアは承認した先頭を指定した CAS で削除）。

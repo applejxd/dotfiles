@@ -66,7 +66,8 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 順番はコードに固定してある（設定の並びに意味は無い）。
 
 1. **共通の禁止**。どの役割・bypass でも外れない
-   - `bash`: `check_bash.py` の deny 側と同じ検査（`[bash] deny` の照合と意味解析。`cd` を挟んだ形も見る）
+   - `bash`: `check_bash.py` の deny 側と同じ検査（`[bash] deny` の照合と意味解析。`cd` を挟んだ形も見る）。
+     **例外**: 役割の `deny_except` に載る語は、条件つきで `[bash] deny` から外す（[`git worktree remove` の例外](#git-worktree-remove-の例外)）
    - ファイル: `[file] read_deny_globs`（`read` / `grep` / `find` / `ls`）と `write_deny_globs`（`edit` / `write`）。
      例外（`[[file.deny_exceptions]]`）は対の deny にだけ効く。パスは渡された形・`cwd` で解いた絶対パス・
      symlink を解いた実体の 3 つで照合する。ディレクトリを渡す `grep` / `find` / `ls` は、中のファイルの形でも照合する
@@ -111,7 +112,7 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
   GraphQL の `createRepository`・`updateRepository`・`deleteRepository`・`archiveRepository`・`transferRepository`・`createRef`・`updateRef`・`deleteRef`・`createCommitOnBranch`・`mergePullRequest`。
   これは **GitHub API 経由の push 相当**（コンテンツ API・Git データ API）を塞ぐ。それ以外の書き込みは ask（確認に格上げ）
 - **表に無い外部書き込みは、従来どおり**（役割の既定の ask。サンドボックスでは allow）。この表では「すべて」を捕捉できない（すり抜けを許容する範囲）
-- **元に戻せないローカルの git 操作**（`[pi.confirm] local_git = true`。`judge/gitdestructive.ts`）: `git branch -D/-M/-f/--delete --force`（`-fd`・`-df` など束ねた形を含む）、`git clean`（`-n`/`--dry-run` が無いもの）、`git tag -d/--delete/-f`、`git checkout -B`、`git switch -C/--force-create`。
+- **元に戻せないローカルの git 操作**(`[pi.confirm] local_git = true`。`judge/gitdestructive.ts`): `git branch -D/-M/-f/--delete --force`(`-fd`・`-df` など束ねた形を含む)、`git clean`(`-n`/`--dry-run` が無いもの)、`git tag -d/--delete/-f`、`git checkout -B`、`git switch -C/--force-create`、`git worktree remove` の force は、元に戻せない操作の一覧に残す (deny が外れる形に force は付かないので通常は働かない多層防御。[例外](#git-worktree-remove-の例外))。
   前置の環境変数・`env`・`git` のグローバルオプション（`-C`・`-c`・`--git-dir`・`--work-tree` など）を読み飛ばしてから、サブコマンドとフラグを見る（`--` 以降と、値を取るオプションの値は数えない。`git clean -e '-n' -f` は dry-run と見なさない）。
   評価の位置は、確認表の直後・`bashAsk` の前。**ask が既定の役割（親・`worker`）は、bypass でもサンドボックスの緩和でも ask のまま（理由の先頭は「確認が必要な元に戻せない git 操作 (bypass でも確認する): 」）**。
   **既定が deny の役割（`explorer`・`reader`・`committer`）は deny**: これらは `[bash] ask` が役割の既定の deny より先に当たり、`git branch -D`・`git clean`・`docker rm` が bypass で allow になっていた（2026-10-29 に実測。ask 一般の扱いは[次の節](#既定が-deny-の役割の-ask)）。
@@ -141,6 +142,37 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 - **`local_git` との関係**: `local_git` の deny は残す。検出器が違い、複合（`git clean -fd && gh api -X POST …`）や別の書き方でも、後続の ask（mustConfirm を含む）に緩めずに先に deny を返すため
 - **照合**: Python の正解データは ask（bypass なら allow）。TS の deny は、`judge_golden.mjs` が、役割・bash・元の理由・`source`・`check` を比べて一致とみなす
 - **残る範囲**: ファイル読み取りの ask は bypass で allow のまま。`worker` は ask 既定で bypass を継ぐので、`docker rm` などは通る
+
+## git worktree remove の例外
+
+`[bash] deny` の `git worktree remove` は、**pi の `implementer`（親）と `worker` だけ**、単純な 1 行の force なしだけを許可する
+（[CHG-0062](../../change-history/0062.md)）。force 付きは deny のまま（確認つきで通す案は、解析の取りこぼしが続いたので採らなかった）。`explorer`・`reader`・`committer`・`orchestrator` は deny のまま。
+
+- **設定**: `[pi.profiles.implementer]` と `[pi.profiles.worker]` の `deny_except = ["git worktree remove"]`。許す語は判定器（`decide.ts` の
+  `DENY_EXCEPT_WORDS`）が「`git worktree remove`」に固定し、未知の語・配列でない値は `source: error` の deny。`[bash] deny` と `[bash.deny_guide]` は変えない
+  （Claude Code・Copilot・OpenCode の生成物は同じ。pi だけの変更）
+- **deny を外す条件**（`judge/bash.ts` の `worktreeRemoveExcepted`、共通の deny を引く前）: `[pi.confirm] local_git` が真で、役割が例外に載っていること。
+  **元のコマンド文字列の全体**が、正規表現 `^git worktree remove(?: [A-Za-z0-9_./@%+=:,][A-Za-z0-9_./@%+=:,-]*)+$` に一致すること
+  （`git worktree remove` の後ろに、単一の空白で区切った、`-` で始まらない単純なトークンが 1 個以上）。
+  `normalize` の結果や分割したセグメントは見ない（解析器の解釈に依存しない）。前後の空白・連続する空白・引用符・バックスラッシュ・行継続・
+  リダイレクト・パイプ・`;` `&`・括弧・`$` `` ` `` `{` `*` `?` `[` `~` `!`・`-` で始まるトークン（`-f`・`--force`・`--`・`-C`）・
+  前置の `env`・`git -C`・`xargs`・`bash -c`・`cd … &&`・複合は、すべて一致せず deny のまま（fail closed）。
+  全体が 1 コマンドなので、複合コマンドの他の部分の deny には影響しない。`local_git` を切れば例外も無効
+  - **代償**: 空白を含むパスなど引用が要る正当なコマンドも deny のまま（この repo の worktree 名は空白を含まない）
+- **force の検出**（`judge/gitdestructive.ts` の `case "worktree"`、[confirm](#confirm)）: 多層防御として残す。deny が外れる形に force は付かないので通常は働かず、
+  何かの不具合で force 付きが deny を通ったときだけ、`mustConfirm` の ask になる
+- **緩めたあとの判定**: 他の規則に当たらない plain 形は `source: default`（親は ask、bypass で allow、`pis` の境界の中で allow。`[pi.shell] allow` には載せない）
+- **ssh 経由では効かない**: 判定器は ssh を先に解いてリモート側の文字列を再帰判定するが、例外は元の入力そのもの（直接実行）にだけ効く。
+  `ssh <許可済み宛先> 'git worktree remove …'` は deny のまま（代償: リモートの正当な掃除は、リモートで手動で行う）
+- **Python 版と golden**: `decide.py` は `deny_except` を知らず deny のまま。TS も例外が効くのは force なしの 1 行だけで、golden の標本（force 付き）は
+  どちらも deny なので、`judge_golden.mjs` に許容は無い。負例は `test_pi_worktree_remove.py`
+- **残る限界**:
+  - force なしでも、`.gitignore` 対象のファイル（例: `.tmp/`・`.venv`）と detached のコミットは失う。退避（tgz）は `wt_clean.py` と PR ビューアの cleanup（`apps/pr-viewer/merge.ts` の退避）にあるが、bash からの直接実行にはない
+  - force なしの `git worktree remove` が守るのは、変更済み・未追跡のファイルがあるときと、`git worktree lock`（所有の表明）したときだけ。
+    claim を忘れた worktree は lock で守られない。lock した worktree は force が 2 回要るが、force 付きは deny なので消せない
+  - bypass を継ぐ worker は、claim のない clean な他の worktree を plain で消せる
+  - 保証は「うっかり防止」。git の alias・外部スクリプト・動的に組み立てた文字列は見ない。反映には `chezmoi apply` と pi の再起動が要る
+- **試験**: `test_pi_worktree_remove.py`
 
 ## ssh / scp の許可
 
@@ -209,12 +241,12 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 
 | 役割 | `tools` | `default` | ほか | 使うもの |
 | --- | --- | --- | --- | --- |
-| `implementer` | 7 つのツール・`task`・`todo`・`ask`・`mcp__*` | ask | `shell_deny` は git の状態を変える操作など（`git flow`・`git-flow` の拒否は [CHG-0050](../../change/0050-slim-guarded-action.md) で撤去） | 親（主エージェント） |
+| `implementer` | 7 つのツール・`task`・`todo`・`ask`・`mcp__*` | ask | `deny_except` に `git worktree remove`（force なしを許可。[例外](#git-worktree-remove-の例外)）。`shell_deny` は git の状態を変える操作など（`git flow`・`git-flow` の拒否は [CHG-0050](../../change/0050-slim-guarded-action.md) で撤去） | 親（主エージェント） |
 | `reader` | read・grep・find・ls | deny | — | 利用者が `pis --role reader` で選ぶ読み取り専用の親。子の `plan` 役も使う（`[pi.agents.plan]`。bash を持たないので、`skill_scripts` の許可が通らない）。harness の読み取り専用の子の一覧 `READ_ONLY_CHILD_PROFILES` に含む（`/btw` の入口と、計画モードの間に起動できる子）。bash を持たない役割の試験にも使う |
 | `explorer` | `reader` + bash | deny | `shell_allow` に `wc` と読み取り専用の git（`status` / `diff` / `log` / `show` / `ls-files`） | 子の `explore` / `review` |
 | `committer` | bash・read・grep・find・ls | deny | `shell_allow` に `git status` / `git diff` / `git log` など。`shell_deny` に git の状態を変える操作 | 子の `commit` |
 | `orchestrator` | read・grep・find・ls・task・todo・ask・action | deny | 許可リスト。`bash`・`edit`・`write`・MCP を持たない。`/orchestrate on` の間だけ、親の役割になる（[親の絞り込み](pi-subagents.md#親の絞り込みorchestrate)） | 親（利用者が切り替える） |
-| `worker` | 7 つのツール | ask | `shell_deny` に git の状態を変える操作 | 子の `worker` |
+| `worker` | 7 つのツール | ask | `deny_except` に `git worktree remove`（同上）。`shell_deny` に git の状態を変える操作 | 子の `worker` |
 
 **既定の役割**は `[pi] default_role`（`common.toml`。既定は `implementer`）。`pis` は `--role` / `PI_HARNESS_ROLE` で上書きでき、
 `[pi.profiles]` に無い名前は、生成が止まる。
@@ -222,8 +254,8 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 `git status` / `git diff` は `.git/config` 経由でコマンドを起動しうるので、全体の `[pi.shell] allow` には載せず、
 `committer` の `shell_allow` だけに置く（今の OpenCode の `commit` と同じ）。
 
-`tools` が文字列の配列でない・`default` が allow / ask / deny でない・`shell_allow` / `shell_deny` が文字列の
-配列でない・名前が無いときは、`source: error` の deny。
+`tools` が文字列の配列でない・`default` が allow / ask / deny でない・`shell_allow` / `shell_deny` / `deny_except` が文字列の
+配列でない・`deny_except` に未知の語がある・名前が無いときは、`source: error` の deny。
 
 ## 試験
 

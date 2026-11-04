@@ -1,8 +1,0 @@
-{"job": {
-  "id": "22222222-2222-4222-8222-222222222222", "kind": "address_review", "state": "succeeded", "reasons": [],
-  "createdAt": "2099-01-01T03:00:00+00:00", "startedAt": "2099-01-01T03:00:01+00:00", "endedAt": "2099-01-01T03:03:00+00:00", "elapsedSec": 179,
-  "baseOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "resultOid": "ffffffffffffffffffffffffffffffffffffffff",
-  "batchIds": ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
-  "files": [{"path": "src/search.ts", "status": "M"}, {"path": "docs/new.md", "status": "A"}, {"path": "old/gone.ts", "status": "D"}],
-  "exitCode": 0
-}}

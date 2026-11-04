@@ -94,6 +94,7 @@
 
 | # | 目的 | 結果 | 終了日 | 現行仕様 / ADR |
 | --- | --- | --- | --- | --- |
+| [0063](closed/0063-git-push-action.md) | git push の承認つき action（`git_push`）を `guarded_action` に足す | 取り下げ（5 回の独立 review で毎回別の穴。push は手動のまま。再開時の論点を記録） | 2026-11-05 | [CHG-0050](0050-slim-guarded-action.md)、[CHG-0053](0053-worktree-integration-gate.md) |
 | [0061](closed/0061-pr-inbox.md) | PR ビューアと pi の間に、非同期のメッセージ・キュー（pi 内の受信箱）を入れる | 見送り（S2 まで実装したが、配備せず撤去。方針は CHG-0062 に置き換え。S0 の実験記録は研究として残す） | 2026-11-03 | [CHG-0062](0062-pr-hub-simplify.md)、[調査記録](../research/agents/pi-message-queue-experiments.md) |
 | [0058](closed/0058-batch-approval.md) | 保留の承認を、見ずに承認することなく少ない操作でできるようにする（巡回・一括承認） | 見送り（巡回まで実装したが、保留ごと撤去。一括は作らなかった） | 2026-11-03 | [CHG-0062](0062-pr-hub-simplify.md)、[ADR-0024](../adr/0024-human-press-merges-in-app.md) |
 | [0055](closed/0055-async-approval.md) | 承認つきの操作を、確認が取れなくても失わず、利用者が後から承認して実行できるようにする（非同期承認の実装） | 見送り（実装したが、保留と `/pending approve` を CHG-0062 の段 A5 で撤去。旧形式の退避の list・show・drop だけ残る） | 2026-11-03 | [CHG-0062](0062-pr-hub-simplify.md)、[ADR-0024](../adr/0024-human-press-merges-in-app.md) |

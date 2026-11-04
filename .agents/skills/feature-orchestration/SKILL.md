@@ -48,7 +48,7 @@ description: "feature を起票して worker に実装を切り出し、成果�
 7. **コミット**: `guarded_action` の `git_commit`（`dir` に worktree。
    **`message` は 1200 字以下**。feature の linked worktree なら確認なし）。bash の `git commit` は拒否される。
 8. **PR の要約と統合**: `guarded_pr_summary` で、PR に要約（`mergeMessage` の下書き。develop のコミットメッセージになる）を出す。
-   **統合は、利用者が PR ビューアの「統合する」を押す**（アプリが merge commit で同期統合する）。AI は `git flow feature finish`・`git merge` を実行しない
+   **統合は、既定では利用者が PR ビューアの「統合する」を押す**（アプリが merge commit で同期統合する）。利用者がチャットで統合を明示的に指示したときに限り、AI が統合コマンドを必須確認つきで実行してよい（[運用モード](../../../docs/spec/operation-modes.md#統合)）。指示が無いときは `git flow feature finish`・`git merge` を実行しない
    （素の pi で実行すると、bypass でも必須確認になる。[CHG-0053](../../../docs/change/0053-worktree-integration-gate.md)）。
    押されたあとの衝突・復旧は、ビューアの表示と [PR ビューア](../../../docs/spec/pr-viewer.md) の手順に従う。
    docs の更新表や `_PI_TESTS` の同じ位置の衝突は、両方の行を残す。
@@ -75,7 +75,7 @@ B が、まだ develop に入っていない A の変更を要るとき、A の�
 - **worker の時間制限は約 15 分**。範囲を絞り、優先順位をつける。報告なしで打ち切られても成果物が揃っていることがある（実物で確かめる）。
 - **feature への `develop` の取り込み**（と、feature 同士のマージ）は、`cd <絶対パス> && git merge develop`（`&&`・直接の git 1 コマンド・パイプなし）なら、**統合の必須確認にはならない**（判定器の結果のまま。通常モードでは通常の確認、bypass では確認なし）。
   相対パス・`;`・パイプ・`2>&1`・`env` や `sh -c` で包む形は、必須確認になる（[CHG-0053](../../../docs/change/0053-worktree-integration-gate.md)）。
-- **AI は保護ブランチへ統合しない**（統合は利用者の押下）。`finish`・`merge`・`update-ref` などを素の pi で実行すると、`bypass` でも必須確認になる。
+- **AI は、利用者の指示が無いのに保護ブランチへ統合しない**（既定は利用者の押下。チャットで明示的に指示されたときだけ、必須確認つきで実行してよい）。`finish`・`merge`・`update-ref` などを素の pi で実行すると、`bypass` でも必須確認になる。
 - `git_commit` の `message` が 1200 字を超えると拒否される。短い版でコミットし、全文は `guarded_pr_summary` の要約（`mergeMessage`）に置く。
 - **全件検査は 1 本ずつ回す**（worker の試験が走っている間も重ねない）。重なると負荷が上がり（16 コアで負荷平均 18 超）、pi を実際に起動する時間依存の試験
   （`test_pi_harness.py` の `FAUX_DELAY_MS` を使うもの）が落ちる。落ちたら、負荷が下がってから**単独で再実行して確かめる**（再実行で通るなら負荷が原因）。
