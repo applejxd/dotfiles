@@ -405,7 +405,9 @@ def test_other_actions_are_still_refused_on_timeout(env):
         env, _call("gh_issue_comment", repo="o/r", number=3, body="b"), lambda req: None
     )
     assert (
-        results[0][0] is True and "not approved:" in results[0][1] and "再試行せず" in results[0][1]
+        results[0][0] is True
+        and "not approved:" in results[0][1]
+        and "再試行しない" in results[0][1]
     ), results
     assert "退避" not in view(requests[0])
     assert not (env["ghdir"] / "args").exists()
