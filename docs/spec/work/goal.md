@@ -27,8 +27,10 @@
 - 予算は常に有限（範囲外・0・無限は拒否）。変換は入力を変更せず決定的。
 - 差分試験: 乱数のコマンド列で、`goal-core.ts` 直接と、変換 → `reduce` → 導出の `GoalState` が一致する（`updatedAt` を除く）。
 
-## 限界（食い違い）
+## 限界と解消した食い違い
 
-- `updatedAt` は台帳に無い（`createdAt` か `rt.updatedAt`）。停止の理由は reducer が保存しない（`rt.pause` で重ねる）。
-- `clear` は `verdict` cancel で、モデルの `verdict` も同じ型（reducer は出所を見ない）。要検討。
+- `updatedAt` は台帳に無い（`createdAt` か `rt.updatedAt`）。
+- 解消: 停止の理由は `goal.paused` の `reason` を goal ノードの `pauseReason` に保存し、`goalStateOf` が読む（`rt.pause` があればそれが優先）。
+- 解消: `clear` の `verdict` cancel は、reducer が出所 user でなければ拒否する（I10 の拡張。task の cancel はモデルでも通る）。
+- 解消: 予算の `rounds` は `Money` の任意の項目になった（`budget` の往復で落ちない）。
 - 目標の id は時刻由来。同じ時刻の目標は重複で拒否する。

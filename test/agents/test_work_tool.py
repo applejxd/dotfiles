@@ -275,7 +275,7 @@ def test_add_dep_on_goal_rejected():
 
 
 def test_add_to_finished_goal_rejected():
-    setup = [*active(), ev("verdict", "g1", {"verdict": "cancel", "reason": "r"})]
+    setup = [*active(), ev("verdict", "g1", {"verdict": "cancel", "reason": "r"}, "user")]
     text = rejected(setup, {"op": "add", "title": "x", "parent": "g1"})
     assert "足せない" in text
 

@@ -7,6 +7,8 @@ export interface Money {
 	usd: number;
 	tokens: number;
 	ms: number;
+	/** goal の予算の往復数 (任意の拡張軸。reducer は budget を丸ごと写し、予約・使用量の合算には使わない) */
+	rounds?: number;
 }
 
 export type Kind = "goal" | "task" | "run" | "check" | "integrate" | "wait";
@@ -62,6 +64,8 @@ export interface Node {
 	spent: Money;
 	waits: WaitOn[];
 	owner?: Lease;
+	/** goal の一時停止の理由 (goal.paused の reason。goal.resumed で消える) */
+	pauseReason?: string;
 	/** 証拠 (検査の出力・差分・行数・子の全文へのパス) の id */
 	evidence: string[];
 	notes: Note[];

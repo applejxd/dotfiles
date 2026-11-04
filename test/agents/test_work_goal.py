@@ -405,3 +405,84 @@ def test_facts_budget_exhausted_by_minutes_and_tokens():
     assert facts(["--minutes 1 作業"], claim=False, rt={"used": used})["budgetExhausted"] is True
     used = {"rounds": 0, "runMs": 0, "tokens": 1000, "evalCalls": 0, "evalTokens": 0}
     assert facts(["--tokens 1000 作業"], claim=False, rt={"used": used})["budgetExhausted"] is True
+
+
+# ── pauseReason・rounds・goal cancel の出所 (台帳の核との食い違いの解消) ──
+def raw(*events):
+    return drive({"raw": {"events": list(events)}})
+
+
+def _active():
+    b = {"usd": 5, "tokens": 5000, "ms": 600000, "rounds": 7}
+    return [
+        {
+            "type": "goal.created",
+            "node": "g1",
+            "data": {"title": "x", "budget": b},
+            "source": "user",
+        },
+        {"type": "plan.proposed", "node": "g1", "data": {"hash": "h"}, "source": "user"},
+        {"type": "plan.approved", "node": "g1", "data": {"hash": "h"}, "source": "user"},
+    ]
+
+
+@pytest.mark.parametrize(
+    "reason", ["rounds", "minutes", "tokens", "stalled", "blocked", "unapproved"]
+)
+def test_paused_reason_is_derived_from_ledger(reason):
+    out = raw(
+        *_active(),
+        {"type": "goal.paused", "node": "g1", "data": {"reason": reason}, "source": "system"},
+    )
+    assert out["goal"]["status"] == "paused"
+    assert out["goal"]["pause"]["reason"] == reason
+
+
+def test_resume_clears_derived_pause():
+    out = raw(
+        *_active(),
+        {"type": "goal.paused", "node": "g1", "data": {"reason": "rounds"}, "source": "system"},
+        {"type": "goal.resumed", "node": "g1", "data": {}, "source": "user"},
+    )
+    assert out["goal"]["status"] == "active"
+    assert "pause" not in out["goal"]
+
+
+def test_user_pause_command_derives_user_reason():
+    s = run("調査", "pause")[1]
+    assert s["goal"]["pause"]["reason"] == "user"
+
+
+def test_derived_budget_rounds_comes_from_ledger_money():
+    out = raw(*_active())
+    assert out["goal"]["budget"]["rounds"] == 7
+    assert out["node"]["budget"]["rounds"] == 7
+
+
+def test_model_goal_cancel_is_rejected_and_goal_stays_active():
+    out = raw(
+        *_active(),
+        {
+            "type": "verdict",
+            "node": "g1",
+            "data": {"verdict": "cancel", "reason": "r"},
+            "source": "model",
+        },
+    )
+    assert out["steps"][-1]["ok"] is False
+    assert "I10" in out["steps"][-1]["error"]
+    assert out["goal"]["status"] == "active"
+
+
+def test_user_goal_cancel_derives_null():
+    out = raw(
+        *_active(),
+        {
+            "type": "verdict",
+            "node": "g1",
+            "data": {"verdict": "cancel", "reason": "r"},
+            "source": "user",
+        },
+    )
+    assert out["steps"][-1]["ok"] is True
+    assert out["goal"] is None
