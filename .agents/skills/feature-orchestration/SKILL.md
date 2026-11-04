@@ -67,7 +67,7 @@ B が、まだ develop に入っていない A の変更を要るとき、A の�
 
 ## 複数 feature をまとめて取り込む (bundle)
 
-全件検査と「統合する」を 1 回にしたいときは、手で merge せず `python3 scripts/bundle.py start <a> <b> ...` を使う（衝突は止まる＝終了コード 3。worker に解消させ、`git add -A` 後に `continue`、最後に `verify`・`summary`）。正本は [統合用の枝](../../../docs/spec/orchestration.md#統合用の枝bundle)。
+全件検査と「統合する」を 1 回にしたいときは、手で merge せず `python3 scripts/bundle.py start <a> <b> ...` を使う（既存の bundle に枝を足すときは `add`。シェルの `git merge` は対象によらず保護ブランチへの統合と同じ確認が出る。衝突は止まる＝終了コード 3。worker に解消させ、`git add -A` 後に `continue`、最後に `verify`・`summary`）。正本は [統合用の枝](../../../docs/spec/orchestration.md#統合用の枝bundle)。
 
 ## 落とし穴
 

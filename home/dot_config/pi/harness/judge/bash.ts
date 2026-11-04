@@ -5,21 +5,23 @@
 //
 // node の型除去でそのまま動く書き方だけを使う。
 // see docs/spec/guard/pi-decide.md
-import { actionDenyReason } from "./actions.ts";
 import { ASK_NAMES, CHECKS, DENY_NAMES, PATH_NAMES } from "./checks.ts";
 import type { Ctx, Tables } from "./context.ts";
 import { newCtx } from "./context.ts";
 import type { BashDecider, Response } from "./decide.ts";
-import { errorResponse, response } from "./decide.ts";
+import { response } from "./decide.ts";
 import { expandUser } from "./pathutil.ts";
 import { findMatch, normalize, patternMatches, splitCommandSegments } from "./normalize.ts";
 import type { Common } from "./policy.ts";
 import { basename, pyLen, pyRegex, shlexSplit, ShlexError } from "./pystr.ts";
 import { clip200, expandCdTargets, splitHeredocBody } from "./shared.ts";
 import { localGitDestructiveReason } from "./gitdestructive.ts";
+import { collectLegacyFindings } from "./legacy_adapter.ts";
+import type { RoleView } from "./verdict.ts";
+import { verdictBash } from "./verdict.ts";
 
 // 検査の上限。check_bash.py と同じ
-const MAX_COMMAND_LEN = 10000;
+export const MAX_COMMAND_LEN = 10000;
 // allow の一覧に当たっても、書き込みや実行時の展開の余地がある形は allow にしない
 const UNSAFE_FOR_ALLOW = [">", "<", "`", "$", "--output"];
 // git が任意のプログラムを起動しうるオプション。allow の一覧に当たっても allow にしない
@@ -127,7 +129,7 @@ function runChecks(
 }
 
 /** check_bash.py の deny 側と同じ順で検査する。当たれば deny の応答。 */
-function bashCommonDeny(ctx: Ctx, cmd: string): Response | null {
+export function bashCommonDeny(ctx: Ctx, cmd: string): Response | null {
 	const deny = runChecks(ctx, DENY_NAMES, cmd, "deny", "check_policy_deny");
 	if (deny) return deny;
 	let cdVariant = "";
@@ -140,7 +142,7 @@ function bashCommonDeny(ctx: Ctx, cmd: string): Response | null {
 	return null;
 }
 
-function bashAsk(ctx: Ctx, cmd: string, pi: Obj): Response | null {
+export function bashAsk(ctx: Ctx, cmd: string, pi: Obj): Response | null {
 	const confirmChecks = ((pi.confirm?.checks as unknown[] | undefined) ?? []).map(String);
 	// 確認に格上げする検査 (mustConfirm) は、他の ask (check_policy_ask など) より先に引く。
 	// 先に別の ask が当たると mustConfirm が付かず、bypass で確認なしに通ってしまうため
@@ -178,7 +180,7 @@ function bodyFromStdin(segment: string): boolean {
  * 本文を確認できない形の `gh pr|issue create|comment|edit|review` は deny。
  * see docs/spec/guard/pi-decide.md#confirm
  */
-function confirmTable(cmd: string, pi: Obj): Response | null {
+export function confirmTable(cmd: string, pi: Obj): Response | null {
 	const patterns = ((pi.confirm?.bash as unknown[] | undefined) ?? []).map(String);
 	if (patterns.length === 0) return null;
 	let first: string | null = null;
@@ -212,7 +214,7 @@ function confirmTable(cmd: string, pi: Obj): Response | null {
  * ここは複合 (`git clean -fd && gh api -X POST …`) や別の書き方でも、先に deny を返し、後続の ask (mustConfirm を含む) に緩めない。
  * see docs/spec/guard/pi-decide.md#confirm
  */
-function localGitConfirm(cmd: string, pi: Obj, profile: Obj): Response | null {
+export function localGitConfirm(cmd: string, pi: Obj, profile: Obj): Response | null {
 	if (pi.confirm?.local_git !== true) return null;
 	const reason = localGitDestructiveReason(cmd);
 	if (reason === null) return null;
@@ -234,7 +236,7 @@ function localGitConfirm(cmd: string, pi: Obj, profile: Obj): Response | null {
  * mustConfirm の ask はそのまま (bypass でも ask のままで、子では UI が無くて拒否される)。
  * see docs/spec/guard/pi-decide.md#既定が-deny-の役割の-ask
  */
-function denyForDenyDefaultRole(ask: Response, profile: Obj): Response {
+export function denyForDenyDefaultRole(ask: Response, profile: Obj): Response {
 	if (profile.default !== "deny" || ask.decision !== "ask" || ask.mustConfirm) return ask;
 	return response(
 		"deny",
@@ -245,7 +247,7 @@ function denyForDenyDefaultRole(ask: Response, profile: Obj): Response {
 }
 
 /** `[[pi.guide]]` (誘導) に当たれば、案内を理由にした deny。bypass でも外れない。 */
-function guide(cmd: string, pi: Obj): Response | null {
+export function guide(cmd: string, pi: Obj): Response | null {
 	for (const g of (pi.guide as Obj[] | undefined) ?? []) {
 		// scope 付きはここでは評価しない (foreground は judge/call.ts が guarded_bash だけに当てる)
 		if (g.scope) continue;
@@ -261,7 +263,7 @@ function guide(cmd: string, pi: Obj): Response | null {
 }
 
 /** 全セグメントが allow の一覧に当たれば、当たった最初のパターンを返す。 */
-function allSegmentsAllowed(cmd: string, patterns: readonly string[]): string | null {
+export function allSegmentsAllowed(cmd: string, patterns: readonly string[]): string | null {
 	if (patterns.length === 0 || UNSAFE_FOR_ALLOW.some((t) => cmd.includes(t)) || hasGitExecOption(cmd) || hasUnsafeEnvPrefix(cmd) || hasOutputOption(cmd)) return null;
 	const segments = normalize(cmd);
 	if (segments.length === 0) return null;
@@ -275,7 +277,7 @@ function allSegmentsAllowed(cmd: string, patterns: readonly string[]): string | 
 }
 
 /** `[pi.skill_scripts]` の形に完全に当たれば、そのスクリプトを返す。 */
-function skillScriptAllowed(cmd: string, pi: Obj): string | null {
+export function skillScriptAllowed(cmd: string, pi: Obj): string | null {
 	if (UNSAFE_FOR_ALLOW.some((t) => cmd.includes(t)) || [";", "&", "|", "\n"].some((t) => cmd.includes(t))) return null;
 	let tokens: string[];
 	try {
@@ -320,7 +322,7 @@ const LOCAL_SHELL_META = ";&|<>(){}$`\n*?[~#!";
  * 宛先の前のオプション (`-o ProxyCommand=…` など) は受け付けず、コマンドなし (対話 shell) も対象外。
  * see docs/spec/guard/pi-decide.md#ssh--scp-の許可
  */
-function unwrapRemoteExec(cmd: string, targets: readonly string[]): string | null {
+export function unwrapRemoteExec(cmd: string, targets: readonly string[]): string | null {
 	if (targets.length === 0) return null;
 	const text = cmd.trim();
 	const isScp = text.startsWith("scp ");
@@ -380,7 +382,7 @@ function unwrapScp(tokens: string[], targets: readonly string[]): string | null 
 }
 
 // 役割の deny_except で、[bash] deny から外せる語 (decide.ts の DENY_EXCEPT_WORDS と同じ)
-const WORKTREE_REMOVE = "git worktree remove";
+export const WORKTREE_REMOVE = "git worktree remove";
 // 元のコマンド全体がこの 1 形式に一致するときだけ例外にする。解析器の解釈には依存しない。
 // `-` で始まるトークン (-f・--force・--・-C) と、引用・展開・リダイレクト・区切り・前置きは、一致しない (deny のまま)
 const WORKTREE_REMOVE_PLAIN = /^git worktree remove(?: [A-Za-z0-9_./@%+=:,][A-Za-z0-9_./@%+=:,-]*)+$/;
@@ -391,7 +393,7 @@ const WORKTREE_REMOVE_PLAIN = /^git worktree remove(?: [A-Za-z0-9_./@%+=:,][A-Za
  * 一致するとき全体が 1 コマンドなので、複合コマンドの他の部分の deny には影響しない。force 付きは一致せず deny のまま。
  * see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外
  */
-function worktreeRemoveExcepted(cmd: string, pi: Obj, profile: Obj): boolean {
+export function worktreeRemoveExcepted(cmd: string, pi: Obj, profile: Obj): boolean {
 	if (pi.confirm?.local_git !== true) return false;
 	const except = profile.deny_except;
 	if (!Array.isArray(except) || !except.includes(WORKTREE_REMOVE)) return false;
@@ -400,7 +402,7 @@ function worktreeRemoveExcepted(cmd: string, pi: Obj, profile: Obj): boolean {
 
 // `git restore --staged` の例外 (index だけを戻す形。作業ツリーは変えない)。deny を外す対象は `[bash] deny` の「git restore」
 const RESTORE_STAGED = "git restore --staged";
-const RESTORE_DENY = "git restore";
+export const RESTORE_DENY = "git restore";
 const RESTORE_MAX_PATHS = 50;
 // 元のコマンド全体が、`--staged` か `-S` (+ 任意の ` --`) と、単純なパス 1 個以上だけの 1 形式に一致するときだけ。
 // `-` で始まるトークン (--worktree・-W・--source・-p など)・引用・展開・グロブ・リダイレクト・区切り・前置きは一致しない
@@ -411,7 +413,7 @@ const RESTORE_STAGED_PLAIN = /^git restore (?:--staged|-S)(?: --)?((?: [A-Za-z0-
  * 元のコマンド全体が RESTORE_STAGED_PLAIN に一致し、パスが 1〜RESTORE_MAX_PATHS 件で、`..` を含まないときだけ true。
  * see docs/spec/guard/pi-decide.md#git-restore---staged-の例外
  */
-function restoreStagedExcepted(cmd: string, pi: Obj, profile: Obj): boolean {
+export function restoreStagedExcepted(cmd: string, pi: Obj, profile: Obj): boolean {
 	if (pi.confirm?.local_git !== true) return false;
 	const except = profile.deny_except;
 	if (!Array.isArray(except) || !except.includes(RESTORE_STAGED)) return false;
@@ -422,7 +424,7 @@ function restoreStagedExcepted(cmd: string, pi: Obj, profile: Obj): boolean {
 }
 
 /** 文脈の `[bash] deny` から、指定のパターンだけを除いたものを返す。 */
-function withoutDeny(ctx: Ctx, pattern: string): Ctx {
+export function withoutDeny(ctx: Ctx, pattern: string): Ctx {
 	const bash = (ctx.common as Obj).bash ?? {};
 	const deny = ((bash.deny as unknown[] | undefined) ?? []).filter((p) => p !== pattern);
 	return { ...ctx, common: { ...ctx.common, bash: { ...bash, deny } } } as Ctx;
@@ -442,10 +444,9 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		const ctx = newCtx(tables, common, cwd);
 		let cmd = rawCmd;
 		const loaded = CHECKS.get("check_policy_loaded")?.(ctx, cmd);
-		if (loaded) return { commonDeny: errorResponse(loaded), roleRule: null };
-		if (pyLen(cmd) > MAX_COMMAND_LEN) {
-			return { commonDeny: errorResponse(`コマンドが長すぎます (${pyLen(cmd)} 文字)`), roleRule: null };
-		}
+		const early = (reason: string) => verdictBash({ F: [{ stage: "S0", idx: 0, reason, source: "error" }], covered: false }, profile as RoleView);
+		if (loaded) return early(loaded);
+		if (pyLen(cmd) > MAX_COMMAND_LEN) return early(`コマンドが長すぎます (${pyLen(cmd)} 文字)`);
 		try {
 			cmd = splitHeredocBody(ctx, cmd);
 		} catch {
@@ -460,37 +461,8 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		if (!remote && worktreeRemoveExcepted(rawCmd, pi, profile)) denyCtx = withoutDeny(denyCtx, WORKTREE_REMOVE);
 		const restoreOk = !remote && restoreStagedExcepted(rawCmd, pi, profile);
 		if (restoreOk) denyCtx = withoutDeny(denyCtx, RESTORE_DENY);
-		const deny = bashCommonDeny(denyCtx, cmd);
-		if (deny) return { commonDeny: deny, roleRule: null };
-		const g = guide(cmd, pi);
-		if (g) return { commonDeny: null, roleRule: g };
-		// action ツールを持つ役割だけ: 操作表 [[pi.actions]] の replaces に当たるコマンドは guarded_action へ誘導する (bypass でも外れない)
-		if (Array.isArray(profile.tools) && profile.tools.includes("action")) {
-			const reason = actionDenyReason(cmd, pi);
-			if (reason !== null) return { commonDeny: null, roleRule: response("deny", reason, "rule") };
-		}
-		// 役割だけの禁止。共通の禁止ではないが、bypass では外れない (bypass は ask だけを変える)
-		// 例外に当たった `git restore --staged` は、役割の shell_deny の「git restore」も外す
-		const roleDenyList = ((profile.shell_deny as unknown[] | undefined) ?? []).map(String).filter((p) => !(restoreOk && p === RESTORE_DENY));
-		const roleDeny = findMatch(cmd, roleDenyList);
-		if (roleDeny) {
-			return { commonDeny: null, roleRule: response("deny", `\`${roleDeny}\` はこの役割の shell_deny にある`, "rule") };
-		}
-		const confirm = confirmTable(cmd, pi);
-		if (confirm) return { commonDeny: null, roleRule: confirm };
-		const localGit = localGitConfirm(cmd, pi, profile);
-		if (localGit) return { commonDeny: null, roleRule: localGit };
-		const ask = bashAsk(ctx, cmd, pi);
-		if (ask) return { commonDeny: null, roleRule: denyForDenyDefaultRole(ask, profile) };
-		// 役割が shell_allow を持てば、[pi.shell] allow の代わりにそれを使う
-		const own = profile.shell_allow;
-		const allowList: unknown[] = own != null ? own : (pi.shell?.allow ?? []);
-		const where = own != null ? "役割の shell_allow" : "[pi.shell] allow";
-		const matched = allSegmentsAllowed(cmd, allowList.map(String));
-		if (matched) return { commonDeny: null, roleRule: response("allow", `\`${matched}\` は ${where} にある`, "rule") };
-		const script = skillScriptAllowed(cmd, pi);
-		if (script) return { commonDeny: null, roleRule: response("allow", `\`${script}\` は [pi.skill_scripts] にある`, "rule") };
-		return { commonDeny: null, roleRule: null };
+		// S2〜S10 の所見を旧の検査関数から集め、段の表 (verdict.ts) が決める
+		return verdictBash(collectLegacyFindings({ ctx, denyCtx, cmd, pi, profile, restoreOk }), profile as RoleView);
 	};
 	return (rawCmd, cwd, pi, profile, common: Common) => decide(rawCmd, cwd, pi, profile, common, false);
 }

@@ -435,7 +435,9 @@
    "~/.pi/agent/settings.json",
    "~/.pi/agent/mcp.json",
    "~/.pi/agent/extensions/**",
-   "~/.config/pi/harness/**"
+   "~/.config/pi/harness/**",
+   "**/.git/pi-work/**",
+   "**/.tmp/work/**"
   ]
  },
  "hooks": [
@@ -1506,6 +1508,7 @@
      "ls",
      "task",
      "todo",
+     "work",
      "ask",
      "action",
      "pr_summary",
@@ -1521,6 +1524,7 @@
      "ls",
      "task",
      "todo",
+     "work",
      "ask",
      "action"
     ]
@@ -1642,6 +1646,7 @@
     "-builtin:tool-search",
     "-builtin:llama.cpp"
    ],
+   "hideThinkingBlock": true,
    "skills": [
     "~/.claude/skills",
     "-~/.agents/skills/orchestration",

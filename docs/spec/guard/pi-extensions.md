@@ -316,6 +316,9 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 
 #### 文脈の使用率による自動の保存と圧縮
 
+旗 `PI_WORK_ARBITER=1` (既定は無効) のときは、この拡張と todo は `agent_before_settle` を登録せず、事実 (`checkpointSnapshot()`) と効果 (`checkpointExec`) を調停へ渡す。
+圧縮完了後の自動再開は旗に関わらず従来の経路。旗と配線は [settle](work/settle.md#既存の-3-者の移し方-配線済み・旗つき-feature-work-settle-wire)。
+
 文脈の使用率が閾値以上になったら、エージェント自身に保存させてから圧縮を起動する（`harness/autocheckpoint.ts`。親のセッションだけ）。
 
 | 項目 | 内容 |
@@ -330,6 +333,11 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 | 再開 | 圧縮が**成功**（`onComplete`）したら、200ms 待ってから `pi.sendUserMessage(RESUME_PROMPT, { deliverAs: "followUp" })` で短い再開の指示を 1 回だけ送る（アイドルなら新しいターンが始まり、streaming 中なら followUp で待つ）。200ms は、pi が圧縮の状態を解く前に完了通知が届くため（`index.ts` の `session_compact` と同じ扱い）。待つ間に別の周期が始まった・無効化された場合は送らない。失敗・中断では送らない。1 周期に 1 回で、冷却（10 分）の間は新しい周期が始まらないので、再開で使用率が閾値を超えてもループしない。指示は `NEXT.md` の先頭と todo を読んで続け、判断待ちだけなら「待機」と答えて止まる。`PI_AUTOCHECKPOINT_RESUME=0` で再開だけを無効にする（全体は `PI_AUTOCHECKPOINT=0`） |
 | 限界 | 保存の質は**エージェント次第**で保証しない（指示を守らない・docs の反映が不完全なことがある）。組み込みの自動圧縮（窓 − `reserveTokens` 付近）は**予備として残る**ので、保存より先にそちらが走ることもある。使用率は settle の時点でしか見ないので、1 回の長い実行の途中では働かない。再開の指示は、判断待ち・完了待ちだけのときも 1 ターン走る（「待機」と答えるだけ） |
 | 試験 | `test/agents/test_pi_autocheckpoint.py`（`test/agents/pi/autocheckpoint_driver.mjs` が偽のイベントとコンテキストを handler へ渡す）。実機の確認は未実施 |
+
+### 思考とツール出力の既定の折り畳み
+
+- 思考のブロックは `[pi.settings] hideThinkingBlock = true` で、ツール出力は `quiet-notices.ts` が `session_start` で `ctx.ui.setToolsExpanded(false)` を呼んで、既定で畳む（スマホで読みやすくするため。表示だけ）。
+- 展開は `ctrl+t`（思考）・`ctrl+o`（ツール出力）。戻し方: `hideThinkingBlock = false`、環境変数 `PI_FOLD_TOOLS=0`。UI なし・API なし・例外のときは何もしない。
 
 ### 自動の通知を畳む表示
 

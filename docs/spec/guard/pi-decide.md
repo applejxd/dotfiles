@@ -27,7 +27,7 @@ response: { decision: allow | ask | deny, reason, source: rule | check | default
 
 | キー | 中身 |
 | --- | --- |
-| `tool` | `bash` / `read` / `edit` / `write` / `grep` / `find` / `ls` / `task`（子エージェントの起動）/ `todo`（タスクリストの拡張）/ `ask`（利用者への質問の拡張）と MCP のツール（`mcp__…`）。フルガードがツールを別名で登録していても、元の名前で渡す。役割の `tools` に無い名前は deny |
+| `tool` | `bash` / `read` / `edit` / `write` / `grep` / `find` / `ls` / `task`（子エージェントの起動）/ `todo`（タスクリストの拡張）/ `work`（作業台帳。親の役割だけ）/ `ask`（利用者への質問の拡張）と MCP のツール（`mcp__…`）。フルガードがツールを別名で登録していても、元の名前で渡す。役割の `tools` に無い名前は deny |
 | `input` | ツールの引数。`bash` は `command`、ファイルのツールは `path`（`grep` / `find` / `ls` は省略すると `.`） |
 | `cwd` | 作業ディレクトリの絶対パス。相対パスの解決と「作業ツリーの中か」の判定に使う |
 | `role` | `[pi.profiles]` の名前（「役割」の表） |
@@ -265,11 +265,11 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 
 | 役割 | `tools` | `default` | ほか | 使うもの |
 | --- | --- | --- | --- | --- |
-| `implementer` | 7 つのツール・`task`・`todo`・`ask`・`mcp__*` | ask | `deny_except` に `git worktree remove`（force なしを許可。[例外](#git-worktree-remove-の例外)）と `git restore --staged`（[例外](#git-restore---staged-の例外)）。`shell_deny` は無い（`git flow`・`git-flow` の拒否は [CHG-0050](../../change/0050-slim-guarded-action.md) で撤去） | 親（主エージェント） |
+| `implementer` | 7 つのツール・`task`・`todo`・`work`・`ask`・`mcp__*` | ask | `deny_except` に `git worktree remove`（force なしを許可。[例外](#git-worktree-remove-の例外)）と `git restore --staged`（[例外](#git-restore---staged-の例外)）。`shell_deny` は無い（`git flow`・`git-flow` の拒否は [CHG-0050](../../change/0050-slim-guarded-action.md) で撤去） | 親（主エージェント） |
 | `reader` | read・grep・find・ls | deny | — | 利用者が `pis --role reader` で選ぶ読み取り専用の親。子の `plan` 役も使う（`[pi.agents.plan]`。bash を持たないので、`skill_scripts` の許可が通らない）。harness の読み取り専用の子の一覧 `READ_ONLY_CHILD_PROFILES` に含む（`/btw` の入口と、計画モードの間に起動できる子）。bash を持たない役割の試験にも使う |
 | `explorer` | `reader` + bash | deny | `shell_allow` に `wc` と読み取り専用の git（`status` / `diff` / `log` / `show` / `ls-files`） | 子の `explore` / `review` |
 | `committer` | bash・read・grep・find・ls | deny | `shell_allow` に `git status` / `git diff` / `git log` など。`shell_deny` に git の状態を変える操作 | 子の `commit` |
-| `orchestrator` | read・grep・find・ls・task・todo・ask・action | deny | 許可リスト。`bash`・`edit`・`write`・MCP を持たない。`/orchestrate on` の間だけ、親の役割になる（[親の絞り込み](pi-subagents.md#親の絞り込みorchestrate)） | 親（利用者が切り替える） |
+| `orchestrator` | read・grep・find・ls・task・todo・work・ask・action | deny | 許可リスト。`bash`・`edit`・`write`・MCP を持たない。`/orchestrate on` の間だけ、親の役割になる（[親の絞り込み](pi-subagents.md#親の絞り込みorchestrate)） | 親（利用者が切り替える） |
 | `worker` | 7 つのツール | ask | `deny_except` に `git worktree remove`（同上）。`shell_deny` に git の状態を変える操作 | 子の `worker` |
 
 **既定の役割**は `[pi] default_role`（`common.toml`。既定は `implementer`）。`pis` は `--role` / `PI_HARNESS_ROLE` で上書きでき、
@@ -362,6 +362,31 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。
   Python 版の `tables.py` は、同じディレクトリ → リポジトリのソース → 配備先 `~/.config/pi/harness/judge/` の順に探す（撤去までの橋渡し。
   Windows は `harness/` を配らないので、Windows の Python の hook は表を読めず fail-closed で止まる）
 - 構文解析の堅牢化（`shellparse` を正式な構文解析に替える）は別の変更。差分試験を残したまま進める
+
+## 解析結果 Plan（G1(a)）
+
+`judge/plan.ts` の `analyze(cmd, {sshTargets})` は、bash を構文木（同梱の mvdan-sh）から**1 回だけ**解析し、実行点 `ExecSite` の平坦な列 `Plan` を返す純関数。
+**判定器には接続していない**（挙動は変えない。接続は後続）。Plan は、旧の判定を置換せず、拒否側の所見・追加の厳格化と shadow 比較の入力になる（tighten-only）。
+
+- 型: `ExecSite` = `argv`（ラッパーを剥がした実効）・`rawArgv`・`assigns`・`redirs`・`via`・`cmd`・`cwd`（caller / chain / unknown）・`ctl`・入れ子（`parent`・`depth`）。
+  語 `Word` は lit / tilde / pat / unk。literal は「展開後も 1 つの文字列に決まる語」で、`Lit` かどうかでは決めない
+- 拒否側専用の view: `tails`（`--` の後ろ・runner・here-string・プロセス置換の echo など、旧の埋め込み抽出と同じ範囲）と
+  `denyViews`（git のグローバル引数を除いた view）。許可の被覆には使わない。`varsVisible` は旧の字句上の代入名
+- 入れ子: `bash -c`・heredoc・許可宛先の ssh・`find -exec`・xargs・`$()`・`<()` を同じ列に平坦化する。`eval`・`source`・インタプリタの本文は `opaque`
+- fail-closed: 読み込み失敗・sha 不一致・評価失敗・構文エラー・CR/NUL ほかの C0・上限超え（長さ 10000・実行箇所 200・深さ 4・語 4000）は `ok:false`（呼び出し側が deny にする）
+- 限界: `$'…'`・`$"…"` は復号せず unk（頭にあれば後段が deny にする印）。cwd の chain は実在確認をしない（G5 が解く）。`CDPATH`・関数・alias がある原文の `cd` は unknown
+- 試験: `test_pi_plan_literal.py`（表 L・演算子番号・fixture）・`test_pi_plan_failclosed.py`・`test_pi_plan_sites.py`。実型は [mvdan-sh の構文木の実型](../../research/agents/mvdan-sh-ast-fixtures.md)
+
+## shadow（観測）
+
+`judge/shadow.ts` は、bash（`bash`・`bg_run`）の判定の**後**に `analyze` を呼び、観測の 1 行を `<cwd>/.tmp/work/shadow/<session>.jsonl` に追記する。
+目的は、`analyze` を判定の先頭へ繋いで `ok:false` を deny にする案（G1(b)）の前に、**正当なコマンドを deny にする率**を実測すること。
+
+- 記録: 時刻・役割・モード・旧の decision/source・コマンド長・先頭の語・`ok`・失敗種別 `why`・site 数・cmd 名（最大 8。安全な字種だけ、他は `?`）・`ms`・`would_tighten`（旧が allow/ask で新が `ok:false`）・`vendor_missing`。**コマンドの全文・引用・値は入れない**
+- 不変: 応答（decision・reason・source）を変えない。`analyze` の例外・追記の失敗は握りつぶす。`PI_SHADOW=0` で無効（既定は有効）、子（`PI_HARNESS_CHILD`）では記録しない。1 ファイル 5 MB で止める
+- 簡易ブレーカー: `analyze` が 200 ms を超えたら以降は呼ばない（同期処理なので 1 回の遅れは防げない。最初の 1 回は vendor 読み込みを含むので対象外）
+- 集計: `python3 scripts/shadow_stats.py [パス]`（失敗率・`would_tighten` と理由・ms の p50/p90/p99・失敗した入力の先頭の語）。試験は `test_pi_shadow.py`
+- 限界: 子と Windows の別実行は記録の置き場が無く観測しない。判定後の確認待ちの結果（承認・拒否）は記録しない
 
 ## 既知の制約
 

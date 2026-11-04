@@ -149,6 +149,7 @@ CLI の終了コード: 0 = 全て処理、3 = 一部を残した・拒否、2 =
 | --- | --- |
 | `python3 scripts/bundle.py start [--name bundle-N] <feature>...` | develop の最新から枝と worktree を作り、指定順に `git merge` する。`a` でも `feature/a` でもよい。名前を省くと空き番号を選ぶ |
 | `continue [--name bundle-N]` | 衝突が解消され `git add -A` 済みならコミットし、残りの枝を続ける |
+| `add [--name bundle-N] <feature>...` | 既存の bundle に枝を足して取り込む（手で取り込み済みの枝は飛ばす）。**シェルから `git merge` を打つと、対象が develop でなくても保護ブランチへの統合と同じ確認が出る**ので、bundle へ枝を足すときはこれを使う |
 | `verify [--name bundle-N]` | その worktree で `mise run verify:all` を回し、件数と終了コードを要約する（`BUNDLE_VERIFY_CMD` で差し替え可） |
 | `status` / `summary` | 取り込み済み・未取り込み・衝突中の一覧 / PR 要約の材料（枝ごとのコミット数・変更ファイル数） |
 

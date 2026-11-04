@@ -181,6 +181,10 @@ FILE_PATHS = (
     ".env.example",
     "src/../.env",
     "${ROOT}/.git/config",
+    # 作業台帳の置き場 (書き込みは deny、読み取りは従来どおり)
+    "${ROOT}/.git/pi-work/log/x.jsonl",
+    "${ROOT}/.git/pi-work/DEGRADED.json",
+    "${ROOT}/.tmp/work/journal/x.jsonl",
     "${HOME}/.ssh/id_rsa",
     "${HOME}/.aws/credentials",
     "${HOME}/.config/gh/hosts.yml",
@@ -196,6 +200,7 @@ FILE_CWDS = ("${ROOT}", "/tmp")
 OTHER_TOOLS = (
     {"tool": "task", "input": {"agent": "explore", "task": "x"}},
     {"tool": "todo", "input": {"action": "list"}},
+    {"tool": "work", "input": {"op": "list"}},
     {"tool": "ask", "input": {"questions": []}},
     {"tool": "mcp__x__y", "input": {}},
     {"tool": "unknown", "input": {}},

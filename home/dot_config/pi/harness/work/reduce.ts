@@ -101,7 +101,7 @@ export const resolveEdge = <E extends { type: string; node?: string; data: Recor
 	if (ev.type !== "edge.added") return ev;
 	const { from, to } = ev.data as { from: string; to: string };
 	if (!wouldCycle(state, from, to)) return ev;
-	return { ...ev, type: "edge.rejected", data: { from, to, reason: "cycle", ...(ev.data.source ? { source: ev.data.source } : {}) } };
+	return { ...ev, type: "edge.rejected", data: { from, to, reason: "cycle" } };
 };
 
 const addTo = (a: Money, b: Money, sign = 1): void => {
@@ -202,10 +202,10 @@ const apply = (d: Draft, ev: LedgerEvent): void => {
 	const data = ev.data as Record<string, any>;
 
 	// I8: 保持者が記された追記は、その goal の lease の保持者でなければ拒否する (記さない追記は store の責任)
-	if (data.holder !== undefined && !ev.type.startsWith("lease.")) {
+	if (ev.holder !== undefined && !ev.type.startsWith("lease.")) {
 		const gid = eventGoal(d, ev);
 		const owner = gid ? d.need(gid).owner : undefined;
-		if (gid && owner?.holder !== data.holder) throw new ReduceError(`I8: ${String(data.holder)} は lease の保持者でない (${owner?.holder ?? "なし"})`);
+		if (gid && owner?.holder !== ev.holder) throw new ReduceError(`I8: ${String(ev.holder)} は lease の保持者でない (${owner?.holder ?? "なし"})`);
 	}
 
 	switch (ev.type) {
@@ -379,7 +379,7 @@ const apply = (d: Draft, ev: LedgerEvent): void => {
 			const e = d.edit(id);
 			e.waits = e.waits.filter((x) => x.ref !== data.ref);
 			e.state = r.to as never;
-			d.resolutions.push({ seq: ev.seq, node: id, ref: data.ref, on: w.on, by: data.by, source: String(data.source ?? "") });
+			d.resolutions.push({ seq: ev.seq, node: id, ref: data.ref, on: w.on, by: data.by, source: String(ev.source ?? "") });
 			return;
 		}
 		case "note.appended": {
@@ -401,6 +401,10 @@ const apply = (d: Draft, ev: LedgerEvent): void => {
 		}
 		case "verdict": {
 			const n = d.need(id);
+			// I10 の拡張: goal の取り消しは利用者専用 (task の cancel はモデルでも通る)
+			if (n.kind === "goal" && data.verdict === "cancel" && ev.source !== "user") {
+				throw new ReduceError(`I10: goal の cancel は利用者専用 (出所が user でない: ${String(ev.source ?? "system")})`);
+			}
 			const r = next(tkindOf(n.kind), n.state, "verdict", data.verdict);
 			const e = d.edit(id);
 			if (n.kind === "goal") e.evidence.push(`verdict:${ev.seq}:${data.verdict}`);
@@ -421,12 +425,25 @@ const apply = (d: Draft, ev: LedgerEvent): void => {
 			const n = d.goalNode(id);
 			const r = next("goal", n.state, "plan.approved");
 			if (n.attrs.planHash !== data.hash) throw new ReduceError(`計画の hash が一致しない (${String(n.attrs.planHash)} ≠ ${data.hash})`);
+			const reapprove = n.state === "active" || n.state === "paused";
+			const open = [...d.nodes.values()].filter(
+				(t) => isTaskLike(t) && rootGoalId(d.nodes, t.id) === id && t.state !== "done" && t.state !== "cancelled" && t.state !== "skipped",
+			);
+			// 再承認は承認の対象 (未承認の非終端 task) が 1 件以上あるときだけ。空の承認を作らない
+			if (reapprove && !open.some((t) => t.approved !== true)) throw new ReduceError("承認の対象 (未承認の task) が無い");
+			// 確認画面に出した対象 (approvalIds) と、適用時点の未承認の集合が一致しなければ拒否する (確認の間に足された task を承認しない)。無い旧イベントは従来どおり
+			if (Array.isArray(data.approvalIds)) {
+				const want = new Set(data.approvalIds as string[]);
+				const have = open.filter((t) => t.approved !== true).map((t) => t.id);
+				if (want.size !== have.length || have.some((x) => !want.has(x))) throw new ReduceError("承認の対象が確認後に変わった");
+			}
 			const e = d.edit(id);
 			e.attrs.approvedBy = "user";
 			e.state = r.to as never;
-			for (const t of [...d.nodes.values()]) {
-				if (!isTaskLike(t) || t.state !== "proposed" || rootGoalId(d.nodes, t.id) !== id) continue;
-				d.edit(t.id).state = next("task", "proposed", "plan.approved").to as never;
+			for (const t of open) {
+				const te = d.edit(t.id);
+				te.approved = true;
+				if (t.state === "proposed") te.state = next("task", "proposed", "plan.approved").to as never;
 			}
 			return;
 		}
@@ -435,7 +452,10 @@ const apply = (d: Draft, ev: LedgerEvent): void => {
 			const n = d.goalNode(id);
 			const r = next("goal", n.state, ev.type);
 			const e = d.edit(id);
-			if (ev.type === "goal.resumed") e.attrs.resumes = ((n.attrs.resumes as number | undefined) ?? 0) + 1;
+			if (ev.type === "goal.resumed") {
+				e.attrs.resumes = ((n.attrs.resumes as number | undefined) ?? 0) + 1;
+				delete e.pauseReason;
+			} else e.pauseReason = data.reason;
 			e.state = r.to as never;
 			return;
 		}

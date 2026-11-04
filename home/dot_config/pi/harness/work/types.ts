@@ -7,6 +7,8 @@ export interface Money {
 	usd: number;
 	tokens: number;
 	ms: number;
+	/** goal の予算の往復数 (任意の拡張軸。reducer は budget を丸ごと写し、予約・使用量の合算には使わない) */
+	rounds?: number;
 }
 
 export type Kind = "goal" | "task" | "run" | "check" | "integrate" | "wait";
@@ -62,6 +64,10 @@ export interface Node {
 	spent: Money;
 	waits: WaitOn[];
 	owner?: Lease;
+	/** goal の一時停止の理由 (goal.paused の reason。goal.resumed で消える) */
+	pauseReason?: string;
+	/** 利用者の承認 (plan.approved) の時点で存在した task に reducer が立てる。立っていない task はスケジューラが自動起動しない */
+	approved?: boolean;
 	/** 証拠 (検査の出力・差分・行数・子の全文へのパス) の id */
 	evidence: string[];
 	notes: Note[];
@@ -116,6 +122,10 @@ export interface LedgerEvent {
 	data: Record<string, unknown>;
 	/** 観測用。reducer は無視する */
 	aux?: boolean;
+	/** 出所。makeEvent が呼び出し側の引数から設定する。data の中に同名の値があっても無視する */
+	source?: "user" | "model" | "system";
+	/** 追記した lease の保持者 (I8)。makeEvent が引数から設定する。data の中の holder は無視する */
+	holder?: string;
 }
 
 /** 追記するイベント (seq と ts は store が付ける) */

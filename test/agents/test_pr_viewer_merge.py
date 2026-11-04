@@ -983,6 +983,15 @@ def _kill_during_merge(w: World, source: str, delay: float) -> None:
     with contextlib.suppress(ProcessLookupError):
         os.killpg(p.pid, signal.SIGKILL)
     p.wait()
+    # node が死んでも、git の子が実際に消えるのは負荷の下で遅れうる。ロック・ref・作業ツリーを持ったまま次へ進まないよう、
+    # プロセスグループが空になるのを待つ（上限つき）
+    gone = time.monotonic() + 10
+    while time.monotonic() < gone:
+        try:
+            os.killpg(p.pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.005)
 
 
 def test_kill_9_during_merge_then_manual_recovery(w):
@@ -1028,6 +1037,8 @@ def test_kill_9_during_merge_then_manual_recovery(w):
             assert len(_parents(w)) == 2 and (w.repo / f"big/{attempt}-0000.txt").exists()
         else:
             assert not (w.repo / f"big/{attempt}-0000.txt").exists()
+            # kill が git の ORIG_HEAD.lock を残すことがある。recover はまだ診断しない（todo #127）ので、利用者が手で消す操作を模す
+            (w.git_dir() / "ORIG_HEAD.lock").unlink(missing_ok=True)
             rc, out, _ = w.merge(name)  # 解除の後の統合が成功する
             assert rc == 0 and out["ok"], out
         _git(w.repo, "checkout", "--", "other.txt")
@@ -1487,3 +1498,211 @@ def test_plan_does_not_change_refs_index_or_worktree(w):
         w.plan(src)
     assert _snapshot(w) == before
     _no_leftovers(w)
+
+
+# ---------------------------------------------------------------- 古い git ロックの診断と、失敗理由への git の出力
+# どちらも表示の追加だけ。ロックは自動では消さず、code・終了コード・state は変えない。ロックは手で作る（kill に頼らない）。
+
+MERGE_GIT_TS = APP / "merge-git.ts"
+
+
+def _sanitize(w: World, text: str) -> str:
+    """sanitizeGitMessage を node で直接呼ぶ。"""
+    script = w.tmp / "san.mjs"
+    script.write_text(
+        f"""const M = await import({json.dumps(MERGE_GIT_TS.as_uri())});
+console.log(JSON.stringify(M.sanitizeGitMessage(JSON.parse(process.argv[2]))));
+""",
+        encoding="utf-8",
+    )
+    proc = subprocess.run(
+        [_node(), str(script), json.dumps(text)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=w.env(),
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    return json.loads(proc.stdout.strip().splitlines()[-1])
+
+
+def _locks(out: dict) -> list[dict]:
+    return out.get("details", {}).get("staleLocks", [])
+
+
+def _lock_names(out: dict) -> set[str]:
+    return {Path(x["path"]).name for x in _locks(out)}
+
+
+def test_recover_reports_orig_head_lock_and_keeps_it(w):
+    lock = w.git_dir() / "ORIG_HEAD.lock"
+    lock.write_text("")
+    rc, out, _ = w.cli("recover")
+    assert rc == 0 and out["state"] == "clean", out
+    assert "ORIG_HEAD.lock" in _lock_names(out)
+    assert lock.exists()  # 自動では消さない
+
+
+def test_recover_message_asks_user_to_check_and_delete(w):
+    (w.git_dir() / "ORIG_HEAD.lock").write_text("")
+    _, out, _ = w.cli("recover")
+    assert "持ち主の git が動いていないことを確認してから" in out["message"]
+    assert "ORIG_HEAD.lock" in out["message"] and "削除してください" in out["message"]
+
+
+@pytest.mark.parametrize(
+    "name", ["HEAD.lock", "index.lock", "packed-refs.lock", "config.lock", "ORIG_HEAD.lock"]
+)
+def test_recover_lists_each_top_level_lock(w, name):
+    (w.git_dir() / name).write_text("")
+    rc, out, _ = w.cli("recover")
+    assert rc == 0, out
+    assert _lock_names(out) == {name}
+    assert (w.git_dir() / name).exists()
+
+
+def test_recover_without_locks_has_no_new_fields(w):
+    rc, out, _ = w.cli("recover")
+    assert rc == 0 and out == {"ok": True, "state": "clean"}
+
+
+def test_recover_lists_ref_locks_up_to_depth_4(w):
+    heads = w.git_dir() / "refs" / "heads"
+    (heads / "a" / "b").mkdir(parents=True)
+    (heads / "x.lock").write_text("")
+    (heads / "a" / "b" / "y.lock").write_text("")
+    deep = heads / "a" / "b" / "c"
+    deep.mkdir()
+    (deep / "z.lock").write_text("")  # 深さ 5 は見ない
+    rc, out, _ = w.cli("recover")
+    assert rc == 0, out
+    assert _lock_names(out) == {"x.lock", "y.lock"}
+    assert (heads / "x.lock").exists() and (deep / "z.lock").exists()
+
+
+def test_recover_ignores_non_lock_files(w):
+    (w.git_dir() / "ORIG_HEAD").write_text(w.rev() + "\n")
+    (w.git_dir() / "refs" / "heads" / "x.locked").write_text("")
+    rc, out, _ = w.cli("recover")
+    assert rc == 0 and out == {"ok": True, "state": "clean"}
+
+
+def test_recover_lock_age_is_plausible(w):
+    lock = w.git_dir() / "ORIG_HEAD.lock"
+    lock.write_text("")
+    old = time.time() - 3600
+    os.utime(lock, (old, old))
+    (w.git_dir() / "HEAD.lock").write_text("")
+    _, out, _ = w.cli("recover")
+    ages = {Path(x["path"]).name: x["ageSec"] for x in _locks(out)}
+    assert 3590 <= ages["ORIG_HEAD.lock"] <= 3700
+    assert 0 <= ages["HEAD.lock"] < 120
+    assert all(isinstance(x["ageSec"], int) for x in _locks(out))
+
+
+def test_recover_reports_locks_in_worktree_git_dir_and_common_dir(w):
+    wt = w.tmp / "wt"
+    _git(w.repo, "worktree", "add", "-q", "-b", "side", str(wt))
+    wt_gd = Path(_git(wt, "rev-parse", "--git-dir").strip()).resolve()
+    assert wt_gd != w.git_dir()
+    (wt_gd / "HEAD.lock").write_text("")
+    (w.git_dir() / "packed-refs.lock").write_text("")
+    rc, out, _ = w.cli("recover", repo=wt)
+    assert rc == 0, out
+    paths = {x["path"] for x in _locks(out)}
+    assert str(wt_gd / "HEAD.lock") in paths
+    assert str(w.git_dir() / "packed-refs.lock") in paths
+    assert (wt_gd / "HEAD.lock").exists() and (w.git_dir() / "packed-refs.lock").exists()
+
+
+def test_recover_state_and_exit_code_are_unchanged_with_locks(w):
+    w.feature("feature/a", {"a.txt": "a\n"})
+    (w.git_dir() / "ORIG_HEAD.lock").write_text("")
+    rc, out, _ = w.cli("recover")
+    assert (rc, out["ok"], out["state"]) == (0, True, "clean")
+    rc2, out2, _ = w.cli("recover")  # 繰り返しても同じで、ロックは残る
+    assert (rc2, out2["state"]) == (0, "clean") and (w.git_dir() / "ORIG_HEAD.lock").exists()
+
+
+def test_recover_never_deletes_locks_even_when_state_is_released(w):
+    (w.git_dir() / "ORIG_HEAD.lock").write_text("")
+    (w.git_dir() / "HEAD.lock").write_text("")
+    _write_state(w, targetOld=w.rev(), commit=w.rev())
+    rc, out, _ = w.cli("recover")
+    assert rc == 0 and out["state"] == "completed", out
+    assert {"ORIG_HEAD.lock", "HEAD.lock"} <= _lock_names(out)
+    assert (w.git_dir() / "ORIG_HEAD.lock").exists() and (w.git_dir() / "HEAD.lock").exists()
+    assert not (w.git_dir() / "pr-viewer-merge.state").exists()  # 状態の解除は従来どおり
+
+
+def test_merge_with_orig_head_lock_fails_with_git_message(w):
+    w.feature("feature/a", {"a.txt": "a\n"})
+    lock = w.git_dir() / "ORIG_HEAD.lock"
+    lock.write_text("")
+    before = w.rev()
+    rc, out, _ = w.merge("feature/a")
+    assert rc == 2 and out["code"] == "failed", out
+    assert "統合に失敗しました。" in out["reason"] and "（git: " in out["reason"]
+    assert "ORIG_HEAD.lock" in out["reason"] and "ORIG_HEAD.lock" in out["details"]["git"]
+    assert len(out["details"]["git"]) <= 300
+    assert lock.exists() and w.rev() == before  # ロックは消さず、develop も動かない
+
+
+def test_recover_after_orig_head_lock_failure_names_the_lock(w):
+    w.feature("feature/a", {"a.txt": "a\n"})
+    (w.git_dir() / "ORIG_HEAD.lock").write_text("")
+    w.merge("feature/a")
+    rc, out, _ = w.cli("recover")
+    assert rc == 0 and "ORIG_HEAD.lock" in _lock_names(out)
+    (w.git_dir() / "ORIG_HEAD.lock").unlink()  # 利用者が手で消す
+    assert w.merge("feature/a")[0] == 0
+
+
+def test_normal_merge_output_has_no_git_fields(w):
+    w.feature("feature/a", {"a.txt": "a\n"})
+    rc, out, _ = w.merge("feature/a")
+    assert rc == 0 and out["ok"] is True
+    assert "details" not in out and "message" not in out
+
+
+def test_other_refusals_have_no_git_detail(w):
+    w.feature("feature/a", {"a.txt": "a\n"})
+    (w.git_dir() / "index.lock").write_text("")
+    rc, out, _ = w.merge("feature/a")
+    assert rc == 2 and out["code"] == "index_locked"
+    assert "details" not in out and "git:" not in out["reason"]
+
+
+def test_merge_failure_by_update_ref_carries_git_message(w):
+    """target が作業ツリーに無い経路（update-ref）の失敗にも、git の出力が付く。"""
+    w.feature("feature/a", {"a.txt": "a\n"})
+    _git(w.repo, "checkout", "-q", "-b", "other")
+    (w.git_dir() / "refs" / "heads" / "develop.lock").write_text("")
+    rc, out, _ = w.merge("feature/a")
+    assert rc == 2 and out["code"] == "failed", out
+    assert "develop.lock" in out["details"]["git"] and "（git: " in out["reason"]
+    assert (w.git_dir() / "refs" / "heads" / "develop.lock").exists()
+
+
+def test_sanitize_masks_url_credentials(w):
+    s = _sanitize(w, "fatal: unable to access 'https://user:tok3n@example.com/r.git/': x")
+    assert "tok3n" not in s and "user" not in s
+    assert "https://***@example.com/r.git/" in s
+
+
+def test_sanitize_masks_token_only_userinfo(w):
+    s = _sanitize(w, "remote: ssh://ghp_SECRET@host/x and http://a:b@h/")
+    assert "ghp_SECRET" not in s and ":b@" not in s
+
+
+def test_sanitize_strips_control_chars_and_joins_lines(w):
+    s = _sanitize(w, "fatal: a\n\tb\r\nc\x1b[31m\x00d\x7f")
+    assert not any(ord(c) < 0x20 or ord(c) == 0x7F for c in s)
+    assert s.startswith("fatal: a b c") and "\n" not in s
+
+
+def test_sanitize_truncates_to_300(w):
+    assert len(_sanitize(w, "x" * 1000)) == 300
+    assert _sanitize(w, "短い") == "短い"
+    assert _sanitize(w, "  \n ") == ""

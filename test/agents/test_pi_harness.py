@@ -61,8 +61,41 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "model-choice.ts", harness / "model-choice.ts")
     shutil.copy2(HARNESS_SRC.parent / "autocheckpoint.ts", harness / "autocheckpoint.ts")
     shutil.copy2(HARNESS_SRC.parent / "quiet-notices.ts", harness / "quiet-notices.ts")
+    shutil.copy2(HARNESS_SRC.parent / "goal-core.ts", harness / "goal-core.ts")
+    shutil.copy2(HARNESS_SRC.parent / "goal-types.ts", harness / "goal-types.ts")
     (harness / "work").mkdir()
-    for name in ("journal.ts", "types.ts"):
+    for name in (
+        "journal.ts",
+        "types.ts",
+        "register.ts",
+        "runtime.ts",
+        "tool.ts",
+        "panel.ts",
+        "notices.ts",
+        "text-width.ts",
+        "store.ts",
+        "root.ts",
+        "reduce.ts",
+        "events.ts",
+        "invariants.ts",
+        "project.ts",
+        "globs.ts",
+        "transitions.ts",
+        "settle.ts",
+        "arbiter.ts",
+        "settle-snapshot.ts",
+        "goal.ts",
+        "goal-run.ts",
+        "driver-run.ts",
+        "driver.ts",
+        "adapt.ts",
+        "aimd.ts",
+        "digest.ts",
+        "sched.ts",
+        "strategy.ts",
+        "reserve.ts",
+        "overlap.ts",
+    ):
         shutil.copy2(HARNESS_SRC.parent / "work" / name, harness / "work" / name)
     shutil.copy2(HARNESS_SRC.parent / "pending-store.ts", harness / "pending-store.ts")
     for name in (

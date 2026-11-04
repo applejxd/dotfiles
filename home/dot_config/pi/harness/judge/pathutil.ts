@@ -1,7 +1,7 @@
 // パスの扱い (Python の os.path 相当)。判定器の各所で共有する。
 // node の型除去でそのまま動く書き方だけを使う。
 // see docs/spec/guard/pi-decide.md#ts-版への移植
-import { realpathSync } from "node:fs";
+import { lstatSync, readlinkSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, sep } from "node:path";
 
@@ -28,6 +28,41 @@ export function realpathLoose(path: string): string {
 			head = head.slice(0, slash);
 		}
 	}
+}
+
+/**
+ * 厳格な解決: 先頭から成分を辿り、存在する symlink は (対象が無くても) 文字列として置き換えて続ける。
+ * 深さの上限 (40) を超える・lstat が ENOENT 以外で失敗するときは例外 (呼び出し側が deny にする)。
+ */
+export function strictResolve(path: string): string {
+	let queue = path.split(sep); // normpath しない (`f/..` や `link/..` を字句で畳むと実体と食い違う)
+	let resolved = sep;
+	let hops = 0;
+	while (queue.length > 0) {
+		const comp = queue.shift()!;
+		if (comp === "" || comp === ".") continue;
+		if (comp === "..") {
+			resolved = resolved === sep ? sep : resolved.slice(0, resolved.lastIndexOf(sep)) || sep;
+			continue;
+		}
+		const next = join(resolved, comp);
+		let link: string | null = null;
+		try {
+			const st = lstatSync(next);
+			if (st.isSymbolicLink()) link = readlinkSync(next);
+			else if (!st.isDirectory() && queue.some((c) => c !== "" && c !== ".")) throw new Error("通常ファイルの後に成分が続く");
+		} catch (e: any) {
+			if (e?.code !== "ENOENT") throw e;
+		}
+		if (link === null) {
+			resolved = next;
+			continue;
+		}
+		if (++hops > 40) throw new Error("symlink が深すぎる");
+		if (isAbsolute(link)) resolved = sep;
+		queue = [...link.split(sep), ...queue];
+	}
+	return resolved;
 }
 
 /** `os.path.expanduser` (`~` と `~/` だけを展開する)。 */

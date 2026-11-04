@@ -170,10 +170,10 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 | キー | 出所 |
 | --- | --- |
 | `defaultProvider` / `defaultModel` | `[opencode.model]` の `default` 階層（[モデルの割り当て](../agent-model-assignment.md#モデルの割り当て)） |
-| `defaultThinkingLevel` / `skills` / `enabledModels` | `[pi.settings]`（書いたものだけ） |
+| `defaultThinkingLevel` / `skills` / `enabledModels` / `hideThinkingBlock` | `[pi.settings]`（書いたものだけ。`hideThinkingBlock` は真偽値のみ） |
 | `extensions` / `defaultTools` | `[pi.settings]`。**非 Windows**: フルガード・自作の拡張（`[pi] own_extensions`。除外の直後に `+extensions/<名前>/index.ts` で足す）・`!extensions/**`（自動検出の拡張を外す）・Orca の状態表示（`+extensions/orca-agent-status.ts`）・組み込みの `codemode` / `tool-search` / `llama.cpp` の除外、`defaultTools = []`。**Windows**: 非 Windows と同じ（Orca の状態表示を含む）に、subagents（`+extensions/subagents/index.ts`）を足す。`commit-confirm` はどちらにも含めない |
 
-今は `defaultThinkingLevel = "xhigh"`（2026-10-31 に `medium` から上げた。根拠は [記録 M5](../../research/agents/subagent-model-assignment.md)）、`skills = ["~/.claude/skills"]`。子は、階層に `#variant` が無い役割（`explore`・`review`）だけがこの既定を継ぐ。`~/.agents/skills` は pi が元から読む。
+今は `defaultThinkingLevel = "xhigh"`（2026-10-31 に `medium` から上げた。根拠は [記録 M5](../../research/agents/subagent-model-assignment.md)）、`hideThinkingBlock = true`（思考のブロックを既定で畳む。スマホで読みやすくするため）、`skills = ["~/.claude/skills"]`。子は、階層に `#variant` が無い役割（`explore`・`review`）だけがこの既定を継ぐ。`~/.agents/skills` は pi が元から読む。
 
 `defaultProjectTrust` は設定しない（既定の `ask`）。作業先の信頼の拒否は、`pis` の `--no-approve` が担う。
 この設定だけで、フラグ無しの `pi` のツールが `guarded_*` と自作の拡張だけになり、agent 置き場の `extensions/` に置いた未審査の拡張は読まれない。設定と同じ拡張を `-e` でも読むと、ツール名の衝突で起動に失敗する（試験は `test_pi_settings_launch.py`）。
@@ -190,6 +190,7 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 作業先のスキル（`.agents/skills`・`.pi/skills`）は指示を読むだけなので、警告しない。
 **書き込みの拒否**: `~/.pi/agent/settings.json`・`mcp.json`・`extensions/**`・`~/.config/pi/harness/**` は、判定器が書き込みを拒否する（`[file] write_deny_globs`）。素の `pi` は Fence で凍結できないため。変更は chezmoi の source 側（このリポジトリ）で行い、`chezmoi apply` で入れる（`settings.json` の生成器が持つキーは `[pi.settings]` が正本で、直接書いても戻る。拡張は chezmoi から配る）。`mcp.json` も拒否する（モデルが書いたサーバは、次の起動でガードの外で動くため）。
 **bash 経由でも拒否する**: 上の制御ファイルへの書き込みは、ファイルツールの `write_deny_globs` に加えて、bash のリダイレクト・`mv` / `cp` / `rm` / `tee`・インラインコードでの書き込みも拒否する（`judge/rules_guard.ts` の `GUARD_TARGETS`。試験は `test_pi_control_files_bash.py`）。ただし**ガードは OS の隔離ではない**（シェルの経由などの抜け道は、サンドボックスで塞ぐ）。
+**作業台帳の置き場**: `**/.git/pi-work/**` と `**/.tmp/work/**` も、同じ 2 経路（`write_deny_globs` と `GUARD_TARGETS`）で書き込みを拒否する。読み取りは許す。ハーネスは判定器を通らず fs で書くので影響しない（[置き場](../work/store.md#置き場)）。サンドボックスの `denyWrite` には足さない（ハーネスが内側で書くため）。
 `defaultTools = []` は境界ではなく、`pi --tools …` で戻せる（利用者が意図して選ぶ経路）。
 **フルガードの読み込みに失敗した起動で、判定なしの実行が残らないようにする**: フルガードは起動時に印 `globalThis.__PI_FULL_GUARD__` を立てる。実行を伴う自作の拡張の `bg_run`（`activity`）と `task`（`subagents`）は、印が無いと実行しない。ガードのパスが無いとき、`defaultTools = []` は組み込みツールだけを無効にするので、自作の拡張の `bg_run`（shell）が残るためである（独立レビューで見つかった）。`rules.json` が壊れている・無いときは pi が起動に失敗する（終了コード 1。`pi -ne` で拡張無しに起動できる）。
 

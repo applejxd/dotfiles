@@ -7,7 +7,7 @@
 // see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { tableSet } from "./context.ts";
-import { expandUser, isAbsolute, join, normpath, sep } from "./pathutil.ts";
+import { expandUser, isAbsolute, join, normpath, realpathLoose, sep, strictResolve } from "./pathutil.ts";
 import { basename, pyRegex, shlexSplit, ShlexError, split, stripChars } from "./pystr.ts";
 import { argv } from "./shellparse.ts";
 import { splitCommandSegments } from "./normalize.ts";
@@ -49,6 +49,11 @@ const GUARD_TARGETS = [
 	"/.git/hooks",
 	".git/config",
 	".git/hooks",
+	// 作業台帳の置き場 (ハーネスだけが fs で書く)。"/.tmp/work/" は "/.tmp/worktrees/" に当たらない
+	"/.git/pi-work",
+	".git/pi-work",
+	"/.tmp/work/",
+	".tmp/work/",
 ];
 
 const guardHits = (token: string): boolean => {
@@ -56,7 +61,187 @@ const guardHits = (token: string): boolean => {
 	return GUARD_TARGETS.some((t) => expanded.includes(t));
 };
 
-const INLINE_PATH_RE = pyRegex(`['"]([^'"]*(?:\\.claude|\\.copilot|/agents|\\.git/|\\.pi/agent|config/pi/harness)[^'"]*)['"]`, "g");
+// 作業台帳の置き場を、成分境界つきで照合する (`.tmp/worktrees` には当たらず、置き場そのもの `.tmp/work` には当たる)。
+// 先頭の境界は付けない: `-o.tmp/work/x` のような短いオプションと値の連結にも当てるため (読み取り専用コマンドは対象外なので偽陽性は出ない)
+const LEDGER_RE = /\.tmp\/work(?:\/|$)|\.git\/pi-work(?:\/|$)/u;
+
+// 台帳のパスが引数に現れても書き込まない、既知の読み取り専用コマンド (これ以外は fail-closed で拒否する)
+const LEDGER_READ_ONLY = new Set([
+	"cat", "ls", "head", "tail", "grep", "egrep", "fgrep", "rg", "wc", "stat", "file", "jq", "find", "diff", "less", "more",
+	"du", "realpath", "readlink", "basename", "dirname", "echo", "printf", "test", "[", "pwd", "sha256sum", "md5sum",
+	"cut", "sort", "tac", "nl", "column",
+]);
+const LEDGER_GIT_READ = new Set(["log", "show", "diff", "status", "rev-parse", "ls-files", "blame", "grep", "cat-file", "rev-list"]);
+const FIND_WRITE_FLAGS = new Set(["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"]);
+
+/** `token` (または `--opt=値` の値) が、cwd 基点の絶対パス・symlink の実体のどちらかで台帳に当たるか。動的な展開は字面だけ見る。 */
+function ledgerHit(token: string, base: string | null): boolean {
+	const raw = stripChars(token, "'\"");
+	const forms = [raw];
+	const eq = raw.indexOf("=");
+	if (eq > 0) forms.push(raw.slice(eq + 1));
+	// 連結した短いオプションの値 (`-oledger/x`・`-aoledger/x`): 先頭の `-` と 1〜3 文字の英字を剥いだ候補を全部加える
+	if (/^-[A-Za-z]/u.test(raw)) {
+		for (let n = 1; n <= 3; n++) {
+			if (!/^[A-Za-z]+$/u.test(raw.slice(1, 1 + n))) break;
+			forms.push(raw.slice(1 + n));
+		}
+	}
+	for (const form of forms) {
+		if (!form) continue;
+		if (LEDGER_RE.test(normalizeGuardPath(form))) return true;
+		if (base === null || Array.from("$`").some((ch) => form.includes(ch))) continue;
+		const expanded = expandUser(form);
+		const abs = normpath(isAbsolute(expanded) ? expanded : join(base, expanded));
+		if (LEDGER_RE.test(abs.replaceAll(sep, "/"))) return true;
+		if (LEDGER_RE.test(realpathLoose(abs).replaceAll(sep, "/"))) return true;
+		// symlink と `..` を成分ごとに順に解決する (`link/..` を先に畳まない)。失敗 (循環・権限など) は字面の判定のままにする
+		try {
+			const strict = strictResolve(isAbsolute(expanded) ? expanded : `${base}${sep}${expanded}`);
+			if (LEDGER_RE.test(strict.replaceAll(sep, "/"))) return true;
+		} catch {
+			// 安全側: 上の字面の判定に任せる
+		}
+	}
+	return false;
+}
+
+/** git の読み取り専用のサブコマンドで、`--output` / `-o` を持たないか。`-C` の基点は `bases` へ積む。 */
+function gitReadOnly(tokens: string[], base: string | null): { readOnly: boolean; base: string | null } {
+	let cur = base;
+	let i = 1;
+	while (i < tokens.length && tokens[i].startsWith("-")) {
+		const t = tokens[i];
+		if (t === "-C" && i + 1 < tokens.length) {
+			cur = chdirBase(cur, tokens[i + 1]);
+			i += 2;
+		} else if (t.length > 2 && t.startsWith("-C")) {
+			cur = chdirBase(cur, t.slice(2));
+			i += 1;
+		} else if (t === "-c" && i + 1 < tokens.length) {
+			i += 2;
+		} else {
+			i += 1;
+		}
+	}
+	const sub = tokens[i];
+	const outputFlag = tokens.some((t) => t === "-o" || t.startsWith("--output") || (/^-o./u.test(t) && !t.startsWith("--")));
+	return { readOnly: sub !== undefined && LEDGER_GIT_READ.has(sub) && !outputFlag, base: cur };
+}
+
+/** `git -C <dir>` の基点の更新。 */
+function chdirBase(cur: string | null, dir: string): string | null {
+	const d = expandUser(stripChars(dir, "'\""));
+	if (cur === null && !isAbsolute(d)) return null;
+	if (Array.from("$`").some((ch) => d.includes(ch))) return null;
+	const full = isAbsolute(d) ? d : `${cur ?? ""}${sep}${d}`;
+	const lexical = normpath(full);
+	try {
+		// symlink の後ろの `..` を字句で畳むと実体とずれるので、ずれる・解決できないときは基点を不明 (null) にする
+		return strictResolve(full) === lexical ? lexical : null;
+	} catch {
+		return null;
+	}
+}
+
+/** 値を取るラッパーのオプション (次のトークンを 1 つ食う)。 */
+const WRAPPER_VALUE_OPTS: Record<string, Set<string>> = {
+	env: new Set(["-u", "--unset", "-C", "--chdir"]),
+	timeout: new Set(["-s", "--signal", "-k", "--kill-after"]),
+	time: new Set(["-f", "--format", "-o", "--output"]),
+	nice: new Set(["-n", "--adjustment"]),
+	stdbuf: new Set(["-o", "-i", "-e"]),
+	exec: new Set(["-a"]),
+};
+const WRAPPERS = new Set(["env", "timeout", "time", "nice", "nohup", "command", "stdbuf", "builtin", "exec"]);
+
+/**
+ * 既知のラッパー (env / timeout / time / nice / nohup / command / stdbuf / builtin / exec) 自身のオプションを読み飛ばし、
+ * 実コマンドの argv と、読み飛ばしたトークン (台帳向けの引数があり得るので別に検査する) を返す。解釈できない形は変えずに返す。
+ */
+function unwrapCommand(tokens: string[]): { rest: string[]; skipped: string[] } {
+	let cur = tokens;
+	const skipped: string[] = [];
+	for (let depth = 0; depth < 8 && cur.length > 0; depth++) {
+		const head = baseName(cur[0]);
+		if (!WRAPPERS.has(head)) break;
+		const valueOpts = WRAPPER_VALUE_OPTS[head] ?? new Set<string>();
+		let i = 1;
+		let ok = true;
+		while (i < cur.length) {
+			const t = cur[i];
+			if (head === "env" && (t.startsWith("-S") || t.startsWith("--split-string"))) {
+				ok = false; // 文字列から命令を作る形は解釈しない (読み取り専用に見えず、拒否側へ倒れる)
+				break;
+			}
+			if (head === "env" && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(t)) {
+				i += 1;
+			} else if (t === "--") {
+				i += 1;
+				break;
+			} else if (valueOpts.has(t)) {
+				i += 2;
+			} else if (t.startsWith("-") && t.length > 1) {
+				i += 1;
+			} else {
+				break;
+			}
+		}
+		if (!ok) break;
+		if (head === "timeout" && i < cur.length) i += 1; // DURATION
+		skipped.push(...cur.slice(1, Math.min(i, cur.length)));
+		cur = cur.slice(i);
+	}
+	return { rest: cur, skipped };
+}
+
+/** 台帳への書き込み・削除 (リダイレクト・書き込みオプション・symlink の別名・置き場そのものの削除) を、追加の判定として拒否する。 */
+function checkLedgerWrite(ctx: Ctx, cmd: string): string | null {
+	const workspace = workspaceRoot(ctx);
+	const deny = (target: string): string =>
+		`作業台帳の置き場 (\`${target}\`) への書き込み・削除は許可されていません。\n` +
+		"台帳はハーネスだけが書きます (`.tmp/work`・`.git/pi-work`)。読み取りは cat / grep / ls などを使ってください。";
+	for (const target of redirectWriteTargets(ctx, cmd)) {
+		if (ledgerHit(target, workspace)) return deny(target);
+	}
+	for (const command of commands(ctx, cmd)) {
+		const all = argv(command);
+		if (all.length === 0) continue;
+		const { rest: tokens, skipped } = unwrapCommand(all);
+		// ラッパー自身の引数 (`env -C .tmp/work` など) は従来どおり検査する
+		for (const token of skipped) {
+			if (ledgerHit(token, workspace)) return deny(token);
+		}
+		if (tokens.length === 0) continue;
+		const head = baseName(tokens[0]);
+		let base = workspace;
+		let readOnly = LEDGER_READ_ONLY.has(head);
+		if (head === "git") {
+			const g = gitReadOnly(tokens, workspace);
+			readOnly = g.readOnly;
+			base = g.base;
+			// `-C` の基点が不明 (symlink の後ろの `..` など) で書き込みうる形は、台帳に当たりうるとして拒否する
+			if (base === null && workspace !== null && !readOnly) return deny("git -C");
+		} else if (head === "find") {
+			readOnly = !tokens.some((t) => FIND_WRITE_FLAGS.has(t));
+		} else if (head === "less") {
+			readOnly = !tokens.some((t) => /^-[oO]/u.test(t) || t.startsWith("--log-file") || t.startsWith("--LOG-FILE"));
+		} else if (head === "sort") {
+			readOnly = !tokens.some((t) => /^-[A-Za-z]*o/u.test(t) || t.startsWith("--output"));
+		} else if (/^python3?(?:\.\d+)?$/u.test(head)) {
+			readOnly = !tokens.includes("-c") && tokens.some((t) => t.endsWith("scripts/work_stats.py"));
+		}
+		// ledger の中へ入ると、以後の相対パスの書き込みを字面で見られない
+		const enters = head === "cd" || head === "pushd" || head === "chdir";
+		if (readOnly && !enters) continue;
+		for (const token of tokens.slice(1)) {
+			if (ledgerHit(token, base)) return deny(token);
+		}
+	}
+	return null;
+}
+
+const INLINE_PATH_RE = pyRegex(`['"]([^'"]*(?:\\.claude|\\.copilot|/agents|\\.git/|\\.pi/agent|config/pi/harness|\\.tmp/work/)[^'"]*)['"]`, "g");
 const HOOK_ENV_RE = pyRegex("\\b(AGENTS_CONFIG_DIR|PYTHONPATH|CLAUDE_[A-Z_]*HOOK[A-Z_]*)=(\\S*)", "g");
 
 const MUTATING = new Set([
@@ -80,6 +265,8 @@ const CHEZMOI_MUTATING = new Set(["forget", "destroy", "remove", "unmanage"]);
 
 /** hook や permission 設定そのものを無効化しようとしていないか。 */
 export function checkGuardTampering(ctx: Ctx, cmd: string): string | null {
+	const ledger = checkLedgerWrite(ctx, cmd);
+	if (ledger !== null) return ledger;
 	// リダイレクト先がガード設定なら、どのコマンドでも上書きになる
 	for (const target of redirectWriteTargets(ctx, cmd)) {
 		if (guardHits(target)) {

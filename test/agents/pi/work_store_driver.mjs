@@ -70,7 +70,7 @@ async function run() {
 					results.push({ ok: true, value: await stores[op.name].acquireLease(op.holder, op.pid ?? process.pid) });
 					break;
 				case "append":
-					results.push({ ok: true, value: await stores[op.name].append({ type: op.type ?? "notice", node: op.node, data: op.data ?? {}, aux: op.aux }) });
+					results.push({ ok: true, value: await stores[op.name].append({ type: op.type ?? "notice", node: op.node, data: op.data ?? {}, aux: op.aux, source: op.source, holder: op.holder }) });
 					break;
 				case "appendN": {
 					let last = null;

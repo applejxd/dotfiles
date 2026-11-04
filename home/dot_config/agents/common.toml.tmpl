@@ -548,6 +548,9 @@ write_deny_globs = [
   "~/.pi/agent/mcp.json",
   "~/.pi/agent/extensions/**",
   "~/.config/pi/harness/**",
+  # 作業台帳の置き場。ハーネスだけが fs で書く (読み取りは許す)。see docs/spec/work/store.md#置き場
+  "**/.git/pi-work/**",
+  "**/.tmp/work/**",
 ]
 
 # deny の例外 (仕組みと CLI ごとの差は docs/spec/agent-config-generation.md#deny-の例外envexample-など)
@@ -1248,11 +1251,13 @@ unless = '(^|&&|;|\n)\s*(git|gh)\s[^\n]*\s-{1,2}(m|am|message|body|title)[\s=]'
 message = "10 秒以上の sleep でここを止めないでください (その間会話が止まります)。待つコマンドは bg_run で起動すると、終わったときの通知でターンが再開し、待つ間も会話を続けられます。短い待ち (9 秒以下) はそのままで構いません。"
 
 # ~/.pi/agent/settings.json へ出す設定。ここに書いたキーは生成器の持ち物で、消すと settings.json からも消える。
-# 書けるキー: defaultThinkingLevel / skills / enabledModels / extensions / defaultTools。既定のモデルは [opencode.model] の default 階層。
+# 書けるキー: defaultThinkingLevel / skills / enabledModels / extensions / defaultTools / hideThinkingBlock。既定のモデルは [opencode.model] の default 階層。
 # see docs/spec/guard/pi-guard.md#pi-の設定
 [pi.settings]
 # ★xhigh (2026-10-31)。根拠と子への影響は docs/research/agents/subagent-model-assignment.md (記録 M5)
 defaultThinkingLevel = "xhigh"
+# 思考のブロックを既定で畳む (ctrl+t で切替)。see docs/spec/pi-manual.md
+hideThinkingBlock = true
 # Orca・Herdr が入れたスキルは、フルガードの一覧 (<available_skills>) から外す ("-" は厳密な除外)。
 # see docs/spec/guard/pi-guard.md#pi-の設定
 skills = [
@@ -1518,7 +1523,7 @@ $ARGUMENTS
 # 末尾が * の項目は前方一致。mcp__* は MCP のツール全部 (規則が無いので既定の扱いになる)。
 [pi.profiles.implementer]
 # pr_summary: ローカル PR ビューアの道具 (see docs/spec/pr-viewer.md)
-tools = ["bash", "read", "edit", "write", "grep", "find", "ls", "task", "todo", "ask", "action", "pr_summary", "mcp__*"]
+tools = ["bash", "read", "edit", "write", "grep", "find", "ls", "task", "todo", "work", "ask", "action", "pr_summary", "mcp__*"]
 default = "ask"
 # [bash] deny の例外 (許す語は判定器が固定。see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外)
 # `git restore --staged` は index だけを戻す厳密な 1 形式だけ (see docs/spec/guard/pi-decide.md#git-restore---staged-の例外)
@@ -1600,7 +1605,7 @@ shell_deny = [
 # 親が失う操作の代替: 作業・検証は worker、調査は explore、コミットは guarded_action。
 # see docs/spec/guard/pi-subagents.md#親の絞り込みorchestrate
 [pi.profiles.orchestrator]
-tools = ["read", "grep", "find", "ls", "task", "todo", "ask", "action"]
+tools = ["read", "grep", "find", "ls", "task", "todo", "work", "ask", "action"]
 default = "deny"
 
 # 親の絞り込み (orchestrator)。default は起動時の状態 (off / on)。実行中は /orchestrate on|off (利用者専用)

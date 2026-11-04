@@ -42,6 +42,8 @@ try:
         "explain.ts",
         "autocheckpoint.ts",
         "quiet-notices.ts",
+        "goal-core.ts",
+        "goal-types.ts",
         "actions.ts",
         "text-viewer.ts",
         "confirm-present.ts",
@@ -67,7 +69,38 @@ try:
     ):
         shutil.copy2(SRC / name, harness / name)
     (harness / "work").mkdir()
-    for name in ("journal.ts", "types.ts"):
+    for name in (
+        "journal.ts",
+        "types.ts",
+        "register.ts",
+        "runtime.ts",
+        "tool.ts",
+        "panel.ts",
+        "notices.ts",
+        "text-width.ts",
+        "store.ts",
+        "root.ts",
+        "reduce.ts",
+        "events.ts",
+        "invariants.ts",
+        "project.ts",
+        "globs.ts",
+        "transitions.ts",
+        "settle.ts",
+        "arbiter.ts",
+        "settle-snapshot.ts",
+        "goal.ts",
+        "goal-run.ts",
+        "driver-run.ts",
+        "driver.ts",
+        "adapt.ts",
+        "aimd.ts",
+        "digest.ts",
+        "sched.ts",
+        "strategy.ts",
+        "reserve.ts",
+        "overlap.ts",
+    ):
         shutil.copy2(SRC / "work" / name, harness / "work" / name)
     rules = gen.build_pi_harness({}, load_common())
     for agent in rules["agents"].values():
