@@ -123,6 +123,7 @@ _PI_TESTS = (
     "test_pi_autocheckpoint",
     "test_pi_quiet_notices",
     "test_pi_goal_core",
+    "test_pi_goal_eval",
     "test_pi_board",
     "test_pi_board_collect",
     "test_pi_board_command",
