@@ -2,6 +2,8 @@
 //
 // node の型除去でそのまま動く書き方だけを使う (enum・namespace は使わない)。
 
+import { explainLines } from "./explain.ts";
+
 export const DEFAULT_TIMEOUT_SECONDS = 300;
 // 本文・タイトルの表示の上限 (合計の字数)。超えたら確認を出さず止める
 export const MAX_DISPLAY_CHARS = 8000;
@@ -459,6 +461,16 @@ export function finishBodyLines(
 	return lines;
 }
 
+/** 確認画面の本文に添える「手順:」の行 (空なら出さない)。表示だけで、判定には使わない。see explain.ts */
+export function explainSection(command: string, hit?: string[]): string {
+	try {
+		const lines = explainLines(command, hit);
+		return lines.join("\n");
+	} catch {
+		return "";
+	}
+}
+
 /**
  * mustConfirm の確認画面を組む。コマンドは全文を出す。gh なら解析結果を参考として別に出し、
  * --body-file は readBodyFile で読んで本文を出す。読めない・長すぎるときは確認を出さず block。
@@ -470,6 +482,7 @@ export function buildMustConfirmView(
 	reason: string,
 	readBodyFile: (path: string) => BodyFileResult,
 	facts?: IntegrationFacts,
+	opts?: { explain?: boolean; hit?: string[] },
 ): MustView {
 	const parsed = parseGh(command);
 	let fileText: string | undefined;
@@ -503,6 +516,10 @@ export function buildMustConfirmView(
 	// 先頭が finish でないと結論の画面にならない。黙って汎用の画面に戻らないよう、理由を 1 行出す
 	if (integration && !finish && FINISH_ANYWHERE.test(command)) lines.push(FINISH_NOT_LEADING_NOTE, "");
 	lines.push("コマンド (全文):", sanitizeForDisplay(command));
+	if (opts?.explain) {
+		const ex = explainSection(command, opts.hit);
+		if (ex) lines.push("", ex);
+	}
 	if (parsed) {
 		lines.push("", "解析結果 (参考。実際に実行されるのは上のコマンド):", `  対象: gh ${parsed.kind} ${parsed.action}`);
 		if (parsed.repo !== undefined) lines.push(field("repo", parsed.repo));

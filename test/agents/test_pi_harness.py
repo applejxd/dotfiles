@@ -39,6 +39,8 @@ def env(tmp_path):
     harness.mkdir(parents=True)
     shutil.copy2(HARNESS_SRC, harness / "index.ts")
     shutil.copytree(HARNESS_SRC.parent / "judge", harness / "judge")
+    shutil.copytree(HARNESS_SRC.parent / "vendor", harness / "vendor")
+    shutil.copy2(HARNESS_SRC.parent / "explain.ts", harness / "explain.ts")
     shutil.copy2(HARNESS_SRC.parent / "redact.ts", harness / "redact.ts")
     shutil.copy2(HARNESS_SRC.parent / "canary.ts", harness / "canary.ts")
     shutil.copy2(HARNESS_SRC.parent / "children.ts", harness / "children.ts")
