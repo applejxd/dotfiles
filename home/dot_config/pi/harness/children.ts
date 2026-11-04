@@ -41,9 +41,9 @@ export function classify(f: RoundFacts): { status: RoundStatus; note?: string } 
 
 // ─── 入力 ───────────────────────────────────────────────────────────
 
-export type BatchItem = { agent: string; task: string; model?: string; effort?: string };
+export type BatchItem = { agent: string; task: string; model?: string; effort?: string; cwd?: string };
 export type TaskInput =
-	| { kind: "new"; agent: string; task: string; keep: boolean; background: boolean; model?: string; effort?: string; todo?: number; isolation?: "worktree" }
+	| { kind: "new"; agent: string; task: string; keep: boolean; background: boolean; model?: string; effort?: string; todo?: number; isolation?: "worktree"; cwd?: string }
 	| { kind: "batch"; tasks: BatchItem[]; background: boolean }
 	| { kind: "followup"; jobId: string; task: string; background: boolean }
 	| { kind: "close"; jobId: string }
@@ -87,8 +87,9 @@ export function parseTaskInput(p: any): TaskInput {
 			if (typeof t?.task !== "string" || t.task === "") fail(`tasks[${i}] needs \`task\``);
 			if (t.model !== undefined && typeof t.model !== "string") fail(`tasks[${i}].model must be a string`);
 			if (t.effort !== undefined && typeof t.effort !== "string") fail(`tasks[${i}].effort must be a string`);
-			for (const k of Object.keys(t)) if (!["agent", "task", "model", "effort"].includes(k)) fail(`tasks[${i}] has unknown \`${k}\``);
-			return { agent: t.agent, task: t.task, ...(t.model ? { model: t.model } : {}), ...(t.effort ? { effort: t.effort } : {}) };
+			if (t.cwd !== undefined && typeof t.cwd !== "string") fail(`tasks[${i}].cwd must be a string`);
+			for (const k of Object.keys(t)) if (!["agent", "task", "model", "effort", "cwd"].includes(k)) fail(`tasks[${i}] has unknown \`${k}\``);
+			return { agent: t.agent, task: t.task, ...(t.model ? { model: t.model } : {}), ...(t.effort ? { effort: t.effort } : {}), ...(t.cwd ? { cwd: t.cwd } : {}) };
 		});
 		return { kind: "batch", tasks, background: bool("background") };
 	}
@@ -118,6 +119,8 @@ export function parseTaskInput(p: any): TaskInput {
 	if (p.model !== undefined && typeof p.model !== "string") fail("`model` must be a string");
 	if (p.effort !== undefined && typeof p.effort !== "string") fail("`effort` must be a string");
 	if (has("todo") && (typeof p.todo !== "number" || !Number.isInteger(p.todo))) fail("`todo` must be an integer id");
+	if (p.cwd !== undefined && typeof p.cwd !== "string") fail("`cwd` must be a string");
+	if (has("cwd") && has("isolation")) fail("`cwd` cannot be used with `isolation` (isolation creates its own worktree)");
 	if (has("isolation")) {
 		if (p.isolation !== "worktree") fail('`isolation` must be "worktree"');
 		// 隔離の job は 1 往復で終わり、回収は 1 回
@@ -134,6 +137,7 @@ export function parseTaskInput(p: any): TaskInput {
 		...(p.effort ? { effort: p.effort } : {}),
 		...(has("todo") ? { todo: p.todo } : {}),
 		...(has("isolation") ? { isolation: "worktree" as const } : {}),
+		...(has("cwd") ? { cwd: p.cwd } : {}),
 	};
 }
 
