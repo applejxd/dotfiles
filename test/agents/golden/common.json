@@ -1642,6 +1642,7 @@
     "-builtin:tool-search",
     "-builtin:llama.cpp"
    ],
+   "hideThinkingBlock": true,
    "skills": [
     "~/.claude/skills",
     "-~/.agents/skills/orchestration",

@@ -331,7 +331,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `[pi.external_read]` | 作業ツリー外で無確認に読める場所 | 3 件（各 CLI のスキル置き場） |
 | `[pi.skill_scripts]` | 無確認で実行できるスキルのスクリプト | `[[allow]]` 11 件 |
 | `[[pi.guide]]` | 当たると案内つきで deny（bypass でも外れない） | 6 件 |
-| `[pi.settings]` | pi の `settings.json` の持ち物 | `defaultThinkingLevel = "xhigh"`、`skills`、`extensions`、`defaultTools = []` |
+| `[pi.settings]` | pi の `settings.json` の持ち物 | `defaultThinkingLevel = "xhigh"`、`hideThinkingBlock = true`、`skills`、`extensions`、`defaultTools = []` |
 | `[pi.model.tier.*]` / `[pi.model.catalog.*]` | 子のモデルの階層の上書き / 選べるモデルの範囲 | プロバイダごと |
 | `[pi.sandbox]` | `pis` の追加の読み取り・保護 | `read` `control_dirs` `deny_read` `protected` |
 | `[pis.broker]` | ブローカー（`copilot` `github` `search`） | `off` / `auto` |
@@ -399,6 +399,7 @@ read = ["/data1"]
 | `PI_DELEGATE_NUDGE=0` | `/delegate-stats` の記録を止める |
 | `PI_TODO_NO_REMINDER=1` | todo の続行の促しを止める |
 | `PI_AUTOCHECKPOINT=0` / `PI_AUTOCHECKPOINT_PERCENT` / `PI_AUTOCHECKPOINT_RESUME=0` | 文脈の使用率による自動の保存と圧縮を止める / 閾値（既定 80）/ 圧縮後の自動の再開だけを止める（[仕様](guard/pi-extensions.md#文脈の使用率による自動の保存と圧縮)） |
+| `PI_FOLD_TOOLS=0` | ツール出力を既定で畳むのを止める（戻し方: [仕様](guard/pi-extensions.md#思考とツール出力の既定の折り畳み)） |
 | `PIS_EXTRA_READ` / `PIS_EXTRA_DEVICES` | 7.3 |
 | `AGENTS_LOCAL_CONFIG` | `local.toml` の場所の差し替え |
 | `DOTFILES_RESYNC_WEBSEARCH_KEYS=1` | apply 時に検索の鍵を取り直す |

@@ -2394,6 +2394,7 @@ PI_SETTINGS_KEYS = frozenset(
         "enabledModels",
         "extensions",
         "defaultTools",
+        "hideThinkingBlock",
     }
 )
 # extensions の中で自動検出の拡張を外す記法。自作の拡張はこの直後に "+" で足す
@@ -2416,6 +2417,8 @@ def merge_pi_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[
         value = declared.get(key, [])
         if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
             raise SystemExit(f"[pi.settings] {key} は文字列の配列でなければならない")
+    if "hideThinkingBlock" in declared and not isinstance(declared["hideThinkingBlock"], bool):
+        raise SystemExit("[pi.settings] hideThinkingBlock は真偽値でなければならない")
     declared = copy.deepcopy(declared)
     exts = declared.get("extensions")
     if exts and PI_EXCLUDE_AUTO in exts:
