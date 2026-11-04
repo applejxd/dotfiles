@@ -215,7 +215,9 @@ function safeDetails(r: Refusal): Record<string, unknown> | undefined {
 function refusalToError(r: Refusal): ApiError {
 	const code = r.code === "stale" ? "stale_view" : r.code === "failed" ? "merge_failed" : r.code;
 	const conflicts = r.code === "conflict" && Array.isArray(r.conflicts) ? r.conflicts.slice(0, MAX_CONFLICTS).map(String) : undefined;
-	return new ApiError(REFUSAL_STATUS[r.code] ?? 500, code, r.reason, conflicts, safeDetails(r));
+	// 理由の末尾の「（git: …）」は CLI 向けの診断で、HTTP へは出さない（生の git 出力・絶対パスを返さない）
+	const reason = r.code === "failed" ? r.reason.replace(/（git: [^]*）$/, "") : r.reason;
+	return new ApiError(REFUSAL_STATUS[r.code] ?? 500, code, reason, conflicts, safeDetails(r));
 }
 
 /** 診断ログ（標準エラーに 1 行の JSON）。本文・ヘッダー・パスは出さない。共有 ref と同じく、改ざんされうる記録ではなく、運用の手がかり。 */
