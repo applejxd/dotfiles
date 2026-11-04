@@ -87,6 +87,16 @@ Claude Code の `context: fork` は、**本文（`$ARGUMENTS` 置換後）を、
 
 例（工程への展開）: `skill-creator` は D（聞き取り）→ C（草稿）→ E（比較試験の管理）→ C（修正）。`github-operations` は D（対象・意図の確認）→ 子（現状調査・本文の準備）→ 親側の承認つき操作 → 子（読み戻し）。`oss-research` は A（調べて報告）だが、`gh`・`curl` の実行と取得物の削除の承認が要るので、承認の経路（CHG-0045 の段 4）が前提。
 
+## `review-loop` の step back
+
+レビュー→修正が収束しないとき、パッチを当て続けず設計から見直す。手順は `review-loop/references/stepback.md`（実例 14 件に基づく）。
+標準ライブラリだけの `scripts/converge.py check <rounds.jsonl>` がラウンドごとに判定する（`continue`・`converged`・`stepback`・`stop`）。
+既定のトリガー: T1 同じ原因クラスの BLOCKER が 2 回再発、T2 異なるクラスの BLOCKER が 3 ラウンド連続、
+T3 修正起因の新 BLOCKER が 2 ラウンド、T4 同じ fingerprint が 2 ラウンド open、T5 BLOCKER+MAJOR 累計 15 件または $6 超、
+T6 ラウンド 3 以降に未解決 BLOCKER が 2 件以上、T7 `surface-open` が 1 件。step back を 2 回行っても収束しなければ `stop`
+（利用者へ撤退・縮小・撤去を提案）。関連: プロンプトテンプレート `/stepback` は変えていない。
+試験: `test/test_review_converge.py`。実際のループで使った実績はまだ無い（阈値は実例からの見積もり）。
+
 ## `experiment-loop`
 
 ベンチマーク改善の実験ループ（グローバルのスキル。`~/.claude/skills/experiment-loop/`）。標準ライブラリだけの CLI `scripts/exp.py` が、次を持つ。

@@ -101,6 +101,9 @@ RUN_ID="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "./.tmp/review-loop/${RUN_ID}"
 ```
 
+指摘の記録は、人が読む `round-<N>.md`・`ledger.md` のほかに、判定用の `rounds.jsonl`（1 行 1 ラウンド。
+形式は `references/convergence.md`）にも残す。
+
 `./.tmp/` は使い捨ての置き場で、削除に承認は要らない（`redirect-tmp.py` が
 `/tmp` の代わりに誘導する先）。ここに置いた記録は成果物ではないので、
 最終レポートは会話に出す。
@@ -141,6 +144,9 @@ mkdir -p "./.tmp/review-loop/${RUN_ID}"
 | MINOR | 可読性・命名・重複 | 安全なら直す |
 | NIT | 好みの範囲 | 直さない。記録だけ |
 
+各指摘に**原因クラス**（`cause_class`）と、直した結果の新しい指摘か（`introduced_by_fix`）を付け、
+`rounds.jsonl` に記録する（レビュー役が付けた値を使う。`references/convergence.md`）。
+
 #### 3-3. 修正
 
 BLOCKER → MAJOR → MINOR の順に直す。
@@ -160,6 +166,18 @@ BLOCKER → MAJOR → MINOR の順に直す。
 
 検証が落ちたらそのラウンド内で直す。直せなければループを止めて報告する。
 
+#### 3-5. 収束・step back の判定
+
+ラウンドの記録を `rounds.jsonl` に 1 行足し、判定を実行する（標準ライブラリのみ。決定的）。
+
+```bash
+python3 ~/.claude/skills/review-loop/scripts/converge.py check ./.tmp/review-loop/<run-id>/rounds.jsonl
+```
+
+出力の `verdict` に従う: `continue` は次のラウンドへ、`converged` は終了、`stepback` は
+`references/stepback.md` の手順へ移る（パッチを当てない）、`stop` は手順 4 の「止めて報告」。
+トリガー T1〜T7 の意味は `converge.py explain` で見る。
+
 ### 4. 終了条件
 
 次のいずれかに当たったら止める。**どれで止まったかを必ず報告する**。
@@ -168,15 +186,17 @@ BLOCKER → MAJOR → MINOR の順に直す。
 | --- | --- |
 | 収束 | `references/convergence.md` の「収束したと言える形」を満たす（正本。累積の未解決 BLOCKER・MAJOR がゼロ、最後の編集後の独立レビュー済み、など） |
 | リスク受容で終了 | 未解決の BLOCKER・MAJOR が無いが、リスク受容にした BLOCKER・MAJOR が残る。「収束」とは呼ばない |
-| 上限到達 | 5 ラウンド（ユーザ指定があればその値） |
-| 停滞 | 2 ラウンド連続で、指摘の内容が実質同じ |
+| 上限到達 | 5 ラウンド（ユーザ指定があればその値）。トリガーが無いまま上限に当たったとき（`converge.py` の `stop`） |
+| step back へ | `converge.py check` が `stepback`（同じ原因クラスの再発・異なるクラスの BLOCKER が続く・BLOCKER が複数残る・面が開いている、など）。**止めて報告ではなく**、`references/stepback.md` の手順へ移る |
+| 止めて報告 | 検証失敗、判断待ち、利用者の承認が要るもの（権限・元に戻せない操作・全廃）、step back を 2 回行っても収束しない（`stop`） |
 | 検証失敗 | テスト / lint が落ち、そのラウンドで直せない |
 | 判断待ち | 設計方針の選択が必要で、勝手に決めると手戻りする |
 
-**停滞の判定**は指摘の件数ではなく中身で行う。
+**停滞**（同じ箇所・同趣旨の指摘が続く）は T4 として step back の入口の 1 つになる。件数ではなく中身で見る。
 件数が減っていても、同じ箇所に同じ趣旨の指摘が続いているなら停滞とみなす。
-停滞したらループを続けず、対立点を整理して報告する
-（レビュー役の指摘が的外れなのか、修正方針が間違っているのか）。
+さらに、**同じ原因クラスの再発**と**異なるクラスの BLOCKER が毎ラウンド出る**ことも、同じ原因が残っているサインとして扱う
+（`references/convergence.md`）。step back では、対立点の整理にとどめず、原因クラスで分類し、
+転換の型から 2〜3 案を比べて決定ログに残し、新しい run-id で現状レビューをやり直す。
 
 自動承認モード（autopilot）で走っている場合も、
 **「判断待ち」で止まったら勝手に決めずに報告する**。
@@ -190,7 +210,7 @@ BLOCKER → MAJOR → MINOR の順に直す。
 <パス / 差分の指定>
 
 ### 終了理由
-<収束 | リスク受容で終了 | 上限到達 | 停滞 | 検証失敗 | 判断待ち>（<N> ラウンド）
+<収束 | リスク受容で終了 | 上限到達 | step back（回数）| 止めて報告（検証失敗・判断待ち・2 回の step back でも未収束）>（<N> ラウンド）
 
 ### ラウンドごとの推移
 | R | BLOCKER | MAJOR | MINOR | 主な対応 |
@@ -210,8 +230,9 @@ BLOCKER → MAJOR → MINOR の順に直す。
 - <判断が必要なもの / 次にやるべきこと>
 ```
 
-詳細は `references/review-prompt.md`（レビュー役へ渡すプロンプトの雛形）と
-`references/convergence.md`（停滞の見分け方）を参照する。
+詳細は `references/review-prompt.md`（レビュー役へ渡すプロンプトの雛形）、
+`references/convergence.md`（停滞・原因クラスの見分け方と `rounds.jsonl` の形式）、
+`references/stepback.md`（step back の手順と実例）を参照する。
 
 ## 制約
 
