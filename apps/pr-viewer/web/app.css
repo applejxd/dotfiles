@@ -165,41 +165,19 @@ tr.gap td.hh { background: var(--bg2); border-top: 1px solid var(--bd); border-b
 .md .mdtable { overflow-x: auto; max-width: 100%; }
 .md th, .md td { border: 1px solid var(--bd); padding: 2px 6px; text-align: left; }
 .md a { overflow-wrap: anywhere; }
-.revqueue { flex-basis: 100%; }
-.thread { border: 1px solid var(--bd); border-left: 4px solid var(--info); border-radius: 6px; padding: 8px 10px; margin: 6px 0; background: var(--bg); font-family: system-ui, "Hiragino Sans", "Noto Sans CJK JP", sans-serif; white-space: normal; }
-.thread.stale { border-left-color: var(--warn); border-style: dashed; border-left-style: solid; }
-.thead { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 4px; }
-.comment + .comment { border-top: 1px dashed var(--bd); margin-top: 6px; padding-top: 6px; }
-.cmeta { font-size: 13px; }
-.reply { margin-top: 6px; }
-.cform { display: grid; gap: 6px; }
 .cbox { font: inherit; width: 100%; min-height: 72px; resize: vertical; color: var(--fg); background: var(--bg); border: 1px solid var(--bd); border-radius: 6px; padding: 6px 8px; }
 .cact { display: flex; gap: 8px; flex-wrap: wrap; }
 .formerr { color: var(--bad); font-size: 13px; }
 .formerr:empty { display: none; }
-tr.thr > td, tr.editor > td { padding: 4px 8px 8px 52px; background: var(--bg); white-space: normal; }
-tr.editor .editbox { border: 1px solid var(--acc); border-radius: 6px; padding: 8px; background: var(--bg); font-family: system-ui, "Noto Sans CJK JP", sans-serif; }
-tr.can { cursor: pointer; }
-td.code.can { cursor: pointer; }
-@media (hover: hover) { tr.can:hover td.code, td.code.can:hover { box-shadow: inset 3px 0 0 var(--acc); } }
-.orphans { padding: 6px 8px; border-bottom: 1px solid var(--bd); }
 .summary { border-left: 4px solid var(--merged); }
 .summary h3 { font-size: 13px; margin: 10px 0 2px; color: var(--muted); }
 
-/* レビューを送る: 固定バーとシート */
+/* 統合のシート（下から出る） */
 .page.withbar { padding-bottom: 8px; }
-.revbar { position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--bd); border-radius: 8px; background: var(--bg2); box-shadow: 0 -2px 8px rgba(0, 0, 0, .12); }
-.revbtns { display: flex; flex-wrap: wrap; gap: 6px 8px; }
-.revmain { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.revnote { flex: 1 1 220px; color: var(--muted); }
-.revnotice { flex: 1 1 100%; color: var(--ok); font-weight: 600; }
 .backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, .45); display: flex; align-items: center; justify-content: center; padding: 12px; }
 .sheet { width: min(480px, 100%); max-height: 90vh; overflow: auto; background: var(--bg); color: var(--fg); border: 1px solid var(--bd); border-radius: 12px; padding: 16px; display: grid; gap: 10px; }
 .sheet h2 { font-size: 17px; margin: 0; }
-.sheetnote { margin: 0; padding: 8px; border-left: 4px solid var(--info); background: var(--bg2); }
-.field { display: grid; gap: 4px; }
 .lbl { font-weight: 600; font-size: 13px; }
-.unsentline { margin: 0; font-weight: 600; }
 
 @media (max-width: 899px) { .cols { grid-template-columns: minmax(0, 1fr); } .col-side { position: static; order: -1; } }
 @media (max-width: 719px) {
@@ -220,9 +198,6 @@ td.code.can { cursor: pointer; }
   .frow { min-height: 44px; }
   .backdrop { align-items: flex-end; padding: 0; }
   .sheet { width: 100%; border-radius: 12px 12px 0 0; max-height: 85vh; }
-  tr.thr > td, tr.editor > td { padding-left: 8px; }
-  .revbar .btn { flex: 1 1 100%; }
-  .revbtns { flex: 1 1 100%; }
   table.diff { font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
@@ -249,24 +224,8 @@ td.code.can { cursor: pointer; }
 @media (max-width: 719px) {
   .mergebar { display: flex; position: sticky; bottom: 0; z-index: 6; margin-top: 8px; padding: 8px 12px; border: 1px solid var(--bd); border-radius: 8px; background: var(--bg2); }
   .mergebar .btn { flex: 1 1 100%; }
-  .hasmerge .revbar { bottom: 64px; }
   .confirmrow { min-height: 48px; }
 }
 
 /* 稼働版の表示（画面の隨） */
 .verchip { position: fixed; right: 6px; bottom: 2px; opacity: 0.7; pointer-events: none; z-index: 1; }
-
-/* 起票: 一覧のボタン・行の題名・入力シート・依頼文カード */
-.listact { margin-left: auto; }
-.rtitle { margin-top: 2px; color: var(--fg); overflow-wrap: anywhere; }
-.sheet.createsheet { width: min(640px, 100%); overflow-wrap: anywhere; }
-.createsheet > * { min-width: 0; }
-.createsheet .field { display: grid; gap: 4px; min-width: 0; }
-.createsheet input.cbox, .createsheet textarea.cbox { font-size: 16px; min-width: 0; }
-.createsheet input.cbox { min-height: 40px; }
-.createpreview code, .createcmd code { overflow-wrap: anywhere; }
-.createcmd { margin: 0; overflow-wrap: anywhere; }
-.createtext { max-height: 40vh; overflow: auto; }
-.briefcard summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; gap: 8px; }
-.briefbody { max-height: 50vh; overflow: auto; }
-@media (max-width: 719px) { .briefcard summary { min-height: 44px; } .createsheet input.cbox { min-height: 44px; } }

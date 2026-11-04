@@ -55,7 +55,7 @@ const TODO_TOOL = "todo";
 const ASK_TOOL = "ask";
 const ACTION_TOOL = "action";
 // profile の deny_except に書いてよい語 (bash.ts の例外処理が知っているものだけ)
-const DENY_EXCEPT_WORDS: readonly string[] = ["git worktree remove"];
+const DENY_EXCEPT_WORDS: readonly string[] = ["git worktree remove", "git restore --staged"];
 
 /** bash の判定器。移植が済むまでは差し込まれない。 */
 export type BashDecider = (

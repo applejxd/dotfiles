@@ -1493,7 +1493,8 @@
    "implementer": {
     "default": "ask",
     "deny_except": [
-     "git worktree remove"
+     "git worktree remove",
+     "git restore --staged"
     ],
     "tools": [
      "bash",
@@ -1508,7 +1509,6 @@
      "ask",
      "action",
      "pr_summary",
-     "pr_comments",
      "mcp__*"
     ]
    },

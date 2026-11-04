@@ -1,4 +1,4 @@
-/* API クライアント（契約: GET 5 本 + POST 2 本。同一オリジンのみ） */
+/* API クライアント(契約: GET 5 本 + POST 2 本。同一オリジンのみ) */
 (function () {
   "use strict";
   var PRV = (window.PRV = window.PRV || {});
@@ -95,37 +95,19 @@
         return get(idPath(id) + "/review", signal);
       });
     },
-    comment: function (id, c) {
-      return guard(function () {
-        return post(idPath(id) + "/comments", { thread: c.thread, anchor: c.anchor, body: c.body, expect: c.expect });
-      });
-    },
-    submit: function (id, s) {
-      return guard(function () {
-        return post(idPath(id) + "/submit", { kind: s.kind, dest: s.dest, resendOf: s.resendOf, expect: s.expect });
-      });
-    },
     /* 統合（CHG-0062 段 A2）。capabilities は 404（古いサーバ）・通信断のとき merge:false 扱い */
     capabilities: function () {
       return get("/api/capabilities").then(
         function (b) {
           return {
             merge: b.merge === true,
-            create: b.create === true,
             targets: Array.isArray(b.targets) ? b.targets : [],
           };
         },
         function () {
-          return { merge: false, create: false, targets: [] };
+          return { merge: false, targets: [] };
         }
       );
-    },
-    /* 起票（CHG-0062 段 B1）。本文は契約どおり {kind, name, requestId, expect:{target}, brief} */
-    createFeature: function (repoId, c) {
-      return guard(function () {
-        if (!/^r[0-9a-f]{8}$/.test(repoId)) throw fail("リポジトリの指定が正しくありません。");
-        return post("/api/repos/" + repoId + "/features", { kind: "feature", name: c.name, requestId: c.requestId, expect: { target: c.target }, brief: c.brief });
-      });
     },
     mergePlan: function (id) {
       return guard(function () {

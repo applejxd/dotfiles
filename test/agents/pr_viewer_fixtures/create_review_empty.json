@@ -1,7 +1,0 @@
-{"schema": 2, "readonly": false, "bad": null, "review": "none", "reviewStale": false, "stale": false,
- "staleParts": {"source": false, "target": false, "base": false}, "merged": false,
- "threads": [], "batches": [], "summary": null,
- "worktrees": [{"worktreeId": "w1", "name": "example-app", "isMain": true}],
- "defaultDest": {"worktreeId": "w1"}, "unsent": 0,
- "brief": {"rev": 1, "title": "PLACEHOLDER", "goal": "PLACEHOLDER", "constraints": "", "scope": [], "acceptance": "",
-           "digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "bytes": 120, "at": "2099-01-01T00:00:00+00:00"}}

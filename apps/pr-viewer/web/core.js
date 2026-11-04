@@ -56,11 +56,6 @@
     return String(oid || "").slice(0, 7);
   };
 
-  /* 書き込みに付ける「表示していた版」（GET の pr の OID。ref 名は送らない） */
-  PRV.expectOf = function (pr) {
-    return { source: pr.sourceOid, target: pr.targetOid, base: pr.baseOid };
-  };
-
   PRV.size = function (a, d) {
     return PRV.h("span", { class: "size" }, PRV.h("span", { class: "sa", text: "+" + a }), " ", PRV.h("span", { class: "sd", text: "−" + d }));
   };
@@ -68,8 +63,6 @@
   /* 主状態のチップ。既定値（open）は何も出さない */
   PRV.stateChip = function (pr) {
     if (pr.state === "merged") return PRV.h("span", { class: "chip c-merged", text: "✓ 統合済み" });
-    /* 0 コミットで依頼文だけがある PR（統合済みとは別） */
-    if (pr.state === "empty") return PRV.h("span", { class: "chip c-info", text: "◌ 起票のみ" });
     return null;
   };
 
@@ -127,6 +120,31 @@
       if (parts.length === 4 && parts[3] === "files") return { view: "files", id: id, path: params.get("path") };
     }
     return { view: "notfound" };
+  };
+
+  /* 下から出るシート（統合する）の基盤。「開いている」扱いと閉じ方を 1 か所にまとめる。onClose は閉じた直後に呼ぶ */
+  var current = null;
+
+  PRV.closeSheet = function () {
+    if (current) {
+      var c = current;
+      current = null;
+      c.backdrop.remove();
+      document.removeEventListener("keydown", c.onKey);
+      if (c.onClose) c.onClose();
+      if (c.opener && c.opener.isConnected) c.opener.focus();
+    }
+  };
+
+  PRV.openSheet = function (backdrop, onKey, opener, onClose) {
+    PRV.closeSheet();
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(backdrop);
+    current = { backdrop: backdrop, onKey: onKey, opener: opener, onClose: onClose };
+  };
+
+  PRV.sheetOpen = function () {
+    return !!current;
   };
 
   PRV.token = 0;

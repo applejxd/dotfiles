@@ -7,7 +7,6 @@
     ["all", "すべて"],
     ["open", "オープン"],
     ["merged", "統合済み"],
-    ["empty", "起票のみ"],
   ];
 
   var SHOW_KEY = "prv.showIncluded";
@@ -18,16 +17,14 @@
     try { window.localStorage.setItem(SHOW_KEY, v ? "1" : "0"); } catch (e) {}
   }
 
-  function row(pr, rv) {
-    var bt = rv && rv.brief && typeof rv.brief.title === "string" ? rv.brief.title : "";
+  function row(pr) {
     return h(
       "li",
       { class: "prrow" },
       h(
         "a",
         { class: "rowlink", href: PRV.prHref(pr) },
-        h("div", { class: "rt" }, h("span", { class: "ttl", text: pr.branch }), PRV.mainChip(pr, rv), PRV.staleReviewChip(rv)),
-        bt ? h("div", { class: "rtitle", text: bt }) : null,
+        h("div", { class: "rt" }, h("span", { class: "ttl", text: pr.branch }), PRV.mainChip(pr)),
         h(
           "div",
           { class: "rm" },
@@ -65,10 +62,10 @@
 
   PRV.viewList = function (isCurrent) {
     PRV.loading();
-    Promise.all([PRV.api.repos(), PRV.api.prs(), PRV.api.capabilities()]).then(
+    Promise.all([PRV.api.repos(), PRV.api.prs()]).then(
       function (res) {
         if (!isCurrent()) return;
-        draw(res[0].repos || [], res[1].prs || [], res[2], res[1].errors || []);
+        draw(res[0].repos || [], res[1].prs || [], res[1].errors || []);
       },
       function (e) {
         if (isCurrent()) PRV.showError(e);
@@ -86,7 +83,7 @@
     return h("div", { class: "attn list-errors", role: "status", text: errors.length + " 件の PR を読めませんでした: " + names.join("、") + more });
   }
 
-  function draw(repos, prs, caps, errors) {
+  function draw(repos, prs, errors) {
     var filter = "all";
     var repo = "";
     var query = "";
@@ -168,25 +165,14 @@
         );
         return;
       }
-      box.replaceChildren(h("ul", { class: "prlist" }, shown.map(function (p) { return row(p, reviews[p.id]); })));
+      box.replaceChildren(h("ul", { class: "prlist" }, shown.map(function (p) { return row(p); })));
     }
 
-    /* レビュー状態のチップは、先に一覧を出してから PR ごとに取り足す（失敗してもチップが無いだけ） */
-    var reviews = {};
-    prs.forEach(function (p) {
-      if (p.state !== "open" && p.state !== "empty") return;
-      PRV.api.review(p.id).then(function (rv) {
-        reviews[p.id] = rv;
-        if (box.isConnected) update();
-      }, function () {});
-    });
-
-    var mk = PRV.createEntry ? PRV.createEntry(caps, repos) : null;
     PRV.mount(
       h(
         "div",
         { class: "page" },
-        h("div", { class: "listhead" }, h("h1", { text: "PR 一覧" }), h("span", { class: "muted", text: prs.length + " 件" }), mk ? h("span", { class: "listact" }, mk) : null),
+        h("div", { class: "listhead" }, h("h1", { text: "PR 一覧" }), h("span", { class: "muted", text: prs.length + " 件" })),
         unpushedNote(repos, repos.length > 1),
         errorsNote(errors),
         h("div", { class: "toolbar" }, seg, sel, search),

@@ -8,7 +8,7 @@
 >
 > - 記載した既定値は、リポジトリに同梱された設定の値
 > - 保留の承認（`/pending approve`・`git_integrate`）は撤去済み。統合は必須確認（TUI）か PR ビューアの「統合する」ボタン（[CHG-0062](../change/0062-pr-hub-simplify.md)、履歴は [guard/pi-pending.md](guard/pi-pending.md)）
-> - PR ビューアの書き込み系の旗（`--allow-merge`・`--allow-create`・`--allow-jobs`）は既定で無効。ジョブ・起票・markdown 描画・worktree の所有（`wt_owner.py`）・統合用の枝（`bundle.py`）・掃除（`wt_clean.py`）の道具が入った。使い分けは [運用モード](operation-modes.md)
+> - PR ビューアの書き込み系の旗（`--allow-merge`）は既定で無効。markdown 描画・worktree の所有（`wt_owner.py`）・統合用の枝（`bundle.py`）・掃除（`wt_clean.py`）の道具が入った（ジョブと起票の機能は撤去済み）。使い分けは [運用モード](operation-modes.md)
 > - 反映は `chezmoi apply` と pi の再起動の後
 
 ## 早見（1 画面）
@@ -272,7 +272,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 
 | 役割 | ツール | 既定 | 補足 |
 | --- | --- | --- | --- |
-| `implementer`（親の既定） | bash・read・edit・write・grep・find・ls・task・todo・ask・action・`mcp__*` | ask | `shell_deny` に git の状態変更などがある |
+| `implementer`（親の既定） | bash・read・edit・write・grep・find・ls・task・todo・ask・action・`mcp__*` | ask | `shell_deny` に git の状態変更などがある。`git restore --staged <パス>...`（index だけを戻す厳密な 1 形式）は例外で許可（[仕様](guard/pi-decide.md#git-restore---staged-の例外)） |
 | `reader` | read・grep・find・ls | deny | 読み取り専用 |
 | `explorer` | bash・read・grep・find・ls | deny | bash は `wc` と読み取り専用の git（`status` `diff` `log` `show` `ls-files`）だけ |
 | `committer` | bash・read・grep・find・ls | deny | `git status` `git diff` `git log` などだけ |

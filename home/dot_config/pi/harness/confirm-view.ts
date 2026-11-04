@@ -254,10 +254,12 @@ export function parseFinishTarget(command: string): FinishTarget | null {
 	return { topic, name, branch: name.startsWith(`${topic}/`) ? name : `${topic}/${name}` };
 }
 
-export type SquashMessage =
+// merge: `-M` / `--merge-message` (merge commit) 由来
+export type SquashMessage = (
 	| { kind: "literal"; text: string }
 	| { kind: "file"; path: string }
-	| { kind: "unresolved"; why: string };
+	| { kind: "unresolved"; why: string }
+) & { merge?: true };
 
 // 引用された語 (または引用なしの語) の先頭の 1 つ。展開 ($ と `) を含むものは null
 function firstShellWord(s: string): string | null {
@@ -302,7 +304,18 @@ function firstShellWord(s: string): string | null {
 export function extractSquashMessage(command: string): SquashMessage | null {
 	const m = /--squash-message(=|[ \t]+)/.exec(command);
 	if (!m) return null;
-	const rest = command.slice(m.index + m[0].length);
+	return readMessageValue(command.slice(m.index + m[0].length));
+}
+
+/** `-M` / `--merge-message` の値 (merge commit の finish)。読み方は `--squash-message` と同じ */
+export function extractMergeMessage(command: string): SquashMessage | null {
+	const m = /(?:^|\s)(?:-M|--merge-message)(=|[ \t]+)/.exec(command);
+	if (!m) return null;
+	const v = readMessageValue(command.slice(m.index + m[0].length));
+	return { ...v, merge: true };
+}
+
+function readMessageValue(rest: string): SquashMessage {
 	const sub = /^"?\$\(\s*cat\s+([^\s"'`$;&|<>()\\-][^\s"'`$;&|<>()\\]*)\s*\)"?(?=\s|$)/.exec(rest);
 	if (sub) return { kind: "file", path: sub[1] };
 	const w = firstShellWord(rest);
@@ -376,23 +389,24 @@ function lastName(path: string): string {
 
 /** squash メッセージの行。件名 + 地の文 (箇条書きは省き、空行は 1 つにまとめ、MESSAGE_LINES 行まで)。見せられないときは、その理由の 1 行 */
 function squashMessageLines(msg: SquashMessage, msgFile: BodyFileResult | undefined): string[] {
+	const kindName = msg.merge ? "merge メッセージ" : "squash メッセージ";
 	let label: string;
 	let text: string;
 	let whole: string;
 	if (msg.kind === "literal") {
-		label = "squash メッセージ:";
+		label = `${kindName}:`;
 		text = msg.text;
 		whole = "上のコマンド";
 	} else if (msg.kind === "file") {
 		if (!msgFile?.ok) {
-			return [`squash メッセージ: ${sanitizeForDisplay(msgFile?.why ?? `ファイル ${msg.path} を読めない`)}。確認画面では見せられない (実行時に読まれる)`];
+			return [`${kindName}: ${sanitizeForDisplay(msgFile?.why ?? `ファイル ${msg.path} を読めない`)}。確認画面では見せられない (実行時に読まれる)`];
 		}
-		label = `squash メッセージ (${sanitizeForDisplay(lastName(msg.path))}):`;
+		label = `${kindName} (${sanitizeForDisplay(lastName(msg.path))}):`;
 		// `$(cat ...)` は末尾の改行を落とす
 		text = msgFile.text.replace(/\n+$/, "");
 		whole = sanitizeForDisplay(msg.path);
 	} else {
-		return [`squash メッセージ: ${sanitizeForDisplay(msg.why)}`];
+		return [`${kindName}: ${sanitizeForDisplay(msg.why)}`];
 	}
 	// 先頭の空行は落とし、連続する空行は 1 つにまとめる。箇条書き (と、その続きの字下げ行) は省く
 	const rows: string[] = [];
@@ -433,7 +447,10 @@ export function finishBodyLines(
 	msg: SquashMessage | null,
 	msgFile: BodyFileResult | undefined,
 ): string[] {
-	const sq = msg !== null || /(^|\s)--squash(\s|$)/.test(command) ? " (squash)" : "";
+	const hasSquash = /(^|\s)--squash(\s|$)/.test(command) || /--squash-message(=|[ \t]+)/.test(command);
+	const isMerge = !!msg?.merge;
+	// -M だけなら merge commit。--squash と -M が両方あるときは squash の表示に警告を足す (git-flow の解決に任せ、実行するコマンドは全文で出る)
+	const sq = hasSquash || (msg !== null && !isMerge) ? " (squash)" : isMerge ? " (merge commit)" : "";
 	const lines: string[] = [
 		facts
 			? `${sanitizeForDisplay(facts.branch)} → ${sanitizeForDisplay(facts.target)}${sq}`
@@ -447,6 +464,7 @@ export function finishBodyLines(
 	} else if (merge?.kind === "unknown") {
 		lines.push(`衝突の事前検査: 確認できなかった (${sanitizeForDisplay(merge.why)})`);
 	}
+	if (hasSquash && isMerge) lines.push("⚠ --squash と -M (merge commit) が両方ある。意図した形か確認");
 	if (facts && !facts.ok) lines.push(`(統合の内容を取得できなかった: ${sanitizeForDisplay(facts.why)})`);
 	if (msg) lines.push(...squashMessageLines(msg, msgFile));
 	if (facts?.ok) {
@@ -499,7 +517,7 @@ export function buildMustConfirmView(
 	// finish は、結論 (行き先・メッセージ・変更) を先に、実行するコマンドを最後に出す (導入文と理由は出さない)
 	const finish = integration ? parseFinishTarget(command) : null;
 	if (finish) {
-		const msg = extractSquashMessage(command);
+		const msg = extractSquashMessage(command) ?? extractMergeMessage(command);
 		const msgFile = msg?.kind === "file" ? readBodyFile(msg.path) : undefined;
 		if (facts || msg) {
 			const body = [...finishBodyLines(command, finish, facts, msg, msgFile), "", "実行:", sanitizeForDisplay(command)].join("\n");

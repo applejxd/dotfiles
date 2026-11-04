@@ -1,7 +1,9 @@
-"""PR ビューア 段 2（サーバの書き込み API）の試験。
+"""PR ビューア（サーバの POST の共通規則・書き込みの範囲・レビュー状態の読み出し）の試験。
 
 使い捨てのリポジトリ（tmp_path。名前・メールは架空）で node のサーバを起動し、HTTP で確かめる。
-契約: .tmp/keep/prv-app/api-contract-write.md。receipt や pi の返信は、共有ライブラリの node スクリプトで直接追記して作る。
+残る POST は統合（merge-plan・merge）だけなので、汎用の検査（ヘッダー・Origin・Host・サイズ・JSON）は merge-plan を乗り物にする。
+レビューコメントの送信（comments・submit）は撤去した（docs/spec/pr-viewer.md）。
+receipt や pi の返信などは、共有ライブラリの node スクリプトで直接追記して作る。
 """
 
 from __future__ import annotations
@@ -12,13 +14,14 @@ import itertools
 import json
 import re
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 from agents_common import ROOT
 from test_pi_judge_ts import _node
 from test_pi_review_git import PRELUDE
+from test_pr_viewer_merge_api import _start as _start_merge_world
+from test_pr_viewer_merge_api import post as merge_post
 from test_pr_viewer_server import (
     APP,
     Server,
@@ -33,14 +36,13 @@ from test_pr_viewer_server import (
 pytestmark = pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
 
 _counter = itertools.count(1)
-SECRET = "leak-leak-leak-leak"
 
 
 # ---------------------------------------------------------------- 道具
 
 
 def call(server, path, method="POST", body=None, *, headers=None, raw=None, host="127.0.0.1"):
-    """書き込み用の HTTP 呼び出し。headers の値が None のものは送らない。"""
+    """HTTP 呼び出し。headers の値が None のものは送らない。"""
     h = {"Host": host, "Content-Type": "application/json", "X-PRV": "1"}
     h.update(headers or {})
     h = {k: v for k, v in h.items() if v is not None}
@@ -117,9 +119,16 @@ def world(tmp_path_factory):
         },
         "init",
     )
-    _git(w.repo, "worktree", "add", "-q", str(base / "wt-two"), "-b", "scratch/wt")
     w.server = Server(["--repo", str(w.repo), "--port", "0", "--web-dir", str(_web_dir(base))])
     w.texts = []  # 応答の全文（パスの非漏洩の検査用）
+    yield w
+    w.server.stop()
+
+
+@pytest.fixture(scope="module")
+def mworld(tmp_path_factory):
+    """--allow-merge つきのサーバ（汎用の POST の検査の乗り物は merge-plan）。"""
+    w = _start_merge_world(tmp_path_factory.mktemp("write-merge"))
     yield w
     w.server.stop()
 
@@ -133,34 +142,11 @@ def new_pr(w: World) -> dict:
     return next(p for p in body["prs"] if p["branch"] == name)
 
 
-def blobs_of(w: World, pr: dict, path: str) -> dict:
-    status, body = w.server.get(f"/api/prs/{pr['id']}/diff?path={path}")
-    assert status == 200
-    return body
-
-
-def post(w: World, pr: dict, what: str, body, **kw):
-    status, resp = call(w.server, f"/api/prs/{pr['id']}/{what}", body=body, **kw)
-    w.texts.append(json.dumps(resp, ensure_ascii=False))
-    return status, resp
-
-
 def review(w: World, pr: dict) -> dict:
     status, body = w.server.get(f"/api/prs/{pr['id']}/review")
     assert status == 200
     w.texts.append(json.dumps(body, ensure_ascii=False))
     return body
-
-
-def anchor_of(w: World, pr: dict, path="README.md", side="new", line=2, line_end=None) -> dict:
-    d = blobs_of(w, pr, path)
-    return {
-        "path": path,
-        "side": side,
-        "blob": d["newBlob" if side == "new" else "oldBlob"],
-        "line": line,
-        "lineEnd": line_end or line,
-    }
 
 
 def refs_of(repo: Path) -> str:
@@ -176,34 +162,26 @@ def current_vs(pr: dict) -> dict:
     return {"source": pr["sourceOid"], "target": pr["targetOid"], "base": pr["baseOid"]}
 
 
-def uuid_like() -> str:
-    return "00000000-0000-4000-8000-" + f"{next(_counter):012d}"
+def plan(m, **kw):
+    """統合の計画（merge-plan）への POST。残る POST の代表。"""
+    return merge_post(m, f"/api/prs/{m.pr['id']}/merge-plan", kw.pop("body", {}), **kw)
 
 
-# ---------------------------------------------------------------- diff の blob
+# ---------------------------------------------------------------- diff の応答
 
 
-def test_diff_has_old_and_new_blob_for_each_status(world):
+def test_diff_response_has_no_blob_fields(world):
+    """行コメントの位置指定（blob）は撤去した。diff の応答は差分の閲覧に要るものだけ。"""
     pr = new_pr(world)
-    base, src = pr["baseOid"], pr["sourceOid"]
-
-    def rp(rev: str) -> str:
-        return _git(world.repo, "rev-parse", rev).strip()
-
-    m = blobs_of(world, pr, "README.md")
-    assert (m["oldBlob"], m["newBlob"]) == (rp(f"{base}:README.md"), rp(f"{src}:README.md"))
-    a = blobs_of(world, pr, "docs/new.txt")
-    assert (a["oldBlob"], a["newBlob"]) == (None, rp(f"{src}:docs/new.txt"))
-    d = blobs_of(world, pr, "gone.txt")
-    assert (d["oldBlob"], d["newBlob"]) == (rp(f"{base}:gone.txt"), None)
-    r = blobs_of(world, pr, "renamed.txt")
-    assert (r["oldBlob"], r["newBlob"]) == (rp(f"{base}:old.txt"), rp(f"{src}:renamed.txt"))
-    assert (
-        m["path"] == "README.md" and m["binary"] is False and m["truncated"] is False and m["hunks"]
-    )  # 段 1 のフィールド
+    status, body = world.server.get(f"/api/prs/{pr['id']}/diff?path=README.md")
+    assert status == 200
+    assert set(body) == {"path", "binary", "truncated", "hunks"}
+    assert body["path"] == "README.md" and body["binary"] is False and body["hunks"]
+    status, body = world.server.get(f"/api/prs/{pr['id']}/diff?path=gone.txt")
+    assert status == 200 and set(body) == {"path", "binary", "truncated", "hunks"}
 
 
-# ---------------------------------------------------------------- 書き込みの共通規則
+# ---------------------------------------------------------------- 書き込み（POST）の共通規則
 
 
 @pytest.mark.parametrize(
@@ -217,90 +195,89 @@ def test_diff_has_old_and_new_blob_for_each_status(world):
         {"Content-Type": "application/jsonx"},
     ],
 )
-def test_missing_or_wrong_headers_are_400_and_write_nothing(world, headers):
-    pr = new_pr(world)
-    before = refs_of(world.repo)
-    for what, body in (("comments", {"body": "x"}), ("submit", {"kind": "changes"})):
-        status, resp = post(world, pr, what, body, headers=headers)
+def test_missing_or_wrong_headers_are_400_and_write_nothing(mworld, headers):
+    before = refs_of(mworld.repo)
+    for what in ("merge-plan", "merge"):
+        status, resp = merge_post(mworld, f"/api/prs/{mworld.pr['id']}/{what}", {}, headers=headers)
         assert status == 400 and resp["error"]["code"] == "bad_request"
-    assert refs_of(world.repo) == before
+    assert refs_of(mworld.repo) == before
 
 
-def test_charset_in_content_type_is_accepted(world):
-    pr = new_pr(world)
-    status, _ = post(
-        world,
-        pr,
-        "comments",
-        {"body": "x"},
-        headers={"Content-Type": "application/json; charset=utf-8"},
-    )
-    assert status == 201
+def test_charset_in_content_type_is_accepted(mworld):
+    status, _ = plan(mworld, headers={"Content-Type": "application/json; charset=utf-8"})
+    assert status == 200
 
 
 @pytest.mark.parametrize(
     "origin", ["http://evil.example", "http://127.0.0.1:1", "null", "http://localhost", "x"]
 )
-def test_foreign_origin_is_403_and_writes_nothing(world, origin):
-    pr = new_pr(world)
-    before = refs_of(world.repo)
-    status, resp = post(world, pr, "comments", {"body": "x"}, headers={"Origin": origin})
+def test_foreign_origin_is_403_and_writes_nothing(mworld, origin):
+    before = refs_of(mworld.repo)
+    status, resp = plan(mworld, origin=origin)
     assert status == 403 and resp["error"]["code"] == "forbidden_origin"
-    assert refs_of(world.repo) == before
+    assert refs_of(mworld.repo) == before
 
 
-def test_same_origin_and_no_origin_are_accepted(world):
-    pr = new_pr(world)
-    own = f"http://127.0.0.1:{world.server.port}"
-    assert (
-        post(
-            world,
-            pr,
-            "comments",
-            {"body": "a"},
-            headers={"Origin": own},
-            host=f"127.0.0.1:{world.server.port}",
-        )[0]
-        == 201
-    )
-    assert post(world, pr, "comments", {"body": "b"})[0] == 201
+def test_own_origin_is_accepted_and_a_missing_origin_is_403(mworld):
+    assert plan(mworld)[0] == 200
+    status, resp = plan(mworld, origin=None)
+    assert status == 403 and resp["error"]["code"] == "forbidden_origin"
 
 
 @pytest.mark.parametrize("host", ["evil.example", "127.0.0.1.evil.example", "10.0.0.1"])
-def test_disallowed_host_is_403_for_post(world, host):
-    pr = new_pr(world)
-    before = refs_of(world.repo)
-    status, resp = post(world, pr, "comments", {"body": "x"}, host=host)
+def test_disallowed_host_is_403_for_post(mworld, host):
+    before = refs_of(mworld.repo)
+    status, resp = plan(mworld, host=host)
     assert status == 403 and resp["error"]["code"] == "forbidden_host"
-    assert refs_of(world.repo) == before
+    assert refs_of(mworld.repo) == before
 
 
-def test_too_large_body_is_413(world):
-    pr = new_pr(world)
-    before = refs_of(world.repo)
-    big = json.dumps({"body": "x" * (64 * 1024)}).encode("utf-8")
-    status, resp = post(world, pr, "comments", None, raw=big)
+def test_too_large_body_is_413(mworld):
+    before = refs_of(mworld.repo)
+    big = json.dumps({"message": "x" * (64 * 1024)}).encode("utf-8")
+    status, resp = plan(mworld, raw=big)
     assert status == 413 and resp["error"]["code"] == "too_large"
-    assert refs_of(world.repo) == before
-    just = json.dumps({"body": "x" * 7000}).encode("utf-8")  # 64 KB 未満は通る
-    assert post(world, pr, "comments", None, raw=just)[0] == 201
+    assert refs_of(mworld.repo) == before
 
 
 @pytest.mark.parametrize("raw", [b"{", b"", b"not json", b'{"body": "x"', b"\xff\xfe"])
-def test_broken_json_is_400(world, raw):
-    pr = new_pr(world)
-    before = refs_of(world.repo)
-    status, resp = post(world, pr, "comments", None, raw=raw)
+def test_broken_json_is_400(mworld, raw):
+    before = refs_of(mworld.repo)
+    status, resp = plan(mworld, raw=raw)
     assert status == 400 and resp["error"]["code"] == "bad_json"
-    assert refs_of(world.repo) == before
+    assert refs_of(mworld.repo) == before
 
 
 @pytest.mark.parametrize("raw", [b"[]", b"1", b'"x"', b"null"])
-def test_json_that_is_not_an_object_is_400(world, raw):
-    pr = new_pr(world)
-    for what in ("comments", "submit"):
-        status, resp = post(world, pr, what, None, raw=raw)
+def test_json_that_is_not_an_object_is_400(mworld, raw):
+    for what in ("merge-plan", "merge"):
+        status, resp = merge_post(mworld, f"/api/prs/{mworld.pr['id']}/{what}", None, raw=raw)
         assert status == 400 and resp["error"]["code"] == "bad_request"
+
+
+def test_chunked_body_over_the_limit_is_413_and_writes_nothing(mworld):
+    """Content-Length が無い (chunked) でも、ストリームの実測で 64 KB を超えたら 413。"""
+    before = refs_of(mworld.repo)
+    payload = json.dumps({"message": "x" * (96 * 1024)}).encode("utf-8")
+    chunks = [payload[i : i + 8192] for i in range(0, len(payload), 8192)]
+    conn = http.client.HTTPConnection("127.0.0.1", mworld.server.port, timeout=60)
+    conn.request(
+        "POST",
+        f"/api/prs/{mworld.pr['id']}/merge-plan",
+        body=iter(chunks),
+        headers={
+            "Host": f"127.0.0.1:{mworld.server.port}",
+            "Origin": f"http://127.0.0.1:{mworld.server.port}",
+            "Content-Type": "application/json",
+            "X-PRV": "1",
+        },
+        encode_chunked=True,
+    )
+    resp = conn.getresponse()
+    status, text = resp.status, resp.read().decode("utf-8")
+    conn.close()
+    assert status == 413 and json.loads(text)["error"]["code"] == "too_large"
+    assert refs_of(mworld.repo) == before
 
 
 def test_only_the_known_posts_are_allowed(world):
@@ -314,6 +291,9 @@ def test_only_the_known_posts_are_allowed(world):
         ("POST", f"{base}/review"),
         ("POST", f"{base}/diff?path=README.md"),
         ("POST", f"{base}/merge/x"),
+        # 撤去したレビューコメントの送信（comments・submit）は、POST の入口が無い
+        ("POST", f"{base}/comments"),
+        ("POST", f"{base}/submit"),
         ("POST", f"{base}/comments/x"),
         ("POST", "/"),
         ("POST", "/web/app.js"),
@@ -335,7 +315,7 @@ def test_only_the_known_posts_are_allowed(world):
     assert refs_of(world.repo) == before
 
 
-def test_get_on_post_routes_is_not_a_write(world):
+def test_get_on_removed_post_routes_is_404(world):
     pr = new_pr(world)
     before = refs_of(world.repo)
     for what in ("comments", "submit"):
@@ -350,14 +330,19 @@ def test_get_review_has_no_side_effect_and_works_without_a_ref(world):
     body = review(world, pr)
     assert refs_of(world.repo) == before and pr["prKey"] not in refs_of(world.repo)
     assert body["schema"] == 1 and body["readonly"] is False and body["bad"] is None
-    assert (
-        body["review"] == "none"
-        and body["threads"] == []
-        and body["batches"] == []
-        and body["unsent"] == 0
-    )
     assert body["summary"] is None and body["merged"] is False and body["stale"] is False
     assert body["staleParts"] == {"source": False, "target": False, "base": False}
+    # コメント・送信の状態（threads・batches・unsent・review・宛先の候補）は返さない
+    for gone in (
+        "threads",
+        "batches",
+        "unsent",
+        "review",
+        "reviewStale",
+        "worktrees",
+        "defaultDest",
+    ):
+        assert gone not in body, gone
     status, headers, _ = world.server.request(f"/api/prs/{pr['id']}/review")
     assert status == 200 and headers["cache-control"] == "no-store"
     assert world.server.get(f"/api/prs/{_repo_id(world.repo)}/p{'0' * 16}/review")[0] == 404
@@ -365,30 +350,17 @@ def test_get_review_has_no_side_effect_and_works_without_a_ref(world):
     assert refs_of(world.repo) == before
 
 
-# ---------------------------------------------------------------- 書き込みの範囲
-
-
-def test_writes_touch_only_refs_pi_review(world):
+def test_review_response_headers_are_safe(world):
     pr = new_pr(world)
-    before = {r.split()[-1]: r for r in refs_of(world.repo).splitlines()}
-    state = {
-        "head": (world.repo / ".git" / "HEAD").read_text(encoding="utf-8"),
-        "config": (world.repo / ".git" / "config").read_text(encoding="utf-8"),
-        "status": _git(world.repo, "status", "--porcelain"),
-        "index": hashlib.sha256((world.repo / ".git" / "index").read_bytes()).hexdigest(),
-    }
-    assert post(world, pr, "comments", {"body": "a", "anchor": anchor_of(world, pr)})[0] == 201
-    assert post(world, pr, "submit", {"kind": "changes"})[0] == 201
-    after = {r.split()[-1]: r for r in refs_of(world.repo).splitlines()}
-    changed = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
-    assert changed == {f"refs/pi/review/{pr['prKey']}"}
-    assert state == {
-        "head": (world.repo / ".git" / "HEAD").read_text(encoding="utf-8"),
-        "config": (world.repo / ".git" / "config").read_text(encoding="utf-8"),
-        "status": _git(world.repo, "status", "--porcelain"),
-        "index": hashlib.sha256((world.repo / ".git" / "index").read_bytes()).hexdigest(),
-    }
-    assert not (world.repo / "docs" / "new.txt").exists()  # 作業ツリーは develop のまま
+    _status, headers, _ = world.server.request(f"/api/prs/{pr['id']}/review")
+    assert (
+        headers["content-type"].startswith("application/json")
+        and headers["x-content-type-options"] == "nosniff"
+    )
+    assert "default-src 'self'" in headers["content-security-policy"]
+
+
+# ---------------------------------------------------------------- 書き込みの範囲
 
 
 GIT_WRITE_JS = f"""
@@ -426,6 +398,8 @@ def test_git_write_allowlist(world, tmp_path):
         ["commit", "-m", "x"],
         ["worktree", "add", "x"],
         ["worktree", "list"],
+        # 作業ツリーの一覧は、宛先の候補（撤去済み）のためだけの許可だった
+        ["worktree", "list", "--porcelain"],
         ["worktree", "list", "--porcelain", "-z"],
         ["update-ref", "-d", key],
         ["update-ref", "--no-deref", "-d", key],
@@ -472,7 +446,6 @@ def test_git_write_allowlist(world, tmp_path):
         ["ls-tree", "-z", oid],
         ["for-each-ref", "--format=%(refname)", "refs/pi/review/"],
         ["merge-base", oid, oid],
-        ["worktree", "list", "--porcelain"],
         [
             "-c",
             "user.name=a",
@@ -537,436 +510,11 @@ def test_git_write_input_limit(world, tmp_path):
     }
 
 
-# ---------------------------------------------------------------- コメント
-
-
-def test_new_thread_reply_and_pr_wide_comment(world):
-    pr = new_pr(world)
-    anchor = anchor_of(world, pr, line=2, line_end=3)
-    status, resp = post(world, pr, "comments", {"body": "ここを直す", "anchor": anchor})
-    assert status == 201
-    c = resp["comment"]
-    assert (
-        c["by"] == "app"
-        and c["thread"] == c["id"]
-        and c["body"] == "ここを直す"
-        and c["anchor"] == anchor
-    )
-    assert re.match(r"^\d{4}-\d{2}-\d{2}T", c["at"])
-    status, reply = post(world, pr, "comments", {"body": "返信", "thread": c["id"]})
-    assert (
-        status == 201
-        and reply["comment"]["thread"] == c["id"]
-        and reply["comment"]["anchor"] is None
-    )
-    for pr_wide in ({"body": "全体 1"}, {"body": "全体 2", "anchor": None}):
-        status, resp = post(world, pr, "comments", pr_wide)
-        assert (
-            status == 201
-            and resp["comment"]["anchor"] is None
-            and resp["comment"]["thread"] == resp["comment"]["id"]
-        )
-    rv = review(world, pr)
-    assert [len(t["comments"]) for t in rv["threads"]] == [2, 1, 1]
-    first = rv["threads"][0]
-    assert first["id"] == c["id"] and first["status"] == "unsent" and first["stale"] is False
-    assert first["comments"][0] == {
-        "id": c["id"],
-        "by": "app",
-        "at": c["at"],
-        "body": "ここを直す",
-        "anchor": anchor,
-    }
-    assert rv["unsent"] == 4
-
-
-def test_client_supplied_by_vs_id_are_ignored_and_meta_is_server_made(world):
-    pr = new_pr(world)
-    fake = {"source": "a" * 40, "target": "b" * 40, "base": "c" * 40}
-    status, resp = post(
-        world,
-        pr,
-        "comments",
-        {"body": "x", "by": "pi", "id": "mine", "vs": fake, "at": "2020-01-01T00:00:00Z"},
-    )
-    assert status == 201 and resp["comment"]["by"] == "app" and resp["comment"]["id"] != "mine"
-    (ev,) = ref_events(world.repo, pr)
-    assert (
-        ev["by"] == "app"
-        and ev["vs"] == current_vs(pr)
-        and ev["at"] != "2020-01-01T00:00:00Z"
-        and ev["t"] == "comment"
-    )
-    meta = json.loads(
-        _git(world.repo, "cat-file", "blob", f"refs/pi/review/{pr['prKey']}:meta.json")
-    )
-    assert set(meta) == {"schema", "pr", "branch", "target", "createdAt"}
-    assert (meta["schema"], meta["pr"], meta["branch"], meta["target"]) == (
-        1,
-        pr["prKey"],
-        pr["branch"],
-        "develop",
-    )
-    tree = _git(world.repo, "ls-tree", f"refs/pi/review/{pr['prKey']}")
-    assert sorted(line.split("\t")[1] for line in tree.splitlines()) == [
-        "events.jsonl",
-        "meta.json",
-    ]
-
-
-def test_body_is_plain_text_and_stored_as_is(world):
-    pr = new_pr(world)
-    body = '<script>alert(1)</script> <b>x</b> **強調** &amp; "引用" \\n\n2 行目'
-    status, resp = post(world, pr, "comments", {"body": body})
-    assert status == 201 and resp["comment"]["body"] == body
-    assert review(world, pr)["threads"][0]["comments"][0]["body"] == body
-    assert ref_events(world.repo, pr)[0]["d"]["body"] == body
-    status, headers, _ = world.server.request(f"/api/prs/{pr['id']}/review")
-    assert (
-        headers["content-type"].startswith("application/json")
-        and headers["x-content-type-options"] == "nosniff"
-    )
-    assert "default-src 'self'" in headers["content-security-policy"]
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        {},
-        {"body": ""},
-        {"body": "   \n\t"},
-        {"body": None},
-        {"body": 1},
-        {"body": ["x"]},
-        {"body": "x" * 8001},
-        {"body": "あ" * 6000},  # 文字数は足りるが 16 KB を超える
-    ],
-)
-def test_invalid_body_is_400(world, body):
-    pr = new_pr(world)
-    before = refs_of(world.repo)
-    status, resp = post(world, pr, "comments", body)
-    assert status == 400 and resp["error"]["code"] == "bad_body"
-    assert refs_of(world.repo) == before
-
-
-def test_body_boundary_is_accepted(world):
-    pr = new_pr(world)
-    assert post(world, pr, "comments", {"body": "x" * 8000})[0] == 201
-    assert post(world, pr, "comments", {"body": "あ" * 5000})[0] == 201  # 15000 バイト
-
-
-def _bad_anchors(w: World, pr: dict) -> dict[str, dict]:
-    ok = anchor_of(w, pr)
-    wrong = "f" * 40
-    return {
-        "blob_mismatch": {**ok, "blob": wrong},
-        "blob_of_other_side": {**ok, "side": "old"},
-        "blob_short": {**ok, "blob": ok["blob"][:10]},
-        "blob_missing": {k: v for k, v in ok.items() if k != "blob"},
-        "path_not_in_diff": {**ok, "path": "keep.txt"},
-        "path_unknown": {**ok, "path": "nope.txt"},
-        "path_traversal": {**ok, "path": "../README.md"},
-        "path_absolute": {**ok, "path": "/etc/passwd"},
-        "path_not_string": {**ok, "path": 1},
-        "line_gt_end": {**ok, "line": 5, "lineEnd": 2},
-        "line_zero": {**ok, "line": 0, "lineEnd": 1},
-        "line_negative": {**ok, "line": -1, "lineEnd": 1},
-        "line_float": {**ok, "line": 1.5, "lineEnd": 2},
-        "line_string": {**ok, "line": "2", "lineEnd": "2"},
-        "line_missing": {k: v for k, v in ok.items() if k != "line"},
-        "lineend_missing": {k: v for k, v in ok.items() if k != "lineEnd"},
-        "side_both": {**ok, "side": "both"},
-        "side_missing": {k: v for k, v in ok.items() if k != "side"},
-        "old_side_of_added_file": {
-            "path": "docs/new.txt",
-            "side": "old",
-            "blob": blobs_of(w, pr, "docs/new.txt")["newBlob"],
-            "line": 1,
-            "lineEnd": 1,
-        },
-        "new_side_of_deleted_file": {
-            "path": "gone.txt",
-            "side": "new",
-            "blob": blobs_of(w, pr, "gone.txt")["oldBlob"],
-            "line": 1,
-            "lineEnd": 1,
-        },
-        "not_object": "README.md",
-        "list": [ok],
-        "number": 1,
-    }
-
-
-def test_invalid_anchors_are_400_and_write_nothing(world):
-    pr = new_pr(world)
-    before = refs_of(world.repo)
-    for name, anchor in _bad_anchors(world, pr).items():
-        status, resp = post(world, pr, "comments", {"body": SECRET, "anchor": anchor})
-        assert status == 400 and resp["error"]["code"] == "bad_anchor", name
-        assert SECRET not in json.dumps(resp) and "README" not in resp["error"]["message"]
-    assert refs_of(world.repo) == before
-
-
-def test_old_side_and_renamed_file_anchors_are_accepted(world):
-    pr = new_pr(world)
-    old = anchor_of(world, pr, path="README.md", side="old", line=1)
-    assert post(world, pr, "comments", {"body": "旧", "anchor": old})[0] == 201
-    renamed_old = anchor_of(world, pr, path="renamed.txt", side="old", line=4)
-    assert post(world, pr, "comments", {"body": "改名の旧", "anchor": renamed_old})[0] == 201
-    deleted = anchor_of(world, pr, path="gone.txt", side="old", line=1)
-    assert post(world, pr, "comments", {"body": "削除", "anchor": deleted})[0] == 201
-    added = anchor_of(world, pr, path="docs/new.txt", side="new", line=1)
-    assert post(world, pr, "comments", {"body": "追加", "anchor": added})[0] == 201
-
-
-def test_a_blob_from_another_pr_is_refused(world):
-    a, b = new_pr(world), new_pr(world)
-    mine = anchor_of(world, a)
-    # 内容が同じなので blob は同じ。別の内容を足したブランチで、内容が違えば断られる
-    _git(world.repo, "switch", "-q", "-c", "feature/other-content", "develop")
-    _commit(world.repo, {"README.md": "hello\nother\nworld\n"}, "feat: other")
-    _git(world.repo, "switch", "-q", "develop")
-    status, body = world.server.get("/api/prs")
-    other = next(p for p in body["prs"] if p["branch"] == "feature/other-content")
-    status, resp = post(world, other, "comments", {"body": "x", "anchor": mine})
-    assert status == 400 and resp["error"]["code"] == "bad_anchor"
-    assert (
-        post(world, b, "comments", {"body": "x", "anchor": mine})[0] == 201
-    )  # 同じ内容の blob なら通る（blob の一致を見ている）
-
-
-def test_bad_replies_are_400(world):
-    pr = new_pr(world)
-    _, first = post(world, pr, "comments", {"body": "親"})
-    tid = first["comment"]["id"]
-    # 返信の id（スレッドの最初のコメントではない）は使えない
-    _, reply = post(world, pr, "comments", {"body": "返信", "thread": tid})
-    for thread in (reply["comment"]["id"], uuid_like(), "x", "", 1, ["a"], {"a": 1}):
-        status, resp = post(world, pr, "comments", {"body": "x", "thread": thread})
-        assert status == 400 and resp["error"]["code"] == "bad_thread", thread
-    status, resp = post(
-        world, pr, "comments", {"body": SECRET, "thread": tid, "anchor": anchor_of(world, pr)}
-    )
-    assert (
-        status == 400 and resp["error"]["code"] == "bad_anchor" and SECRET not in json.dumps(resp)
-    )
-    assert len(review(world, pr)["threads"]) == 1
-
-
-# ---------------------------------------------------------------- 送信
-
-
-def test_submit_bundles_unsent_comments_into_one_batch(world):
-    pr = new_pr(world)
-    ids = [post(world, pr, "comments", {"body": f"c{i}"})[1]["comment"]["id"] for i in range(3)]
-    status, resp = post(world, pr, "submit", {"kind": "comment"})
-    assert status == 201 and resp["kind"] == "comment" and resp["items"] == ids
-    assert re.match(r"^[0-9a-f-]{36}$", resp["batchId"])
-    rv = review(world, pr)
-    assert rv["unsent"] == 0 and [t["status"] for t in rv["threads"]] == ["sent"] * 3
-    assert rv["review"] == "none"  # comment の送信ではレビュー状態は変わらない
-    assert [b["items"] for b in rv["batches"]] == [ids] and rv["batches"][0]["received"] is False
-    # 2 回目: 項目が無いので断る
-    status, resp = post(world, pr, "submit", {"kind": "comment"})
-    assert status == 400 and resp["error"]["code"] == "nothing_to_send"
-    # 送信後に足したコメントは次の batch にだけ入る
-    new_id = post(world, pr, "comments", {"body": "後から"})[1]["comment"]["id"]
-    assert review(world, pr)["unsent"] == 1
-    status, second = post(world, pr, "submit", {"kind": "comment"})
-    assert status == 201 and second["items"] == [new_id] and not set(second["items"]) & set(ids)
-    assert [b["items"] for b in review(world, pr)["batches"]] == [ids, [new_id]]
-
-
-def test_replies_in_existing_threads_are_sent_too(world):
-    pr = new_pr(world)
-    root = post(world, pr, "comments", {"body": "親"})[1]["comment"]["id"]
-    post(world, pr, "submit", {"kind": "comment"})
-    reply = post(world, pr, "comments", {"body": "返信", "thread": root})[1]["comment"]["id"]
-    status, resp = post(world, pr, "submit", {"kind": "changes"})
-    assert status == 201 and resp["items"] == [reply]
-
-
-def test_empty_submit_rules(world):
-    pr = new_pr(world)
-    before = refs_of(world.repo)
-    status, resp = post(world, pr, "submit", {"kind": "comment"})
-    assert status == 400 and resp["error"]["code"] == "nothing_to_send"
-    assert refs_of(world.repo) == before  # 断った送信は ref も作らない
-    status, resp = post(world, pr, "submit", {"kind": "changes"})
-    assert status == 201 and resp["items"] == []
-    assert review(world, pr)["review"] == "changes"
-    status, resp = post(world, pr, "submit", {"kind": "approve"})
-    assert status == 201 and resp["items"] == []
-    rv = review(world, pr)
-    assert rv["review"] == "approve" and rv["reviewStale"] is False and len(rv["batches"]) == 2
-    (b1, b2) = ref_events(world.repo, pr)
-    assert (
-        b1["d"]["kind"] == "changes"
-        and b2["d"]["kind"] == "approve"
-        and b2["by"] == "app"
-        and b2["vs"] == current_vs(pr)
-    )
-
-
-def test_approve_is_only_a_review_record(world):
-    pr = new_pr(world)
-    post(world, pr, "comments", {"body": "x"})
-    before = {r for r in refs_of(world.repo).splitlines() if "refs/pi/review" not in r}
-    status, resp = post(world, pr, "submit", {"kind": "approve"})
-    assert status == 201 and len(resp["items"]) == 1
-    assert {
-        r for r in refs_of(world.repo).splitlines() if "refs/pi/review" not in r
-    } == before  # 統合はしない
-    assert _git(world.repo, "rev-parse", pr["branch"]).strip() == pr["sourceOid"]
-    assert not any(e["t"].startswith("merge") for e in ref_events(world.repo, pr))
-    assert review(world, pr)["merged"] is False
-
-
-@pytest.mark.parametrize("kind", [None, "", "merge", "COMMENT", 1, ["comment"]])
-def test_bad_kind_is_400(world, kind):
-    pr = new_pr(world)
-    status, resp = post(world, pr, "submit", {"kind": kind})
-    assert status == 400 and resp["error"]["code"] == "bad_kind"
-    assert post(world, pr, "submit", {})[1]["error"]["code"] == "bad_kind"
-
-
-def test_dest_candidates_default_and_validation(world):
-    pr = new_pr(world)
-    rv = review(world, pr)
-    main_id = hashlib.sha256(str(world.repo.resolve()).encode()).hexdigest()[:16]
-    other_id = hashlib.sha256(str((world.base / "wt-two").resolve()).encode()).hexdigest()[:16]
-    assert rv["worktrees"] == [
-        {"worktreeId": main_id, "name": "example-app", "isMain": True},
-        {"worktreeId": other_id, "name": "wt-two", "isMain": False},
-    ]
-    assert rv["defaultDest"] == {"worktreeId": main_id}
-    post(world, pr, "comments", {"body": "a"})
-    for dest in (
-        {"worktreeId": "0" * 16},
-        {"worktreeId": ""},
-        {"worktreeId": 1},
-        {},
-        "x",
-        ["a"],
-        {"worktreeId": str(world.repo)},
-    ):
-        status, resp = post(world, pr, "submit", {"kind": "comment", "dest": dest})
-        assert status == 400 and resp["error"]["code"] == "bad_dest", dest
-    assert review(world, pr)["batches"] == []
-    status, resp = post(world, pr, "submit", {"kind": "comment", "dest": {"worktreeId": other_id}})
-    assert status == 201 and resp["dest"] == {"worktreeId": other_id}
-    post(world, pr, "comments", {"body": "b"})
-    status, resp = post(world, pr, "submit", {"kind": "comment"})
-    assert status == 201 and resp["dest"] == {"worktreeId": main_id}
-    assert [b["dest"]["worktreeId"] for b in review(world, pr)["batches"]] == [other_id, main_id]
-
-
-def test_resend_of(world):
-    pr = new_pr(world)
-    ids = [post(world, pr, "comments", {"body": f"c{i}"})[1]["comment"]["id"] for i in range(2)]
-    first = post(world, pr, "submit", {"kind": "comment"})[1]
-    post(world, pr, "comments", {"body": "未送信"})
-    for bad_id in (uuid_like(), "x", "", 1, ["a"]):
-        status, resp = post(world, pr, "submit", {"kind": "comment", "resendOf": bad_id})
-        assert status == 400 and resp["error"]["code"] == "bad_resend", bad_id
-    status, again = post(world, pr, "submit", {"kind": "comment", "resendOf": first["batchId"]})
-    assert status == 201 and again["batchId"] != first["batchId"] and again["items"] == ids
-    batches = review(world, pr)["batches"]
-    assert batches[1]["resendOf"] == first["batchId"] and "resendOf" not in batches[0]
-    assert review(world, pr)["unsent"] == 1  # 再送では、新しい未送信は消えない
-
-
-def test_four_concurrent_posts_keep_every_comment(world):
-    pr = new_pr(world)
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        results = list(
-            pool.map(lambda i: post(world, pr, "comments", {"body": f"同時 {i}"}), range(4))
-        )
-    assert [s for s, _ in results] == [201] * 4
-    rv = review(world, pr)
-    assert sorted(t["comments"][0]["body"] for t in rv["threads"]) == [
-        f"同時 {i}" for i in range(4)
-    ]
-    assert len({t["id"] for t in rv["threads"]}) == 4
-    assert len(ref_events(world.repo, pr)) == 4
-
-
-def test_concurrent_comments_and_submits_neither_lose_nor_duplicate(world):
-    pr = new_pr(world)
-    jobs = [
-        ("comments", {"body": "a"}),
-        ("comments", {"body": "b"}),
-        ("submit", {"kind": "changes"}),
-        ("submit", {"kind": "changes"}),
-    ]
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        results = list(pool.map(lambda j: post(world, pr, j[0], j[1]), jobs))
-    assert [s for s, _ in results] == [201] * 4
-    events = ref_events(world.repo, pr)
-    assert len(events) == 4 and len({e["id"] for e in events}) == 4
-    items = [i for e in events if e["t"] == "submit" for i in e["d"]["items"]]
-    assert len(items) == len(set(items))  # 同じコメントが 2 つの batch に入らない
-    rv = review(world, pr)
-    assert rv["unsent"] == 2 - len(items)
-
-
 # ---------------------------------------------------------------- 状態
-
-
-def test_thread_status_progresses_unsent_sent_read_replied(world, tmp_path):
-    pr = new_pr(world)
-    vs = current_vs(pr)
-    t_sent = post(world, pr, "comments", {"body": "送信済みのまま"})[1]["comment"]["id"]
-    b1 = post(world, pr, "submit", {"kind": "comment"})[1]
-    t_read = post(world, pr, "comments", {"body": "読まれる"})[1]["comment"]["id"]
-    t_replied = post(world, pr, "comments", {"body": "返信される"})[1]["comment"]["id"]
-    b2 = post(world, pr, "submit", {"kind": "comment"})[1]
-    t_unsent = post(world, pr, "comments", {"body": "未送信"})[1]["comment"]["id"]
-    states = {t["id"]: t["status"] for t in review(world, pr)["threads"]}
-    assert states == {t_sent: "sent", t_read: "sent", t_replied: "sent", t_unsent: "unsent"}
-    run_js(
-        tmp_path,
-        world.repo,
-        """
-        const key = L.prKeyOf(arg.branch);
-        const r1 = await G.appendEvents(git, key, meta(arg.branch), () => [
-            ev("receipt", { batchId: arg.b2, sessionId: "s-1" }, { vs: arg.vs }),
-        ]);
-        const r2 = await G.appendEvents(git, key, meta(arg.branch), () => [
-            ev("comment", { thread: arg.replied, anchor: null, body: "pi の返信" }, { vs: arg.vs }),
-        ]);
-        out([r1.ok, r2.ok]);
-        """,
-        {"branch": pr["branch"], "b2": b2["batchId"], "replied": t_replied, "vs": vs},
-    )
-    rv = review(world, pr)
-    assert {t["id"]: t["status"] for t in rv["threads"]} == {
-        t_sent: "sent",
-        t_read: "read",
-        t_replied: "replied",
-        t_unsent: "unsent",
-    }
-    replied = next(t for t in rv["threads"] if t["id"] == t_replied)
-    assert [c["by"] for c in replied["comments"]] == ["app", "pi"] and replied["comments"][1][
-        "body"
-    ] == "pi の返信"
-    by_id = {b["batchId"]: b for b in rv["batches"]}
-    assert by_id[b2["batchId"]]["received"] is True and by_id[b2["batchId"]]["sessionId"] == "s-1"
-    assert by_id[b1["batchId"]]["received"] is False
-    assert rv["unsent"] == 1
-    # 利用者が受領後に足したコメントでは「返信済み」にならない
-    post(world, pr, "comments", {"body": "利用者の追記", "thread": t_read})
-    assert {t["id"]: t["status"] for t in review(world, pr)["threads"]}[t_read] == "read"
-    # pi が書いたコメントは送信の項目に入らない（利用者の 2 件だけ）
-    status, sub = post(world, pr, "submit", {"kind": "changes"})
-    assert status == 201 and len(sub["items"]) == 2 and t_unsent in sub["items"]
-    assert review(world, pr)["unsent"] == 0
 
 
 def test_pi_summary_is_returned(world, tmp_path):
     pr = new_pr(world)
-    post(world, pr, "comments", {"body": "x"})
     run_js(
         tmp_path,
         world.repo,
@@ -989,42 +537,32 @@ def test_pi_summary_is_returned(world, tmp_path):
     )
 
 
-def test_review_stale_and_thread_stale_follow_the_branch(world):
+def test_stale_follows_the_branch(world, tmp_path):
     pr = new_pr(world)
-    post(world, pr, "comments", {"body": "古くなる"})
-    post(world, pr, "submit", {"kind": "changes"})
+    run_js(
+        tmp_path,
+        world.repo,
+        """
+        const key = L.prKeyOf(arg.branch);
+        const r = await G.appendEvents(git, key, meta(arg.branch), () => [
+            ev("summary", { done: "古くなる", files: [], findings: [] }, { vs: arg.vs }),
+        ]);
+        out(r.ok);
+        """,
+        {"branch": pr["branch"], "vs": current_vs(pr)},
+    )
     rv = review(world, pr)
-    assert (rv["review"], rv["reviewStale"], rv["stale"]) == ("changes", False, False)
+    assert (rv["stale"], rv["merged"]) == (False, False) and rv["summary"]["done"] == "古くなる"
     _git(world.repo, "switch", "-q", pr["branch"])
     _commit(world.repo, {"keep.txt": "keep\nmore\n"}, "feat: more")
     _git(world.repo, "switch", "-q", "develop")
     rv = review(world, pr)
-    assert rv["reviewStale"] is True and rv["stale"] is True and rv["staleParts"]["source"] is True
+    assert rv["stale"] is True and rv["staleParts"]["source"] is True
     assert rv["staleParts"]["target"] is False and rv["staleParts"]["base"] is False
-    assert rv["threads"][0]["stale"] is True and rv["review"] == "changes"
-    # 新しい版で足したコメントは古くない。最後のレビューは古いまま
-    new_pr_info = next(p for p in world.server.get("/api/prs")[1]["prs"] if p["id"] == pr["id"])
-    assert new_pr_info["sourceOid"] != pr["sourceOid"]
-    assert post(world, new_pr_info, "comments", {"body": "新しい版"})[0] == 201
-    rv = review(world, new_pr_info)
-    assert (
-        rv["stale"] is False
-        and rv["reviewStale"] is True
-        and [t["stale"] for t in rv["threads"]] == [True, False]
-    )
-    assert ref_events(world.repo, pr)[-1]["vs"]["source"] == new_pr_info["sourceOid"]
-    # 新しい source は、この記録の commit の追加の親になる。古い source は、最初の記録の commit が親として持つ
-    # (どちらも ref から到達できる。古い diff も、最後にレビューした版も gc 後に残る)
-    parents = _git(
-        world.repo, "rev-list", "--parents", "-n", "1", f"refs/pi/review/{pr['prKey']}"
-    ).split()
-    assert new_pr_info["sourceOid"] in parents[2:]
-    _git(
-        world.repo, "merge-base", "--is-ancestor", pr["sourceOid"], f"refs/pi/review/{pr['prKey']}"
-    )
+    assert rv["summary"]["done"] == "古くなる"  # 表示は残る
 
 
-# ---------------------------------------------------------------- 断る場合
+# ---------------------------------------------------------------- 統合済み・壊れた記録
 
 MERGE_JS = """
 const key = L.prKeyOf(arg.branch);
@@ -1038,9 +576,8 @@ out(r.ok);
 """
 
 
-def test_merged_pr_refuses_writes_with_409(world, tmp_path):
+def test_a_merge_record_marks_the_pr_merged(world, tmp_path):
     pr = new_pr(world)
-    post(world, pr, "comments", {"body": "先に 1 件"})
     assert (
         run_js(
             tmp_path,
@@ -1050,22 +587,10 @@ def test_merged_pr_refuses_writes_with_409(world, tmp_path):
         )
         is True
     )
-    rv = review(world, pr)
-    assert rv["merged"] is True
-    before = refs_of(world.repo)
-    for what, body in (
-        ("comments", {"body": SECRET}),
-        ("submit", {"kind": "changes"}),
-        ("submit", {"kind": "comment"}),
-    ):
-        status, resp = post(world, pr, what, body)
-        assert (
-            status == 409 and resp["error"]["code"] == "merged" and SECRET not in json.dumps(resp)
-        ), (what, body)
-    assert refs_of(world.repo) == before
+    assert review(world, pr)["merged"] is True
 
 
-def test_a_failed_merge_does_not_block_writes(world, tmp_path):
+def test_a_failed_merge_does_not_mark_the_pr_merged(world, tmp_path):
     pr = new_pr(world)
     assert (
         run_js(
@@ -1077,7 +602,6 @@ def test_a_failed_merge_does_not_block_writes(world, tmp_path):
         is True
     )
     assert review(world, pr)["merged"] is False
-    assert post(world, pr, "comments", {"body": "続けられる"})[0] == 201
 
 
 def _plant(repo: Path, pr: dict, entries: list[tuple[str, str, str, str]]) -> str:
@@ -1126,7 +650,7 @@ def _good_meta(pr: dict, **kw) -> str:
     return json.dumps({**m, **kw})
 
 
-def test_selfcheck_failure_is_409_bad_state(world):
+def test_selfcheck_failure_is_reported_as_bad(world):
     pr = new_pr(world)
     _plant(
         world.repo,
@@ -1139,20 +663,12 @@ def test_selfcheck_failure_is_409_bad_state(world):
     )
     before = refs_of(world.repo)
     rv = review(world, pr)
-    assert (
-        isinstance(rv["bad"], str) and rv["bad"] and rv["threads"] == [] and rv["readonly"] is False
-    )
-    for what, body in (("comments", {"body": SECRET}), ("submit", {"kind": "changes"})):
-        status, resp = post(world, pr, what, body)
-        assert (
-            status == 409
-            and resp["error"]["code"] == "bad_state"
-            and SECRET not in json.dumps(resp)
-        )
+    assert isinstance(rv["bad"], str) and rv["bad"] and rv["summary"] is None
+    assert rv["readonly"] is False
     assert refs_of(world.repo) == before
 
 
-def test_invalid_event_log_is_bad_state(world):
+def test_invalid_event_log_is_reported_as_bad(world):
     pr = new_pr(world)
     _plant(
         world.repo,
@@ -1163,10 +679,9 @@ def test_invalid_event_log_is_bad_state(world):
         ],
     )
     assert review(world, pr)["bad"]
-    assert post(world, pr, "comments", {"body": "x"})[1]["error"]["code"] == "bad_state"
 
 
-def test_newer_schema_is_readonly_409(world):
+def test_newer_schema_is_readonly(world):
     pr = new_pr(world)
     _plant(
         world.repo,
@@ -1178,46 +693,28 @@ def test_newer_schema_is_readonly_409(world):
     )
     before = refs_of(world.repo)
     rv = review(world, pr)
-    assert rv["readonly"] is True and rv["threads"] == [] and rv["bad"] is None
-    for what, body in (("comments", {"body": SECRET}), ("submit", {"kind": "changes"})):
-        status, resp = post(world, pr, what, body)
-        assert (
-            status == 409 and resp["error"]["code"] == "readonly" and SECRET not in json.dumps(resp)
-        )
+    assert rv["readonly"] is True and rv["summary"] is None and rv["bad"] is None
     assert refs_of(world.repo) == before
 
 
-def test_event_limit_is_413(world, tmp_path):
+def test_old_comment_and_submit_events_are_still_readable(world, tmp_path):
+    """撤去前に書かれた comment・submit・receipt は、壊れた記録として扱わず、読み取れる（互換）。"""
     pr = new_pr(world)
     res = run_js(
         tmp_path,
         world.repo,
         """
         const key = L.prKeyOf(arg.branch);
-        let n = 0;
-        for (;;) {
-            const evs = [];
-            for (let i = 0; i < 100; i++) evs.push(cm("x", { by: "app", vs: arg.vs }));
-            const r = await G.appendEvents(git, key, meta(arg.branch), () => evs);
-            if (!r.ok) { out({ refused: r.refused, n }); break; }
-            n += 100;
-        }
+        const c = cm("古いコメント", { by: "app", vs: arg.vs });
+        const sub = ev("submit", { batchId: randomUUID(), kind: "changes", items: [c.id], dest: { worktreeId: "w1" } }, { vs: arg.vs });
+        const r = await G.appendEvents(git, key, meta(arg.branch), () => [c, sub]);
+        out(r.ok);
         """,
         {"branch": pr["branch"], "vs": current_vs(pr)},
     )
-    assert res["n"] >= 1000
-    # 末尾の 32 KB は終端用の余裕。通常のコメントは、上限の手前で 413 になる (大きい本文を続けて送る)
-    before = refs_of(world.repo)
-    status, resp = 201, {}
-    for _ in range(12):
-        before = refs_of(world.repo)
-        status, resp = post(world, pr, "comments", {"body": "x" * 8000})
-        if status != 201:
-            break
-    assert status == 413 and resp["error"]["code"] == "limit"
-    assert refs_of(world.repo) == before
-    rv = review(world, pr)  # 読むことはできる
-    assert len(rv["threads"]) >= 1000
+    assert res is True
+    rv = review(world, pr)
+    assert rv["bad"] is None and rv["readonly"] is False and rv["merged"] is False
 
 
 def _prkey(branch: str) -> str:
@@ -1304,65 +801,61 @@ def test_premise_plain_git_runs_the_planted_hook_and_fsmonitor(hostile):
     _clear(hostile.marks)
 
 
-def test_writes_never_run_planted_commands(hostile):
+RECORD_MERGE_JS = f"""
+const V = await import({json.dumps((APP / "git-view.ts").as_uri())});
+const R = await import({json.dumps((APP / "review-api.ts").as_uri())});
+const repo = await V.openRepo(arg.repo);
+const ok = await R.recordMerge(
+	{{ repo, prKey: arg.pr.prKey, branch: arg.pr.branch, target: "develop",
+		sourceOid: arg.pr.sourceOid, targetOid: arg.pr.targetOid, baseOid: arg.pr.baseOid }},
+	{{ requestId: randomUUID(), message: "m", cleanup: "none", commit: arg.pr.sourceOid }},
+);
+out(ok);
+"""
+
+
+def test_reads_and_the_merge_record_never_run_planted_commands(hostile, tmp_path):
     _clear(hostile.marks)
     status, body = hostile.server.get("/api/prs")
     assert status == 200 and len(body["prs"]) == 1
     pr = body["prs"][0]
-    anchor = None
-    _, diff = hostile.server.get(f"/api/prs/{pr['id']}/diff?path=README.md")
-    anchor = {"path": "README.md", "side": "new", "blob": diff["newBlob"], "line": 2, "lineEnd": 2}
-    for i in range(3):
-        status, resp = call(
-            hostile.server,
-            f"/api/prs/{pr['id']}/comments",
-            body={"body": f"c{i}", "anchor": anchor},
-        )
-        assert status == 201, resp
-    status, resp = call(hostile.server, f"/api/prs/{pr['id']}/submit", body={"kind": "approve"})
-    assert status == 201, resp
+    assert hostile.server.get(f"/api/prs/{pr['id']}/diff?path=README.md")[0] == 200
     assert call(hostile.server, f"/api/prs/{pr['id']}/review", method="GET")[0] == 200
+    # 残る書き込み（統合の記録）は、アプリの git アダプタ（appendEvents）で ref を書く
+    assert (
+        run_js(tmp_path, hostile.repo, RECORD_MERGE_JS, {"repo": str(hostile.repo), "pr": pr})
+        is True
+    )
     assert sorted(p.name for p in hostile.marks.iterdir()) == []  # 印ができていない
     assert "refs/pi/review/" in _git(hostile.repo, "for-each-ref")  # 書き込み自体は行われた
-    assert len(ref_events(hostile.repo, pr)) == 4
+    assert [e["t"] for e in ref_events(hostile.repo, pr)] == ["merge_request", "merge_result"]
+    assert call(hostile.server, f"/api/prs/{pr['id']}/review", method="GET")[1]["merged"] is True
 
 
 # ---------------------------------------------------------------- パスの非漏洩・import 境界
 
 
-def test_no_absolute_path_in_any_write_response(world):
+def test_no_absolute_path_in_any_response(world, mworld):
     pr = new_pr(world)
-    post(world, pr, "comments", {"body": "x", "anchor": anchor_of(world, pr)})
-    post(
-        world,
-        pr,
-        "comments",
-        {
-            "body": "x",
-            "anchor": {"path": "../x", "side": "new", "blob": "0" * 40, "line": 1, "lineEnd": 1},
-        },
-    )
-    post(world, pr, "submit", {"kind": "comment"})
-    post(world, pr, "submit", {"kind": "comment"})
-    post(world, pr, "submit", {"kind": "comment", "dest": {"worktreeId": str(world.repo)}})
-    post(world, pr, "comments", None, raw=b"{")
     review(world, pr)
-    # world はモジュール内で共有するので、同じ worker で先に走った試験の応答も入る。
-    # 並列実行 (xdist) では何件入るか不定なので、この試験自身の 7 件だけを前提にする
-    assert len(world.texts) >= 7
-    joined = "\n".join(world.texts)
+    # 失敗の応答（壊れた JSON・別の Origin）にも、パスや内部の情報を含めない
+    texts = list(world.texts)
+    for kw in ({"raw": b"{"}, {"origin": "http://evil.example"}, {"host": "evil.example"}):
+        status, resp = plan(mworld, **kw)
+        assert status in (400, 403), kw
+        texts.append(json.dumps(resp, ensure_ascii=False))
+    assert len(texts) >= 4
+    joined = "\n".join(texts)
     for needle in (
         str(world.base),
         str(world.repo.resolve()),
         str(world.base.resolve()),
+        str(mworld.base),
         "/tmp/",
         "/home/",
-        "wt-two/",
     ):
         assert needle not in joined
     assert "node:" not in joined and "Error:" not in joined and "at async" not in joined
-    for w in review(world, pr)["worktrees"]:
-        assert set(w) == {"worktreeId", "name", "isMain"}
 
 
 ALLOWED_HARNESS = {"review-log.ts", "review-git.ts"}
@@ -1406,98 +899,3 @@ def test_app_imports_only_the_two_shared_review_libraries():
         if p.name in ("review-api.ts", "routes.ts", "server.ts")
     )
     assert "update-ref" not in api and "commit-tree" not in api and "hash-object" not in api
-
-
-# ---------------------------------------------------------------- 本文の上限 (chunked) と表示版の固定 (expect)
-
-
-def test_chunked_body_over_the_limit_is_413_and_writes_nothing(world):
-    """Content-Length が無い (chunked) でも、ストリームの実測で 64 KB を超えたら 413。"""
-    pr = new_pr(world)
-    before = refs_of(world.repo)
-    payload = json.dumps({"body": "x" * (96 * 1024)}).encode("utf-8")
-    chunks = [payload[i : i + 8192] for i in range(0, len(payload), 8192)]
-    conn = http.client.HTTPConnection("127.0.0.1", world.server.port, timeout=60)
-    conn.request(
-        "POST",
-        f"/api/prs/{pr['id']}/comments",
-        body=iter(chunks),
-        headers={"Host": "127.0.0.1", "Content-Type": "application/json", "X-PRV": "1"},
-        encode_chunked=True,
-    )
-    resp = conn.getresponse()
-    status, text = resp.status, resp.read().decode("utf-8")
-    conn.close()
-    assert status == 413 and json.loads(text)["error"]["code"] == "too_large"
-    assert refs_of(world.repo) == before
-
-
-def expect_of(pr: dict, **over) -> dict:
-    e = {"source": pr["sourceOid"], "target": pr["targetOid"], "base": pr["baseOid"]}
-    e.update(over)
-    return e
-
-
-def test_expect_that_matches_is_accepted(world):
-    pr = new_pr(world)
-    assert post(world, pr, "comments", {"body": "合う", "expect": expect_of(pr)})[0] == 201
-    assert post(world, pr, "submit", {"kind": "comment", "expect": expect_of(pr)})[0] == 201
-
-
-def test_expect_is_optional(world):
-    pr = new_pr(world)
-    assert post(world, pr, "comments", {"body": "省略"})[0] == 201
-    assert post(world, pr, "submit", {"kind": "comment"})[0] == 201
-
-
-@pytest.mark.parametrize("part", ["source", "target", "base"])
-@pytest.mark.parametrize("what", ["comments", "submit"])
-def test_expect_that_differs_in_any_part_is_409_and_writes_nothing(world, part, what):
-    pr = new_pr(world)
-    post(world, pr, "comments", {"body": "先に 1 件"})
-    before = refs_of(world.repo)
-    body = {"body": "ずれている"} if what == "comments" else {"kind": "approve"}
-    body["expect"] = expect_of(pr, **{part: "0123456789abcdef0123456789abcdef01234567"})
-    status, resp = post(world, pr, what, body)
-    assert status == 409 and resp["error"]["code"] == "stale_view"
-    assert "更新" in resp["error"]["message"]
-    assert refs_of(world.repo) == before
-
-
-def test_old_expect_after_the_branch_moved_is_409(world):
-    pr = new_pr(world)
-    post(world, pr, "comments", {"body": "見ていた版へ"})
-    _git(world.repo, "switch", "-q", pr["branch"])
-    _commit(world.repo, {"keep.txt": "keep\nnext\n"}, "feat: next")
-    _git(world.repo, "switch", "-q", "develop")
-    before = refs_of(world.repo)
-    status, resp = post(world, pr, "submit", {"kind": "approve", "expect": expect_of(pr)})
-    assert status == 409 and resp["error"]["code"] == "stale_view"
-    assert refs_of(world.repo) == before
-    # 取り直した版なら通る
-    fresh = next(p for p in world.server.get("/api/prs")[1]["prs"] if p["id"] == pr["id"])
-    assert post(world, fresh, "submit", {"kind": "approve", "expect": expect_of(fresh)})[0] == 201
-
-
-@pytest.mark.parametrize(
-    "bad",
-    [
-        "x",
-        1,
-        [],
-        {},
-        None,  # null は「省略」ではない (省略だけが照合なし)
-        {"source": "a" * 40},
-        {"source": "A" * 40, "target": "a" * 40, "base": "a" * 40},
-        {"source": "a" * 39, "target": "a" * 40, "base": "a" * 40},
-        {"source": 1, "target": "a" * 40, "base": "a" * 40},
-        {"source": "a" * 40, "target": "a" * 40, "base": "a" * 40, "ref": "refs/heads/x"},
-    ],
-)
-def test_malformed_expect_is_400_bad_expect(world, bad):
-    pr = new_pr(world)
-    before = refs_of(world.repo)
-    for what, body in (("comments", {"body": "形"}), ("submit", {"kind": "approve"})):
-        status, resp = post(world, pr, what, {**body, "expect": bad})
-        assert status == 400 and resp["error"]["code"] == "bad_expect", (what, bad, status, resp)
-    assert refs_of(world.repo) == before

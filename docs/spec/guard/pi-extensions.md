@@ -199,6 +199,8 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 | execute 直前の統合ゲート（S7） | `free_zone_prefixes`（自由区の判定をやり直す） | 主 worktree | 自由区にしない |
 
 - **自由区は、feature 自身の HEAD の `pi.json` を読まない**。エージェントが自分で書いた設定で、自分の自由区を広げられないようにするため。設定の変更は、承認された統合で主ブランチに入るまで自由区に効かない。保護ブランチの拒否は残る
+- raw `git flow … finish` の確認画面（`confirm-view.ts`）: squash（`--squash --squash-message "$(cat <path>)"`）は「(squash)」、**merge commit の finish（`-M` / `--merge-message`。`--squash-message` と同じ読み方）は「(merge commit)」**の見出しで、行き先・メッセージ・衝突の有無を先に出す（表示だけ。判定は変えない）。
+  - チャット経由の統合の標準は `git flow feature finish <名前> --no-ff --no-squash -M "$(cat <メッセージ>)" --keepremote --no-fetch --no-push --notag`（bundle は squash すると取り込み元の枝が祖先にならず、`wt_clean.py` の判定が壊れるため merge commit）。`--squash` と `-M` の両方は squash 表示に警告を足す
 - raw `git flow … finish` のプレビュー: cwd の HEAD と主 worktree の HEAD の**両方**を読み、どちらかが `target` か `source_prefixes` を既定から変えている・読めない・common dir を得られないときは、「統合の内容は確認できない」と出す（別のブランチの差分を見せない）。`free_zone_prefixes` だけの変更では止めない
 - `/board`: 実効の `source_prefixes` で feature を拾う。**比較先は実効の `target`**（設定を読んだときは、設定が無い・無効でも、全体の既定か `pi.json` の値）。設定が有効で既定と違うとき・無効のときだけ、1 行を足す（`pi.json: 有効 (統合元 …)`・`pi.json: 無効 (コード)`）
 - **execute 直前の再判定（S7）**: tool_call で決めた判定を再利用するときも、execute 直前に `tightenIntegration` をかけ直す（`index.ts`）。tool_call の後に主設定が変わって自由区でなくなっても、古い許可で実行しない。拒否・必須確認はそのまま、許可だけを再判定する。RPC の回帰試験がある（`test_s7_the_integration_gate_is_rechecked_just_before_execute`）

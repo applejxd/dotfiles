@@ -268,7 +268,6 @@ def test_repos_lists_name_and_target_but_not_paths(world):
         "name": "example-app",
         "target": "develop",
         "unpushed": None,  # 上流が無いリポジトリ（A3 で足した後方互換の項目）
-        "targetOid": _git(world.repo, "rev-parse", "develop").strip(),
     }
     # 統合先が無いリポジトリ (trunk だけ) は一覧に出さない
     assert "app-none" not in by_name
@@ -351,13 +350,12 @@ def test_diff_of_renamed_japanese_and_binary_files(world):
     )
     assert ja["hunks"][0]["lines"] == [{"t": "+", "o": None, "n": 1, "s": "こんにちは"}]
     _, binary = world.server.get(f"/api/prs/{alpha['id']}/diff?path=bin.dat")
-    assert {k: v for k, v in binary.items() if k not in ("oldBlob", "newBlob")} == {
+    assert binary == {
         "path": "bin.dat",
         "binary": True,
         "truncated": False,
         "hunks": [],
     }
-    assert binary["oldBlob"] is None and len(binary["newBlob"]) == 40  # 段 2: 追加されたファイル
 
 
 def test_huge_diff_is_truncated_at_a_whole_line(world):

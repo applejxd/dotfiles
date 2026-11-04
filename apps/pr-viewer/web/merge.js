@@ -337,9 +337,6 @@
         } else {
           kids.push(h("p", { class: "muted small", text: "リスクのあるパスはありません。" }));
         }
-        (res.warnings || []).forEach(function (w) {
-          kids.push(h("p", { class: "attn", role: "status", text: "⚠ " + String(w.message || w.code) }));
-        });
         var files = Array.isArray(plan.files) ? plan.files : [];
         var rest = fc - files.length;
         var fl = files.map(function (f) {

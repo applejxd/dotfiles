@@ -21,6 +21,5 @@
     "messageSource": "generated",
     "summaryStale": false,
     "cleanup": "none"
-  },
-  "warnings": [{"code": "review_stale", "message": "<img src=x onerror=\"window.__pwned=1\">"}]
+  }
 }
