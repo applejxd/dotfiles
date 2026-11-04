@@ -174,13 +174,13 @@ worker は実行せず、報告の「次の候補」に書く（worker は sandb
 
 <!-- child:worker -->
 
-- worker はコミットしない。親が結果を根拠で確かめ、`git_commit`（`dir` に worktree）→ `guarded_pr_summary` で `mergeMessage` の下書きを出す → 利用者が PR ビューアの「統合する」を押す。AI は `finish`・`merge` を実行しない
+- worker はコミットしない。親が結果を根拠で確かめ、`git_commit`（`dir` に worktree）→ `guarded_pr_summary` で `mergeMessage` の下書きを出す → 利用者が PR ビューアの「統合する」を押す。worker は `finish`・`merge` を実行しない
 
 <!-- /child -->
 
 <!-- parent -->
 
-- **`git flow feature finish`・`git merge` など、保護ブランチへの統合は、利用者が PR ビューアの「統合する」を押す。AI が実行すると、bypass でも必須確認**（承認画面が出る。[CHG-0053](docs/change/0053-worktree-integration-gate.md)）
+- **`git flow feature finish`・`git merge` など、保護ブランチへの統合は、既定では利用者が PR ビューアの「統合する」を押す。利用者がチャットで統合を明示的に指示したときに限り、AI が統合コマンドを実行してよい**（必須確認の承認画面が出て、利用者が TUI で承認する。bypass でも省略できない。指示が無いときは実行しない。実行前に、本体が `develop` で clean・全件検査が合格・`git merge-tree` が衝突なしを確かめる。チャット経由は統合器・2 段確認・リスクパスの警告が無いので、ボタンを既定とする。[運用モード](docs/spec/operation-modes.md#統合)・[CHG-0053](docs/change/0053-worktree-integration-gate.md)）
 - 共有されやすいファイル（`common.toml.tmpl`・golden・docs の索引）は、同時に複数の worker に触らせない。衝突するなら、親が順に取り込む
 
 <!-- /parent -->
