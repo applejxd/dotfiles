@@ -120,6 +120,7 @@ _PI_TESTS = (
     "test_pi_github_boundary",
     "test_pi_commit_confirm",
     "test_pi_autocheckpoint",
+    "test_pi_goal_core",
     "test_pi_board",
     "test_pi_board_collect",
     "test_pi_board_command",
