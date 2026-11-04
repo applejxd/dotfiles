@@ -41,6 +41,7 @@ try:
         "confirm-view.ts",
         "explain.ts",
         "autocheckpoint.ts",
+        "quiet-notices.ts",
         "actions.ts",
         "text-viewer.ts",
         "confirm-present.ts",
