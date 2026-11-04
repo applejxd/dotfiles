@@ -259,6 +259,36 @@ def test_width_and_component_wrap():
     assert c["rows"] == ["全" * 10, "全" * 10, "全" * 10]
 
 
+def _fold(events=("session_start",), **kw):
+    args = {"events": list(events), "hasUI": True, **kw}
+    return run([{"fn": "foldTools", "args": args}])[0]
+
+
+def test_fold_tools_on_session_start():
+    r = _fold(("session_start", "session_start"))
+    assert r["calls"] == [False, False]
+
+
+def test_fold_tools_disabled_by_env():
+    r = _fold(env={"PI_FOLD_TOOLS": "0"})
+    assert r["calls"] == [] and r["registered"] == []
+
+
+def test_fold_tools_needs_ui():
+    assert _fold(hasUI=False)["calls"] == []
+
+
+@pytest.mark.parametrize("kw", [{"noApi": True}, {"throws": True}])
+def test_fold_tools_never_raises(kw):
+    r = _fold(**kw)
+    assert r["error"] is None and r["calls"] == []
+
+
+def test_fold_tools_only_on_session_start():
+    r = _fold(("turn_start", "agent_end", "session_shutdown"))
+    assert r["calls"] == []
+
+
 def test_wiring_in_index_and_autocheckpoint_and_todo():
     index = (HARNESS / "index.ts").read_text(encoding="utf-8")
     assert "registerQuietNotices(pi)" in index and "foldActionResult" in index

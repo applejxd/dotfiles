@@ -334,6 +334,11 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 | 限界 | 保存の質は**エージェント次第**で保証しない（指示を守らない・docs の反映が不完全なことがある）。組み込みの自動圧縮（窓 − `reserveTokens` 付近）は**予備として残る**ので、保存より先にそちらが走ることもある。使用率は settle の時点でしか見ないので、1 回の長い実行の途中では働かない。再開の指示は、判断待ち・完了待ちだけのときも 1 ターン走る（「待機」と答えるだけ） |
 | 試験 | `test/agents/test_pi_autocheckpoint.py`（`test/agents/pi/autocheckpoint_driver.mjs` が偽のイベントとコンテキストを handler へ渡す）。実機の確認は未実施 |
 
+### 思考とツール出力の既定の折り畳み
+
+- 思考のブロックは `[pi.settings] hideThinkingBlock = true` で、ツール出力は `quiet-notices.ts` が `session_start` で `ctx.ui.setToolsExpanded(false)` を呼んで、既定で畳む（スマホで読みやすくするため。表示だけ）。
+- 展開は `ctrl+t`（思考）・`ctrl+o`（ツール出力）。戻し方: `hideThinkingBlock = false`、環境変数 `PI_FOLD_TOOLS=0`。UI なし・API なし・例外のときは何もしない。
+
 ### 自動の通知を畳む表示
 
 方針: チャットには**会話と判断の要求だけ**が目に入るようにし、自動で出る通知は既定で 1 行に畳む。**表示だけ**で、モデルに渡す本文（`content`）は変えない（`harness/quiet-notices.ts` の純関数。`registerMessageRenderer`・`registerMarkdownTransformer`・ツールの `renderResult` で表示だけを差し替える）。

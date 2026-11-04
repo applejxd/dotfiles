@@ -266,8 +266,26 @@ const paintOf = (theme: any, level: Level) => (s: string) => {
 	}
 };
 
-/** 自動の通知の renderer (メッセージ・user の再開の指示) を登録する。PI_QUIET_NOTICES=0 なら何も登録しない */
+/** ツール出力を畳んだ状態で始める。PI_FOLD_TOOLS=0 で無効 */
+export function foldToolsEnabled(env: Record<string, string | undefined> = process.env): boolean {
+	return env.PI_FOLD_TOOLS !== "0";
+}
+
+/** session_start で ctx.ui.setToolsExpanded(false)。UI なし・API なし・例外のときは何もしない (べき等) */
+export function registerFoldTools(pi: any, env: Record<string, string | undefined> = process.env): void {
+	if (!foldToolsEnabled(env)) return;
+	pi.on?.("session_start", (_event: any, ctx: any) => {
+		try {
+			if (ctx?.hasUI && typeof ctx.ui?.setToolsExpanded === "function") ctx.ui.setToolsExpanded(false);
+		} catch {
+			// 表示だけの設定なので、失敗しても何もしない
+		}
+	});
+}
+
+/** 自動の通知の renderer (メッセージ・user の再開の指示) を登録する。PI_QUIET_NOTICES=0 なら renderer は登録しない */
 export function registerQuietNotices(pi: any, env: Record<string, string | undefined> = process.env): void {
+	registerFoldTools(pi, env);
 	if (!quietEnabled(env)) return;
 	const kinds: NoticeKind[] = ["child-finished", "bg-job-finished", "todo-reminder", "autocheckpoint"];
 	for (const kind of kinds) {
