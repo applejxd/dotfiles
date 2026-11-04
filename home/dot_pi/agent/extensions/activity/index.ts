@@ -214,16 +214,19 @@ export default function (pi: ExtensionAPI) {
 		name: "bg_run",
 		label: "bg_run",
 		// promptSnippet が無いと Available tools に出ない
-		promptSnippet: "Start a long-running or waiting command (server, watcher, build) in the background and get a job id",
+		promptSnippet:
+			"Start a long-running or waiting command (tests, full verification, builds, servers, watchers) in the background and get a job id",
 		promptGuidelines: [
-			"Use bg_run instead of bash for commands that run long or wait; check them with bg_log and stop them with bg_kill.",
+			"Use bg_run instead of bash for commands that run long or wait: test suites (pytest etc.), full verification (verify / verify:all), " +
+				"whole-repo lint (pre-commit --all-files), builds, servers, watchers. If a command may take 10 seconds or more, use bg_run; " +
+				"bash is for short commands. Check jobs with bg_log and stop them with bg_kill.",
 			"A message arrives automatically when a bg_run job finishes. Do not wait with sleep or poll bg_log; do other work, or end your turn when nothing else is left.",
 		],
 		description:
 			"Start a shell command in the background and return immediately with a job id. " +
 			"Output goes to a log file. Use bg_log to read it and bg_kill to stop it. " +
 			"A notification message arrives when the job finishes, so do not sleep or poll while waiting. " +
-			"Use for long-running commands (servers, watchers, builds); not for quick commands.",
+			"Use for anything that may take 10 seconds or more (test suites, full verification, builds, servers, watchers); not for quick commands.",
 		parameters: Type.Object({
 			command: Type.String({ description: "Shell command to run" }),
 		}),
