@@ -36,6 +36,17 @@ response: { decision: allow | ask | deny, reason, source: rule | check | default
 | `allowed` | `{ read, write }`。サンドボックスが実際に開けた場所。`boundary` が真のとき、作業ツリーの外の読み書きの判定に使う（形が違えば `source: error` の deny） |
 | `writeRoot` / `tmpRoots` | 任意。`writeRoot`（絶対パス）があるとき、`edit` / `write` は**既存の許可より先に**、書込み先が `writeRoot` と `tmpRoots`（文字列の配列。`writeRoot` を含むものは無視）の外なら deny（bypass でも）。書込み先は pi の正規化（`@`・`file://`・`~`・Unicode 空白）の全解釈と、symlink の厳格な解決（対象が無くても追う）で見る。無いときの判定は変わらない。形が違えば `source: error` の deny |
 
+`writeRoot` の補足（[子エージェントの限界](pi-subagents.md#子エージェント)）:
+
+- **全候補方式の代償**: pi が行いうる解釈のどれか 1 つでも外なら deny するので、まれに正当なパスが拒否される。
+  例: cwd 内に `file:` という通常ファイルがあるとき、担当内を指す `file://` URL は拒否される。
+  先頭が literal の `@` のファイル名は、pi が `@` を取り除くので `./@types/x` か絶対パスで渡す。
+- **担当内の絶対パスは、プレフィックス（`@`・`file://`・`~`）なしで渡す**。
+- 通常ファイルの後に成分が続くパス（`f/../x` など。リンクを辿った後も同じ）は、ENOTDIR 相当として deny する。
+- **未実装の既知の限界**: 大文字小文字を区別しない FS・bind mount の別名では、許可ルートとの同一性を文字列の包含で見ているため、
+  除外・許可が取りこぼしうる（対策案: `stat` の `dev` / `ino` で既存ディレクトリの祖先を照合。この環境の `/home` は
+  大小文字を区別するので未実装）。Windows のパス（`\`・ドライブ・UNC）は未対応。
+
 `source` は判定がどこで決まったか。
 
 | `source` | 意味 |
