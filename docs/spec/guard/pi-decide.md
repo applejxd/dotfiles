@@ -377,6 +377,17 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。
 - 限界: `$'…'`・`$"…"` は復号せず unk（頭にあれば後段が deny にする印）。cwd の chain は実在確認をしない（G5 が解く）。`CDPATH`・関数・alias がある原文の `cd` は unknown
 - 試験: `test_pi_plan_literal.py`（表 L・演算子番号・fixture）・`test_pi_plan_failclosed.py`・`test_pi_plan_sites.py`。実型は [mvdan-sh の構文木の実型](../../research/agents/mvdan-sh-ast-fixtures.md)
 
+## shadow（観測）
+
+`judge/shadow.ts` は、bash（`bash`・`bg_run`）の判定の**後**に `analyze` を呼び、観測の 1 行を `<cwd>/.tmp/work/shadow/<session>.jsonl` に追記する。
+目的は、`analyze` を判定の先頭へ繋いで `ok:false` を deny にする案（G1(b)）の前に、**正当なコマンドを deny にする率**を実測すること。
+
+- 記録: 時刻・役割・モード・旧の decision/source・コマンド長・先頭の語・`ok`・失敗種別 `why`・site 数・cmd 名（最大 8。安全な字種だけ、他は `?`）・`ms`・`would_tighten`（旧が allow/ask で新が `ok:false`）・`vendor_missing`。**コマンドの全文・引用・値は入れない**
+- 不変: 応答（decision・reason・source）を変えない。`analyze` の例外・追記の失敗は握りつぶす。`PI_SHADOW=0` で無効（既定は有効）、子（`PI_HARNESS_CHILD`）では記録しない。1 ファイル 5 MB で止める
+- 簡易ブレーカー: `analyze` が 200 ms を超えたら以降は呼ばない（同期処理なので 1 回の遅れは防げない。最初の 1 回は vendor 読み込みを含むので対象外）
+- 集計: `python3 scripts/shadow_stats.py [パス]`（失敗率・`would_tighten` と理由・ms の p50/p90/p99・失敗した入力の先頭の語）。試験は `test_pi_shadow.py`
+- 限界: 子と Windows の別実行は記録の置き場が無く観測しない。判定後の確認待ちの結果（承認・拒否）は記録しない
+
 ## 既知の制約
 
 - gitflow-lite のリポジトリで develop / main を直接編集・コミットさせない制限は、判定器の外側の層（[CHG-0049](../../change/0049-gitflow-convention-guard.md)）に置いていたが、2026-10-31 に撤去した（[CHG-0050](../../change/0050-slim-guarded-action.md)）。今は機械では止めず、指示で運用する。`decide` は変えていない

@@ -188,6 +188,7 @@ _PI_TESTS = (
     "test_pi_plan_sites",
     "test_pi_stage_table",
     "test_work_sched",
+    "test_pi_shadow",
 )
 _OC_TESTS = (
     "test_generate_opencode*",
