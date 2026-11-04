@@ -718,6 +718,9 @@ def test_dirty_target_worktree_is_refused_and_untouched(w):
     before = snapshot(w)
     status, resp = merge(w, pr)
     assert status == 409 and resp["error"]["code"] == "dirty", resp
+    assert resp["error"]["details"] == {"paths": ["keep.txt"], "pathCount": 1}, resp
+    status, p = plan(w, pr)
+    assert p["refusal"]["code"] == "dirty" and p["refusal"]["details"]["paths"] == ["keep.txt"], p
     assert snapshot(w) == before and (w.repo / "keep.txt").read_text() == "手元の変更\n"
     no_leak(w, resp)
 

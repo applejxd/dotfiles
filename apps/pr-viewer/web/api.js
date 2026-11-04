@@ -25,9 +25,10 @@
             var m = body && body.error && typeof body.error.message === "string" ? body.error.message : "";
             var code = body && body.error && typeof body.error.code === "string" ? body.error.code : "";
             var cf = body && body.error && Array.isArray(body.error.conflicts) ? body.error.conflicts.map(String) : undefined;
+            var dt = body && body.error && body.error.details && typeof body.error.details === "object" ? body.error.details : undefined;
             /* 表示中の版から PR が更新された: 詳細のキャッシュを捨てる（次の描画で取り直す） */
             if (code === "stale_view" || code === "not_ff") PRV.cache = {};
-            throw fail(m || "サーバがエラーを返しました（" + res.status + "）。", code, { status: res.status, serverMessage: m, conflicts: cf });
+            throw fail(m || "サーバがエラーを返しました（" + res.status + "）。", code, { status: res.status, serverMessage: m, conflicts: cf, details: dt });
           }
           if (body === null || typeof body !== "object") throw fail("サーバの応答を読み取れませんでした。", "", { status: res.status });
           return body;

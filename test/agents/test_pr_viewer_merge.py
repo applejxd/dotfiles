@@ -390,26 +390,61 @@ console.log(JSON.stringify(r));""",
 
 @pytest.mark.parametrize(
     "name",
-    ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_LOG", "rebase-merge", "rebase-apply"],
+    [
+        "MERGE_HEAD",
+        "CHERRY_PICK_HEAD",
+        "REVERT_HEAD",
+        "BISECT_LOG",
+        "rebase-merge",
+        "rebase-apply",
+        "sequencer",
+    ],
 )
-def test_operation_in_progress_is_dirty(w, name):
+def test_operation_in_progress_is_refused_with_its_own_code(w, name):
     w.feature("feature/a", {"a.txt": "a\n"})
     target = w.git_dir() / name
-    if name.startswith("rebase"):
+    if name.startswith("rebase") or name == "sequencer":
         target.mkdir()
     else:
         target.write_text(w.rev() + "\n")
     rc, out, _ = w.merge("feature/a")
-    assert rc == 2 and out["code"] == "dirty"
+    assert rc == 2 and out["code"] == "operation_in_progress", out
+    assert out["details"] == {"op": name}
     assert not (w.repo / "a.txt").exists()
 
 
-def test_existing_index_lock_is_busy(w):
+def test_existing_index_lock_is_index_locked(w):
     w.feature("feature/a", {"a.txt": "a\n"})
     (w.git_dir() / "index.lock").write_text("")
     rc, out, _ = w.merge("feature/a")
-    assert rc == 2 and out["code"] == "busy"
+    assert rc == 2 and out["code"] == "index_locked", out
+    assert "index.lock" in out["reason"] and "実行されていません" in out["reason"]
     assert (w.git_dir() / "index.lock").exists()  # 他人のロックは消さない
+
+
+def test_dirty_refusal_carries_the_paths_capped_at_20(w):
+    files = {f"d/f{i:02d}.txt": "x\n" for i in range(25)}
+    w.feature("feature/a", files)
+    (w.repo / "d").mkdir()
+    for rel in files:
+        (w.repo / rel).write_text("手元\n", encoding="utf-8")  # 統合が作るパスと同名の untracked
+    rc, out, _ = w.merge("feature/a")
+    assert rc == 2 and out["code"] == "dirty", out
+    assert out["details"]["pathCount"] == 25
+    assert len(out["details"]["paths"]) == 20
+    assert set(out["details"]["paths"]) <= set(files)
+
+
+def test_head_mismatch_reason_names_the_current_branch(w):
+    w.feature("feature/a", {"a.txt": "a\n"})
+    out = w.api(
+        """const r = await M.executeMerge(
+  { repo: arg.repo, source: "feature/a", message: "feat: a\\n" }, undefined,
+  { afterPlan: () => g("checkout", "-q", "-b", "other") });
+console.log(JSON.stringify(r));""",
+        {"repo": str(w.repo)},
+    )
+    assert out["code"] == "head_mismatch" and "other" in out["reason"], out
 
 
 # ---------------------------------------------------------------- 7 target が checkout されていない

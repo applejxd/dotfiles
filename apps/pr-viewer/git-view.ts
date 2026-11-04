@@ -13,11 +13,14 @@ export class ApiError extends Error {
 	code: string;
 	/** 統合の衝突したパス（conflict のときだけ。件数・長さは呼び出し側で絞る） */
 	conflicts?: string[];
-	constructor(status: number, code: string, message: string, conflicts?: string[]) {
+	/** 拒否の原因の詳細（paths・pathCount・op。安全な形に絞って渡す） */
+	details?: Record<string, unknown>;
+	constructor(status: number, code: string, message: string, conflicts?: string[], details?: Record<string, unknown>) {
 		super(message);
 		this.status = status;
 		this.code = code;
 		if (conflicts !== undefined) this.conflicts = conflicts;
+		if (details !== undefined) this.details = details;
 	}
 }
 
