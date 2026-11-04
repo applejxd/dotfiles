@@ -84,16 +84,16 @@ def test_serve_既定では_allow_旗を付けない(box):
 
 
 def test_serve_旗が_1_のときだけ_allow_を付けて警告する(box):
-    _write_env(box, "PRAPP_ALLOW_MERGE=1\nPRAPP_ALLOW_CREATE=1\n")
+    _write_env(box, "PRAPP_ALLOW_MERGE=1\n")
     r = _run(box, "serve", extra={"PRAPP_ROOT": str(box["root"])})
     log = _log(box, "node")
     assert "arg=--allow-merge" in log
-    assert "arg=--allow-create" in log
-    assert "統合を有効" in r.stderr and "起票" in r.stderr and "変更を依頼" not in r.stderr
+    assert "--allow-create" not in log
+    assert "統合を有効" in r.stderr and "変更を依頼" not in r.stderr
 
 
 def test_serve_旗が_0_なら_付けない(box):
-    _write_env(box, "PRAPP_ALLOW_MERGE=0\nPRAPP_ALLOW_CREATE=0\n")
+    _write_env(box, "PRAPP_ALLOW_MERGE=0\n")
     _run(box, "serve", extra={"PRAPP_ROOT": str(box["root"])})
     assert "--allow-" not in _log(box, "node")
 
@@ -134,8 +134,9 @@ def test_install_は新規設定の旗をすべて_0_で書く(box):
     r = _run(box, "install", extra={"PRAPP_ROOT": str(box["root"])})
     assert r.returncode == 0, r.stderr
     text = _envfile(box).read_text(encoding="utf-8")
-    for k in ("PRAPP_ALLOW_MERGE", "PRAPP_ALLOW_CREATE"):
+    for k in ("PRAPP_ALLOW_MERGE",):
         assert f"{k}=0\n" in text
+    assert "CREATE" not in text
     assert "JOBS" not in text
     assert "=1" not in text
     assert f'PRAPP_REPOS="{box["root"]}"' in text

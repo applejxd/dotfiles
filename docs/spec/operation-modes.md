@@ -11,13 +11,13 @@ pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結�
 | --- | --- | --- |
 | 層 0 | pi + ガード。通常のコーディングエージェント。単独で完結する | 不要 |
 | 層 1 | pi の中のオーケストレーション。親が `guarded_task` で worker を並列に起動する。git-flow の worktree、`scripts/wt_owner.py`・`scripts/bundle.py`・`scripts/wt_clean.py` | 不要 |
-| 層 2 | PR ビューア。人の操作盤（見る・コメント・統合ボタン・起票）。**任意** | 本体 |
+| 層 2 | PR ビューア。人の操作盤（見る・コメント・統合ボタン）。**任意** | 本体 |
 
 ## 2. 段階 × 運用モード
 
 | 段階 | pi 単独 | ビューア併用 |
 | --- | --- | --- |
-| 起票 | 親が `git flow feature start <名前> --worktree --no-fetch` | 同左、または画面の「＋ 起票」（`--allow-create`） |
+| 起票 | 親が `git flow feature start <名前> --worktree --no-fetch` | 同左（画面の起票は撤去した） |
 | 実装 | 親が worker を起動（起動前に `wt_owner.py claim`） | 同左。画面からの「pi に依頼」ジョブは撤去済み |
 | 検査 | 親が `mise run verify`・`verify:all` | worker 経路のみ（ジョブ経路は撤去済み） |
 | commit | 親が `git add -A` → `git_commit`（`dir` に worktree。feature の worktree では確認なし） | worker 経路は同左（ジョブ経路は撤去済み） |
@@ -97,9 +97,8 @@ node apps/pr-viewer/merge-cli.ts recover <repo>
 | --- | --- | --- |
 | （なし） | 閲覧・コメント・送信だけ | まず無旗で使う |
 | `--allow-merge` | 画面の「統合する」 | 統合を画面で押したいとき。有効化の手順を先に読む |
-| `--allow-create` | 画面の「＋ 起票」 | 画面から feature を作りたいとき |
 
-権限の旗（`--allow-merge`・`--allow-create`）は**既定で無効**。取り込みだけでは有効にならず、旗を付けた起動が要る。`--state-dir <パス>` は権限ではなく、統合の退避の保存先の指定（絶対パス。省略時は `$XDG_STATE_HOME/pr-viewer`、未設定なら `~/.local/state/pr-viewer`。リポジトリの中には置けない）。
+権限の旗（`--allow-merge`）は**既定で無効**。取り込みだけでは有効にならず、旗を付けた起動が要る。`--state-dir <パス>` は権限ではなく、統合の退避の保存先の指定（絶対パス。省略時は `$XDG_STATE_HOME/pr-viewer`、未設定なら `~/.local/state/pr-viewer`。リポジトリの中には置けない）。
 
 レビューの流れ:
 

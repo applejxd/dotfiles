@@ -13,4 +13,4 @@
  "summary": {"done": "<img src=x onerror=\"window.__pwned=1\">", "files": ["<img src=x onerror=\"window.__pwned=1\">"],
   "findings": [{"ref": "<b>x</b>", "reply": "<script>window.__pwned=1</script>"}], "notes": "<img src=x onerror=\"window.__pwned=1\">", "at": "2099-01-01T00:20:00+00:00", "by": "pi"},
  "worktrees": [{"worktreeId": "w1", "name": "<img src=x onerror=\"window.__pwned=1\">", "isMain": true}],
- "defaultDest": {"worktreeId": "w1"}, "unsent": 1, "brief": null}
+ "defaultDest": {"worktreeId": "w1"}, "unsent": 1}

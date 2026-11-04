@@ -250,7 +250,7 @@
     d.keys.batches = JSON.stringify([(rv && rv.batches) || [], (rv && rv.worktrees) || []]);
     var inc = h("p", { class: "muted small included-note" });
     inc.hidden = true;
-    var main = [inc, PRV.briefCard ? PRV.briefCard(rv) : null, behindCard(pr), d.summary, generalCard(ctx), files, commits, d.batches];
+    var main = [inc, behindCard(pr), d.summary, generalCard(ctx), files, commits, d.batches];
     d.bar = PRV.reviewBar(ctx, notice);
     var me = PRV.mergeEntry ? PRV.mergeEntry(ctx) : null;
     PRV.mount(
