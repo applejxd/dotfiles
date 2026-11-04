@@ -363,6 +363,20 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。
   Windows は `harness/` を配らないので、Windows の Python の hook は表を読めず fail-closed で止まる）
 - 構文解析の堅牢化（`shellparse` を正式な構文解析に替える）は別の変更。差分試験を残したまま進める
 
+## 解析結果 Plan（G1(a)）
+
+`judge/plan.ts` の `analyze(cmd, {sshTargets})` は、bash を構文木（同梱の mvdan-sh）から**1 回だけ**解析し、実行点 `ExecSite` の平坦な列 `Plan` を返す純関数。
+**判定器には接続していない**（挙動は変えない。接続は後続）。Plan は、旧の判定を置換せず、拒否側の所見・追加の厳格化と shadow 比較の入力になる（tighten-only）。
+
+- 型: `ExecSite` = `argv`（ラッパーを剥がした実効）・`rawArgv`・`assigns`・`redirs`・`via`・`cmd`・`cwd`（caller / chain / unknown）・`ctl`・入れ子（`parent`・`depth`）。
+  語 `Word` は lit / tilde / pat / unk。literal は「展開後も 1 つの文字列に決まる語」で、`Lit` かどうかでは決めない
+- 拒否側専用の view: `tails`（`--` の後ろ・runner・here-string・プロセス置換の echo など、旧の埋め込み抽出と同じ範囲）と
+  `denyViews`（git のグローバル引数を除いた view）。許可の被覆には使わない。`varsVisible` は旧の字句上の代入名
+- 入れ子: `bash -c`・heredoc・許可宛先の ssh・`find -exec`・xargs・`$()`・`<()` を同じ列に平坦化する。`eval`・`source`・インタプリタの本文は `opaque`
+- fail-closed: 読み込み失敗・sha 不一致・評価失敗・構文エラー・CR/NUL ほかの C0・上限超え（長さ 10000・実行箇所 200・深さ 4・語 4000）は `ok:false`（呼び出し側が deny にする）
+- 限界: `$'…'`・`$"…"` は復号せず unk（頭にあれば後段が deny にする印）。cwd の chain は実在確認をしない（G5 が解く）。`CDPATH`・関数・alias がある原文の `cd` は unknown
+- 試験: `test_pi_plan_literal.py`（表 L・演算子番号・fixture）・`test_pi_plan_failclosed.py`・`test_pi_plan_sites.py`。実型は [mvdan-sh の構文木の実型](../../research/agents/mvdan-sh-ast-fixtures.md)
+
 ## 既知の制約
 
 - gitflow-lite のリポジトリで develop / main を直接編集・コミットさせない制限は、判定器の外側の層（[CHG-0049](../../change/0049-gitflow-convention-guard.md)）に置いていたが、2026-10-31 に撤去した（[CHG-0050](../../change/0050-slim-guarded-action.md)）。今は機械では止めず、指示で運用する。`decide` は変えていない
