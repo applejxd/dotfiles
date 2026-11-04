@@ -498,7 +498,9 @@ def test_list_hides_included_branches_with_a_toggle() -> None:
     assert "incN > 0" in lst and "件）" in lst  # 0 件のときは切り替えを出さない
     assert re.search(r'text: "→ " \+ pr\.includedIn \+ " に含まれる"', lst)
     pr = (WEB / "view-pr.js").read_text(encoding="utf-8")
-    assert "inc.textContent = " in pr and "me2.includedIn" in pr
+    assert "inc.textContent = " in pr and "pr.includedIn" in pr
+    assert "api.prs()" not in pr  # 概要の表示のために全件の一覧を計算しない
+    assert "errorsNote" in lst and "件の PR を読めませんでした" in lst
     for text in (lst, pr):
         assert "innerHTML" not in text
 

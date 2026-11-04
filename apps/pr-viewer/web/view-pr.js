@@ -265,17 +265,11 @@
         me ? me.bar : null
       )
     );
-    /* 一覧の includedIn（他の open な PR の枝に含まれる）を 1 行で注記する。取れなければ省略（表示だけ） */
-    PRV.api.prs().then(
-      function (l) {
-        var me2 = ((l && l.prs) || []).filter(function (p) { return p.id === pr.id; })[0];
-        if (me2 && typeof me2.includedIn === "string" && me2.includedIn) {
-          inc.textContent = "→ " + me2.includedIn + " に含まれる枝です（一覧では既定で隠れます）。";
-          inc.hidden = false;
-        }
-      },
-      function () {}
-    );
+    /* 詳細応答の includedIn（他の open な PR の枝に含まれる）を 1 行で注記する。無ければ省略（表示だけ） */
+    if (typeof pr.includedIn === "string" && pr.includedIn) {
+      inc.textContent = "→ " + pr.includedIn + " に含まれる枝です（一覧では既定で隠れます）。";
+      inc.hidden = false;
+    }
   }
 
   PRV.viewOverview = function (r, isCurrent) {

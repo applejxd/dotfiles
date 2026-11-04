@@ -254,10 +254,35 @@ def cmd_serve(repos: list[str]) -> int:
     return 0  # pragma: no cover
 
 
+def is_linked_worktree(root: Path) -> bool:
+    """root が linked worktree か。git が無い・git 管理外なら False（判定できないときは止めない）。"""
+    vals = []
+    for opt in ("--git-dir", "--git-common-dir"):
+        try:
+            r = subprocess.run(
+                ["git", "-C", str(root), "rev-parse", "--path-format=absolute", opt],
+                capture_output=True,
+                encoding="utf-8",
+                check=False,
+            )
+        except OSError:
+            return False
+        if r.returncode != 0:
+            return False
+        vals.append(r.stdout.strip())
+    return vals[0] != vals[1]
+
+
 def cmd_install(repos: list[str]) -> int:
     need_systemd()
     fv = read_env_file(env_file())
     root = resolve_root(fv)
+    if is_linked_worktree(root):
+        raise Stop(
+            f"linked worktree からは install できない: {root}\n"
+            "unit が worktree の絶対パスに固定され、worktree の掃除後に Restart のループになる。"
+            "本体のチェックアウトで実行する"
+        )
     write_env(root, repos)
     text = unit_text(root)
     target = unit_dir() / UNIT
