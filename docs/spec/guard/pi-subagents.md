@@ -156,6 +156,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 - **フッター**: `activity` が、動いている子が 3 件以下なら `🤖 explore 12s, review 40s`、それより多ければ件数
 - **やらないこと**: プロジェクト内の定義ファイルからの役割（`--no-approve` と衝突）、子から子（入れ子）
 - **worktree 隔離**: `guarded_task` の `isolation: "worktree"`（opt-in。単独の新規 `worker` のみ）。仕様は [CHG-0029](../../change/0029-worktree-isolation.md)。
+- **子の実行場所（`cwd`）**: `guarded_task` の新規と `tasks` の各要素に任意の `cwd`（絶対パス）。親（`ctx.cwd`）のリポジトリの `git worktree list --porcelain` に載る worktree（主・linked）と realpath が完全に一致するときだけ許可し、シンボリックリンク・`..`・`.git`・相対・存在しない・別リポジトリは理由つきで拒否する（fail closed）。`isolation` とは併用不可。子のサンドボックス・役割・環境変数は変えない。`cwd` つきの子が終わったとき、本体の `git status --porcelain` が起動前から変わっていれば、結果に `⚠ 本体の作業ツリーに…` の行（最大 5 件）を付ける（本体そのものを指定した場合と、git の失敗時は省く。起動は止めない）。worker は担当の worktree を `cwd` に指定して起動する。
 
 ### 子の文脈 (AGENTS.md) の抜粋 (CHG-0059)
 

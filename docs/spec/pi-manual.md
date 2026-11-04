@@ -236,8 +236,8 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 
 | 形 | 引数 |
 | --- | --- |
-| 新規 | `agent` `task`、任意で `keep` `background` `model` `effort` `todo` `isolation: "worktree"` |
-| 並列 | `tasks:[{agent, task, model?, effort?}]`（最大 12 件）。`background` だけ併用可 |
+| 新規 | `agent` `task`、任意で `keep` `background` `model` `effort` `todo` `isolation: "worktree"` `cwd` |
+| 並列 | `tasks:[{agent, task, model?, effort?, cwd?}]`（最大 12 件）。`background` だけ併用可 |
 | 続き | `jobId` `task` `background`（`keep` した子だけ） |
 | 状態・一覧 | `{jobId, status:true}` / `{list:true}` |
 | 追加指示 | `{jobId, steer:"…"}` |
@@ -246,6 +246,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 - `effort` は `minimal | low | medium | high | xhigh | max`。`off` は不可。
 - `todo` ツールが有効なとき、`explore` / `review` / `worker` の新規起動には `todo` の ID が必須。
 - `isolation:"worktree"` は新規の `worker` 1 件だけで、`keep` とは併用できない。
+- `cwd`（絶対パス）は子の実行場所。親のリポジトリの `git worktree list` に載る worktree と realpath が完全に一致するときだけ許可（`isolation` とは併用不可）。終了時に本体の `git status` が起動前から変わっていれば、結果に ⚠ の行が付く。
 - 同時に生かせる子は最大 6。1 往復の既定上限は 15 分で、`plan` だけ 30 分。
 - `/plan`（計画モード）の間は、読み取り専用の役割の子（`explore` / `review` / `plan`）だけ起動・続行できる。
 

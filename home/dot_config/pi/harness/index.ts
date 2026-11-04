@@ -1160,6 +1160,61 @@ function prepareIsolation(parentCwd: string, childArgs: string[]): IsolationPlan
 	}
 }
 
+// 子の実行場所 (`cwd`) の検証 (fail closed)。親のリポジトリの `git worktree list` に載る worktree と、realpath で完全に一致するものだけ許す。
+// 相対パス・`..`・`.git` の中・シンボリックリンク・存在しないパス・別のリポジトリは理由つきで拒否する。see docs/spec/guard/pi-subagents.md
+function resolveChildCwd(parentCwd: string, cwd: string): { cwd: string; main: string } | { error: string } {
+	const refuse = (why: string) => ({ error: `cwd refused: ${why}` });
+	if (!isAbsolute(cwd)) return refuse("絶対パスでない");
+	const segs = cwd.split(/[\\/]+/);
+	if (segs.includes("..") || segs.includes(".git")) return refuse("`..` か `.git` を含む");
+	let real: string;
+	try {
+		real = realpathSync(cwd);
+	} catch {
+		return refuse("存在しない");
+	}
+	if (real !== resolve(cwd)) return refuse("シンボリックリンクを含む (realpath と一致しない)");
+	const listed: string[] = [];
+	let main: string | null = null;
+	try {
+		main = findRepoRoot(parentCwd);
+		if (main === null) return refuse("親の作業場所が git リポジトリでない");
+		const r = runGit(["worktree", "list", "--porcelain"], { cwd: main });
+		if (r.status !== 0) return refuse("git worktree list に失敗した");
+		for (const line of String(r.stdout).split("\n")) {
+			if (!line.startsWith("worktree ")) continue;
+			try {
+				listed.push(realpathSync(line.slice("worktree ".length)));
+			} catch {
+				// 実体の無い登録は一致させない
+			}
+		}
+	} catch (e) {
+		return refuse(`git worktree list に失敗した: ${errMsg(e)}`);
+	}
+	if (!listed.includes(real)) return refuse("親のリポジトリの git worktree に登録されていない");
+	return { cwd: real, main };
+}
+
+// 本体 (親のリポジトリ) の `git status --porcelain`。失敗したら null (警告を省くだけで、子の起動は止めない)
+function mainStatus(main: string): string | null {
+	try {
+		const r = runGit(["status", "--porcelain"], { cwd: main });
+		return r.status === 0 ? String(r.stdout) : null;
+	} catch {
+		return null;
+	}
+}
+
+// 起動前に無かった行のファイル名 (git status --porcelain の 4 桁目以降)
+function mainStatusDelta(before: string, after: string): string[] {
+	const had = new Set(before.split("\n"));
+	return after
+		.split("\n")
+		.filter((l) => l !== "" && !had.has(l))
+		.map((l) => l.slice(3));
+}
+
 function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 	const names = Object.keys(agents);
 	// 計画モード (`plan` 拡張) が、動いている子に書き込みの役割があるかを知らせるための、読み取り専用の役割の一覧
@@ -1181,9 +1236,11 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 
 	// 子へ渡した文脈のモード (結果の見出しに出す)
 	const contextModes = new WeakMap<Job, string>();
+	// `cwd` を指定して起動した子の、起動前の本体の状態 (終了時に比べて警告する)
+	const mainBaselines = new WeakMap<Job, { main: string; status: string }>();
 	// 子を 1 つ起動する。枠は同期で確保する (並行する起動でも上限を超えない)
 	type Spawned = { job: Job; model: string } | { error: string; full?: boolean };
-	const spawnChild = (agentName: string, ctx: any, owner: { cwd: string; role: string }, modelOverride?: string, isolation?: boolean, effortOverride?: string): Spawned => {
+	const spawnChild = (agentName: string, ctx: any, owner: { cwd: string; role: string }, modelOverride?: string, isolation?: boolean, effortOverride?: string, cwdArg?: string): Spawned => {
 		const agent = agents[agentName];
 		if (!agent) throw new Error(`unknown agent: ${agentName}`);
 		// 子へ渡す文脈のモード: 環境変数 > [pi.child] context 。未知の値では子を起動せず、黙って抽出にも全文にもしない。子の役割が対象外 (commit など) なら常に inherit
@@ -1220,6 +1277,17 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			PI_HARNESS_ROLE: agent.profile,
 			PI_HARNESS_BYPASS: bypass && agent.inherit_bypass ? "1" : "",
 		};
+		if (cwdArg && isolation) return { error: "cwd refused: isolation と併用できない" };
+		let childCwd: string = ctx.cwd;
+		let baseline: { main: string; status: string } | null = null;
+		if (cwdArg) {
+			const v = resolveChildCwd(ctx.cwd, cwdArg);
+			if ("error" in v) return { error: v.error };
+			childCwd = v.cwd;
+			// 本体そのものを指定したときは、本体が変わるのは当然なので警告の対象外
+			const status = v.cwd === v.main ? null : mainStatus(v.main);
+			if (status !== null) baseline = { main: v.main, status };
+		}
 		const plan = isolation ? prepareIsolation(ctx.cwd, args) : null;
 		if (plan && "error" in plan) return { error: plan.error };
 		const abandon = () => {
@@ -1234,7 +1302,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			job = jobs.create(
 				plan
 					? { id: plan.id, agent: agentName, args: plan.args, cwd: plan.cwd, env: { ...env, ...plan.env }, owner, command: plan.command, finalize: plan.finalize }
-					: { agent: agentName, args, cwd: ctx.cwd, env, owner },
+					: { agent: agentName, args, cwd: childCwd, env, owner },
 			);
 		} catch (e) {
 			abandon();
@@ -1247,6 +1315,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		}
 		job.choiceLine = describeChoice(choice);
 		contextModes.set(job, contextMode);
+		if (baseline) mainBaselines.set(job, baseline);
 		return { job, model };
 	};
 
@@ -1288,6 +1357,10 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 						cond.noSection ? "- missing: the section that matches the conditions (heading with 守る条件)" : `- missing in the matching section: ${cond.missing.join(", ")}`,
 					]
 				: [];
+		// `cwd` を指定された子が終わったとき、本体の作業ツリーに起動前に無かった変更があれば警告する (git の失敗では警告を省く)
+		const base = mainBaselines.get(job);
+		const nowStatus = base ? mainStatus(base.main) : null;
+		const dirtied = base && nowStatus !== null && nowStatus !== base.status ? mainStatusDelta(base.status, nowStatus) : [];
 		const parts = [
 			`child ${job.agent}: ${label}${r.note ? ` (${r.note})` : ""} [${fmtStats(r.stats)}]`,
 			...(job.choiceLine ? [`- ${job.choiceLine}`] : []),
@@ -1303,6 +1376,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			...condLines,
 			...(r.status === "done" && r.answer ? [`- calls: ${summarizeCalls(r.toolCalls ?? [])}`] : []),
 			...isolationLines(job),
+			...(dirtied.length > 0 ? [`⚠ 本体の作業ツリーに、子の起動前に無かった変更が入っている: ${dirtied.slice(0, 5).join(", ")}`] : []),
 			...(alive ? [`- job: ${job.id} (idle; follow up with {jobId, task}, close with {jobId, close:true})`] : []),
 			...(r.answer ? ["", "answer:", r.answer] : [""]),
 		];
@@ -1473,10 +1547,11 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		description:
 			"Run a task in a child agent. The child is a separate pi process with the same guard, and cannot see this conversation, " +
 			"so put everything it needs into `task`. Forms (do not mix their fields):\n" +
-			"- new: {agent, task, keep?, background?, model?, effort?, todo?, isolation?}. The child stops when it finishes unless keep=true; then it stays idle and a jobId is returned. " +
+			"- new: {agent, task, keep?, background?, model?, effort?, todo?, isolation?, cwd?}. The child stops when it finishes unless keep=true; then it stays idle and a jobId is returned. " +
 			"background=true returns at once and notifies you on completion. model and effort: see the list below (set them only when the user asks; omit them to use the role default). todo is a todo id to update when the child finishes; it is required for explore / review / worker when the todo tool is active (add a todo item first). " +
-			"isolation: \"worktree\" runs the worker isolated in a git worktree (a single new worker task only; not with keep).\n" +
-			"- tasks: {tasks:[{agent, task, model?, effort?}, ...], background?}. Runs them in parallel (waiting for free slots) and returns every result.\n" +
+			"isolation: \"worktree\" runs the worker isolated in a git worktree (a single new worker task only; not with keep). " +
+			"cwd: absolute path the child runs in (use it to start a worker in its assigned git worktree). Accepted only when its realpath exactly matches a worktree of `git worktree list` of the parent's repository (main or linked); symlinks, `..`, `.git`, relative or missing paths and other repositories are refused; not with isolation. When a child started with cwd finishes, the result gets a warning line if the main working tree's `git status` changed since the start.\n" +
+			"- tasks: {tasks:[{agent, task, model?, effort?, cwd?}, ...], background?}. Runs them in parallel (waiting for free slots) and returns every result.\n" +
 			"- follow-up: {jobId, task, background?}. Sends another request to a kept child; it remembers the earlier conversation. One request at a time per job.\n" +
 			"- status: {jobId, status:true}, or list: {list:true}. State, elapsed time, last tool, calls and tokens of children.\n" +
 			"- steer: {jobId, steer:\"...\"}. Sends an extra instruction to a running child (delivered after its current turn).\n" +
@@ -1497,10 +1572,11 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				effort: Type.Optional(Type.Union([...EFFORTS, ""].map((e) => Type.Literal(e)), { description: "new task only: thinking level (only when the user asks). \"\" means unset" })),
 				todo: Type.Optional(Type.Number({ description: "new task only: a todo id to mark done (or annotate) when the child finishes" })),
 				isolation: Type.Optional(Type.Union([Type.Literal("worktree"), Type.Literal("")], { description: "new worker task only: \"worktree\" runs the worker isolated in a git worktree (not with keep)" })),
+				cwd: Type.Optional(Type.String({ description: "new task only: absolute path of a worktree listed by the parent repo's `git worktree list` (realpath must match exactly; symlinks, .., .git, relative or missing paths are refused; not with isolation). The child runs there. A warning line is added to the result if the main working tree changed meanwhile" })),
 				tasks: Type.Optional(
 					Type.Array(
 						Type.Object(
-							{ agent: Type.String(), task: Type.String(), model: Type.Optional(Type.String()), effort: Type.Optional(Type.Union([...EFFORTS, ""].map((e) => Type.Literal(e)))) },
+							{ agent: Type.String(), task: Type.String(), model: Type.Optional(Type.String()), effort: Type.Optional(Type.Union([...EFFORTS, ""].map((e) => Type.Literal(e)))), cwd: Type.Optional(Type.String()) },
 							{ additionalProperties: false },
 						),
 						{ description: `parallel tasks (up to ${MAX_BATCH}); do not combine with other fields except background` },
@@ -1573,7 +1649,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 							let sp: Spawned = { error: "", full: true };
 							// 空きが出るまで待つ (上限は維持する)
 							for (let tries = 0; tries < 6000 && "error" in sp && sp.full; tries++) {
-								sp = spawnChild(it.agent, ctx, owner, it.model, undefined, it.effort);
+								sp = spawnChild(it.agent, ctx, owner, it.model, undefined, it.effort, it.cwd);
 								if ("error" in sp && sp.full) await sleep(100);
 							}
 							// 依頼文は秘密を含みうるので、伏字化してから切る
@@ -1650,7 +1726,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				if (TODO_REQUIRED_AGENTS.has(input.agent) && input.todo === undefined && pi.getActiveTools().some((n) => n === "todo")) {
 					return text(`todo is required for ${input.agent}: add a todo item for this work and pass its id as \`todo\``, true);
 				}
-				const sp = spawnChild(input.agent, ctx, owner, input.model, input.isolation === "worktree", input.effort);
+				const sp = spawnChild(input.agent, ctx, owner, input.model, input.isolation === "worktree", input.effort, input.cwd);
 				if ("error" in sp) return text(sp.error, true);
 				job = sp.job;
 				message = input.task;
