@@ -414,6 +414,11 @@ RULES: tuple[Rule, ...] = (
     Rule("worktree の掃除", ("scripts/wt_clean.py",), ("test_wt_clean",)),
     Rule("マージ待ちの一覧", ("scripts/prs.py",), ("test_prs",)),
     Rule(
+        "オーケストレーションのプロファイル検出",
+        ("home/dot_claude/skills/feature-orchestration/scripts/*.py", "test/orch_fixtures.py"),
+        ("test_orch_profile",),
+    ),
+    Rule(
         "ステージの空ファイル検査", ("scripts/check_staged_drop.py",), ("test_check_staged_drop",)
     ),
     Rule("skill-lab のスキル同期", ("scripts/sync_skill_lab.py",), ("test_sync_skill_lab",)),
