@@ -347,6 +347,64 @@ def test_control_characters_in_the_message_are_made_visible(table):
     assert "\x1b" not in body and "a\\x1b[31mred" in body
 
 
+# --- merge commit の finish (-M / --merge-message) ---
+
+
+def test_merge_message_forms(table):
+    m = table["mergecommit"]
+    assert m["extract_short_file"] == {"kind": "file", "path": "msg.txt", "merge": True}
+    assert m["extract_short_eq"] == {"kind": "literal", "text": "docs:one", "merge": True}
+    assert m["extract_long_space"] == {"kind": "literal", "text": "a b", "merge": True}
+    assert m["extract_long_eq"] == {"kind": "file", "path": "msg.txt", "merge": True}
+    assert m["extract_other_subst"]["kind"] == "unresolved"
+    # --no-ff などのフラグは -M と取り違えない
+    assert m["extract_none"] is None
+    # 対象の枝名は、-M や他のフラグが後ろにあっても取り違えない
+    assert m["target"] == {"topic": "feature", "name": "x", "branch": "feature/x"}
+
+
+def test_merge_commit_finish_view_shows_the_message_and_pins_the_file(table):
+    v = table["mergecommit"]["view_file"]
+    assert v["kind"] == "confirm"
+    body = v["body"]
+    assert body.startswith("feature/x → develop (merge commit)\n")
+    assert "squash" not in body.split("実行:")[0]
+    assert "merge メッセージ (msg.txt):\n  docs: 件名\n\n  本文の 1 行目\n" in body
+    assert body.rstrip().endswith("--keepremote --no-fetch --no-push --notag")
+    assert "\n実行:\ngit flow feature finish x --no-ff --no-squash -M " in body
+    assert v["bodyFile"] == {"path": "msg.txt", "text": "docs: 件名\n\n本文の 1 行目\n\n"}
+
+
+def test_merge_commit_finish_view_other_forms(table):
+    m = table["mergecommit"]
+    assert "merge メッセージ:\n  abc\n" in m["view_eq"]["body"]
+    assert m["view_eq"]["body"].startswith("feature/x → develop (merge commit)\n")
+    assert "merge メッセージ:\n  docs: 件名\n\n  本文\n" in m["view_literal"]["body"]
+    # 読めないファイル・解けない展開は、squash と同じ扱い (見せられない旨を出し、ピン留めはしない)
+    missing = m["view_missing"]
+    assert (
+        "merge メッセージ: nope.txt を読めない。確認画面では見せられない (実行時に読まれる)"
+        in missing["body"]
+    )
+    assert "bodyFile" not in missing
+    assert "merge メッセージ: コマンド置換や変数を含むので" in m["view_unresolved"]["body"]
+    assert "bodyFile" not in m["view_unresolved"]
+    # 制御文字・ANSI は可視化
+    ansi = m["view_ansi"]["body"]
+    assert "\x1b" not in ansi and "a\\x1b[31mred" in ansi
+    # --squash と -M の矛盾は、警告を出す (squash の表示のまま)
+    both = m["view_both"]["body"]
+    assert both.startswith("feature/x → develop (squash)\n") and "⚠ --squash と -M" in both
+
+
+def test_squash_finish_view_is_unchanged_by_merge_support(table):
+    f = table["finish"]
+    assert f["view_file"]["body"].startswith("feature/x → develop (squash)\n")
+    assert "merge" not in f["view_file"]["body"].split("実行:")[0]
+    assert f["view_no_squash"]["body"].startswith("feature/x → develop\n")
+    assert "(merge commit)" not in f["view_no_squash"]["body"]
+
+
 # --- 統合の衝突の事前検査 (git merge-tree) と、統合先の進み ---
 
 

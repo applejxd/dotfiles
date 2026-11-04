@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 const mod = await import(pathToFileURL(resolve(ROOT, "home", "dot_config", "pi", "harness", "confirm-view.ts")).href);
-const { sanitizeForDisplay, shellWords, parseGh, buildMustConfirmView, classifyConfirm, outcomeReason, confirmTimeoutSeconds, parseFinishTarget, extractSquashMessage, parseNumstat, parseMergeTree } = mod;
+const { sanitizeForDisplay, shellWords, parseGh, buildMustConfirmView, classifyConfirm, outcomeReason, confirmTimeoutSeconds, parseFinishTarget, extractSquashMessage, extractMergeMessage, parseNumstat, parseMergeTree } = mod;
 
 const files = { "body.md": "本文の 1 行目\n2 行目", "big.md": "x".repeat(9000) };
 const reader = (p) => (p in files ? { ok: true, text: files[p] } : { ok: false, why: `${p} を読めない` });
@@ -120,6 +120,24 @@ out.finish = {
 	view_not_finish: finishView("git merge x"),
 	view_other_reason: buildMustConfirmView('git flow feature finish x --squash-message="abc"', "確認が必要な外部への送信・公開 (bypass でも確認する): x", finishReader, facts),
 	view_ansi: finishView('git flow feature finish x --squash-message="a\x1b[31mred"'),
+};
+// merge commit の finish (-M / --merge-message)
+const NOFF = "--no-ff --no-squash";
+out.mergecommit = {
+	extract_short_file: extractMergeMessage('git flow feature finish x -M "$(cat msg.txt)" --keepremote'),
+	extract_short_eq: extractMergeMessage("git flow feature finish x -M=docs:one"),
+	extract_long_space: extractMergeMessage("git flow feature finish x --merge-message 'a b'"),
+	extract_long_eq: extractMergeMessage('git flow feature finish x --merge-message="$(cat msg.txt)"'),
+	extract_other_subst: extractMergeMessage('git flow feature finish x -M "$(git log -1)"'),
+	extract_none: extractMergeMessage(`git flow feature finish x ${NOFF} --keepremote`),
+	target: parseFinishTarget(`git flow feature finish x ${NOFF} -M abc`),
+	view_file: finishView(`git flow feature finish x ${NOFF} -M "$(cat msg.txt)" --keepremote --no-fetch --no-push --notag`),
+	view_eq: finishView("git flow feature finish x --merge-message=abc"),
+	view_literal: finishView("git flow feature finish x -M 'docs: 件名\n\n本文'"),
+	view_missing: finishView('git flow feature finish x -M "$(cat nope.txt)"'),
+	view_unresolved: finishView('git flow feature finish x -M "$(git log -1)"'),
+	view_ansi: finishView('git flow feature finish x -M "a\x1b[31mred"'),
+	view_both: finishView('git flow feature finish x --squash -M "abc"'),
 };
 // 統合の衝突の事前検査 (merge-tree) と、統合先が分岐後に進んだ件数
 const OID = "a".repeat(40);
