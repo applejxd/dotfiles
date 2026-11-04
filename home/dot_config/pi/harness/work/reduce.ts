@@ -101,7 +101,7 @@ export const resolveEdge = <E extends { type: string; node?: string; data: Recor
 	if (ev.type !== "edge.added") return ev;
 	const { from, to } = ev.data as { from: string; to: string };
 	if (!wouldCycle(state, from, to)) return ev;
-	return { ...ev, type: "edge.rejected", data: { from, to, reason: "cycle", ...(ev.data.source ? { source: ev.data.source } : {}) } };
+	return { ...ev, type: "edge.rejected", data: { from, to, reason: "cycle" } };
 };
 
 const addTo = (a: Money, b: Money, sign = 1): void => {
@@ -202,10 +202,10 @@ const apply = (d: Draft, ev: LedgerEvent): void => {
 	const data = ev.data as Record<string, any>;
 
 	// I8: 保持者が記された追記は、その goal の lease の保持者でなければ拒否する (記さない追記は store の責任)
-	if (data.holder !== undefined && !ev.type.startsWith("lease.")) {
+	if (ev.holder !== undefined && !ev.type.startsWith("lease.")) {
 		const gid = eventGoal(d, ev);
 		const owner = gid ? d.need(gid).owner : undefined;
-		if (gid && owner?.holder !== data.holder) throw new ReduceError(`I8: ${String(data.holder)} は lease の保持者でない (${owner?.holder ?? "なし"})`);
+		if (gid && owner?.holder !== ev.holder) throw new ReduceError(`I8: ${String(ev.holder)} は lease の保持者でない (${owner?.holder ?? "なし"})`);
 	}
 
 	switch (ev.type) {
@@ -379,7 +379,7 @@ const apply = (d: Draft, ev: LedgerEvent): void => {
 			const e = d.edit(id);
 			e.waits = e.waits.filter((x) => x.ref !== data.ref);
 			e.state = r.to as never;
-			d.resolutions.push({ seq: ev.seq, node: id, ref: data.ref, on: w.on, by: data.by, source: String(data.source ?? "") });
+			d.resolutions.push({ seq: ev.seq, node: id, ref: data.ref, on: w.on, by: data.by, source: String(ev.source ?? "") });
 			return;
 		}
 		case "note.appended": {

@@ -42,7 +42,7 @@
 - `edge.added` の `{from, to}` は「from が to に依存する」。循環なら適用せず `rejections` に残す（`resolveEdge` で追記前に `edge.rejected` へ変換できる）
 - `skipped` は依存を満たしたものとして扱う（`cancelled` は満たさない）
 - 予算: `reserved` は「使用済み＋未使用の予約」。run の終了で未使用分を階層から戻す。予算を超える予約は reducer が拒否する。見積りを超えた使用は予約も同額増やし、超過は I3 が検出する
-- 出所は `data.source`、lease の保持者は任意の `data.holder`（`types.ts` に専用欄が無いため）
+- 出所と lease の保持者は `LedgerEvent` の専用欄 `source`・`holder`（任意）。`makeEvent` が引数から設定し、`data` の中の `source`・`holder` は捨てる（lease.* のペイロードの `holder` は除く）。`source` 欄が無いイベントは system 扱い（利用者専用は拒否）。I8 は `holder` 欄で検査する
 - `run.ended` の二重配送は例外で拒否する。証拠の id（`check:<seq>`）に seq が入るので、合流性は seq を除いて成り立つ
 - `globsMayOverlap` は「ディレクトリへの書き込みは配下に及ぶ」と「スラッシュ無しはどの階層にも合致」を保守側に取る（`*.ts` と `*.md` も重なる扱い）
 - `ready` の順序: 臨界路の長さ（降順）→ bundle → 費用の昇順 → id。実行中の `writes` と重なる task は出さない

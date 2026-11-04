@@ -20,8 +20,8 @@ const [ev, tr, rd, inv, pj, gl] = await Promise.all(["events.ts", "transitions.t
 const USER_ONLY = new Set(["plan.approved", "budget.adjusted", "goal.resumed"]);
 const Z = { usd: 0, tokens: 0, ms: 0 };
 const mkEvent = (e, seq) => {
-	const source = e.source ?? (USER_ONLY.has(e.type) || (e.type === "wait.resolved" && e.data?.by === "user") ? "user" : "system");
-	return { ts: seq * 1000, seq: e.seq ?? seq, type: e.type, ...(e.node !== undefined ? { node: e.node } : {}), data: { ...(e.data ?? {}), source }, ...(e.aux ? { aux: true } : {}) };
+	const source = e.noSource ? undefined : (e.source ?? (USER_ONLY.has(e.type) || (e.type === "wait.resolved" && e.data?.by === "user") ? "user" : "system"));
+	return { ts: seq * 1000, seq: e.seq ?? seq, type: e.type, ...(e.node !== undefined ? { node: e.node } : {}), data: { ...(e.data ?? {}) }, ...(source !== undefined ? { source } : {}), ...(e.holder !== undefined ? { holder: e.holder } : {}), ...(e.aux ? { aux: true } : {}) };
 };
 
 const plain = (s) => ({ ...rd.serialize(s), nodes: Object.fromEntries(s.nodes) });
@@ -261,7 +261,7 @@ const gen = (state, R, c) => {
 			if (!nodes.length) return null;
 			const n = pick(nodes);
 			const holder = R() < 0.2 ? { holder: pick(["A", "B"]) } : {};
-			return { type: "note.appended", node: n.id, data: { by: pick(["user", "llm", "run:r1"]), text: R() < 0.03 ? "x".repeat(301) : "メモ" + c.t, ...holder } };
+			return { type: "note.appended", node: n.id, data: { by: pick(["user", "llm", "run:r1"]), text: R() < 0.03 ? "x".repeat(301) : "メモ" + c.t }, ...holder };
 		}
 		case "b": {
 			const t = [...goals, ...tasks.filter((n) => n.kind === "task")];

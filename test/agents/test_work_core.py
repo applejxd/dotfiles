@@ -1049,8 +1049,10 @@ def test_i8_lease_shape():
 
 def test_i8_holder_mismatch_rejected_by_reducer():
     pre = [*goal(), E("lease.acquired", "G", holder="A", pid=1), task("a")]
-    assert "I8" in rejected([*pre, E("note.appended", "a", by="llm", text="x", holder="B")])
-    ok([*pre, E("note.appended", "a", by="llm", text="x", holder="A")])
+    assert "I8" in rejected([*pre, {**E("note.appended", "a", by="llm", text="x"), "holder": "B"}])
+    ok([*pre, {**E("note.appended", "a", by="llm", text="x"), "holder": "A"}])
+    # data の中の holder は I8 の対象でない (専用欄だけを見る)
+    ok([*pre, E("note.appended", "a", by="llm", text="x", holder="B")])
     assert "I8" in rejected([*pre, E("lease.acquired", "G", holder="B", pid=2)])
     assert "I8" in rejected([*pre, E("lease.released", "G", holder="B")])
 
@@ -1357,11 +1359,70 @@ def test_make_event_enforces_source():
     r = call("makeEvent", "plan.approved", "G", {"hash": "h"}, "model")
     assert "利用者専用" in r["error"]
     r = call("makeEvent", "plan.approved", "G", {"hash": "h"}, "user")
-    assert r["ok"]["data"] == {"hash": "h", "source": "user"}
+    assert r["ok"]["data"] == {"hash": "h"} and r["ok"]["source"] == "user"
     r = call(
         "makeEvent", "note.appended", "G", {"by": "llm", "text": "x"}, "model", {"holder": "A"}
     )
-    assert r["ok"]["data"]["holder"] == "A" and r["ok"]["data"]["source"] == "model"
+    assert r["ok"]["holder"] == "A" and r["ok"]["source"] == "model"
+    assert "holder" not in r["ok"]["data"] and "source" not in r["ok"]["data"]
+
+
+def test_make_event_drops_source_and_holder_in_data():
+    # data の中の偽装は捨てられ、model 出所の plan.approved は拒否される
+    r = call("makeEvent", "plan.approved", "G", {"hash": "h", "source": "user"}, "model")
+    assert "利用者専用" in r["error"]
+    r = call(
+        "makeEvent",
+        "note.appended",
+        "G",
+        {"by": "llm", "text": "x", "holder": "EVIL"},
+        "model",
+        {"holder": "A"},
+    )
+    assert r["ok"]["holder"] == "A" and "holder" not in r["ok"]["data"]
+    r = call(
+        "makeEvent", "note.appended", "G", {"by": "llm", "text": "x", "holder": "EVIL"}, "model"
+    )
+    assert "holder" not in r["ok"] and "holder" not in r["ok"]["data"]
+    # lease.* の data.holder はペイロードなので残る
+    r = call("makeEvent", "lease.acquired", "G", {"holder": "A", "pid": 1}, "system")
+    assert r["ok"]["data"]["holder"] == "A"
+
+
+def test_data_source_cannot_forge_user_only_event():
+    pre = [*goal(approve=False), task("a")]
+    forged = {
+        "type": "plan.approved",
+        "node": "G",
+        "data": {"hash": "h", "source": "user"},
+        "source": "model",
+    }
+    assert "利用者専用" in rejected([*pre, forged])
+
+
+def test_event_without_source_is_treated_as_system():
+    # source 欄が無いイベントは system 扱い: 利用者専用は拒否、それ以外は通る
+    pre = [*goal(approve=False), task("a")]
+    ev = {
+        "type": "plan.approved",
+        "node": "G",
+        "data": {"hash": "h", "source": "user"},
+        "noSource": True,
+    }
+    assert "利用者専用" in rejected([*pre, ev])
+    ok([*pre, {**E("note.appended", "a", by="llm", text="x"), "noSource": True}])
+
+
+def test_edge_rejected_keeps_source():
+    base = ok([*goal(), task("a"), task("b", after=["a"])])
+    ev = {"type": "edge.added", "node": "a", "data": {"from": "a", "to": "b"}, "source": "model"}
+    r = call("resolveEdge", ev, state=ser(base))
+    assert r["ok"]["type"] == "edge.rejected" and r["ok"]["source"] == "model"
+    assert "source" not in r["ok"]["data"]
+    # data の中の source は引き継がれない
+    ev = {"type": "edge.added", "node": "a", "data": {"from": "a", "to": "b", "source": "user"}}
+    r = call("resolveEdge", ev, state=ser(base))
+    assert r["ok"]["type"] == "edge.rejected" and "source" not in r["ok"]["data"]
 
 
 @pytest.mark.parametrize(
