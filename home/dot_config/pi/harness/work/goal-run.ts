@@ -13,12 +13,27 @@ import type { LedgerState } from "./reduce.ts";
 import { workEnabled } from "./register.ts";
 import { createRuntime } from "./runtime.ts";
 import { clipCells } from "./text-width.ts";
+import { sanitizeUntrusted } from "./digest.ts";
 import type { Runtime, RuntimeOptions } from "./runtime.ts";
 import type { EventType } from "./types.ts";
 
 export type GoalFacts = ReturnType<typeof settleFactsOfGoal>;
 
+export type Redact = (s: string) => string;
+
+/** 伏字化が注入されないときの最低限 (代表的な秘密の形)。本番は index.ts が redact.ts の redactText を渡す */
+const SECRET_RES = [
+	/sk-[A-Za-z0-9_-]{16,}/g,
+	/gh[pousr]_[A-Za-z0-9]{20,}/g,
+	/AKIA[0-9A-Z]{16}/g,
+	/-----BEGIN [A-Z ]*PRIVATE KEY-----/g,
+	/Bearer\s+[A-Za-z0-9._~+/=-]{16,}/gi,
+];
+const defaultRedact: Redact = (s) => SECRET_RES.reduce((t, re) => t.replace(re, () => "[伏字]"), s);
+
 export interface RegisterGoalOptions {
+	/** 確認画面に出す題の伏字化 (既定は最低限の形)。index.ts が redactText を渡す */
+	redact?: Redact;
 	child: boolean;
 	env?: Record<string, string | undefined>;
 	/** 台帳の runtime の取得 (試験用)。省略時は register.ts が公開する globalThis.__piWorkRuntime (PI_WORK_TOOL 有効時) か、自分で開く */
@@ -41,12 +56,24 @@ export const goalEnabled = (env: Record<string, string | undefined>, child: bool
 
 const LIVE = ["draft", "planned", "active", "paused"];
 
-/** 確認画面の本文。再承認は未承認の task の title (最大 10 件) と総件数を出す */
-export const approveBody = (goalTitle: string, a?: { total: number; titles: string[] }): string => {
-	if (!a) return `目標「${goalTitle}」の計画を承認しますか`;
-	const lines = a.titles.map((t) => `- ${clipCells(t.replace(/\s+/g, " "), 60)}`);
+/** 確認画面の本文。再承認は未承認の task の id と title (最大 10 件) と総件数を出す。
+ *  題は 伏字化 → sanitizeUntrusted (ANSI・制御・双方向制御を除去/可視化) → 一行化 → 結合文字の連続を制限 → clipCells の順で安全にする */
+export const approveBody = (goalTitle: string, a?: { total: number; titles: string[]; ids?: string[] }, redact: Redact = defaultRedact): string => {
+	const safe = (s: string, n: number): string => {
+		let t = String(s ?? "");
+		try {
+			t = redact(t);
+		} catch {
+			t = defaultRedact(t);
+		}
+		t = sanitizeUntrusted(defaultRedact(t)).replace(/\s+/g, " ").trim();
+		t = t.replace(/(\p{M}{2})\p{M}+/gu, "$1");
+		return clipCells(t, n);
+	};
+	if (!a) return `目標「${safe(goalTitle, 60)}」の計画を承認しますか`;
+	const lines = a.titles.map((t, i) => `- ${a.ids?.[i] !== undefined ? `[${safe(a.ids[i]!, 24)}] ` : ""}${safe(t, 60)}`);
 	const more = a.total > a.titles.length ? `\n… ほか ${a.total - a.titles.length} 件` : "";
-	return `目標「${clipCells(goalTitle, 60)}」に、承認後に足された task が ${a.total} 件あります。承認しますか\n${lines.join("\n")}${more}`;
+	return `目標「${safe(goalTitle, 60)}」に、承認後に足された task が ${a.total} 件あります。承認しますか\n${lines.join("\n")}${more}`;
 };
 const currentGoal = (s: LedgerState) => {
 	const id = s.goals[s.goals.length - 1];
@@ -148,10 +175,13 @@ export function registerGoal(pi: any, opts: RegisterGoalOptions): GoalHandle | n
 		const res = goalCommandToEvents({ kind: "approve" }, r.state(), Date.now());
 		if (!res.ok) return res.error ?? "承認待ちの計画はありません";
 		if (ctx?.hasUI && typeof ctx.ui.confirm === "function") {
-			const ok = await ctx.ui.confirm(res.approval ? "task の再承認" : "計画の承認", approveBody(g.title, res.approval));
+			const ok = await ctx.ui.confirm(res.approval ? "task の再承認" : "計画の承認", approveBody(g.title, res.approval, opts.redact));
 			if (!ok) return "承認を取りやめました";
 		}
 		const s = await r.submit(res.events);
+		if (!s.ok && res.approval && String(s.error ?? "").includes("承認の対象が確認後に変わった")) {
+			return "拒否: 確認後に対象が変わりました。もう一度 /goal approve してください";
+		}
 		return s.ok ? (res.approval ? `計画を承認しました (再承認: task ${res.approval.total} 件)` : "計画を承認しました") : `拒否: ${s.error ?? "不明"}`;
 	};
 

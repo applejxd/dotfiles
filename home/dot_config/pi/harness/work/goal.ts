@@ -27,7 +27,7 @@ export interface GoalResult {
 	/** draft のメモ (台帳には書かない。LLM に下書きさせる配線が使う) */
 	draft?: string;
 	/** approve のとき、承認の対象 (確認画面に出す) */
-	approval?: { total: number; titles: string[] };
+	approval?: { total: number; titles: string[]; ids: string[] };
 }
 
 /** 台帳に載らない実行中の値 (resume で 0 に戻るもの・停止の理由)。配線が持ち、導出に重ねる */
@@ -49,17 +49,20 @@ export interface GoalApproveCommand {
 	kind: "approve";
 }
 
-/** active / paused の goal の、まだ承認されていない非終端の task (承認後に足されたもの)。title は最大 10 件、total は総件数 */
-export function pendingApproval(state: LedgerState): { total: number; titles: string[] } {
+/** active / paused の goal の、まだ承認されていない非終端の task (承認後に足されたもの)。title は最大 10 件、total は総件数。
+ *  ids は全件の id (承認イベントの approvalIds となり、reducer が適用時点の集合と照合する)。titles[i] は ids[i] の題 */
+export function pendingApproval(state: LedgerState): { total: number; titles: string[]; ids: string[] } {
 	const cur = currentGoal(state);
-	if (!cur) return { total: 0, titles: [] };
+	if (!cur) return { total: 0, titles: [], ids: [] };
 	const out: string[] = [];
+	const ids: string[] = [];
 	for (const t of state.nodes.values()) {
 		if (!isTaskLike(t) || rootGoalId(state.nodes, t.id) !== cur.id) continue;
 		if (t.state === "done" || t.state === "cancelled" || t.state === "skipped" || t.approved === true) continue;
 		out.push(t.title);
+		ids.push(t.id);
 	}
-	return { total: out.length, titles: out.slice(0, 10) };
+	return { total: out.length, titles: out.slice(0, 10), ids };
 }
 
 const hashOf = (s: string): string => {
@@ -151,7 +154,7 @@ function convert(cmd: GoalCommand | GoalApproveCommand, state: LedgerState, now:
 			// active / paused: 承認後に足された task の再承認 (goal の状態は変わらない)
 			const p = pendingApproval(state);
 			if (p.total === 0 || typeof hash !== "string") return fail("承認待ちの計画はありません");
-			return { ok: true, events: [makeEvent("plan.approved", cur.id, { hash }, U)], approval: p };
+			return { ok: true, events: [makeEvent("plan.approved", cur.id, { hash, approvalIds: p.ids }, U)], approval: p };
 		}
 		case "status": {
 			const g = goalStateOf(state);

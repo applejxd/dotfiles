@@ -262,7 +262,12 @@ const rawChecks = ({ events }) => {
 		}
 	}
 	const id = s.goals[s.goals.length - 1];
-	return { steps, goal: gl.goalStateOf(s), node: id ? s.nodes.get(id) : null };
+	return {
+		steps,
+		goal: gl.goalStateOf(s),
+		node: id ? s.nodes.get(id) : null,
+		tasks: [...s.nodes.values()].filter((n) => n.kind === "task").map((n) => ({ id: n.id, state: n.state, approved: n.approved === true })),
+	};
 };
 
 const input = JSON.parse(await new Promise((res) => {

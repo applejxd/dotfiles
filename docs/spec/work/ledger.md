@@ -53,6 +53,7 @@
 - `approved` の有無を見るのはスケジューラの選別（`adapt.ts` の `schedStateOf`・`readyOf`）だけ。表示用の `project.ready` と、モデルが `work set` で自分で進める操作は変えない
 - 再承認: active・paused の goal も利用者の `plan.approved` を受ける（goal の状態は変わらない自己遷移）。reducer が、その時点の非終端の task すべてに `approved` を立てる。承認の対象（`approved` の無い非終端の task）が 0 件なら拒否する（空の承認を作らない）。モデル出所は従来どおり拒否（I10）
 - 経路は `/goal approve`（利用者の確認画面が、承認の対象の title〔最大 10 件〕と総件数を出す）。承認の前なら計画へ入れるか、モデル自身が `set` で進めるのも従来どおり
+- 再承認の対象の結び付け: `plan.approved` の任意の `approvalIds`（確認画面に出した未承認 task の ID 集合）があれば、reducer は適用時点の未承認の非終端 task の ID 集合と照合し、一致しなければ `ReduceError`（`approved` を立てない）。無い旧イベントは従来どおり（再生互換）
 - 再承認の hash は goal の `planHash`（承認の時点の計画）を使う。`plan.proposed` は active では受けないまま
 
 ## 接続と統合試験

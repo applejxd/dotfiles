@@ -27,7 +27,7 @@ export interface Payloads {
 	/** node = goal。hash は計画の内容の hash */
 	"plan.proposed": { hash: string };
 	/** node = goal。利用者専用。hash は直近の plan.proposed と一致しなければならない */
-	"plan.approved": { hash: string };
+	"plan.approved": { hash: string; approvalIds?: string[] };
 	/** node = 新しいノードの id */
 	"node.added": { node: NodeInit };
 	/** node = from (依存する側)。from.after に to を足す。循環なら edge.rejected になる */
@@ -117,7 +117,11 @@ export const validatePayload = (type: EventType, d: Record<string, unknown>): st
 			return null;
 		case "plan.proposed":
 		case "plan.approved":
-			return isStr(d.hash) ? null : "hash が必要";
+			if (!isStr(d.hash)) return "hash が必要";
+			if (d.approvalIds !== undefined && !(Array.isArray(d.approvalIds) && d.approvalIds.every((x) => typeof x === "string"))) {
+				return "approvalIds は文字列の配列";
+			}
+			return null;
 		case "node.added": {
 			const n = d.node;
 			if (!isObj(n)) return "node が必要";

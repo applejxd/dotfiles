@@ -866,7 +866,7 @@ export default async function (pi: ExtensionAPI) {
 	registerJournal(pi, { child: CHILD });
 	// 作業台帳のツール work・/work・パネル (既定は無効。PI_WORK_TOOL=1 のときだけ。PI_WORK=0 で一括無効)
 	registerWork(pi, { child: CHILD });
-	registerGoal(pi, { child: CHILD }); // 旗 PI_WORK_GOAL=1 のときだけ。see docs/spec/work/goal-run.md
+	registerGoal(pi, { child: CHILD, redact: redactText }); // 旗 PI_WORK_GOAL=1 のときだけ。see docs/spec/work/goal-run.md
 
 	const agents: Record<string, any> = rules.agents ?? {};
 	if (!CHILD && supportsChildTasks() && roleTools.includes("task") && Object.keys(agents).length > 0) registerTask(pi, agents);

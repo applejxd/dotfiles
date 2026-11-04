@@ -601,3 +601,223 @@ def test_reapprove_confirm_clips_wide_title(tmp_path):
     out = run(tmp_path, [START, goal("作業"), add_task("あ" * 100), goal("approve")], env=BOTH)
     line = next(x for x in out["confirms"][0]["body"].split("\n") if x.startswith("- "))
     assert len(line) < 70
+
+
+# ── 確認の最中に対象が変わったとき (approvalIds) ──
+def task_b(title="確認中に足す"):
+    return {"op": "add", "title": title}
+
+
+def test_task_added_during_confirm_is_not_approved(tmp_path):
+    out = run(
+        tmp_path,
+        [START, goal("作業"), add_task("確認した"), goal("approve", during=[task_b()])],
+        env=BOTH,
+    )
+    st = task_states(out)
+    assert st["確認中に足す"][1] is False
+    assert st["確認した"][1] is False  # 承認全体を拒否する (確認した A も承認しない)
+
+
+def test_changed_target_notifies_rejection_and_not_success(tmp_path):
+    out = run(
+        tmp_path,
+        [START, goal("作業"), add_task("確認した"), goal("approve", during=[task_b()])],
+        env=BOTH,
+    )
+    last_msg = msgs(out)[-1]
+    assert "確認後に対象が変わりました" in last_msg and "/goal approve" in last_msg
+    assert not any("再承認: task" in m for m in msgs(out))
+    assert next(n for n in out["notices"] if "確認後" in n["message"])["level"] == "warning"
+
+
+def test_confirm_shows_only_the_old_target(tmp_path):
+    out = run(
+        tmp_path,
+        [START, goal("作業"), add_task("確認した"), goal("approve", during=[task_b()])],
+        env=BOTH,
+    )
+    (c,) = out["confirms"]
+    assert "1 件" in c["body"] and "確認中に足す" not in c["body"]
+
+
+def test_reapprove_after_change_succeeds_with_both(tmp_path):
+    out = run(
+        tmp_path,
+        [
+            START,
+            goal("作業"),
+            add_task("確認した"),
+            goal("approve", during=[task_b()]),
+            goal("approve"),
+        ],
+        env=BOTH,
+    )
+    st = task_states(out)
+    assert st["確認した"][1] is True and st["確認中に足す"][1] is True
+    assert "2 件" in out["confirms"][-1]["body"]
+    assert "再承認: task 2 件" in msgs(out)[-1]
+
+
+def test_unchanged_target_is_approved_as_before(tmp_path):
+    out = run(
+        tmp_path, [START, goal("作業"), add_task("確認した"), goal("approve", during=[])], env=BOTH
+    )
+    assert task_states(out)["確認した"][1] is True
+    assert "再承認: task 1 件" in msgs(out)[-1]
+
+
+def test_several_tasks_added_during_confirm_none_approved(tmp_path):
+    out = run(
+        tmp_path,
+        [
+            START,
+            goal("作業"),
+            add_task("A"),
+            goal("approve", during=[task_b("B"), task_b("C")]),
+        ],
+        env=BOTH,
+    )
+    assert all(v[1] is False for v in task_states(out).values())
+
+
+def test_change_during_confirm_keeps_goal_state(tmp_path):
+    out = run(
+        tmp_path,
+        [START, goal("作業"), add_task("A"), goal("approve", during=[task_b()])],
+        env=BOTH,
+    )
+    assert last(out)["state"] == "active"
+
+
+def test_declined_with_change_reports_declined(tmp_path):
+    out = run(
+        tmp_path,
+        [START, goal("作業"), add_task("A"), goal("approve", during=[task_b()], confirm=False)],
+        env=BOTH,
+    )
+    assert "取りやめ" in msgs(out)[-1]
+
+
+def test_first_approval_ignores_tasks_added_during_confirm(tmp_path):
+    # 計画の承認 (planned) は従来どおり。approvalIds は付かず、拒否されない
+    out = run(tmp_path, [START, PLAN, goal("approve", during=[task_b()])], env=BOTH)
+    assert last(out)["state"] == "active"
+    assert "計画を承認しました" in msgs(out)[-1]
+
+
+def test_model_cannot_approve_with_ids(tmp_path):
+    steps = [
+        START,
+        goal("作業"),
+        add_task("A"),
+        {"model": [{"type": "plan.approved", "data": {"hash": "x", "approvalIds": []}}]},
+    ]
+    out = run(tmp_path, steps, env=BOTH)
+    assert out["results"][-1]["model"][0]["ok"] is False
+    assert task_states(out)["A"][1] is False
+
+
+def test_approval_persists_and_replays(tmp_path):
+    run(tmp_path, [START, goal("作業"), add_task("A"), goal("approve")], env=BOTH)
+    out = run(tmp_path, [START, {"tool": {"op": "add", "title": "B"}}], env=BOTH)
+    st = task_states(out)
+    assert st["A"][1] is True and st["B"][1] is False
+
+
+def test_persisted_rejection_leaves_nothing_approved(tmp_path):
+    run(
+        tmp_path, [START, goal("作業"), add_task("A"), goal("approve", during=[task_b()])], env=BOTH
+    )
+    out = run(tmp_path, [START], env=BOTH)
+    assert all(v[1] is False for v in task_states(out).values())
+
+
+# ── 確認画面の題の安全化・伏字化 ──
+def node_added(tid, title):
+    node = {"kind": "task", "parent": None, "title": title, "writes": [], "after": []}
+    return {"type": "node.added", "node": tid, "data": {"node": node}}
+
+
+def body_for(tmp_path, titles, **kw):
+    steps = [START, goal("作業")]
+    for t in titles:
+        steps.append({"tool": {"op": "add", "title": t}})
+    steps.append(goal("approve"))
+    out = run(tmp_path, steps, env=BOTH, **kw)
+    return out["confirms"][0]["body"], out
+
+
+SECRET = "sk-" + "A" * 24
+HOSTILE = [
+    "c1\x85\x9b31mend",
+    "bidi\u202eevil\u2066x",
+    "zero\u200bwidth\ufeff",
+    "z" + "\u0301" * 40 + "end",
+    f"key {SECRET} end",
+]
+
+
+@pytest.mark.parametrize("title", HOSTILE)
+def test_body_has_no_raw_control_or_secret(tmp_path, title):
+    body, out = body_for(tmp_path, [title])
+    if not out["confirms"]:  # work が題を拒否した場合も、画面に出ない
+        return
+    assert not any(ch in body for ch in "\x85\x9b\u202e\u2066\u200b\ufeff\x1b")
+    assert SECRET not in body
+    assert "\u0301" * 3 not in body
+
+
+def test_secret_title_is_redacted_but_task_is_listed(tmp_path):
+    body, _ = body_for(tmp_path, [f"deploy {SECRET}"])
+    assert "[伏字]" in body and "deploy" in body and "1 件" in body
+
+
+def test_body_shows_task_ids(tmp_path):
+    body, out = body_for(tmp_path, ["一つ目", "二つ目"])
+    ids = [t for t in out["results"][-2]["snap"]["tasks"]]
+    assert len(ids) == 2
+    assert body.count("- [") == 2
+
+
+def test_body_keeps_count_and_more_with_hostile_titles(tmp_path):
+    titles = [f"タスク{i:02d} {SECRET}" for i in range(12)]
+    body, _ = body_for(tmp_path, titles)
+    assert "12 件" in body and "ほか 2 件" in body
+    assert SECRET not in body and body.count("\n- ") == 10
+
+
+def test_injected_redactor_is_applied(tmp_path):
+    body, _ = body_for(tmp_path, ["社外秘ワード入り"], redact="社外秘ワード")
+    assert "[R]" in body and "社外秘ワード" not in body
+
+
+def test_default_redactor_still_applies_with_injected_one(tmp_path):
+    body, _ = body_for(tmp_path, [f"x {SECRET}"], redact="x")
+    assert SECRET not in body
+
+
+def test_model_added_raw_ansi_title_is_sanitized(tmp_path):
+    # work ツールを通らず台帳へ直接足された題 (ESC・CSI) も画面に生で残らない
+    ev = node_added("t9", "ansi\x1b[31mred\x1b[0m \x9b2J")
+    ev["node"] = "t9"
+    steps = [START, goal("作業"), {"model": [ev]}, goal("approve")]
+    out = run(tmp_path, steps, env=BOTH)
+    if out["results"][2]["model"][0]["ok"] and out["confirms"]:
+        body = out["confirms"][0]["body"]
+        assert "\x1b" not in body and "\x9b" not in body
+
+
+def test_wide_title_still_clipped_with_id(tmp_path):
+    body, _ = body_for(tmp_path, ["あ" * 100])
+    line = next(x for x in body.split("\n") if x.startswith("- "))
+    assert len(line) < 90
+
+
+def test_goal_title_is_sanitized_in_body(tmp_path):
+    out = run(
+        tmp_path,
+        [START, goal(f"作業 {SECRET}"), add_task("A"), goal("approve")],
+        env=BOTH,
+    )
+    assert SECRET not in out["confirms"][0]["body"]

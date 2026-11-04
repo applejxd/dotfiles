@@ -431,6 +431,12 @@ const apply = (d: Draft, ev: LedgerEvent): void => {
 			);
 			// 再承認は承認の対象 (未承認の非終端 task) が 1 件以上あるときだけ。空の承認を作らない
 			if (reapprove && !open.some((t) => t.approved !== true)) throw new ReduceError("承認の対象 (未承認の task) が無い");
+			// 確認画面に出した対象 (approvalIds) と、適用時点の未承認の集合が一致しなければ拒否する (確認の間に足された task を承認しない)。無い旧イベントは従来どおり
+			if (Array.isArray(data.approvalIds)) {
+				const want = new Set(data.approvalIds as string[]);
+				const have = open.filter((t) => t.approved !== true).map((t) => t.id);
+				if (want.size !== have.length || have.some((x) => !want.has(x))) throw new ReduceError("承認の対象が確認後に変わった");
+			}
 			const e = d.edit(id);
 			e.attrs.approvedBy = "user";
 			e.state = r.to as never;

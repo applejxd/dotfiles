@@ -40,7 +40,8 @@ const journal = { emit: () => {} };
 delete globalThis.__piWorkRuntime;
 const regOpts = { child: sc.child === true, env, journal, runtime: opt };
 reg.registerWork(pi, regOpts);
-const handle = gr.registerGoal(pi, regOpts);
+// sc.redact: 題の伏字化の注入の試験 (この語を [R] に替える)
+const handle = gr.registerGoal(pi, sc.redact ? { ...regOpts, redact: (t) => t.split(sc.redact).join("[R]") } : regOpts);
 
 const mkCtx = (s) => ({
 	cwd: sc.dir,
@@ -51,6 +52,8 @@ const mkCtx = (s) => ({
 		notify: (message, level) => notices.push({ message, level }),
 		confirm: async (title, body) => {
 			confirms.push({ title, body });
+			// during: 確認の最中 (Promise が未解決の間) にモデルが work を呼ぶ
+			for (const a of s.during ?? []) await tools.get("work").execute("id", a, undefined, undefined, mkCtx({}));
 			return s.confirm !== false;
 		},
 	},

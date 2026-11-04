@@ -500,7 +500,7 @@ def test_approve_active_with_late_task_emits_user_plan_approved():
     s = run("作業", late(), APPROVE)[2]
     assert s["ok"] and types(s) == ["plan.approved"]
     assert {e["source"] for e in s["events"]} == {"user"}
-    assert s["approval"] == {"total": 1, "titles": ["後から"]}
+    assert s["approval"] == {"total": 1, "titles": ["後から"], "ids": ["t1"]}
 
 
 def test_approve_active_keeps_goal_active():
@@ -542,7 +542,11 @@ def test_approve_twice_second_fails():
 
 def test_approve_late_task_after_approve_needs_new_approval():
     steps = run("作業", late("一つ目"), APPROVE, late("二つ目"), APPROVE)
-    assert steps[4]["ok"] and steps[4]["approval"] == {"total": 1, "titles": ["二つ目"]}
+    assert steps[4]["ok"] and steps[4]["approval"] == {
+        "total": 1,
+        "titles": ["二つ目"],
+        "ids": ["t3"],
+    }
 
 
 def test_approve_lists_at_most_ten_titles_and_total():
@@ -554,10 +558,124 @@ def test_approve_lists_at_most_ten_titles_and_total():
 
 def test_approve_lists_all_titles_when_few():
     steps = run("作業", late("A"), {"task": "B", "id": "xb"}, APPROVE)
-    assert steps[-1]["approval"] == {"total": 2, "titles": ["A", "B"]}
+    assert steps[-1]["approval"] == {"total": 2, "titles": ["A", "B"], "ids": ["t1", "xb"]}
 
 
 def test_approve_does_not_change_other_commands():
     # 既存コマンドの変換は変わらない (approve の追加で status の出力が崩れない)
     s = run("作業", "status")[1]
     assert s["ok"] and s["events"] == []
+
+
+# ── 再承認の対象の結び付け (approvalIds): 確認画面に出した集合と、適用時点の集合が一致しなければ拒否 ──
+def _task(tid, title="後から"):
+    node = {"kind": "task", "parent": "g1", "title": title, "writes": [], "after": []}
+    return {"type": "node.added", "node": tid, "data": {"node": node}, "source": "model"}
+
+
+def _approve(ids=None, source="user"):
+    data = {"hash": "h"} if ids is None else {"hash": "h", "approvalIds": ids}
+    return {"type": "plan.approved", "node": "g1", "data": data, "source": source}
+
+
+def _approved(out):
+    return {t["id"]: t["approved"] for t in out["tasks"]}
+
+
+def test_approval_ids_match_stamps_task():
+    out = raw(*_active(), _task("t1"), _approve(["t1"]))
+    assert out["steps"][-1]["ok"] is True
+    assert _approved(out) == {"t1": True}
+
+
+def test_approval_ids_match_in_any_order():
+    out = raw(*_active(), _task("t1"), _task("t2"), _approve(["t2", "t1"]))
+    assert out["steps"][-1]["ok"] is True
+    assert _approved(out) == {"t1": True, "t2": True}
+
+
+def test_approval_ids_missing_new_task_is_rejected():
+    # 確認画面は t1 だけ。確認の間に t2 が足された → 拒否し、どちらも承認しない
+    out = raw(*_active(), _task("t1"), _task("t2"), _approve(["t1"]))
+    assert out["steps"][-1]["ok"] is False
+    assert "確認後に変わった" in out["steps"][-1]["error"]
+    assert _approved(out) == {"t1": False, "t2": False}
+
+
+def test_approval_ids_with_unknown_id_is_rejected():
+    out = raw(*_active(), _task("t1"), _approve(["t1", "t9"]))
+    assert out["steps"][-1]["ok"] is False
+    assert _approved(out) == {"t1": False}
+
+
+def test_approval_ids_empty_with_pending_task_is_rejected():
+    out = raw(*_active(), _task("t1"), _approve([]))
+    assert out["steps"][-1]["ok"] is False
+    assert _approved(out) == {"t1": False}
+
+
+def test_approval_ids_removed_task_is_rejected():
+    # 確認した t1 が (取り消しなどで) 対象から外れた → 一致しない
+    cancel = {
+        "type": "verdict",
+        "node": "t1",
+        "data": {"verdict": "cancel", "reason": "x"},
+        "source": "model",
+    }
+    out = raw(*_active(), _task("t1"), _task("t2"), cancel, _approve(["t1", "t2"]))
+    assert out["steps"][-2]["ok"] is True, out["steps"][-2]
+    assert out["steps"][-1]["ok"] is False
+    assert _approved(out)["t2"] is False
+
+
+def test_legacy_event_without_approval_ids_replays_as_before():
+    out = raw(*_active(), _task("t1"), _task("t2"), _approve())
+    assert out["steps"][-1]["ok"] is True
+    assert _approved(out) == {"t1": True, "t2": True}
+
+
+def test_model_source_approval_with_ids_is_rejected():
+    out = raw(*_active(), _task("t1"), _approve(["t1"], source="model"))
+    assert out["steps"][-1]["ok"] is False
+    assert _approved(out) == {"t1": False}
+
+
+def test_first_approval_without_ids_is_unchanged():
+    out = raw(*_active())
+    assert all(s["ok"] for s in out["steps"])
+    assert out["goal"]["status"] == "active"
+
+
+def test_approval_ids_do_not_change_goal_state():
+    out = raw(*_active(), _task("t1"), _approve(["t1"]))
+    assert out["goal"]["status"] == "active"
+
+
+def test_approve_event_carries_all_pending_ids():
+    steps = run("作業", late("A"), {"task": "B", "id": "xb"}, APPROVE)
+    (e,) = steps[-1]["events"]
+    assert e["data"]["approvalIds"] == ["t1", "xb"]
+
+
+def test_approve_ids_include_tasks_beyond_ten_titles():
+    steps = run("作業", *[{"task": f"t{i:02d}", "id": f"x{i}"} for i in range(12)], APPROVE)
+    a = steps[-1]["approval"]
+    assert len(a["ids"]) == 12 and len(a["titles"]) == 10
+    assert steps[-1]["events"][0]["data"]["approvalIds"] == a["ids"]
+
+
+def test_set_events_carry_no_approval_ids():
+    s = run("作業")[0]
+    assert all("approvalIds" not in e["data"] for e in s["events"])
+
+
+def test_approve_ids_are_aligned_with_titles():
+    steps = run("作業", late("A"), {"task": "B", "id": "xb"}, APPROVE)
+    a = steps[-1]["approval"]
+    assert list(zip(a["ids"], a["titles"], strict=True)) == [("t1", "A"), ("xb", "B")]
+
+
+def test_command_events_apply_without_error():
+    # 変換したイベントをそのまま台帳へ畳める (対象が変わらなければ拒否されない)
+    steps = run("作業", late("A"), {"task": "B", "id": "xb"}, APPROVE, "status")
+    assert steps[3]["ok"] is True and steps[4]["ok"] is True
