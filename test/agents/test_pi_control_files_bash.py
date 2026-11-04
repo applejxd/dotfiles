@@ -271,3 +271,117 @@ def test_existing_protections_are_unchanged():
     reads = ["grep x .git/config", "ls .git/hooks", "grep x ~/.pi/agent/settings.json"]
     for (cmd, flags), decision in _decide(reads):
         assert decision != "deny", f"{cmd!r} {flags} -> {decision}"
+
+
+# ─── 短いオプションと値の連結・symlink 後ろの `..`・ラッパー経由 ─────────────────────────────────
+GLUED_OPTIONS = [
+    "sort -o.tmp/work/x /tmp/a",
+    "sort -ao.tmp/work/x /tmp/a",
+    "sort -o.git/pi-work/log/x /tmp/a",
+    "git -C.tmp/work log -1 --output=x",
+    "git -C.tmp/work log -1 -ox",
+    "git log -1 -o.tmp/work/x",
+    "less -O.tmp/work/x /tmp/a",
+    "less -o.tmp/work/x /tmp/a",
+    "curl -o.tmp/work/journal/x http://example.invalid/",
+    "wget -O.tmp/work/x http://example.invalid/",
+    f"sort -o{REPO}/.tmp/work/x /tmp/a",
+]
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_glued_short_options_against_the_ledger_are_denied(role):
+    for (cmd, flags), decision in _decide(GLUED_OPTIONS, role):
+        assert decision == "deny", f"{cmd!r} {flags} -> {decision}"
+
+
+def test_glued_short_options_do_not_match_lookalikes():
+    cmds = [
+        "sort -o.tmp/worktrees/x /tmp/a",
+        "sort -o.tmp/workbench/x /tmp/a",
+        "git -C.tmp/worktrees log -1",
+        "sort -o /tmp/out /tmp/a",
+    ]
+    for (cmd, flags), decision in _decide(cmds):
+        assert decision != "deny", f"{cmd!r} {flags} -> {decision}"
+
+
+def test_symlink_followed_by_dotdot_is_resolved_component_by_component(tmp_path):
+    (tmp_path / ".tmp" / "work" / "journal").mkdir(parents=True)
+    (tmp_path / "ledger").symlink_to(tmp_path / ".tmp" / "work" / "journal")
+    cmds = [
+        "echo x > ledger/../x.jsonl",
+        "cp /tmp/a ledger/../x.jsonl",
+        "tee ledger/../x.jsonl",
+        "touch ledger/../new/../x.jsonl",
+    ]
+    for role in ROLES:
+        for (cmd, flags), decision in _decide(cmds, role, cwd=str(tmp_path)):
+            assert decision == "deny", f"{cmd!r} {flags} -> {decision}"
+    # 通常の `..` (symlink を経由しない) は従来どおり
+    for (cmd, flags), decision in _decide(
+        ["echo x > sub/../x.txt", "grep x ledger/../x.jsonl"], cwd=str(tmp_path)
+    ):
+        assert decision != "deny", f"{cmd!r} {flags} -> {decision}"
+
+
+def test_unresolvable_paths_do_not_crash_and_fall_back_to_lexical(tmp_path):
+    (tmp_path / "loop").symlink_to(tmp_path / "loop")
+    (tmp_path / "plain.txt").write_text("x", encoding="utf-8")
+    cmds = [
+        "echo x > loop/y",
+        "echo x > plain.txt/../y",
+        "echo x > plain.txt/.tmp/work/y",
+        "echo x > loop/.tmp/work/y",
+    ]
+    result = _decide(cmds, cwd=str(tmp_path))
+    assert all(d in ("allow", "ask", "deny") for _, d in result)
+    deny = {c for (c, _), d in result if d == "deny"}
+    assert "echo x > plain.txt/.tmp/work/y" in deny
+    assert "echo x > loop/.tmp/work/y" in deny
+
+
+WRAPPED_READS = [
+    "env cat .tmp/work/journal/x.jsonl",
+    "env FOO=1 cat .tmp/work/journal/x.jsonl",
+    "env -i cat .tmp/work/journal/x.jsonl",
+    "timeout 5 cat .tmp/work/journal/x.jsonl",
+    "timeout -k 1 5 grep x .tmp/work/journal/x.jsonl",
+    "time cat .tmp/work/journal/x.jsonl",
+    "nice cat .tmp/work/journal/x.jsonl",
+    "nice -n 5 cat .tmp/work/journal/x.jsonl",
+    "command cat .tmp/work/journal/x.jsonl",
+    "stdbuf -oL cat .tmp/work/journal/x.jsonl",
+    "builtin echo .tmp/work",
+    "env timeout 5 nice cat .tmp/work/journal/x.jsonl",
+]
+WRAPPED_WRITES = [
+    "env rm -r .tmp/work",
+    "env FOO=1 rm -rf .tmp/work",
+    "timeout 5 tee .tmp/work/x",
+    "timeout -k 1 5 rm -r .git/pi-work",
+    "nice sort -o .tmp/work/x /tmp/a",
+    "nice -n 5 rm -r .tmp/work",
+    "nohup rm -r .tmp/work",
+    "command rm -r .tmp/work",
+    "stdbuf -oL tee .tmp/work/x",
+    "time cp /tmp/a .tmp/work/x",
+    "exec rm -r .tmp/work",
+    "env timeout 5 nice rm -r .tmp/work",
+    "env -C .tmp/work cat x",
+    "env -S 'cat x' .tmp/work/x",
+]
+
+
+@pytest.mark.parametrize(
+    "role", ["implementer", "worker"]
+)  # explore は [pi.profiles] に無く、どの bash も deny になる
+def test_wrapped_ledger_reads_are_not_denied(role):
+    for (cmd, flags), decision in _decide(WRAPPED_READS, role):
+        assert decision != "deny", f"{cmd!r} {flags} -> {decision}"
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_wrapped_ledger_writes_are_denied(role):
+    for (cmd, flags), decision in _decide(WRAPPED_WRITES, role):
+        assert decision == "deny", f"{cmd!r} {flags} -> {decision}"
