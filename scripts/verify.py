@@ -101,6 +101,7 @@ _HOOK_TESTS = (
     "test_markdownlint_hook",
     "test_env_check",
 )
+_ORCH = "home/dot_claude/skills/feature-orchestration/scripts"
 _PI_TESTS = (
     "test_pi_harness",
     "test_pi_harness_extensions",
@@ -410,15 +411,37 @@ RULES: tuple[Rule, ...] = (
     Rule("検証の入口", ("scripts/verify.py",), ("test_verify", "test_verify_stamp")),
     Rule("検証の印", ("scripts/verify_stamp.py",), ("test_verify_stamp",)),
     Rule("push 前の秘密検出", ("scripts/gitleaks_prepush.py",), ("test_gitleaks_prepush",)),
-    Rule("並列実装の混線の検査", ("scripts/parallel_check.py",), ("test_parallel_check",)),
     Rule(
-        "並列実装の関門", ("scripts/feature_gate.py",), ("test_feature_gate", "test_parallel_check")
+        "並列実装の混線の検査",
+        ("scripts/parallel_check.py", f"{_ORCH}/parallel_check.py"),
+        ("test_parallel_check", "test_script_forwarders"),
     ),
-    Rule("worktree の所有表明", ("scripts/wt_owner.py",), ("test_wt_owner",)),
+    Rule(
+        "並列実装の関門",
+        ("scripts/feature_gate.py", f"{_ORCH}/feature_gate.py"),
+        ("test_feature_gate", "test_parallel_check", "test_script_forwarders"),
+    ),
+    Rule(
+        "worktree の所有表明",
+        ("scripts/wt_owner.py", f"{_ORCH}/wt_owner.py"),
+        ("test_wt_owner", "test_wt_clean"),
+    ),
     Rule("PR ビューアの起動・常駐", ("scripts/pr_app.py",), ("test_pr_app",)),
-    Rule("統合用の枝 (bundle)", ("scripts/bundle.py",), ("test_bundle",)),
-    Rule("worktree の掃除", ("scripts/wt_clean.py",), ("test_wt_clean",)),
-    Rule("マージ待ちの一覧", ("scripts/prs.py",), ("test_prs",)),
+    Rule(
+        "統合用の枝 (bundle)",
+        ("scripts/bundle.py", f"{_ORCH}/bundle.py"),
+        ("test_bundle", "test_script_forwarders"),
+    ),
+    Rule(
+        "worktree の掃除",
+        ("scripts/wt_clean.py", f"{_ORCH}/wt_clean.py"),
+        ("test_wt_clean", "test_script_forwarders"),
+    ),
+    Rule(
+        "マージ待ちの一覧",
+        ("scripts/prs.py", f"{_ORCH}/prs.py"),
+        ("test_prs", "test_script_forwarders"),
+    ),
     Rule(
         "オーケストレーションのプロファイル検出",
         ("home/dot_claude/skills/feature-orchestration/scripts/*.py", "test/orch_fixtures.py"),

@@ -176,7 +176,7 @@ def test_human_lock_is_kept(w):
 def test_backup_over_limit_keeps_worktree(w, monkeypatch):
     wt = w.feature("a")
     (wt / "big.ign").write_text("x" * 100)
-    sys.path.insert(0, str(ROOT / "scripts"))
+    sys.path.insert(0, str(ROOT / "home/dot_claude/skills/feature-orchestration/scripts"))
     try:
         import wt_clean
     finally:
