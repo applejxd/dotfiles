@@ -398,6 +398,29 @@ function worktreeRemoveExcepted(cmd: string, pi: Obj, profile: Obj): boolean {
 	return WORKTREE_REMOVE_PLAIN.test(cmd);
 }
 
+// `git restore --staged` の例外 (index だけを戻す形。作業ツリーは変えない)。deny を外す対象は `[bash] deny` の「git restore」
+const RESTORE_STAGED = "git restore --staged";
+const RESTORE_DENY = "git restore";
+const RESTORE_MAX_PATHS = 50;
+// 元のコマンド全体が、`--staged` か `-S` (+ 任意の ` --`) と、単純なパス 1 個以上だけの 1 形式に一致するときだけ。
+// `-` で始まるトークン (--worktree・-W・--source・-p など)・引用・展開・グロブ・リダイレクト・区切り・前置きは一致しない
+const RESTORE_STAGED_PLAIN = /^git restore (?:--staged|-S)(?: --)?((?: [A-Za-z0-9_./@%+=:,][A-Za-z0-9_./@%+=:,-]*)+)$/;
+
+/**
+ * `deny_except` に `git restore --staged` を持つ役割で、`[pi.confirm] local_git` が真のときだけ、`git restore` の deny を外す。
+ * 元のコマンド全体が RESTORE_STAGED_PLAIN に一致し、パスが 1〜RESTORE_MAX_PATHS 件で、`..` を含まないときだけ true。
+ * see docs/spec/guard/pi-decide.md#git-restore---staged-の例外
+ */
+function restoreStagedExcepted(cmd: string, pi: Obj, profile: Obj): boolean {
+	if (pi.confirm?.local_git !== true) return false;
+	const except = profile.deny_except;
+	if (!Array.isArray(except) || !except.includes(RESTORE_STAGED)) return false;
+	const m = RESTORE_STAGED_PLAIN.exec(cmd);
+	if (!m) return false;
+	const paths = m[1].trim().split(" ");
+	return paths.length <= RESTORE_MAX_PATHS && !paths.some((p) => p.includes(".."));
+}
+
 /** 文脈の `[bash] deny` から、指定のパターンだけを除いたものを返す。 */
 function withoutDeny(ctx: Ctx, pattern: string): Ctx {
 	const bash = (ctx.common as Obj).bash ?? {};
@@ -432,11 +455,12 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		const targets = ((pi.remote_exec?.targets as unknown[] | undefined) ?? []).map(String);
 		const inner = remote ? null : unwrapRemoteExec(cmd, targets);
 		if (inner !== null) return decide(inner, cwd, pi, profile, common, true);
-		const deny = bashCommonDeny(
-			// 例外は直接実行だけ (ssh のリモート側を再帰判定しているときは効かせない)
-			!remote && worktreeRemoveExcepted(rawCmd, pi, profile) ? withoutDeny(ctx, WORKTREE_REMOVE) : ctx,
-			cmd,
-		);
+		// 例外は直接実行だけ (ssh のリモート側を再帰判定しているときは効かせない)
+		let denyCtx = ctx;
+		if (!remote && worktreeRemoveExcepted(rawCmd, pi, profile)) denyCtx = withoutDeny(denyCtx, WORKTREE_REMOVE);
+		const restoreOk = !remote && restoreStagedExcepted(rawCmd, pi, profile);
+		if (restoreOk) denyCtx = withoutDeny(denyCtx, RESTORE_DENY);
+		const deny = bashCommonDeny(denyCtx, cmd);
 		if (deny) return { commonDeny: deny, roleRule: null };
 		const g = guide(cmd, pi);
 		if (g) return { commonDeny: null, roleRule: g };
@@ -446,7 +470,9 @@ export function makeBashDecider(tables: Tables): BashDecider {
 			if (reason !== null) return { commonDeny: null, roleRule: response("deny", reason, "rule") };
 		}
 		// 役割だけの禁止。共通の禁止ではないが、bypass では外れない (bypass は ask だけを変える)
-		const roleDeny = findMatch(cmd, ((profile.shell_deny as unknown[] | undefined) ?? []).map(String));
+		// 例外に当たった `git restore --staged` は、役割の shell_deny の「git restore」も外す
+		const roleDenyList = ((profile.shell_deny as unknown[] | undefined) ?? []).map(String).filter((p) => !(restoreOk && p === RESTORE_DENY));
+		const roleDeny = findMatch(cmd, roleDenyList);
 		if (roleDeny) {
 			return { commonDeny: null, roleRule: response("deny", `\`${roleDeny}\` はこの役割の shell_deny にある`, "rule") };
 		}

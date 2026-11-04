@@ -204,7 +204,12 @@ def test_the_exception_is_only_for_implementer_and_worker():
     with_exception = sorted(n for n, p in profiles.items() if "deny_except" in p)
     assert with_exception == ["implementer", "worker"]
     assert all(
-        p["deny_except"] == ["git worktree remove"]
+        p["deny_except"]
+        == (
+            ["git worktree remove", "git restore --staged"]
+            if n == "implementer"
+            else ["git worktree remove"]
+        )
         for n, p in profiles.items()
         if n in with_exception
     )

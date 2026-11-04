@@ -272,7 +272,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 
 | 役割 | ツール | 既定 | 補足 |
 | --- | --- | --- | --- |
-| `implementer`（親の既定） | bash・read・edit・write・grep・find・ls・task・todo・ask・action・`mcp__*` | ask | `shell_deny` に git の状態変更などがある |
+| `implementer`（親の既定） | bash・read・edit・write・grep・find・ls・task・todo・ask・action・`mcp__*` | ask | `shell_deny` に git の状態変更などがある。`git restore --staged <パス>...`（index だけを戻す厳密な 1 形式）は例外で許可（[仕様](guard/pi-decide.md#git-restore---staged-の例外)） |
 | `reader` | read・grep・find・ls | deny | 読み取り専用 |
 | `explorer` | bash・read・grep・find・ls | deny | bash は `wc` と読み取り専用の git（`status` `diff` `log` `show` `ls-files`）だけ |
 | `committer` | bash・read・grep・find・ls | deny | `git status` `git diff` `git log` などだけ |
