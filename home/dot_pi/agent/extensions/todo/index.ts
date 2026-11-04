@@ -213,6 +213,24 @@ export default function (pi: ExtensionAPI) {
 	// 2. in_progress が無く、待ち (blocked) があり、着手できる未着手 (pending) も残っている: 待ちを理由に止まらない。
 	//    止まってよいのは、利用者の方針決定がないと進められる作業が無いときだけ (承認・実機や操作の確認の待ちは理由にしない)。「【将来」を含む項目は着手できる未着手に数えない
 	const short = (t: { id: number; text: string }) => `#${t.id} ${t.text.length > 60 ? `${t.text.slice(0, 60)}…` : t.text}`;
+	// 調停 (harness/work/settle.ts) の旗 PI_WORK_ARBITER=1 のとき、自分の agent_before_settle は登録せず、事実だけを返す (別ディレクトリなので globalThis 経由)
+	// see docs/spec/work/settle.md
+	const arbiterOn = process.env.PI_WORK_ARBITER === "1";
+	(globalThis as any).__piTodoSnapshot = () => ({
+		disabled: process.env.PI_TODO_NO_REMINDER === "1",
+		open: open().length,
+		doing: todos.filter((t) => t.status === "in_progress").map(short),
+		blocked: todos.filter((t) => t.status === "blocked").map(short),
+		queued: todos.filter((t) => t.status === "pending" && !t.text.includes("【将来")).map(short),
+		nudged,
+		nudgedWaiting,
+		/** リマインドが選ばれたとき、調停が呼んで二重のリマインドを防ぐ */
+		markNudged: (which: "nudged" | "nudgedWaiting") => {
+			if (which === "nudged") nudged = true;
+			else nudgedWaiting = true;
+		},
+	});
+	if (!arbiterOn)
 	pi.on("agent_before_settle", async (event: any) => {
 		if (event?.outcome !== "completed" || process.env.PI_TODO_NO_REMINDER === "1") return;
 		const doing = todos.filter((t) => t.status === "in_progress");

@@ -316,6 +316,9 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 
 #### 文脈の使用率による自動の保存と圧縮
 
+旗 `PI_WORK_ARBITER=1` (既定は無効) のときは、この拡張と todo は `agent_before_settle` を登録せず、事実 (`checkpointSnapshot()`) と効果 (`checkpointExec`) を調停へ渡す。
+圧縮完了後の自動再開は旗に関わらず従来の経路。旗と配線は [settle](work/settle.md#既存の-3-者の移し方-配線済み・旗つき-feature-work-settle-wire)。
+
 文脈の使用率が閾値以上になったら、エージェント自身に保存させてから圧縮を起動する（`harness/autocheckpoint.ts`。親のセッションだけ）。
 
 | 項目 | 内容 |

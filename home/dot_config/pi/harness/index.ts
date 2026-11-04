@@ -46,7 +46,9 @@ import { reconcilePending } from "./pending-store.ts";
 import { registerPendingCommand } from "./pending-command.ts";
 import { buildBoard, renderBoard } from "./board.ts";
 import { collectBoardInput } from "./board-collect.ts";
-import { registerAutoCheckpoint } from "./autocheckpoint.ts";
+import { arbiterEnabled, checkpointExec, checkpointSnapshot, registerAutoCheckpoint } from "./autocheckpoint.ts";
+import { registerSettle } from "./work/settle.ts";
+import { makeSettleDeps } from "./work/settle-snapshot.ts";
 import { registerJournal } from "./work/journal.ts";
 import { registerWork } from "./work/register.ts";
 
@@ -839,6 +841,23 @@ export default async function (pi: ExtensionAPI) {
 	registerPr(pi, { Type, prefix: PREFIX, child: CHILD, hasTool: (name) => roleTools.includes(name) });
 	// 文脈の使用率による自動の保存と圧縮 (親のみ。PI_AUTOCHECKPOINT=0 で無効)
 	registerAutoCheckpoint(pi, { child: CHILD, compactInstructions: COMPACT_INSTRUCTIONS });
+	// 継続の調停 (旗 PI_WORK_ARBITER=1 のときだけ。既定は無効で、上の自動保存と todo が従来どおり自分で登録する)。
+	// 旗が有効なら 2 者は agent_before_settle を登録しないので、登録順は問題にならない (journal より前に置き、settle の entries を journal に見せる)。
+	// 圧縮完了後の自動再開 (trigger: resume) は従来の経路のまま。see docs/spec/work/settle.md
+	if (arbiterEnabled()) {
+		registerSettle(
+			pi,
+			makeSettleDeps({
+				checkpointSnapshot,
+				checkpointExec,
+				todoSnapshot: () => (globalThis as any).__piTodoSnapshot?.(),
+				wake: (prompt) => {
+					Promise.resolve(pi.sendUserMessage(prompt, { deliverAs: "followUp" })).catch(() => {});
+				},
+			}),
+			{ enabled: true, child: CHILD },
+		);
+	}
 	// 自動で出る通知 (子・ジョブの完了・todo の続き・保存と再開) の表示を畳む (表示だけ。PI_QUIET_NOTICES=0 で無効)
 	if (!CHILD) registerQuietNotices(pi);
 	// 作業の観測ログ (追記のみ。挙動は変えない。PI_JOURNAL=0 で無効)。todo・autocheckpoint の後に登録して settle の entries を見る

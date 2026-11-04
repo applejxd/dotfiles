@@ -79,6 +79,9 @@ def env(tmp_path):
         "project.ts",
         "globs.ts",
         "transitions.ts",
+        "settle.ts",
+        "arbiter.ts",
+        "settle-snapshot.ts",
     ):
         shutil.copy2(HARNESS_SRC.parent / "work" / name, harness / "work" / name)
     shutil.copy2(HARNESS_SRC.parent / "pending-store.ts", harness / "pending-store.ts")

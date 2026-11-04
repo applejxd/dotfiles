@@ -84,6 +84,9 @@ try:
         "project.ts",
         "globs.ts",
         "transitions.ts",
+        "settle.ts",
+        "arbiter.ts",
+        "settle-snapshot.ts",
     ):
         shutil.copy2(SRC / "work" / name, harness / "work" / name)
     rules = gen.build_pi_harness({}, load_common())
