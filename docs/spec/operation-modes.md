@@ -127,6 +127,7 @@ node apps/pr-viewer/merge-cli.ts recover <repo>
 - **ビューアを外す**: 層 0・1 は動く。失うのは、画面・新しいコメントを画面から入力する入口・ジョブ・画面の統合ボタン（既存の `refs/pi/review` の記録・未受領のレビューは残り、pi は読める）。統合は §3 に戻る。
 - **併用で増えるもの**: `refs/pi/review/*`（レビューの記録）と、`--state-dir` のジョブの記録。
 - **同じ worktree を複数の主体（worker・ジョブ・人）で触らない**。`wt_owner` の lock とジョブの起動前検査（`worktree_busy`）が止める。lock を忘れた経路は検出できない。[worktree の所有の表明](orchestration.md#worktree-の所有の表明)。
+- **ビューアあり→なしへの移行は、静止点で行う**（途中で止めると残骸が出る）。次が片付いてから、サービスを止める・旗を外す。(1) 実行中のジョブがない（残っていたら取り消す。ジョブの記録は `--state-dir` に残るが、移行後は使わない）。(2) 統合が途中でない（`merge-cli plan` が `recover_needed` を返さない）。(3) 送信済みで pi が未受領のレビュー（宛先の worktree の pi が次の入力で受け取る。不要なら無視してよい）。(4) `python3 scripts/wt_owner.py status` に `owner=job` の lock が残っていない（残骸は `reap`）。`refs/pi/review/*` の記録は残り、pi はそのまま読める。逆（なし→あり）は、旗を付けて起動するだけ（PR の一覧と状態は git から導く）。
 - **ビューアが落ちた**: 状態は git の ref にあるので、まずビューアを再起動する（多くはこれで戻る）。統合の途中だったなら、他の git が動いていないことを確かめてから `merge-cli.ts recover <repo>`。ジョブは `interrupted` になり、自動では再開しない（画面の「再送」）。ジョブが残した lock は `python3 scripts/wt_owner.py reap`（pid が死んでいるものだけ）。どうしても急ぐときだけ `merge-cli`（上の「画面の統合にあって CLI に無いもの」に注意）。
 
 ## 6. よくある疑問
