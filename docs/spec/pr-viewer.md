@@ -147,7 +147,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | --- | --- |
 | 起動 | **v1 は利用者が起動する**（`pis` の Fence の内側からは届かない見込み）。`node apps/pr-viewer/server.ts --repo <パス> [--port <N>] [--allow-host <名前>] [--allow-merge]`（既定のポートは 8780。tailnet の名前（`*.ts.net`）の Host は既定で許可。`--allow-merge` は統合を許可する（既定で無効。下の「統合」））。`/pr start` は案内だけ。ビルドは不要 |
 | UI ポート | `127.0.0.1` で待ち受ける。認証なし（遠隔の通信路は tailnet が保証する決定） |
-| 起動の道具 | **正本は `scripts/pr_app.py`**（`serve`・`install`・`uninstall`・`restart`・`status`・`logs`・`expose`・`unexpose`。試験は `test/test_pr_app.py`）。設定 `~/.config/pr-viewer/env` の権限の旗（`PRAPP_ALLOW_MERGE`・`PRAPP_ALLOW_JOBS`・`PRAPP_ALLOW_CREATE`）は**新規作成時にすべて `0`**、既存の設定は上書きしない。起動元はこのスクリプトのあるチェックアウト（`PRAPP_ROOT` で上書き）で、`apps/pr-viewer/server.ts` が無ければ停止する（別の worktree へは切り替えない）。常駐は systemd の user ユニット（Linux のみ）、公開は `tailscale serve` だけ（Funnel は使わない）。`PRAPP_DRY_RUN=1` で表示だけ |
+| 起動の道具 | **正本は `scripts/pr_app.py`**（`serve`・`install`・`uninstall`・`restart`・`status`・`logs`・`expose`・`unexpose`。試験は `test/test_pr_app.py`）。設定 `~/.config/pr-viewer/env` の権限の旗（`PRAPP_ALLOW_MERGE`・`PRAPP_ALLOW_JOBS`・`PRAPP_ALLOW_CREATE`）は**新規作成時にすべて `0`**、既存の設定は上書きしない。起動元はこのスクリプトのあるチェックアウト（`PRAPP_ROOT` で上書き）で、`apps/pr-viewer/server.ts` が無ければ停止する（別の worktree へは切り替えない）。**linked worktree からの `install` は終了コード 2 で拒否する**（unit が worktree の絶対パスに固定され、掃除後に Restart のループになるため。`serve` は影響しない）。常駐は systemd の user ユニット（Linux のみ）、公開は `tailscale serve` だけ（Funnel は使わない）。`PRAPP_DRY_RUN=1` で表示だけ |
 | 制御ポート | UI とは**別のポート**。同じく `127.0.0.1`。段 4 から使う |
 | bind | `localhost` や `0.0.0.0` にしない。どちらか一方でも bind に失敗したら、両方閉じて終了する（bind が排他。lock ファイルは要らない） |
 | 依存 | `node:http` だけ。npm の依存なし |
@@ -161,7 +161,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 方式 | GET だけ（副作用なし）。応答は JSON・`Cache-Control: no-store`。エラーは `{"error": {"code", "message"}}`（メッセージにパスや内部の例外を含めない） |
 | エンドポイント | `/api/repos`・`/api/prs`・`/api/prs/<repoId>/<prKey>`（概要・コミット・ファイル）・`/api/prs/<repoId>/<prKey>/diff?path=<p>` |
 | 一覧に出す PR | `feature/*`・`bugfix/*` の枝のうち、**差分が無く（0 コミット。統合先と同じか祖先）、レビューの記録（`refs/pi/review/<prKey>`）も無い枝は出さない**（統合済みで枝だけ残っているもの。中身が空で PR とは言えない）。記録があれば「統合済み」として出る。記録の有無を読めなかったときは隠さない。一覧に出さないだけで、ID を直接指定すれば詳細は読める |
-| 含まれる枝 | open な PR の枝の先頭が、別の open な PR の枝の先頭の祖先（別のコミット）なら、前者に `includedIn`（含む枝の名前）を付け、**一覧では既定で隠す**（統合用の枝 `feature/bundle-N` の構成員を並べないため。表示だけで、切り替え「含まれる枝も表示（N 件）」で出る。選択は `localStorage`）。ID を直接指定すれば従来どおり読める・操作できる。git が失敗したときは付けない（隠さない側）。統合・判定・権限には使わない |
+| 含まれる枝 | open な PR の枝の先頭が、別の open な PR の枝の先頭の祖先（別のコミット）なら、前者に `includedIn`（含む枝の名前）を付け、**一覧では既定で隠す**（統合用の枝 `feature/bundle-N` の構成員を並べないため。表示だけで、切り替え「含まれる枝も表示（N 件）」で出る。選択は `localStorage`）。ID を直接指定すれば従来どおり読める・操作できる。git が失敗したときは付けない（隠さない側）。詳細応答（`/api/prs/<repoId>/<prKey>`）の `pr` にも付く（概要画面は全件を計算しない）。一覧は 1 本の PR の git 失敗で全滅させず、読めなかった PR を `errors: [{repoName, branch, reason}]`（短い理由。絶対パスは伏せる）で返し、画面が警告を出す。統合・判定・権限には使わない |
 | 統合先の進み・両側の変更・未 push（A3。読み取りだけ） | `PrSummary` に `behind`（分岐点から統合先が進んだコミット数。`rev-list --count <base>..<target>`）と `overlap`（`{count, paths, truncated}`。`behind > 0` のときだけ、`diff --name-only -z <base> <target>` と PR 側の変更ファイル（改名は旧パスも）の積集合。パスは最大 20 件。統合先側の変更が 2000 件を超えたら `paths: []`・`truncated: true` で「多数」）を足した。`/api/repos` の各要素に `unpushed`（統合先の枝が `<target>@{upstream}`、なければ `refs/remotes/origin/<target>` より先にある件数。上流が読めないときは `null`）を足した（どれも既存の項目は変えない後方互換の追加）。**`overlap` は衝突の目安であって判定ではない**（可否は統合の確認画面が `merge-tree` で出す）。`unpushed` は `fetch` をしない「最後に取得した状態との比較」 |
 | 上限 | diff 全体 2 MB・1 ファイル 200 KB・ファイル一覧 400 件・コミット一覧 200 件・1 回の git は 10 秒 / 出力 4 MB。超えたら省略表示か 500 |
 | 配信 | `/` と `/web/<名前>` は、許可リストにあるファイル（`index.html`・`app.css`・`*.js`）だけ。ディレクトリの走査は許さない |

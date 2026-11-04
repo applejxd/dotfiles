@@ -222,19 +222,48 @@ async function markIncluded(repo: Repo, prs: PrSummary[]): Promise<PrSummary[]> 
 	});
 }
 
-async function listRepoPrs(repo: Repo): Promise<PrSummary[]> {
+/** 読めなかった PR（表示だけ。理由は短く、絶対パスは伏せる） */
+export type ListError = { repoName: string; branch: string; reason: string };
+
+function reasonOf(e: unknown): string {
+	const m = e instanceof Error ? e.message : String(e);
+	return (m.split("\n")[0] || "読めませんでした").replace(/(?:[A-Za-z]:)?[\\/][^\s'"]+/g, "<path>").slice(0, 120);
+}
+
+/**
+ * 1 件の PR の includedIn（open なものだけ）。読めなかったら undefined（付けない）。
+ * 統合先に入っていない枝の先頭を含む枝は、それ自身も統合先に入っていない。
+ */
+async function includedInOf(repo: Repo, s: PrSummary): Promise<string | undefined> {
+	if (s.state !== "open") return undefined;
+	try {
+		const hs = await holdersOf(repo, s.sourceOid);
+		if (!hs) return undefined;
+		const real = hs.filter((h) => h.branch !== s.branch && h.oid !== s.sourceOid);
+		if (real.length === 0) return undefined;
+		return [...real].sort((a, b) => b.atUnix - a.atUnix)[0].branch;
+	} catch {
+		return undefined;
+	}
+}
+
+async function listRepoPrs(repo: Repo, errors: ListError[]): Promise<PrSummary[]> {
 	const target = await resolveTarget(repo);
 	if (!target) return []; // 使えないリポジトリは一覧に出さない
 	const branches = (await listBranches(repo)).sort((a, b) => b.atUnix - a.atUnix).slice(0, MAX_PRS_PER_REPO);
 	const reviewed = await reviewedKeys(repo);
 	const out: PrSummary[] = [];
 	for (const b of branches) {
-		const c = await compute(repo, b, target);
-		if (!c) continue;
-		// 差分が無く (0 コミット。統合先と同じか祖先)、レビューの記録も無い枝は、PR として一覧に出さない (ID を直接指定すれば読める)。
-		// 記録の有無を読めなかったとき (reviewed が null) は、隠さずに出す。
-		if (c.summary.commits === 0 && reviewed && !reviewed.has(c.summary.prKey)) continue;
-		out.push(await markEmpty(repo, c.summary, reviewed));
+		try {
+			const c = await compute(repo, b, target);
+			if (!c) continue;
+			// 差分が無く (0 コミット。統合先と同じか祖先)、レビューの記録も無い枝は、PR として一覧に出さない (ID を直接指定すれば読める)。
+			// 記録の有無を読めなかったとき (reviewed が null) は、隠さずに出す。
+			if (c.summary.commits === 0 && reviewed && !reviewed.has(c.summary.prKey)) continue;
+			out.push(await markEmpty(repo, c.summary, reviewed));
+		} catch (e) {
+			errors.push({ repoName: repo.name, branch: b.branch, reason: reasonOf(e) });
+		}
 	}
 	return await markIncluded(repo, out);
 }
@@ -404,9 +433,16 @@ export async function handleApi(repos: Repo[], pathname: string, query: URLSearc
 	}
 	if (pathname === "/api/prs") {
 		const all: PrSummary[] = [];
-		for (const r of repos) all.push(...(await listRepoPrs(r)));
+		const errors: ListError[] = [];
+		for (const r of repos) {
+			try {
+				all.push(...(await listRepoPrs(r, errors)));
+			} catch (e) {
+				errors.push({ repoName: r.name, branch: "(リポジトリ)", reason: reasonOf(e) });
+			}
+		}
 		all.sort((a, b) => Date.parse(b.lastCommit.at) - Date.parse(a.lastCommit.at));
-		return { prs: all };
+		return { prs: all, errors };
 	}
 	const m = /^\/api\/prs\/([^/]+)\/([^/]+)(\/diff|\/review)?$/.exec(pathname);
 	if (m) {
@@ -416,8 +452,10 @@ export async function handleApi(repos: Repo[], pathname: string, query: URLSearc
 		}
 		if (m[3] === undefined) {
 			const { repo, c } = await findPr(repos, m[1], m[2]);
+			const pr = await markEmpty(repo, c.summary, null);
+			const inc = await includedInOf(repo, c.summary);
 			return {
-				pr: await markEmpty(repo, c.summary, null),
+				pr: inc ? { ...pr, includedIn: inc } : pr,
 				commits: await commitsOf(repo, c.summary),
 				files: c.files.slice(0, MAX_FILES),
 				filesTruncated: c.files.length > MAX_FILES,

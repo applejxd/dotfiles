@@ -68,7 +68,7 @@
     Promise.all([PRV.api.repos(), PRV.api.prs(), PRV.api.capabilities()]).then(
       function (res) {
         if (!isCurrent()) return;
-        draw(res[0].repos || [], res[1].prs || [], res[2]);
+        draw(res[0].repos || [], res[1].prs || [], res[2], res[1].errors || []);
       },
       function (e) {
         if (isCurrent()) PRV.showError(e);
@@ -76,7 +76,17 @@
     );
   };
 
-  function draw(repos, prs, caps) {
+  /* 読めなかった PR の警告（textContent だけ。理由は短い文） */
+  function errorsNote(errors) {
+    if (!errors || errors.length === 0) return null;
+    var names = errors.slice(0, 5).map(function (e) {
+      return String(e.branch) + "（" + String(e.reason) + "）";
+    });
+    var more = errors.length > 5 ? " ほか" + (errors.length - 5) + " 件" : "";
+    return h("div", { class: "attn list-errors", role: "status", text: errors.length + " 件の PR を読めませんでした: " + names.join("、") + more });
+  }
+
+  function draw(repos, prs, caps, errors) {
     var filter = "all";
     var repo = "";
     var query = "";
@@ -178,6 +188,7 @@
         { class: "page" },
         h("div", { class: "listhead" }, h("h1", { text: "PR 一覧" }), h("span", { class: "muted", text: prs.length + " 件" }), mk ? h("span", { class: "listact" }, mk) : null),
         unpushedNote(repos, repos.length > 1),
+        errorsNote(errors),
         h("div", { class: "toolbar" }, seg, sel, search),
         incBox,
         box

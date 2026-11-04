@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -139,6 +140,51 @@ def test_install_は新規設定の旗をすべて_0_で書く(box):
     assert f'PRAPP_REPOS="{box["root"]}"' in text
     log = _log(box, "systemctl")
     assert "arg=enable" in log and "arg=--now" in log and "arg=pr-viewer.service" in log
+
+
+def _git_checkout_with_worktree(tmp_path: Path) -> tuple[Path, Path]:
+    """本体のチェックアウトと、その linked worktree（どちらも server.ts がある）を作る。"""
+    main = tmp_path / "main-co"
+    (main / "apps" / "pr-viewer").mkdir(parents=True)
+    (main / "apps" / "pr-viewer" / "server.ts").write_text("", encoding="utf-8")
+    env = {
+        **os.environ,
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+    }
+    wt = tmp_path / "wt-co"
+    for args in (
+        ["init", "-q", "-b", "develop"],
+        ["add", "-A"],
+        ["commit", "-q", "-m", "init"],
+        ["worktree", "add", "-q", "-b", "feature/x", str(wt)],
+    ):
+        subprocess.run(
+            ["git", *args], cwd=main, env=env, check=True, capture_output=True, encoding="utf-8"
+        )
+    return main, wt
+
+
+@linux_only
+@pytest.mark.parametrize("dry", [False, True])
+def test_install_は_linked_worktree_からは終了コード_2_で拒否する(box, tmp_path, dry):
+    main, wt = _git_checkout_with_worktree(tmp_path)
+    git_dir = str(Path(shutil.which("git")).parent)
+    extra = {
+        "PATH": f"{box['bin']}:{git_dir}",
+        "PRAPP_ROOT": str(wt),
+        **({"PRAPP_DRY_RUN": "1"} if dry else {}),
+    }
+    r = _run(box, "install", extra=extra)
+    assert r.returncode == 2, (r.stdout, r.stderr)
+    assert "worktree" in r.stderr and "本体" in r.stderr
+    assert "arg=enable" not in _log(box, "systemctl") and not _envfile(box).exists()
+    # 本体のチェックアウトからは従来どおり
+    ok = _run(box, "install", extra={**extra, "PRAPP_ROOT": str(main)})
+    assert ok.returncode == 0, ok.stderr
 
 
 @linux_only
