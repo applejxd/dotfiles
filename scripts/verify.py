@@ -183,6 +183,7 @@ _PI_TESTS = (
     "test_pi_pending_command",
     "test_btw_view",
     "test_pi_todo_view",
+    "test_work_sched",
 )
 _OC_TESTS = (
     "test_generate_opencode*",
