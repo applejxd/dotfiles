@@ -398,6 +398,11 @@ RULES: tuple[Rule, ...] = (
         "experiment-loop", ("home/dot_claude/skills/experiment-loop/scripts/*.py",), ("test_exp",)
     ),
     Rule(
+        "review-loop",
+        ("home/dot_claude/skills/review-loop/scripts/*.py",),
+        ("test_review_converge",),
+    ),
+    Rule(
         "models の道具",
         ("scripts/models.py",),
         ("test_models_tool", "test_pi_model_catalog"),
