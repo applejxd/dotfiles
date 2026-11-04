@@ -313,6 +313,16 @@ Python 版の判定結果を正解として、TS 版との全件一致を確か�
   `export_checks_golden.py`（検査関数）が検査ごとの正解データに書く。`test/agents/pi/policy_golden.mjs` / `checks_golden.mjs` が TS 版と突き合わせる（食い違ったときに部品を特定できる）。
   `test_pi_judge_ts.py` が全件一致を必須にし、`test_decide_golden.py` が正解データの鮮度を標本で見る
 
+### 判定の退行検知（baseline と意図した差の台帳）
+
+固定の golden は Python 由来で、TS の判定器の内部を入れ替えるときの「緩くなる差」は見えにくい。現行の TS 判定器の出力そのものを凍結して差を見る（判定は変えない）。
+
+- **対象**: `decide_golden.jsonl` の全入力、`checks_golden.jsonl` の検査 id 単位の出力、新設の真理値表（複合・許可＋未知・`local_git`・例外・ラッパー・非 literal・引用・書き込み先を、全役割 × ask/bypass/boundary/両方で）。
+- **ファイル**: `test/agents/golden/ts_baseline.jsonl`（baseline）・`intended_changes.jsonl`（意図した差の台帳）、`test/agents/pi/judge_baseline.mjs`・`judge_diff.mjs`、試験 `test_pi_judge_baseline.py`。
+- **使い方**: `judge_baseline.mjs --write-baseline`（意図した変更のあとに書き出し直す）・`--check`（1 行でも違えば 1）。`judge_diff.mjs` は差を強さ（deny > mustConfirm > ask > allow）で `relax`・`tighten`・`reason` に分け、台帳に無い差があれば終了コード 1。`--emit-ledger` は台帳の雛形を出す。`--corpus <JSON の文字列配列>` は外部コーパス（`.tmp/keep` に置き、リポジトリには入れない）を回し、baseline に無い入力の分布だけを出す（コマンドは出さない）。
+- **台帳の運用**: 1 行 `{kind, input, role, mode, old, new, class, reason, approver}`（`class` は `relax`・`tighten`・`false-positive`・`neutral`）。緩和は 1 件ずつ理由と承認者（`user`・`review`）を記録し、`relax` は台帳なしでは通らない。差が消えた台帳の行は警告（古い台帳）。承認した差は baseline を書き出し直して台帳を空に戻してよい。
+- **限界**: golden とコーパスに無い入力の退行は検知できない。baseline は「現状」で、正しさは保証しない。check は golden に載る（ヒットのある）入力だけで、ヒット無しの入力の新規ヒットは見ない。
+
 ### 判定が前の呼び出しに依存していた（修正済み）
 
 同じ入力でも、同じプロセスで前に何を判定したかで結果が変わる不具合があった（`bashrules/_shared.py` の `_LITERAL_HEREDOC_BODIES`、引用付き heredoc の本文の記録がモジュールのグローバルに残る）。

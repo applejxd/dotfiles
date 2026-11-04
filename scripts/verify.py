@@ -272,6 +272,7 @@ RULES: tuple[Rule, ...] = (
         (
             "test_decide_golden",
             "test_pi_judge_ts",
+            "test_pi_judge_baseline",
             "test_decide",
             "test_command_policy",
             "test_check_bash_*",
@@ -291,6 +292,7 @@ RULES: tuple[Rule, ...] = (
         ("home/dot_config/pi/harness/judge/**",),
         (
             "test_pi_judge_ts",
+            "test_pi_judge_baseline",
             "test_bashrules_tables",
             "test_secret_lists_in_sync",
             "test_pi_harness",
