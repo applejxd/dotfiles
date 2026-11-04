@@ -232,7 +232,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 - **場所**: `<リポジトリ根>/.tmp/worktrees/pi-agent-<job id>`。`.tmp/` が `.gitignore` で除外されていなければ起動を拒否する。回収は `refs/pi-agent/<job id>` と `.tmp/subagents/<job id>.patch`、記録は `.tmp/subagents/worktrees/`。掃除・回収のやり直しは利用者専用の `/worktrees`（モデルは呼べない）
 - **隔離の worktree の作成と回収は、ハーネスが内部で `git` を実行する**（判定器を通らない）。子の書込範囲は Landlock で、その worktree・共有 `.git` の `worktrees/pi-agent-<id>`・`objects` などに狭める
 - **親（`pi` 本体）が worktree のファイルを編集するときの承認**は、通常の書き込みと同じ。そこが作業ツリーの中（`cwd` の実体パスの下。`decide.py` の `_inside`。`.tmp/worktrees/…` を含む）なら allow、外（`~/worktrees/…` など）なら ask（境界つきでは、開けていない場所は deny）
-- **親が `git worktree` を `bash` で直接実行したとき**: `add` / `list` / `prune` は規則に当たらず ask（`source: default`。`pis` で境界が証明されたセッションでは、[手順 4'](pi-decide.md) の緩和で allow）。`remove` は `[bash] deny`（作業内容を失うため）
+- **親が `git worktree` を `bash` で直接実行したとき**: `add` / `list` / `prune` は規則に当たらず ask（`source: default`。`pis` で境界が証明されたセッションでは、[手順 4'](pi-decide.md) の緩和で allow）。`remove` は force なしだけ `implementer`（親）と `worker` で許可（`deny_except`。force 付きは bypass でも省略できない必須確認。他の役割は `[bash] deny` のまま）。限界と条件は [pi-decide.md](pi-decide.md#git-worktree-remove-の例外)
 
 ### 並列実装の運用（隔離なしの worktree）
 

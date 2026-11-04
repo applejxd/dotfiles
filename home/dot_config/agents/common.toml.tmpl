@@ -165,6 +165,8 @@ deny = [
   "git reflog expire",
   "git stash clear",
   "git stash drop",
+  # ★pi の implementer / worker だけ、force なしを許可する (deny_except。force 付きは必須確認)
+  # see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外
   "git worktree remove",
   # 追跡ファイルの変更を破棄する (git でも復旧できない)
   "git checkout --",
@@ -1517,6 +1519,8 @@ $ARGUMENTS
 # pr_summary / pr_comments: ローカル PR ビューアの道具 (see docs/spec/pr-viewer.md)
 tools = ["bash", "read", "edit", "write", "grep", "find", "ls", "task", "todo", "ask", "action", "pr_summary", "pr_comments", "mcp__*"]
 default = "ask"
+# [bash] deny の例外 (許す語は判定器が固定。see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外)
+deny_except = ["git worktree remove"]
 
 [pi.profiles.reader]
 tools = ["read", "grep", "find", "ls"]
@@ -1577,6 +1581,8 @@ shell_deny = [
 [pi.profiles.worker]
 tools = ["bash", "read", "edit", "write", "grep", "find", "ls"]
 default = "ask"
+# see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外
+deny_except = ["git worktree remove"]
 shell_deny = [
   "git add",
   "git commit",

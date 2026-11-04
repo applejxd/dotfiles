@@ -1492,6 +1492,9 @@
    },
    "implementer": {
     "default": "ask",
+    "deny_except": [
+     "git worktree remove"
+    ],
     "tools": [
      "bash",
      "read",
@@ -1533,6 +1536,9 @@
    },
    "worker": {
     "default": "ask",
+    "deny_except": [
+     "git worktree remove"
+    ],
     "shell_deny": [
      "git add",
      "git commit",

@@ -23,6 +23,9 @@ const LONG_WITH_VALUE: Record<string, Set<string>> = {
 	branch: new Set(["--set-upstream-to", "--sort", "--format", "--contains", "--no-contains", "--points-at", "--merged", "--no-merged", "--track", "--color", "--abbrev"]),
 };
 
+// `git worktree remove` の --force とその省略形
+const WORKTREE_FORCE_LONG = /^--f(o(r(c(e)?)?)?)?$/;
+
 interface Flags {
 	short: Set<string>;
 	long: Set<string>;
@@ -89,6 +92,13 @@ function destructiveReason(sub: string, args: string[]): string | null {
 		}
 		case "switch": {
 			if (f.short.has("C") || f.long.has("--force-create")) return "git switch -C (ブランチを強制的に付け替える)";
+			return null;
+		}
+		case "worktree": {
+			// force の有無は位置不問 (`path -f` も)。長い形は git の省略形 (`--for` など) も広めに見る。`--` 以降は数えない
+			if (args[0] !== "remove") return null;
+			const forced = f.short.has("f") || [...f.long].some((n) => WORKTREE_FORCE_LONG.test(n));
+			if (forced) return "git worktree remove --force (変更済み・ロック済みの worktree を強制的に消す)";
 			return null;
 		}
 		default:

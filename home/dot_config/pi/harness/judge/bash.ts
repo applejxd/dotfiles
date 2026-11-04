@@ -379,6 +379,46 @@ function unwrapScp(tokens: string[], targets: readonly string[]): string | null 
 	return ["cp", ...flags, ...local.map(shq)].join(" ");
 }
 
+// 役割の deny_except で、[bash] deny から外せる語 (decide.ts の DENY_EXCEPT_WORDS と同じ)
+const WORKTREE_REMOVE = "git worktree remove";
+// 引数が展開・グロブ・チルダなどで、force の有無を確定できない形 (安全側で deny のままにする)
+const UNDECIDABLE_ARG_RE = /[$`{*?[]|^[~!]/u;
+
+/**
+ * `deny_except` に `git worktree remove` を持つ役割で、`[pi.confirm] local_git` が真のときだけ、この deny を外す。
+ * パターンに当たる正規化セグメントのすべてで force の有無を確定できることが条件 (解析失敗・展開を含む引数は false)。
+ * force 付きは deny を外したあと、`localGitConfirm` (gitdestructive.ts) が mustConfirm の ask にする。
+ * see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外
+ */
+function worktreeRemoveExcepted(cmd: string, pi: Obj, profile: Obj): boolean {
+	if (pi.confirm?.local_git !== true) return false;
+	const except = profile.deny_except;
+	if (!Array.isArray(except) || !except.includes(WORKTREE_REMOVE)) return false;
+	const headLen = WORKTREE_REMOVE.split(" ").length;
+	for (const segment of normalize(cmd)) {
+		if (!patternMatches(segment, WORKTREE_REMOVE)) continue;
+		let tokens: string[];
+		try {
+			tokens = shlexSplit(segment);
+		} catch (e) {
+			if (e instanceof ShlexError) return false;
+			throw e;
+		}
+		for (const t of tokens.slice(headLen)) {
+			if (t === "--") break;
+			if (UNDECIDABLE_ARG_RE.test(t)) return false;
+		}
+	}
+	return true;
+}
+
+/** 文脈の `[bash] deny` から、指定のパターンだけを除いたものを返す。 */
+function withoutDeny(ctx: Ctx, pattern: string): Ctx {
+	const bash = (ctx.common as Obj).bash ?? {};
+	const deny = ((bash.deny as unknown[] | undefined) ?? []).filter((p) => p !== pattern);
+	return { ...ctx, common: { ...ctx.common, bash: { ...bash, deny } } } as Ctx;
+}
+
 /** bash の判定器を作る。`tables` は tables.toml を JSON にしたもの。 */
 export function makeBashDecider(tables: Tables): BashDecider {
 	const decide = (
@@ -406,7 +446,7 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		const targets = ((pi.remote_exec?.targets as unknown[] | undefined) ?? []).map(String);
 		const inner = remote ? null : unwrapRemoteExec(cmd, targets);
 		if (inner !== null) return decide(inner, cwd, pi, profile, common, true);
-		const deny = bashCommonDeny(ctx, cmd);
+		const deny = bashCommonDeny(worktreeRemoveExcepted(cmd, pi, profile) ? withoutDeny(ctx, WORKTREE_REMOVE) : ctx, cmd);
 		if (deny) return { commonDeny: deny, roleRule: null };
 		const g = guide(cmd, pi);
 		if (g) return { commonDeny: null, roleRule: g };

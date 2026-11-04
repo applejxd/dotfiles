@@ -144,6 +144,7 @@ _PI_TESTS = (
     "test_pi_pr_review",
     "test_pi_harness_removal",
     "test_pi_git_destructive",
+    "test_pi_worktree_remove",
     "test_pi_orchestrate",
     "test_pi_allow_output_quoting",
     "test_pi_deny_default_ask",
