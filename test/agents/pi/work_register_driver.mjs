@@ -4,6 +4,7 @@
 //   step: {pi?, ev: "session_start"|"session_shutdown", sid?, ui?: bool}
 //       | {pi?, tool: <引数>, ui?: bool}     (ツール work を呼ぶ)
 //       | {pi?, cmd: "work", ui?: bool}      (スラッシュコマンド)
+//       | {arm: N}                           (log/ への追記を N 件通した後、失敗させる)
 //   結果: {registered:{<pi>:{tools,commands,handlers}}, results:[...], widgets:[...], notices:[...], lease: bool, journal:[...]}
 // see docs/spec/work/register.md
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -23,6 +24,17 @@ const widgets = [];
 const notices = [];
 const journal = [];
 let clock = 1_700_000_000_000;
+// 追記の障害注入: {arm: N} の step の後、台帳ログ (log/) への追記を N 件だけ通し、次から失敗させる
+let budget = null;
+const beforeWrite = (p) => {
+	if (budget === null || !String(p).replace(/\\/g, "/").includes("/log/")) return;
+	if (budget <= 0) {
+		const e = new Error(`EIO: 注入された障害 (${p})`);
+		e.code = "EIO";
+		throw e;
+	}
+	budget--;
+};
 
 for (const n of names) {
 	const handlers = new Map();
@@ -41,7 +53,7 @@ for (const n of names) {
 		env,
 		pid: n === "a" ? process.pid : process.ppid,
 		journal: { emit: (type, data) => journal.push({ pi: n, type, data }) },
-		runtime: { root: join(sc.dir, ".tmp", "work"), now: () => clock++, timers: { setInterval: () => 0, clearInterval: () => {} } },
+		runtime: { root: join(sc.dir, ".tmp", "work"), now: () => clock++, timers: { setInterval: () => 0, clearInterval: () => {} }, storeOptions: { beforeWrite } },
 	});
 	pis[n] = { handlers, tools, commands };
 }
@@ -62,7 +74,9 @@ for (const s of sc.steps) {
 	const p = pis[n];
 	const ctx = mkCtx(n, s);
 	try {
-		if (s.ev) {
+		if (s.arm !== undefined) {
+			budget = s.arm;
+		} else if (s.ev) {
 			for (const fn of p.handlers.get(s.ev) ?? []) results.push({ ret: (await fn({ reason: s.reason ?? "startup" }, ctx)) ?? null });
 			if (!(p.handlers.get(s.ev) ?? []).length) results.push({ none: true });
 		} else if (s.tool !== undefined) {
