@@ -112,6 +112,15 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # 既存ファイルが空のままコミットされる事故を止める。see docs/spec/development.md#ステージの空ファイル検査
+      - id: staged-emptied-files
+        name: Fail when a staged file became empty
+        entry: python3 scripts/check_staged_drop.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       # push する範囲の内容を印と照合する。警告のみ (常に 0)
       - id: verify-stamp-push
         name: Warn when pushed content lacks a verify:all stamp

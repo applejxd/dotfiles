@@ -411,6 +411,9 @@ RULES: tuple[Rule, ...] = (
     Rule("PR ビューアの起動・常駐", ("scripts/pr_app.py",), ("test_pr_app",)),
     Rule("統合用の枝 (bundle)", ("scripts/bundle.py",), ("test_bundle",)),
     Rule("worktree の掃除", ("scripts/wt_clean.py",), ("test_wt_clean",)),
+    Rule(
+        "ステージの空ファイル検査", ("scripts/check_staged_drop.py",), ("test_check_staged_drop",)
+    ),
     Rule("skill-lab のスキル同期", ("scripts/sync_skill_lab.py",), ("test_sync_skill_lab",)),
     Rule("model-eval", ("scripts/model-eval/**",), ("test_model_eval",)),
     Rule(
