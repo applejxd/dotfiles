@@ -38,15 +38,19 @@ pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結�
 6. コミット前に `mise run verify:all` を 1 回。
 7. `git_commit`（`dir` に worktree）。
 8. 所有の解除: `python3 scripts/wt_owner.py release <worktree> --id <id>`。
-9. 統合（下）。複数をまとめるなら先に `python3 scripts/bundle.py start <feature>...`（`continue`・`verify`・`status`・`summary`。衝突は止めて終了コード 3。詳細は [統合用の枝](orchestration.md#統合用の枝bundle)）。
-10. 掃除: `git flow feature finish` を使った場合は不要（finish が消す。下の統合の節）。ビューア/`merge-cli` で統合した場合は `python3 scripts/wt_clean.py <名前>`（`--dry-run` あり）。
+9. 統合待ちの一覧: `mise run prs`（`python3 scripts/prs.py`。枝名・先行コミット数・最新の件名だけ。bundle に含まれる枝は既定で隠し、`-- --all` で全部出す。詳細・統合・掃除はエージェントに指示する）。
+10. 統合（下）。複数をまとめるなら先に `python3 scripts/bundle.py start <feature>...`（`continue`・`verify`・`status`・`summary`。衝突は止めて終了コード 3。詳細は [統合用の枝](orchestration.md#統合用の枝bundle)）。
+11. 掃除: `git flow feature finish` を使った場合は不要（finish が消す。下の統合の節）。ビューア/`merge-cli` で統合した場合は `python3 scripts/wt_clean.py <名前>`（`--dry-run` あり）。
 
 ### 統合
 
 保護ブランチへの統合（`git merge`・`git flow feature finish` など）は、判定器（`home/dot_config/pi/harness/integration-gate.ts`）が**必須確認**にする（bypass でも省略不可。feature の linked worktree の中の、現在のブランチを動かす操作は日常として除く）。承認画面は TUI でその場で答える。このリポジトリの運用規約では、統合は既定では利用者が行う（ビューアのボタン）。**利用者がチャットで統合を明示的に指示したときに限り**、AI が統合コマンドを実行してよい。
 実行すると上の必須確認の画面が出て、利用者が TUI で承認する（指示が無いときは実行しない。[AGENTS.md](../../AGENTS.md)）。
 チャット経由には、ビューアの統合器（衝突の事前検査・排他・取り消し手順）・2 段の確認・リスクのあるパスの警告が無い。実行の前に、本体が `develop` で clean・
-全件検査が合格・`git merge-tree` が衝突なし、を AI が確かめる。実行する統合コマンドの形は、初回の実行で確かめて、この節に追記する（未確認）。外出先から承認する手段は、pi 単独には無い（保留・非同期承認は撤去済み。[履歴](guard/pi-pending.md)）。
+全件検査が合格・`git merge-tree` が衝突なし、を AI が確かめる。チャット経由の標準の統合コマンドは `git flow feature finish <名前>`（確認画面に統合の内容が出る。利用者の決定、2026-11-05）。正確な引数と、merge commit での確認画面は、別 feature（finish-merge-view）で確かめて追記する（未確認）。
+2026-11-05 の bundle-3 は、finish の確認画面が squash 前提だったため、本体で `git merge --no-ff -F <メッセージファイル> feature/<名前>`
+（メッセージはサマリーの `mergeMessage` を `.tmp/keep/pr-merge/<名前>-message.txt` に書く）で統合した（成功。ボタンと同じ merge commit）。
+統合後は `python3 scripts/wt_clean.py <名前>...`（取り込み元の枝もまとめて）と、`apps/pr-viewer/**` を更新したときは `python3 scripts/pr_app.py restart`。外出先から承認する手段は、pi 単独には無い（保留・非同期承認は撤去済み。[履歴](guard/pi-pending.md)）。
 
 TUI を使わず端末で統合するときは `apps/pr-viewer/merge-cli.ts`。ビューアのサーバなしで同じ統合器が動く。結果は JSON 1 行。終了コードは成功 0・拒否 2・想定外の例外 1。
 
