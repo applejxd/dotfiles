@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import subprocess
 
@@ -317,7 +316,7 @@ VENDOR = ROOT / "home" / "dot_config" / "pi" / "harness" / "vendor" / "mvdan-sh"
 
 
 def test_vendored_parser_matches_readme_hash_and_size():
-    """同梱の index.js が README の値 (sha256・大きさ) と一致する (勝手に書き換わっていない)。"""
+    """同梱の index.js が README の値 (sha256・大きさ) と TS の期待値 (syntax.ts) の三者で一致する。"""
     readme = (VENDOR / "README.md").read_text(encoding="utf-8")
     sha = re.search(r"sha256 \| `([0-9a-f]{64})`", readme)
     size = re.search(r"（(\d+) バイト）", readme)
@@ -325,18 +324,19 @@ def test_vendored_parser_matches_readme_hash_and_size():
     data = (VENDOR / "index.js").read_bytes()
     assert hashlib.sha256(data).hexdigest() == sha.group(1)
     assert len(data) == int(size.group(1))
+    ts = (VENDOR.parent.parent / "judge" / "syntax.ts").read_text(encoding="utf-8")
+    assert re.search(r'MVDAN_SHA256 = "([0-9a-f]{64})"', ts).group(1) == sha.group(1)
+    assert int(re.search(r"MVDAN_BYTES = (\d+)", ts).group(1)) == int(size.group(1))
     assert "BSD" in readme and (VENDOR / "LICENSE").is_file()
 
 
 def test_missing_parser_falls_back_to_one_raw_step_without_raising():
-    env = {**os.environ, "PI_EXPLAIN_VENDOR": str(VENDOR / "no-such-dir" / "index.js")}
     proc = subprocess.run(
         [_node(), str(RUNNER), "--fallback"],
         capture_output=True,
         text=True,
         encoding="utf-8",
         cwd=ROOT,
-        env=env,
         timeout=60,
         check=False,
     )

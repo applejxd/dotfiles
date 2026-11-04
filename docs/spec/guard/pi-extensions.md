@@ -469,9 +469,18 @@ cd /abs && git log --oneline | head -3 > /tmp/o
 - **保証の言い過ぎを避ける**: 一覧は**理解を助ける補助**で、判定ではない。解析が不完全なことがある。**常に原文（全文）を確認する**。
   mvdan-sh は 2021 年版で、新しい bash の構文に追随していない可能性がある（その場合は構文エラーとして原文に倒れる）。
   手順の切り出しは Offset（UTF-8 のバイト位置）に依存するので、日本語を含む原文の試験を持つ
-- **更新**: 版を固定して取り込み、`vendor/mvdan-sh/README.md` の版・バイト数・sha256 を書き換える（試験が一致を確かめる）。
-  `index.js` は minified なので、pre-commit の整形の対象から外す（書き換わると sha256 が変わる）
-- 試験: `test/agents/test_pi_explain.py`（`explain_driver.mjs`。反例・日本語・読み込み失敗・代表 30 件の原文倒れ 3 件以下）
+- **更新**: 版を固定して取り込み、`vendor/mvdan-sh/README.md` の版・バイト数・sha256 と、`judge/syntax.ts` の期待値（`MVDAN_SHA256`・`MVDAN_BYTES`）を書き換える（試験が三者の一致を確かめる）。
+  `index.js` は minified なので、pre-commit の整形（`end-of-file-fixer`・`trailing-whitespace`）と git の改行変換（`.gitattributes` の `vendor/** -text`）の対象から外す（書き換わると sha256 が変わる）
+- **読み込み（`judge/syntax.ts`。判定にはまだ接続しない）**: 構文木の読み込みと小さな道具（`arr`・`typeOf`・`pos`・`end`・`cut`）を `explain.ts` から `judge/syntax.ts` へ移した。
+  `index.js` のバイト列を読んで **sha256 を期待値と照合し、照合したのと同じバイトを `new Function` で評価する**（読み直さない。`createRequire` はパスから読み直すので使わない。
+  `node:vm` でなく `new Function` なのは node・bun〔JavaScriptCore〕で同じに動くため）。GopherJS の初期化が書く `global.require`・`Error.stackTraceLimit` は評価の後で戻す。
+  失敗（欠損・sha 不一致・評価の失敗・解析の失敗）は例外にせず `{ ok: false, why }`。判定に接続するときは、これらをすべて deny にする（決定済み）。
+  vendor のディレクトリは引数で注入する（試験用の `PI_EXPLAIN_VENDOR` 環境変数は廃止。差し替えは `setDefaultVendorDir`）
+- **自己診断**: `selfDiagnose()` が既知の 3 コマンド（`git push origin main`・`cd /x && git log | head -3`・`echo "確認"`）の文の数・語の位置（UTF-8 のバイト位置）を確かめる。
+  `node judge/doctor.mjs`（型除去に対応した node か bun で実行）が、実行環境・sha・自己診断・読み込みと解析の時間・メモリの増分を出し、OK / NG を終了コード 0 / 1 で返す。
+  NG の理由には「対処: `pis` の外のシェルで `chezmoi apply`」を添える
+- 試験: `test/agents/test_pi_explain.py`（`explain_driver.mjs`。反例・日本語・読み込み失敗・代表 30 件の原文倒れ 3 件以下）、
+  `test/agents/test_pi_syntax_runtime.py`（`syntax_driver.mjs`・`syntax_probe.ts`。vendor を壊したときの失敗・doctor・bun・**実際の pi の中での読み込み**。pi・bun が無い環境では skip＝未実測）
 
 ### 整形
 

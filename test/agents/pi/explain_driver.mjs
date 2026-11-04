@@ -11,12 +11,14 @@ const ROOT = resolve(HERE, "..", "..", "..");
 const H = resolve(ROOT, "home", "dot_config", "pi", "harness");
 const ex = await import(pathToFileURL(resolve(H, "explain.ts")).href);
 const view = await import(pathToFileURL(resolve(H, "confirm-view.ts")).href);
+const syn = await import(pathToFileURL(resolve(H, "judge", "syntax.ts")).href);
 
 const E = (c, hit) => ex.explainCommand(c, hit);
 const texts = (c, hit) => E(c, hit).steps.map((s) => s.text);
 
-// mvdan-sh を読み込めないときの動作 (PI_EXPLAIN_VENDOR で読み込み先を壊して呼ぶ)
+// mvdan-sh を読み込めないときの動作 (既定の vendor ディレクトリを存在しない場所へ差し替えて呼ぶ)
 if (process.argv[2] === "--fallback") {
+	syn.setDefaultVendorDir(resolve(ROOT, "no-such-dir", "mvdan-sh"));
 	const cmds = ["ls -la", "cd /x && git push", "echo 日本語 && ls", ""];
 	console.log(JSON.stringify(Object.fromEntries(cmds.map((c) => [c, E(c)]))));
 	process.exit(0);
