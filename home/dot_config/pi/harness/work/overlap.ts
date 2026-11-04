@@ -1,6 +1,8 @@
 // writes (glob) の重なり判定と自動直列化。純関数 (fs・pi の API なし)。
 // 方針: 迷えば「重なる」と答える (偽陰性 0。偽陽性は直列になるだけで安全)。see docs/spec/work/scheduler.md#writes-の重なりと直列化
 
+import { globsMayOverlap as coreOverlap } from "./globs.ts";
+
 /** 波括弧の展開の上限。超えたら展開せず保守的に扱う */
 const BRACE_LIMIT = 64;
 
@@ -51,65 +53,12 @@ export function normalizeGlob(p: string): string {
 	return s.replace(/\/{2,}/g, "/");
 }
 
-const isWild = (s: string): boolean => /[*?[\]!]/.test(s);
-
-/** 1 区間の glob を正規表現にする (`[` を含むものは呼ばない) */
-function segRegex(seg: string): RegExp {
-	let re = "";
-	for (const ch of seg) {
-		if (ch === "*") re += ".*";
-		else if (ch === "?") re += ".";
-		else re += ch.replace(/[.+^${}()|\\]/g, "\\$&");
-	}
-	return new RegExp(`^${re}$`, "s");
-}
-
-/** 1 区間どうしが同じ名前に一致しうるか (保守的)。`[`・`]`・`!` を含むときは常に true */
-function segMayOverlap(x: string, y: string): boolean {
-	if (x === "**" || y === "**") return true;
-	if (/[[\]!]/.test(x) || /[[\]!]/.test(y)) return true;
-	const wx = isWild(x);
-	const wy = isWild(y);
-	if (!wx && !wy) return x === y;
-	if (!wx) return segRegex(y).test(x);
-	if (!wy) return segRegex(x).test(y);
-	// 両方とも wildcard: 先頭の定数部と末尾の定数部が両立するかだけを見る (両立しなければ共通の文字列は無い)
-	const pre = (s: string): string => s.slice(0, s.search(/[*?]/));
-	const suf = (s: string): string => s.slice(Math.max(s.lastIndexOf("*"), s.lastIndexOf("?")) + 1);
-	const px = pre(x);
-	const py = pre(y);
-	if (!(px.startsWith(py) || py.startsWith(px))) return false;
-	const sx = suf(x);
-	const sy = suf(y);
-	return sx.endsWith(sy) || sy.endsWith(sx);
-}
-
-function overlapSingle(a: string, b: string): boolean {
-	const sa = a.split("/");
-	const sb = b.split("/");
-	const memo = new Map<number, boolean>();
-	const go = (i: number, j: number): boolean => {
-		const key = i * 4096 + j;
-		const hit = memo.get(key);
-		if (hit !== undefined) return hit;
-		let r: boolean;
-		if (i === sa.length && j === sb.length) r = true;
-		else if (i < sa.length && sa[i] === "**") r = go(i + 1, j) || (j < sb.length && go(i, j + 1));
-		else if (j < sb.length && sb[j] === "**") r = go(i, j + 1) || (i < sa.length && go(i + 1, j));
-		else if (i === sa.length || j === sb.length) r = false;
-		else r = segMayOverlap(sa[i], sb[j]) && go(i + 1, j + 1);
-		memo.set(key, r);
-		return r;
-	};
-	return go(0, 0);
-}
-
 /** 2 つの glob が同じファイルに一致しうるか。**保守的**: 迷えば true (偽陰性 0) */
 export function globsMayOverlap(a: string, b: string): boolean {
 	const ea = expandBraces(normalizeGlob(a));
 	const eb = expandBraces(normalizeGlob(b));
 	if (ea === null || eb === null) return true;
-	for (const x of ea) for (const y of eb) if (overlapSingle(normalizeGlob(x), normalizeGlob(y))) return true;
+	for (const x of ea) for (const y of eb) if (coreOverlap(normalizeGlob(x), normalizeGlob(y), { strict: true })) return true;
 	return false;
 }
 

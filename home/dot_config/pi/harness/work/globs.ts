@@ -54,7 +54,7 @@ const segOverlap = (a: string, b: string): boolean => {
 	return f(0, 0);
 };
 
-const segments = (glob: string): string[] => {
+const segments = (glob: string, strict = false): string[] => {
 	let g = glob.replace(/\\/g, "/");
 	const dir = g.endsWith("/");
 	g = g.replace(/^(\.\/)+/, "");
@@ -63,17 +63,25 @@ const segments = (glob: string): string[] => {
 	const norm = segs.map((s) => (s.includes("**") ? "**" : s));
 	if (dir) norm.push("**");
 	// スラッシュを含まない記法は、どの階層にも合致しうる (gitignore 流) とみなす (保守側)
-	if (norm.length === 1 && !dir) norm.unshift("**");
+	if (norm.length === 1 && !dir && !strict) norm.unshift("**");
 	return norm;
 };
 
-export const globsMayOverlap = (a: string, b: string): boolean => {
-	const A = segments(a);
-	const B = segments(b);
+/**
+ * 2 つの glob が同じファイルに一致しうるか (保守的)。既定は gitignore 流 (スラッシュの無い記法はどの階層にも一致し、前置も重なる)。
+ * strict は根からの厳密な一致: 区切りを含まない記法も根の直下だけ、前置は重ならない (スケジューラ overlap.ts が使う。明示した木の外れは素)。
+ */
+export const globsMayOverlap = (a: string, b: string, opts: { strict?: boolean } = {}): boolean => {
+	const strict = opts.strict === true;
+	const A = segments(a, strict);
+	const B = segments(b, strict);
 	const memo = new Map<number, boolean>();
 	const f = (i: number, j: number): boolean => {
-		// どちらかを使い切った: 前置 (ディレクトリかもしれない) なので重なるとみなす
-		if (i === A.length || j === B.length) return true;
+		// どちらかを使い切った: 既定は前置 (ディレクトリかもしれない) なので重なる。strict は残りが `**` だけのときに限る
+		if (i === A.length || j === B.length) {
+			if (!strict) return true;
+			return i === A.length ? B.slice(j).every((s) => s === "**") : A.slice(i).every((s) => s === "**");
+		}
 		const key = i * (B.length + 1) + j;
 		const hit = memo.get(key);
 		if (hit !== undefined) return hit;
