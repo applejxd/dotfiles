@@ -94,6 +94,7 @@
 | [作業の観測ログ（journal）](work/journal.md) | 作業台帳の観測用イベントの置き場・事象・指標（`work_stats.py`）・限界。観測だけで振る舞いは変えない |
 | [作業台帳の実行時（runtime）](work/runtime.md) | 台帳を開いて持ち続ける接着層。モード・start の順序（lease→load）・submit（reduce 先行）・lease.acquired の自動追記・限界 |
 | [継続の調停（arbiter）](work/arbiter.md) | `agent_before_settle` の継続判断の純関数。優先順位表・提案者 4 つ・守る条件（entries ≤1・wake は effects のみ・失敗は閉じる）・限界 |
+| [調停の接着層（settle）](work/settle.md) | `agent_before_settle` に調停を 1 か所だけ登録する薄い層。旗 `PI_WORK_ARBITER=1`・entries の保持・effects の扱い・3 者の移し方・限界 |
 | [`/goal` と台帳](work/goal.md) | `/goal` のコマンド → 利用者専用イベントの変換・`GoalState` の導出・arbiter の Facts・守る条件・限界（純関数。配線は別の feature） |
 
 [ドキュメント一覧へ戻る](../index.md)
