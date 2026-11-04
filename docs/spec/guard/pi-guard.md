@@ -128,7 +128,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
   確認を出さず拒否（短くするか、利用者が自分で実行する）
 - **無反応は deny**: `[pi.confirm] timeout_seconds`（既定 300）を、TUI でも `confirm` の `timeout` に渡す。期限は確認画面を出してから数える。
   結果は、承認・拒否・時間切れ・取消・UI 無し・abort を区別して、拒否の理由に反映する（`not approved:` の接頭辞は保つ。子の `blocked` の分類のため）。
-  時間切れは「再試行せず、利用者の新しい指示を待つ」、拒否は「同じ操作をくり返さない」
+  時間切れ・取消・表示不能は「同じ操作は再試行せず、依存しない作業を続け、最後に『拒否された操作』として報告する」、拒否は「同じ操作をくり返さない」
 - **UI が無い実行は deny**: print モードと子（RPC。親が UI 要求を取り消す）は、確認できないので拒否する（`inherit_bypass` の子でも通らない）。`bg_run` の `--body-file` は
   `execute()` で再読みできないので、一律に拒否する
 - **`/bypass`**: description・ON の確認の本文・説明に、「確認が要る外部への送信・公開は、bypass でも確認する」を書く
