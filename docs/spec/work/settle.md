@@ -19,13 +19,17 @@ autocheckpoint・todo・goal がそれぞれ登録して `entries` の置換や�
 
 snapshot の取得などで例外が出たら `{}` (継続しない)。ハンドラは `pi.sendUserMessage` / `triggerTurn` を呼ばない。
 
-## 既存の 3 者の移し方 (配線の手順。別の feature)
+## 既存の 3 者の移し方 (配線済み・旗つき: feature `work-settle-wire`)
 
-1. `index.ts` で旗が有効なとき、3 者の `agent_before_settle` 登録を外し、`registerSettle` を 1 回呼ぶ (`deps` を 3 者の状態から作る)。
-2. autocheckpoint: `phase`・`percent`・`cooldown` を snapshot に写し、`exec.checkpoint("compact")` に `ctx.compact` を、再開は `exec.wake` に結ぶ。
-3. todo: `doing` / `blocked` / `queued` と `nudged*` を snapshot に写す (`nudged` の更新は `append_event` の効果で受ける)。
-4. goal: `goal-core` の事実 (`active`・`claim`・`stall`・予算) を snapshot に写す。
-5. 旗が無効なら従来どおり (旗の ON/OFF で二重に登録しない)。
+旗 `PI_WORK_ARBITER=1` のときだけ移る。**旗が無効 (既定) なら従来どおり** (autocheckpoint と todo が自分で登録し、調停は登録しない)。
+
+1. `index.ts`: `registerAutoCheckpoint` の直後 (`registerJournal` より前) で `registerSettle(pi, makeSettleDeps({...}), ...)` を 1 回呼ぶ。
+   旗が有効なら autocheckpoint・todo は `agent_before_settle` を登録しないので、登録順 (pi は登録順の連鎖) は問題にならない。
+2. autocheckpoint: `checkpointSnapshot()` (`phase`・`percent`・`cooldown`) と `checkpointExec` (`compact`・`cancel`・`markSaving`・`notify`・`wake`) を公開。
+   ctx は `session_start`・`before_agent_start`・`turn_end` で控える。保存の指示が勝ったことは journal の tap (`work/settle-snapshot.ts` の `tapJournal`) が `markSaving` で受ける。
+3. todo: `globalThis.__piTodoSnapshot()` (`open`・`doing`・`blocked`・`queued`・`nudged*`・`markNudged`)。リマインドが勝ったことは同じ tap が `markNudged` で受ける。
+4. snapshot の組み立ては `work/settle-snapshot.ts` の `buildSnapshot` (欠け・壊れは継続しない側へ)。`streak` は数えない (0 固定)。
+5. 圧縮完了後の自動再開 (`trigger: resume`) は**従来の経路のまま** (実機で確かめてから調停へ移す)。goal の配線は別 feature。
 
 ## 限界
 
