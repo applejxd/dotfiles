@@ -175,3 +175,15 @@ AI のガードが `git merge` を直接は通さない場合に備え、`python
 | `pis` での gitflow の片付けと `abort` | 撤去（AI の `git flow` 操作をやめたため。CHG-0050） | [CHG-0050](../change/0050-slim-guarded-action.md) |
 | 保留したコミットの取り込み（`/pending` から） | 未着手 | [CHG-0046](../change/0046-guarded-action-timeout.md) 段 4 |
 | `docker rm` などが、ask 既定の役割（親・`worker`）の bypass で通る | 範囲外として残す | [判定器](guard/pi-decide.md#既定が-deny-の役割の-ask) |
+
+## リポジトリのプロファイルの検出（`orch.py profile`）
+
+並列実装の道具を、リポジトリの形（git-flow-next・git-flow AVH・素の git）を検出して動かすための土台。`home/dot_claude/skills/feature-orchestration/scripts/` の `orchlib.py`（検出）と `orch.py`（入口。いまは `profile` だけ）。
+
+- **出力**（`--json`、`v:1`）: `flow`・`integration`（`branch`/`ref`）・`trunk`・`topic`（`prefixes`/`new_prefix`/`start_point`/`also_list`）・`worktrees`（`template`/`base_abs`/`inside_repo`/`ignored`。`{name}` は接頭辞を除いた名前）・`verify`・`overlay`・`gate_checks`・`repo`・`sources`（項目ごとの出所）・`ambiguous`・`warnings`。
+- **優先順**（項目ごとに独立）: CLI（`--integration`・`--prefix`・`--worktrees-dir`）→ `git config --local orchestration.*` → `.gitflow` の `[orchestration]` 節と `.agents/config/orchestration.gitconfig`（同順位。食い違うと曖昧）→ git-flow-next の型設定（local、無ければ `.gitflow`。主トピック型 `feature` の `parent`・`prefix`・`startpoint`、`worktreePath` の `{{ branchName }}` は `{name}`）→ AVH（`gitflow.branch.develop`・`gitflow.prefix.feature`）→ 形の検出（幹の枝の有無・枝名の分布）→ 既定（候補が 1 つのときだけ）。
+- **global/system の設定は読まない**。global にだけ `gitflow.*` / `orchestration.*` があると warning。
+- **曖昧**（同順位の候補が複数、local に next と AVH が両方、`feature/` 系の名前空間が複数）は推測せず、`ambiguous` に候補と設定例を入れて**終了コード 4**。必要な項目が曖昧なコマンドだけが止まる（`orchlib.blocking_ambiguities`）。
+- **終了コード**: 0=確定、2=使い方・前提違反（bare・コミット無し・git リポジトリでない）、4=曖昧。
+- **設定の鍵**（git-config 構文）: `integration`・`topicPrefix`（複数可）・`newPrefix`・`alsoList`・`worktreeDir`・`verifyCmd`・`overlay`・`gateChecks`。
+- 試験は `test/test_orch_profile.py`（形 a〜l と、この repo の `.gitflow`）。既存スクリプトの移設・profile 経由化・`start`/`list`・SKILL.md は後の段（S2 以降。計画: `.tmp/keep/plan/orchestration-general.md`）。
