@@ -323,6 +323,7 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 | 流れ | `agent_before_settle` で、使用率（`ctx.getContextUsage().percent`）が閾値（既定 80%）以上なら、保存の指示を `custom_message`（利用者にも表示）で積み `continue: true` で 1 回だけ継続する。次の settle で `ctx.compact({ customInstructions })`（上の引き継ぎの指示）を起動する。圧縮の完了・失敗のどちらでも 10 分の冷却に入る |
 | 保存の指示 | sdd-docs で docs へ未反映の決定を反映し、`.tmp/keep/checkpoint/NEXT.md`（私用）を書き直し、todo を更新する。コミットしない・公開リポジトリの規約を守る・本体（develop）の docs は編集しない・サブエージェントを起動しない |
 | ループ防止 | 保存の継続は 1 サイクルに 1 回。圧縮が済むまで、冷却が明けるまで、再び積まない |
+| entries の合成 | pi は同じ settle の複数の拡張の `entries` を**後勝ちで置き換える**（`runner.js` の `emitBoundary`）。前の結果は `event.entries` に入るので、`agent_before_settle` を返す拡張は `entries: [...(event.entries ?? []), 自分の entry]` で引き継ぐ（autocheckpoint → todo の順で、保存の指示が todo のリマインドに消されていた）。両方残して 1 ターンに入れる |
 | 何もしない場合 | 子・print / json モード・`PI_AUTOCHECKPOINT=0`・`percent` が null（圧縮直後など）・直前の実行が中断 / エラー |
 | 中断・失敗 | 保存の実行が中断（Esc）されたら、その周期の圧縮は起動しない。保存の実行がエラーで終わっても圧縮は進める。`compact` が例外でも状態は戻る |
 | 調整 | 環境変数 `PI_AUTOCHECKPOINT_PERCENT`（0 超 100 以下。不正値は 80）。無効化は `PI_AUTOCHECKPOINT=0`。設定ファイルには出していない |

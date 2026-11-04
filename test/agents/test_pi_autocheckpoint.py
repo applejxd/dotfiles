@@ -177,6 +177,100 @@ def test_threshold_env_and_invalid_values():
     )
 
 
+# ─── 同じ settle で todo と合成する ───────────────────────────────────
+#
+# pi 1.5.0 の emitBoundary (dist/core/extensions/runner.js 759-802) は、後のハンドラの entries で前の entries を
+# **置き換える** (775-776 行)。前のハンドラの結果は event.entries に入って渡る (767-771 行)。continue も後勝ち (777-778 行)。
+# ロード順は harness (autocheckpoint) → extensions (todo)。ここではその規則を模して 2 つの実物を順に呼ぶ。
+
+COMPOSE_RUNNER = """
+import { pathToFileURL } from "node:url";
+const [, , acPath, todoPath, mode] = process.argv;
+const { createAutoCheckpoint } = await import(pathToFileURL(acPath).href);
+const todoMod = await import(pathToFileURL(todoPath).href);
+const handlers = {};
+todoMod.default({
+  on: (n, f) => { (handlers[n] ??= []).push(f); },
+  registerTool: () => {}, registerCommand: () => {}, appendEntry: () => {},
+});
+const ac = createAutoCheckpoint({ child: false, compactInstructions: "I", env: {}, now: () => 0 });
+const todos = [{ id: 1, text: "x", status: "in_progress" }];
+const branch = mode === "todo" || mode === "both"
+  ? [{ type: "custom", customType: "todo-state", data: { nextId: 2, todos } }]
+  : [];
+const ctx = {
+  mode: "tui", hasUI: false,
+  ui: { notify: () => {}, setStatus: () => {} },
+  sessionManager: { getBranch: () => branch },
+  getContextUsage: () => ({ percent: mode === "todo" ? 10 : 90 }),
+  compact: () => {},
+};
+for (const f of handlers.session_start ?? []) await f({}, ctx);
+for (const f of handlers.before_agent_start ?? []) await f({ messageType: "user" }, ctx);
+// pi 本体の合成規則: entries は後勝ち、continue も後勝ち。event.entries に前の結果が入る
+let entries = [];
+let cont = false;
+const chain = [(e, c) => ac(e, c), ...(handlers.agent_before_settle ?? [])];
+for (const h of chain) {
+  const r = await h({ type: "agent_before_settle", outcome: "completed", entries, continue: cont }, ctx);
+  if (r?.entries !== undefined) entries = r.entries;
+  if (r?.continue !== undefined) cont = r.continue;
+}
+console.log(JSON.stringify({ types: entries.map((x) => x.customType), cont }));
+"""
+
+TODO = ROOT / "home" / "dot_pi" / "agent" / "extensions" / "todo"
+
+
+def _compose(tmp_path, mode):
+    ext = tmp_path / "ext"
+    for name, code in (
+        ("@earendil-works/pi-ai", "export const StringEnum=()=>({});"),
+        (
+            "@earendil-works/pi-tui",
+            "export const matchesKey=()=>false;export class Text{};"
+            "export const truncateToWidth=(s)=>s;export const visibleWidth=(s)=>s.length;",
+        ),
+        ("typebox", "const f=()=>({});export const Type=new Proxy({},{get:()=>f});"),
+    ):
+        stub = ext / "node_modules" / name
+        stub.mkdir(parents=True, exist_ok=True)
+        (stub / "package.json").write_text(
+            json.dumps({"name": name, "type": "module", "main": "index.js"}), encoding="utf-8"
+        )
+        (stub / "index.js").write_text(code, encoding="utf-8")
+    for name in ("index.ts", "view.ts"):
+        (ext / name).write_text((TODO / name).read_text(encoding="utf-8"), encoding="utf-8")
+    runner = ext / "runner.mjs"
+    runner.write_text(COMPOSE_RUNNER, encoding="utf-8")
+    harness = ROOT / "home" / "dot_config" / "pi" / "harness" / "autocheckpoint.ts"
+    proc = subprocess.run(
+        [_node(), str(runner), str(harness), str(ext / "index.ts"), mode],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    return json.loads(proc.stdout.strip().splitlines()[-1])
+
+
+def test_checkpoint_and_todo_reminder_both_survive_the_same_settle(tmp_path):
+    out = _compose(tmp_path, "both")
+    assert out["types"] == ["autocheckpoint", "todo-reminder"], out
+    assert out["cont"] is True
+
+
+@pytest.mark.parametrize(
+    ("mode", "types"), [("checkpoint", ["autocheckpoint"]), ("todo", ["todo-reminder"])]
+)
+def test_each_handler_alone_is_unchanged(tmp_path, mode, types):
+    out = _compose(tmp_path, mode)
+    assert out["types"] == types, out
+    assert out["cont"] is True
+
+
 def test_index_wires_it_with_the_compact_instructions():
     src = INDEX.read_text(encoding="utf-8")
     assert 'from "./autocheckpoint.ts"' in src
