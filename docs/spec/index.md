@@ -80,6 +80,7 @@
 | [pi の拡張と補助機能](guard/pi-extensions.md) | 拡張の入れ方の方針、`guarded_action`、ツールの拡張、圧縮、`git commit` の確認、整形、`/fleet`、stepback、キーバインド、Orca・Zed |
 | [pi の子エージェント](guard/pi-subagents.md) | `guarded_task` の起動と役割、`review` への依頼、job、子の操作、worktree 隔離、Windows の `task` |
 | [作業台帳の永続](work/store.md) | 追記ログの形式・crc・回復と隔離・スナップショット・lease・置き場・限界 |
+| [通知の選別・Digest・パネル](work/notices.md) | 自動の内部メッセージを絞る純関数。選別の表、モデルへの本文（Digest）の上限、畳んだ 1 行、常設パネル、幅の関数 |
 | [保留（撤去済み・履歴）](guard/pi-pending.md) | 非同期承認（`/pending approve`・`git_integrate`）の撤去の事実、残る `/pending`、残骸 ref の掃除 |
 | [ローカル PR ビューアの設計](pr-viewer.md) | PR 風のレビュー画面（別アプリ + git の ref + 薄い pi 拡張）。ref のスキーマ v1、状態の導出、レビューコメント送信の撤去、アプリの安全規則、統合・ジョブ・起票、試験、既知の制限（ペアリング・承認の指示の旧設計は撤去済み） |
 | [作業台帳 (work ledger) の核](work/ledger.md) | 台帳の型・遷移表・不変条件 I1〜I10・投影（ready の取り出し）・設計上の判断（純関数。配線は別の feature） |

@@ -185,6 +185,7 @@ _PI_TESTS = (
     "test_pi_todo_view",
     "test_work_core",
     "test_work_store",
+    "test_work_digest",
 )
 _OC_TESTS = (
     "test_generate_opencode*",
