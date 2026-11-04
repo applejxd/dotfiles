@@ -66,6 +66,8 @@ export interface Node {
 	owner?: Lease;
 	/** goal の一時停止の理由 (goal.paused の reason。goal.resumed で消える) */
 	pauseReason?: string;
+	/** 利用者の承認 (plan.approved) の時点で存在した task に reducer が立てる。立っていない task はスケジューラが自動起動しない */
+	approved?: boolean;
 	/** 証拠 (検査の出力・差分・行数・子の全文へのパス) の id */
 	evidence: string[];
 	notes: Note[];

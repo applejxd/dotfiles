@@ -81,7 +81,9 @@ const historyOf = (state: LedgerState): Record<string, Money[]> => {
 export function readyOf(state: LedgerState, opts: { limit?: number; bundle?: string; history?: Record<string, Money[]> } = {}): Node[] {
 	const history = opts.history ?? historyOf(state);
 	const estimateMs = (n: Node): number => num(n.attrs.estimateMs) ?? durationP50(roleOf(n), sizeOf(n), history);
-	return ready(state, { limit: opts.limit, bundle: opts.bundle, estimateMs });
+	// 承認の時点の task だけを起動候補にする。上限は選別の後に適用する
+	const all = ready(state, { bundle: opts.bundle, estimateMs }).filter((n) => n.approved === true);
+	return opts.limit !== undefined ? all.slice(0, opts.limit) : all;
 }
 
 /**
@@ -105,7 +107,14 @@ export function schedStateOf(state: LedgerState, opts: AdaptOptions): SchedState
 		if (FAILED_RUN.includes(r.state)) failures.set(t.id, (failures.get(t.id) ?? 0) + 1);
 		if (r.state === "done") (history[historyKey(roleOf(t), sizeOf(t))] ??= []).push({ ...r.spent });
 	}
-	const tasks = nodes.filter((n) => isTaskLike(n) && active(n)).map((n) => taskOf(n, failures.get(n.id) ?? 0));
+	// 承認の後に追加された task (approved が無い) は、ready/waiting でもスケジューラに起動させない (proposed 扱いにする)
+	const tasks = nodes
+		.filter((n) => isTaskLike(n) && active(n))
+		.map((n) => {
+			const t = taskOf(n, failures.get(n.id) ?? 0);
+			if (n.approved !== true && (t.state === "ready" || t.state === "waiting")) t.state = "proposed";
+			return t;
+		});
 	const schedRuns: SchedRun[] = runs.map((r) => {
 		const o: SchedRun = {
 			id: r.id,

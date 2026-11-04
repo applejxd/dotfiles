@@ -4,7 +4,7 @@
 // 仕様: docs/spec/work/tool.md
 import { makeEvent, NOTE_MAX, ZERO } from "./events.ts";
 import type { Payloads } from "./events.ts";
-import { emptyState, isLiveRun, isTaskLike, reduce, resolveEdge, wouldCycle } from "./reduce.ts";
+import { emptyState, isLiveRun, isTaskLike, reduce, resolveEdge, rootGoalId, wouldCycle } from "./reduce.ts";
 import type { LedgerState } from "./reduce.ts";
 import { clipCells } from "./text-width.ts";
 import type { EventType, LedgerEvent, NewEvent, Node } from "./types.ts";
@@ -468,7 +468,15 @@ const run = (state: LedgerState, a: Args, ctx: WorkCtx): { w: Work; text: string
 				});
 			}
 			const n = w.node(id);
-			return { w, text: `追加 ${id} [${STATE_JA[n.state]}] ${clipCells(clean(n.title), LIST_LINE_WIDTH)}`, details: { op: "add", id, state: n.state } };
+			// 承認の後に追加した task はスケジューラが自動起動しない (approved が立つのは plan.approved の時点の task だけ)
+			const g = rootGoalId(w.state.nodes, id);
+			const pending = n.approved !== true && g !== undefined && w.state.nodes.get(g)?.state === "active";
+			const note = pending ? "\n承認待ち（スケジューラは起動しない。/goal approve で承認）" : "";
+			return {
+				w,
+				text: `追加 ${id} [${STATE_JA[n.state]}] ${clipCells(clean(n.title), LIST_LINE_WIDTH)}${note}`,
+				details: { op: "add", id, state: n.state },
+			};
 		}
 		case "set": {
 			const t = w.task(a.id);

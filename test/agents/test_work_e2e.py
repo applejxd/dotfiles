@@ -84,7 +84,8 @@ def test_replay_seqs_are_contiguous(replays, stage):
 
 def test_replay_user_only_event_keeps_user_source(replays):
     r = replays["full"]
-    assert r["sources"][3] == "user"  # plan.approved
+    assert r["sources"][r["sources"].index("user")] == "user"  # plan.approved (task の後)
+    assert r["sources"][7] == "user"
     assert r["sources"][-1] == "user"  # budget.adjusted
 
 

@@ -49,6 +49,9 @@
 - I10 の拡張: 対象が goal ノードの `verdict` cancel（`/goal clear`）は、出所が user でなければ reducer が拒否する（対象の種類を知るのは reducer）。task の cancel はモデルでも通る
 - `goal.paused` の `reason` は goal ノードの `pauseReason` に保存し、`goal.resumed` で消す（`goalStateOf` の停止理由はここから導く）
 - `Money` に任意の `rounds`（goal の予算の往復数）を足した。reducer は budget を丸ごと写し、予約・使用量の合算（`MONEY_KEYS`）には使わない。負の値は拒否
+- 承認の時点の task だけが自動起動の対象: `Node.approved`（任意）を `plan.approved`（利用者専用）の reducer が、その goal 配下の非終端の task へ立てる。承認の後に `work add` で足した task は持たない（遷移表の初期状態は従来どおり ready）
+- `approved` の有無を見るのはスケジューラの選別（`adapt.ts` の `schedStateOf`・`readyOf`）だけ。表示用の `project.ready` と、モデルが `work set` で自分で進める操作は変えない
+- active の goal は `plan.approved`・`plan.proposed` を受けない（遷移表）ので、追加分を後から承認する経路は今は無い。承認前に計画へ入れるか、モデル自身が `set` で進める
 
 ## 接続と統合試験
 

@@ -17,6 +17,8 @@
 glob の意味: writes の重なりは台帳の門と同じ `globs.ts` の既定（gitignore 流: スラッシュ無しの記法は全階層、前置も重なる）で判定する。`*.py` と `scripts/verify.py` は重なる（直列）。
 台帳が拒否するものを start しない（偣陰性 0 を優先。偏陰性は直列になるだけ）。
 
+起動候補にするのは、承認の時点の task（`Node.approved`）だけ。`adapt.ts` の `schedStateOf` は、承認の後に追加された task（`approved` が無い ready／waiting）を `proposed` として渡し、`readyOf` は除く。「承認済みの計画」ではなく「承認の時点の task」だけが走る。
+
 親を起こす理由（`wake_parent`）: 全 task が終端で失敗が 1 つも無いときだけ `all_done`、終端だが `failed` を含むときは `failed`。実行中も着手可能も無く待ちだけが残るときは `stuck`（失敗した上流の下流など）。
 
 ## 並列化の方式

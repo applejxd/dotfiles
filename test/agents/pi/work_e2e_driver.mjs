@@ -41,10 +41,11 @@ export function scenario(stage = "full", opts = {}) {
 	];
 	if (stage === "planned") return evs.flat();
 	const h = (type, node, data, source = "system") => E(type, node, data, source, { holder: H });
-	evs.push([h("plan.approved", "G", { hash: "h1" }, "user")]);
 	for (const [id, writes, after, role, size] of tasks) {
 		evs.push([h("node.added", id, { node: { kind: "task", parent: "G", title: `task ${id}`, writes, after, attrs: { role, size } } }, "model")]);
 	}
+	// 承認の時点の task だけが起動候補になるので、task を足してから承認する
+	evs.push([h("plan.approved", "G", { hash: "h1" }, "user")]);
 	if (stage === "ready") return evs.flat();
 	evs.push(
 		[h("run.reserved", "R1", { task: "T1", est: EST }), h("run.started", "R1", { pid: 4242 })],
