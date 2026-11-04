@@ -5,6 +5,8 @@
 //
 // steps の要素: {at: 時刻ms, percent: 数値|null, mode: "tui"|..., outcome: "completed"|..., finish: "complete"|"error"|"throw"}
 // finish は、この step で compact が呼ばれたとき、その場で onComplete / onError を呼ぶか (省略なら呼ばない)
+// resume は注入した関数で、呼ばれた本文を resumes に集める。scenario.resumeDelayMs (既定 5ms)。
+// step.wait (ms) があれば、その step の後で待つ (再開の timer を進める)。step.setEnv はその step の前に env を書き換える。
 // see docs/spec/guard/pi-extensions.md#文脈の使用率による自動の保存と圧縮
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -18,17 +20,22 @@ const scenario = JSON.parse(readFileSync(0, "utf-8"));
 let clock = 0;
 const compacts = [];
 const notes = [];
+const resumes = [];
+const env = scenario.env ?? {};
 const handler = mod.createAutoCheckpoint({
 	child: scenario.child === true,
 	compactInstructions: "INSTR",
-	env: scenario.env ?? {},
+	env,
 	now: () => clock,
 	cooldownMs: scenario.cooldownMs,
+	resumeDelayMs: scenario.resumeDelayMs ?? 5,
+	resume: (text) => resumes.push(text),
 });
 
 const out = [];
 for (const step of scenario.steps) {
 	clock = step.at ?? clock;
+	if (step.setEnv) Object.assign(env, step.setEnv);
 	const before = compacts.length;
 	const ctx = {
 		mode: step.mode ?? "tui",
@@ -43,5 +50,7 @@ for (const step of scenario.steps) {
 	};
 	const result = handler({ type: "agent_before_settle", outcome: step.outcome ?? "completed" }, ctx);
 	out.push({ result: result ?? null, compacts: compacts.length - before });
+	if (step.wait) await new Promise((r) => setTimeout(r, step.wait));
 }
-console.log(JSON.stringify({ steps: out, compactOptions: compacts.map((o) => o.customInstructions), notes }));
+await new Promise((r) => setTimeout(r, 30)); // 最後に残った再開の timer を進める
+console.log(JSON.stringify({ steps: out, compactOptions: compacts.map((o) => o.customInstructions), notes, resumes }));
