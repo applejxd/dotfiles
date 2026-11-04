@@ -312,6 +312,21 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 | 既知の制限 | ① 開始イベントより前の数ミリ秒の窓では保留できない ② `ctx.isIdle()` は圧縮中も false なので、`isIdle` での判定はできない ③ 通知を保留しても、別経路の中断（利用者が圧縮中に Esc を押す、など）は防げない |
 | 試験 | `test/agents/test_pi_compact_defer.py`（harness は `index.ts` の `region compact-defer` の区画を node で実行。activity は偽の `pi`。配線は文字列で確認） |
 
+#### 文脈の使用率による自動の保存と圧縮
+
+文脈の使用率が閾値以上になったら、エージェント自身に保存させてから圧縮を起動する（`harness/autocheckpoint.ts`。親のセッションだけ）。
+
+| 項目 | 内容 |
+| --- | --- |
+| 流れ | `agent_before_settle` で、使用率（`ctx.getContextUsage().percent`）が閾値（既定 80%）以上なら、保存の指示を `custom_message`（利用者にも表示）で積み `continue: true` で 1 回だけ継続する。次の settle で `ctx.compact({ customInstructions })`（上の引き継ぎの指示）を起動する。圧縮の完了・失敗のどちらでも 10 分の冷却に入る |
+| 保存の指示 | sdd-docs で docs へ未反映の決定を反映し、`.tmp/keep/checkpoint/NEXT.md`（私用）を書き直し、todo を更新する。コミットしない・公開リポジトリの規約を守る・本体（develop）の docs は編集しない・サブエージェントを起動しない |
+| ループ防止 | 保存の継続は 1 サイクルに 1 回。圧縮が済むまで、冷却が明けるまで、再び積まない |
+| 何もしない場合 | 子・print / json モード・`PI_AUTOCHECKPOINT=0`・`percent` が null（圧縮直後など）・直前の実行が中断 / エラー |
+| 中断・失敗 | 保存の実行が中断（Esc）されたら、その周期の圧縮は起動しない。保存の実行がエラーで終わっても圧縮は進める。`compact` が例外でも状態は戻る |
+| 調整 | 環境変数 `PI_AUTOCHECKPOINT_PERCENT`（0 超 100 以下。不正値は 80）。無効化は `PI_AUTOCHECKPOINT=0`。設定ファイルには出していない |
+| 限界 | 保存の質は**エージェント次第**で保証しない（指示を守らない・docs の反映が不完全なことがある）。組み込みの自動圧縮（窓 − `reserveTokens` 付近）は**予備として残る**ので、保存より先にそちらが走ることもある。使用率は settle の時点でしか見ないので、1 回の長い実行の途中では働かない |
+| 試験 | `test/agents/test_pi_autocheckpoint.py`（`test/agents/pi/autocheckpoint_driver.mjs` が偽のイベントとコンテキストを handler へ渡す）。実機の確認は未実施 |
+
 ### セッションごとの一時置き場（`.tmp/s/<ID>/`）
 
 [CHG-0042](../../change/0042-tmp-lifecycle.md)。作業ツリーの `.tmp/` に残骸が溜まる（実測で 31 GB）のを防ぐため、
