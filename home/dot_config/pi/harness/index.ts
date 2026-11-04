@@ -23,6 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
 import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
 import { integrationConfig, tightenIntegration } from "./integration-gate.ts";
+import { createShadow } from "./judge/shadow.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
@@ -194,6 +195,13 @@ const callDecider = createCallDecider({
 });
 
 const integration = integrationConfig(rules.judge?.common);
+
+// 新しい解析 (plan.ts) の観測だけ。応答は変えない。PI_SHADOW=0 で無効、子では記録しない。see docs/spec/guard/pi-decide.md#shadow観測
+const shadow = createShadow({
+	role: () => (orchestrate ? ORCH.role : ROLE),
+	mode: () => `${bypass ? "bypass" : "ask"}${BOUNDARY ? "+boundary" : ""}`,
+	sshTargets: () => ((rules.judge?.common?.pi?.remote_exec?.targets as unknown[] | undefined) ?? []).map(String),
+});
 
 // `git flow feature finish <名前>` の確認に添える、統合の内容 (git の読み取りと merge-tree。ref・インデックス・作業ツリーは変えない)。統合先は [pi.integrate] target (既定 develop)
 const REF_NAME = /^[A-Za-z0-9][A-Za-z0-9._\/-]*$/;
@@ -602,6 +610,11 @@ export default async function (pi: ExtensionAPI) {
 		const ep = epoch;
 		const stale = () => ({ block: true, reason: `${NOT_APPROVED} 確認を待つ間に権限の状態 (bypass / orchestrate) が変わった。もう一度やり直す` });
 		const d = decide(tool, event.input, ctx.cwd);
+		try {
+			shadow.observe(tool, (event.input as any)?.command, d, ctx.cwd, ctx.sessionManager.getSessionId());
+		} catch {
+			// 観測は判定に影響させない
+		}
 		const input = JSON.stringify(event.input);
 		if (d.decision === "deny") return { block: true, reason: denyReason(tool, event.input, d) + (orchestrate ? ORCH_HINT : "") };
 		if (d.decision === "ask") {
