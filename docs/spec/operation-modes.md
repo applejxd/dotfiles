@@ -81,7 +81,7 @@ node apps/pr-viewer/merge-cli.ts recover <repo>
 - ビューア/`merge-cli` で統合した場合 → `wt_clean.py`（または統合時の cleanup）。
 - `git flow feature finish` を使った場合（公式の記述。**実機の挙動は未確認**。旗 `--force-worktree`（`-W`）と `--keep-worktree` の存在は、入っている版の `finish --help` で確認済み）: finish は枝を消す前に、その枝がチェックアウトされた worktree を解放する。`git flow feature start <名前> --worktree` で作った worktree（git-flow が作った印つき）は**削除**され、枝も消える（`wt_clean.py` は不要）。`git worktree add` で作った worktree（画面の「＋ 起票」で作ったものを含む）は**削除されず、HEAD を枝から外して（detach）残る**（中身はそのまま）。git-flow が作った worktree に未コミット・未追跡の変更があると、マージの前に中断する（worktree も枝も無傷）。強制は `--force-worktree`（`-W`）、残すのは `--keep-worktree`（CLI のみ。git config には無い）。無視ファイル（`__pycache__` など）が未追跡の変更として数えられるかは**未確認**（`git flow feature finish --help` と、使い捨てのリポジトリで確かめる）。出典: git-flow-next の [Issue #175](https://github.com/gittower/git-flow-next/issues/175)（2026-08-02 起票）と公式の [commands](https://git-flow.sh/docs/commands/)・[configuration](https://git-flow.sh/docs/configuration/)（取得 2026-11-05。全文は未読）。
 
-私用の補助 `pk merge` はこのリポジトリの外にある。正本はこの `merge-cli`。
+利用者の私用の補助 `pk merge` はこのリポジトリの外にあり、ここの手順には使わない。正本はこの `merge-cli`。
 
 ### pi 単独の限界
 
