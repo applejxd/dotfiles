@@ -54,6 +54,8 @@ const TASK_TOOL = "task";
 const TODO_TOOL = "todo";
 const ASK_TOOL = "ask";
 const ACTION_TOOL = "action";
+// profile の deny_except に書いてよい語 (bash.ts の例外処理が知っているものだけ)
+const DENY_EXCEPT_WORDS: readonly string[] = ["git worktree remove"];
 
 /** bash の判定器。移植が済むまでは差し込まれない。 */
 export type BashDecider = (
@@ -103,6 +105,18 @@ function profileOf(pi: Record<string, any>, role: string): Record<string, any> {
 		const value = profile[key];
 		if (value !== undefined && (!Array.isArray(value) || !value.every((c) => typeof c === "string"))) {
 			throw new ValueError(`[pi.profiles.${role}] ${key} が文字列の配列ではありません`);
+		}
+	}
+	// [bash] deny の役割別の例外。許す語は固定 (未知の語は設定の誤りとして deny)
+	const exceptions = profile.deny_except;
+	if (exceptions !== undefined) {
+		if (!Array.isArray(exceptions) || !exceptions.every((c) => typeof c === "string")) {
+			throw new ValueError(`[pi.profiles.${role}] deny_except が文字列の配列ではありません`);
+		}
+		for (const word of exceptions) {
+			if (!DENY_EXCEPT_WORDS.includes(word)) {
+				throw new ValueError(`[pi.profiles.${role}] deny_except に未知の語 ${pyRepr(word)} があります (許す語: ${DENY_EXCEPT_WORDS.join(", ")})`);
+			}
 		}
 	}
 	return profile;

@@ -137,6 +137,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 - 作業が終わって入力待ちになったとき、確認画面を出す前、`ask` の前に、端末の BEL が鳴る（TUI のとき）。
 - 起動時に「フルガードの判定の外で動きうるものがあります: …」と警告が出ることがある（`mcp.json` のサーバや、作業先の `.pi/` の拡張など）。
 - 通常の確認画面は「実行してよいですか？」（コマンドと理由を表示）。
+- bash の確認には、複数の手順があるコマンドを解きほぐした「手順:」の一覧が付く（表示だけの補助。常に原文を確認する。[仕様](guard/pi-extensions.md#確認画面の手順の一覧)）。
 - bypass でも出る確認の見出し:
   - 「⚠ bypass でも確認が要る操作 (外部への送信・公開、元に戻せない git 操作)」
   - 「⚠ 保護ブランチへの統合 (bypass でも確認が要る)」
@@ -168,7 +169,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `/agent <agent> <依頼>` | 子を直接起動する | `agent` は `explore` / `review` / `plan` / `commit` / `worker`。結果はチャットに出る（モデルのターンは起こさない） |
 | `/worktrees [show\|collect\|discard <jobId>\|unlock]` | 隔離 worktree の一覧・回収のやり直し・破棄 | `collect` と `discard` は確認あり。`unlock` は古いロックの解除 |
 | `/pending [list\|show\|drop]` | 退避したコミット（旧形式）の扱い | 引数なしは `list`。後述 |
-| `/todos [tidy\|clear]` | タスクリストの表示 | `tidy` は完了・中止を消す。`clear` は全部消す |
+| `/todos [tidy\|clear]` | タスクリストの表示 | 引数なしは overlay（↑↓ jk・PgUp/PgDn・g/G・a で完了表示・Esc/q。[詳細](guard/pi-extensions.md#todo-の別表示)）。`tidy` は完了・中止を消す。`clear` は全部消す |
 | `/btw [--plain] <質問>` | いまの会話を踏まえた、ついでの質問（履歴に残さない） | 既定は読み取り専用の子 `explore` が調べる（上限 3 分）。`--plain` はツールなしで現在のモデルが答える（上限 2 分） |
 | `/delegate-stats` | 直近 10 発言分の読み取り量と委譲の件数 | 記録のみ。`PI_DELEGATE_NUDGE=0` で止まる |
 
@@ -396,6 +397,7 @@ read = ["/data1"]
 | `PI_HARNESS_CHILD_CONTEXT` | `inherit` / `extract` で、子へ渡す AGENTS.md を全文にするか役割ごとの抜粋にするかを指定（`[pi.child] context` より優先。起動済みの親には届かない） |
 | `PI_DELEGATE_NUDGE=0` | `/delegate-stats` の記録を止める |
 | `PI_TODO_NO_REMINDER=1` | todo の続行の促しを止める |
+| `PI_AUTOCHECKPOINT=0` / `PI_AUTOCHECKPOINT_PERCENT` | 文脈の使用率による自動の保存と圧縮を止める / 閾値（既定 80。[仕様](guard/pi-extensions.md#文脈の使用率による自動の保存と圧縮)） |
 | `PIS_EXTRA_READ` / `PIS_EXTRA_DEVICES` | 7.3 |
 | `AGENTS_LOCAL_CONFIG` | `local.toml` の場所の差し替え |
 | `DOTFILES_RESYNC_WEBSEARCH_KEYS=1` | apply 時に検索の鍵を取り直す |

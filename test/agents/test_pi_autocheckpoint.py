@@ -1,0 +1,186 @@
+"""自動の保存と圧縮 (``home/dot_config/pi/harness/autocheckpoint.ts``) の状態機械の試験。
+
+``test/agents/pi/autocheckpoint_driver.mjs`` に偽のイベントとコンテキストを渡し、handler の戻り値と compact の呼び出しを見る
+(node の型除去を使うので、22.18 未満の node では飛ばす)。
+
+see docs/spec/guard/pi-extensions.md#文脈の使用率による自動の保存と圧縮
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+
+import pytest
+from agents_common import ROOT
+from test_pi_judge_ts import _node
+
+DRIVER = ROOT / "test" / "agents" / "pi" / "autocheckpoint_driver.mjs"
+INDEX = ROOT / "home" / "dot_config" / "pi" / "harness" / "index.ts"
+
+pytestmark = pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+
+MIN = 60_000
+
+
+def run(steps, **scenario):
+    proc = subprocess.run(
+        [_node(), str(DRIVER)],
+        input=json.dumps({"steps": steps, **scenario}),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=ROOT,
+        timeout=60,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-1000:]
+    return json.loads(proc.stdout)
+
+
+def prompt_of(step):
+    return step["result"]["entries"][0]["content"]
+
+
+def test_below_threshold_does_nothing():
+    out = run([{"percent": 79}, {"percent": 10}])
+    assert [s["result"] for s in out["steps"]] == [None, None]
+    assert out["notes"] == []
+
+
+def test_at_threshold_continues_with_a_checkpoint_prompt():
+    out = run([{"percent": 80}])
+    r = out["steps"][0]["result"]
+    assert r["continue"] is True
+    entry = r["entries"][0]
+    assert entry["type"] == "custom_message" and entry["display"] is True
+    for word in (
+        "コミットしない",
+        "私物のホスト名",
+        "本体の作業ツリー",
+        "NEXT.md",
+        "sdd-docs",
+        "保存完了",
+    ):
+        assert word in entry["content"]
+    assert out["steps"][0]["compacts"] == 0
+
+
+def test_next_settle_compacts_exactly_once_with_the_instructions():
+    out = run([{"percent": 85}, {"percent": 85}, {"percent": 90}, {"percent": 95}])
+    s = out["steps"]
+    assert s[0]["result"]["continue"] is True
+    assert [x["compacts"] for x in s] == [0, 1, 0, 0]
+    assert s[1]["result"] is None
+    assert out["compactOptions"] == ["INSTR"]
+
+
+def test_one_save_continuation_per_cycle_no_loop():
+    # 圧縮の完了を待つ間 (compacting) は、使用率が高くても継続を積まない
+    out = run([{"percent": 90}] * 6)
+    conts = [x for x in out["steps"] if x["result"]]
+    assert len(conts) == 1 and sum(x["compacts"] for x in out["steps"]) == 1
+
+
+@pytest.mark.parametrize("finish", ["complete", "error"])
+def test_cooldown_after_complete_or_error_then_resumes(finish):
+    steps = [
+        {"at": 0, "percent": 90},
+        {"at": 1, "percent": 90, "finish": finish},
+        {"at": 2 * MIN, "percent": 90},  # 冷却中 (既定 10 分)
+        {"at": 9 * MIN, "percent": 90},  # 冷却中
+        {"at": 11 * MIN + 1, "percent": 90},  # 冷却が明けて再び保存
+    ]
+    r = [x["result"] for x in run(steps)["steps"]]
+    assert r[0] and r[1] is None and r[2] is None and r[3] is None and r[4]["continue"] is True
+
+
+def test_error_path_notifies():
+    out = run([{"percent": 90}, {"percent": 90, "finish": "error"}])
+    assert any("失敗" in n for n in out["notes"])
+
+
+def test_cooldown_is_configurable():
+    steps = [
+        {"at": 0, "percent": 90},
+        {"at": 1, "percent": 90, "finish": "complete"},
+        {"at": 5000, "percent": 90},
+    ]
+    assert run(steps, cooldownMs=1000)["steps"][2]["result"]["continue"] is True
+
+
+def test_compact_throwing_does_not_wedge_the_state():
+    steps = [
+        {"at": 0, "percent": 90},
+        {"at": 1, "percent": 90, "compactThrows": True},
+        {"at": 11 * MIN, "percent": 90},
+    ]
+    s = run(steps)["steps"]
+    assert s[1]["compacts"] == 1 and s[2]["result"]["continue"] is True
+
+
+def test_compaction_still_runs_when_the_save_run_errored():
+    out = run([{"percent": 90}, {"percent": 90, "outcome": "error"}])
+    assert out["steps"][1]["compacts"] == 1
+
+
+def test_abort_during_save_cancels_the_cycle():
+    out = run(
+        [
+            {"at": 0, "percent": 90},
+            {"at": 1, "percent": 90, "outcome": "aborted"},
+            {"at": 2, "percent": 90},
+        ]
+    )
+    assert [x["compacts"] for x in out["steps"]] == [0, 0, 0]
+    assert out["steps"][2]["result"] is None  # 冷却中
+
+
+def test_an_aborted_or_errored_run_does_not_start_a_cycle():
+    out = run([{"percent": 95, "outcome": "aborted"}, {"percent": 95, "outcome": "error"}])
+    assert [x["result"] for x in out["steps"]] == [None, None]
+
+
+@pytest.mark.parametrize(
+    ("scenario", "step"),
+    [
+        ({"child": True}, {"percent": 99}),
+        ({}, {"percent": 99, "mode": "print"}),
+        ({}, {"percent": 99, "mode": "json"}),
+        ({"env": {"PI_AUTOCHECKPOINT": "0"}}, {"percent": 99}),
+        ({}, {"percent": None}),
+    ],
+    ids=["child", "print", "json", "disabled", "percent-null"],
+)
+def test_inactive_cases_do_nothing(scenario, step):
+    out = run([step, step], **scenario)
+    assert [x["result"] for x in out["steps"]] == [None, None]
+    assert sum(x["compacts"] for x in out["steps"]) == 0
+
+
+def test_threshold_env_and_invalid_values():
+    assert (
+        run([{"percent": 55}], env={"PI_AUTOCHECKPOINT_PERCENT": "50"})["steps"][0]["result"][
+            "continue"
+        ]
+        is True
+    )
+    assert (
+        run([{"percent": 79}], env={"PI_AUTOCHECKPOINT_PERCENT": "abc"})["steps"][0]["result"]
+        is None
+    )
+    assert (
+        run([{"percent": 80}], env={"PI_AUTOCHECKPOINT_PERCENT": "abc"})["steps"][0]["result"][
+            "continue"
+        ]
+        is True
+    )
+
+
+def test_index_wires_it_with_the_compact_instructions():
+    src = INDEX.read_text(encoding="utf-8")
+    assert 'from "./autocheckpoint.ts"' in src
+    assert (
+        "registerAutoCheckpoint(pi, { child: CHILD, compactInstructions: COMPACT_INSTRUCTIONS })"
+        in src
+    )

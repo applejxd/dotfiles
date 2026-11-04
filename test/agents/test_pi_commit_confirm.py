@@ -411,6 +411,8 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     harness.mkdir(parents=True)
     shutil.copy2(HARNESS_SRC, harness / "index.ts")
     shutil.copytree(HARNESS_SRC.parent / "judge", harness / "judge")
+    shutil.copytree(HARNESS_SRC.parent / "vendor", harness / "vendor")
+    shutil.copy2(HARNESS_SRC.parent / "explain.ts", harness / "explain.ts")
     shutil.copy2(HARNESS_SRC.parent / "redact.ts", harness / "redact.ts")
     shutil.copy2(HARNESS_SRC.parent / "canary.ts", harness / "canary.ts")
     shutil.copy2(HARNESS_SRC.parent / "children.ts", harness / "children.ts")
@@ -429,6 +431,7 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     shutil.copy2(HARNESS_SRC.parent / "unguarded.ts", harness / "unguarded.ts")
     shutil.copy2(HARNESS_SRC.parent / "session-tmp.ts", harness / "session-tmp.ts")
     shutil.copy2(HARNESS_SRC.parent / "model-choice.ts", harness / "model-choice.ts")
+    shutil.copy2(HARNESS_SRC.parent / "autocheckpoint.ts", harness / "autocheckpoint.ts")
     shutil.copy2(HARNESS_SRC.parent / "pending-store.ts", harness / "pending-store.ts")
     for name in (
         "pending-command.ts",

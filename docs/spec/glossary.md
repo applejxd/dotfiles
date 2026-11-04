@@ -101,8 +101,8 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
   （[複数の会話を並行して使う運用](guard/pi-subagents.md#複数の会話を並行して使う運用)）
 - **claim / release**: worktree の所有を lock の理由欄で表明する操作と、その解除
   （[worktree の所有の表明](orchestration.md#worktree-の所有の表明)）
-- **ジョブ**: PR ビューアの「変更を依頼」を押したときに、feature の worktree で `pis -p` を 1 回起動する処理
-  （[ジョブ](pr-viewer.md#ジョブ段-a4achg-0062-34)）
+- **ジョブ**（撤去済み）: PR ビューアの「変更を依頼」を押したときに、feature の worktree で `pis -p` を 1 回起動していた処理
+  （[撤去の記録](pr-viewer.md#ジョブ段-a4a撤去済み)）
 - **cwd**: `guarded_task` の子の実行場所。親のリポジトリの worktree 一覧にある絶対パスだけ指定できる
   （[子エージェント](guard/pi-subagents.md#子エージェント)）
 

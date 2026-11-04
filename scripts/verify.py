@@ -119,6 +119,7 @@ _PI_TESTS = (
     "test_bedrock_probe",
     "test_pi_github_boundary",
     "test_pi_commit_confirm",
+    "test_pi_autocheckpoint",
     "test_pi_board",
     "test_pi_board_collect",
     "test_pi_board_command",
@@ -144,6 +145,7 @@ _PI_TESTS = (
     "test_pi_pr_review",
     "test_pi_harness_removal",
     "test_pi_git_destructive",
+    "test_pi_worktree_remove",
     "test_pi_orchestrate",
     "test_pi_allow_output_quoting",
     "test_pi_deny_default_ask",
@@ -152,6 +154,7 @@ _PI_TESTS = (
     "test_pi_session_tmp",
     "test_tmp_hygiene",
     "test_pi_confirm_view",
+    "test_pi_explain",
     "test_pi_speed",
     "test_pi_ask_normalize",
     "test_pi_worktree",
@@ -173,6 +176,7 @@ _PI_TESTS = (
     "test_pi_judge_windows_paths",
     "test_pi_pending_command",
     "test_btw_view",
+    "test_pi_todo_view",
 )
 _OC_TESTS = (
     "test_generate_opencode*",

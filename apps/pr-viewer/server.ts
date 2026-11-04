@@ -1,8 +1,6 @@
 // PR ビューアのサーバ（段 1: 読み取り専用、段 2: レビューの書き込み、段 A2: 統合）。
 // 起動: node apps/pr-viewer/server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>]
-//       [--allow-merge] [--allow-create] [--rules-file <パス>]
-//       [--allow-jobs] [--job-timeout-ms <N>] [--test-platform <名前>] [--pis-command <絶対パス>]
-//       [--state-dir <パス>] [--job-model <提供元/モデル>]
+//       [--allow-merge] [--allow-create] [--rules-file <パス>] [--state-dir <パス>]
 // 設計: docs/change/0060-local-pr-viewer.md・docs/change/0062-pr-hub-simplify.md。契約: .tmp/keep/prv-app/api-contract.md
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -15,14 +13,39 @@ import type { Repo } from "./git-view.ts";
 import { mergeRequestError, stopMerges } from "./merge-api.ts";
 import type { MergeEnv, PostResult } from "./merge-api.ts";
 import { createRequestError, stopCreates } from "./feature-api.ts";
-import { handleApi, handlePost, isFeaturePostRoute, isJobGetRoute, isJobPostRoute, isMergePostRoute, isPostRoute } from "./routes.ts";
-import { DEFAULT_JOB_TIMEOUT_MS, MAX_JOB_TIMEOUT_MS, acquireInstanceLock, jobCapabilities, jobRequestError, recoverJobs, stateDirIsolated, stopJobs } from "./job-api.ts";
-import type { JobsConfig } from "./job-api.ts";
-import { buildArgv } from "./job-runner.ts";
-import { defaultStateDir } from "./job-store.ts";
+import { handleApi, handlePost, isFeaturePostRoute, isMergePostRoute, isPostRoute } from "./routes.ts";
+
+/** 既定の stateDir（$XDG_STATE_HOME/pr-viewer）。統合の掃除の退避先に使う。 */
+function defaultStateDir(env: NodeJS.ProcessEnv = process.env): string {
+	const base = env.XDG_STATE_HOME && env.XDG_STATE_HOME.startsWith("/") ? env.XDG_STATE_HOME : join(homedir(), ".local", "state");
+	return join(base, "pr-viewer");
+}
 
 const DEFAULT_PORT = 8780;
 const HOST = "127.0.0.1";
+
+/** GET /api/version の本体。main() が起動時に 1 回だけ決める（稼働中は変わらない）。 */
+let versionInfo: { pinned: boolean; oid: string | null; ref: string | null; pinnedAt: string | null } = {
+	pinned: false,
+	oid: null,
+	ref: null,
+	pinnedAt: null,
+};
+
+/** pr_app.py が書いた PINNED.json を読む。形が正しくなければ「固定なし」。 */
+async function readPinned(file: string | null): Promise<typeof versionInfo> {
+	const none = { pinned: false, oid: null, ref: null, pinnedAt: null };
+	if (file === null) return none;
+	try {
+		const j = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>;
+		const str = (x: unknown, re: RegExp): string | null => (typeof x === "string" && re.test(x) ? x : null);
+		const oid = str(j.oid, /^[0-9a-f]{40}$/);
+		if (oid === null) return none;
+		return { pinned: true, oid, ref: str(j.ref, /^[\w./-]{1,100}$/), pinnedAt: str(j.pinnedAt, /^[0-9TZ:.+-]{10,40}$/) };
+	} catch {
+		return none;
+	}
+}
 
 type Options = {
 	repos: string[];
@@ -37,18 +60,10 @@ type Options = {
 	rulesFile: string;
 	/** 試験用: ff の直前に入れる遅延（競合・停止の再現） */
 	mergeDelayMs: number;
-	/** pi への依頼（ジョブ）を許可する（既定で無効。Linux のみ）。値を取らない旗 */
-	allowJobs: boolean;
-	/** 1 回の上限。試験用に ms で指定する（1 ms〜30 分） */
-	jobTimeoutMs: number;
-	/** 試験用: process.platform の代わりに使う名前 */
-	testPlatform: string | null;
-	/** pis の絶対パス（既定: ~/.local/bin/pis。試験で偏の pis に差し替える） */
-	pisCommand: string;
-	/** ジョブの保存先（絶対パス。既定: $XDG_STATE_HOME/pr-viewer） */
+	/** 統合の掃除の退避先などの保存先（絶対パス。既定: $XDG_STATE_HOME/pr-viewer） */
 	stateDir: string;
-	/** pis へ渡す --model（既定は pi の既定に任せる） */
-	jobModel: string | null;
+	/** 稼働版の記録（pr_app.py が固定した checkout の PINNED.json。無ければ固定なし） */
+	pinnedFile: string | null;
 	/** 起票を許可する（既定で無効）。値を取らない旗 */
 	allowCreate: boolean;
 	/** 試験用: 起票の検証の後（記録の前）に入れる遅延 */
@@ -66,12 +81,8 @@ function parseArgs(argv: string[]): Options | null {
 		allowMerge: false,
 		rulesFile: join(homedir(), ".config", "pi", "harness", "rules.json"),
 		mergeDelayMs: 0,
-		allowJobs: false,
-		jobTimeoutMs: DEFAULT_JOB_TIMEOUT_MS,
-		testPlatform: null,
-		pisCommand: join(homedir(), ".local", "bin", "pis"),
 		stateDir: defaultStateDir(),
-		jobModel: null,
+		pinnedFile: null,
 		allowCreate: false,
 		createDelayMs: 0,
 		createFail: null,
@@ -84,10 +95,6 @@ function parseArgs(argv: string[]): Options | null {
 		}
 		if (a === "--allow-create") {
 			o.allowCreate = true; // 値を取らない
-			continue;
-		}
-		if (a === "--allow-jobs") {
-			o.allowJobs = true; // 値を取らない
 			continue;
 		}
 		const v = argv[i + 1];
@@ -104,21 +111,12 @@ function parseArgs(argv: string[]): Options | null {
 		else if (a === "--merge-test-delay-ms") {
 			if (!/^\d+$/.test(v) || Number(v) > 60_000) return null; // 試験用
 			o.mergeDelayMs = Number(v);
-		} else if (a === "--job-timeout-ms") {
-			if (!/^\d+$/.test(v) || Number(v) < 1 || Number(v) > MAX_JOB_TIMEOUT_MS) return null; // 試験用
-			o.jobTimeoutMs = Number(v);
-		} else if (a === "--test-platform") {
-			if (!/^[a-z0-9]{1,16}$/.test(v)) return null; // 試験用
-			o.testPlatform = v;
-		} else if (a === "--pis-command") {
+		} else if (a === "--pinned-file") {
 			if (!isAbsolute(v) || v.includes("\0")) return null;
-			o.pisCommand = v;
+			o.pinnedFile = v;
 		} else if (a === "--state-dir") {
 			if (!isAbsolute(v) || v.includes("\0")) return null;
 			o.stateDir = v;
-		} else if (a === "--job-model") {
-			if (v.startsWith("-") || buildArgv("x", v) === null) return null; // "<provider>/<model>" の形だけ（先頭の - は旗と紛れるので不可）
-			o.jobModel = v;
 		} else if (a === "--create-test-delay-ms") {
 			if (!/^\d+$/.test(v) || Number(v) > 60_000) return null; // 試験用
 			o.createDelayMs = Number(v);
@@ -234,29 +232,13 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
 	});
 }
 
-/** 設定から、ジョブ API に渡す形を作る。 */
-function jobsOf(opts: Options): JobsConfig {
-	return {
-		enabled: opts.allowJobs,
-		platform: opts.testPlatform ?? process.platform,
-		pisCommand: opts.pisCommand,
-		stateDir: opts.stateDir,
-		timeoutMs: opts.jobTimeoutMs,
-		model: opts.jobModel,
-		rulesFile: opts.rulesFile,
-	};
-}
-
-/** 書き込み（POST）。共通の規則を検査してから routes.ts へ渡す。統合系・ジョブ系は Origin 必須・--allow-merge / --allow-jobs が要る（先に断る）。 */
+/** 書き込み（POST）。共通の規則を検査してから routes.ts へ渡す。統合系・起票系は Origin 必須・--allow-merge / --allow-create が要る（先に断る）。 */
 async function servePost(repos: Repo[], req: IncomingMessage, res: ServerResponse, pathname: string, opts: Options): Promise<void> {
 	if (isFeaturePostRoute(pathname)) {
 		const denied = createRequestError(req.headers, opts.allowCreate);
 		if (denied) return sendError(res, denied.status, denied.code, denied.message);
 	} else if (isMergePostRoute(pathname)) {
 		const denied = mergeRequestError(req.headers, opts.allowMerge);
-		if (denied) return sendError(res, denied.status, denied.code, denied.message);
-	} else if (isJobPostRoute(pathname)) {
-		const denied = jobRequestError(req.headers, jobsOf(opts), "POST");
 		if (denied) return sendError(res, denied.status, denied.code, denied.message);
 	} else if (!originAllowed(req.headers.origin, req.headers.host)) {
 		return sendError(res, 403, "forbidden_origin", "この Origin は許可されていません。");
@@ -284,7 +266,7 @@ async function servePost(repos: Repo[], req: IncomingMessage, res: ServerRespons
 		return sendError(res, 400, "bad_request", "リクエストの形が正しくありません。");
 	}
 	const env: MergeEnv = { rulesFile: opts.rulesFile, testDelayMs: opts.mergeDelayMs, backupDir: join(opts.stateDir, "cleanup-backups") };
-	const result: PostResult = await handlePost(repos, pathname, body as Record<string, unknown>, env, jobsOf(opts), {
+	const result: PostResult = await handlePost(repos, pathname, body as Record<string, unknown>, env, {
 		testDelayMs: opts.createDelayMs,
 		testFail: opts.createFail,
 	});
@@ -304,7 +286,7 @@ function isMergePost(req: IncomingMessage): boolean {
 	if (req.method !== "POST") return false;
 	try {
 		const p = new URL(req.url ?? "", "http://localhost").pathname;
-		return isMergePostRoute(p) || isJobPostRoute(p) || isFeaturePostRoute(p); // ジョブや起票も、応答を書き終えるまで停止を待つ
+		return isMergePostRoute(p) || isFeaturePostRoute(p); // 起票も、応答を書き終えるまで停止を待つ
 	} catch {
 		return false;
 	}
@@ -367,14 +349,10 @@ function makeInnerHandler(repos: Repo[], opts: Options) {
 					merge: opts.allowMerge,
 					create: opts.allowCreate,
 					targets: ["develop"],
-					...jobCapabilities(jobsOf(opts)),
 				});
 			}
-			if (isJobGetRoute(p)) {
-				const denied = jobRequestError(req.headers, jobsOf(opts), "GET");
-				if (denied) return sendError(res, denied.status, denied.code, denied.message);
-			}
-			if (p.startsWith("/api/")) return sendJson(res, 200, await handleApi(repos, p, url.searchParams, jobsOf(opts)));
+			if (p === "/api/version") return sendJson(res, 200, versionInfo);
+			if (p.startsWith("/api/")) return sendJson(res, 200, await handleApi(repos, p, url.searchParams));
 			return sendError(res, 404, "not_found", "見つかりません。");
 		} catch (e) {
 			if (e instanceof ApiError) return sendError(res, e.status, e.code, e.message, {}, e.conflicts, e.details);
@@ -387,13 +365,8 @@ async function main(): Promise<void> {
 	const opts = parseArgs(process.argv.slice(2));
 	if (!opts || opts.repos.length === 0) {
 		process.stderr.write(
-			"使い方: node server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>] [--allow-merge] [--allow-create] [--allow-jobs] [--rules-file <パス>]\n",
+			"使い方: node server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>] [--allow-merge] [--allow-create] [--rules-file <パス>]\n",
 		);
-		process.exit(2);
-	}
-	const jobs = jobsOf(opts);
-	if (jobs.enabled && jobs.platform !== "linux") {
-		process.stderr.write("--allow-jobs は Linux でだけ使えます。\n");
 		process.exit(2);
 	}
 	const repos: Repo[] = [];
@@ -406,29 +379,13 @@ async function main(): Promise<void> {
 		if (!repos.some((x) => x.repoId === r.repoId)) repos.push(r);
 	}
 	configureLimits({ timeoutMs: opts.timeoutMs, maxBytes: opts.maxBytes });
-	if (jobs.enabled) {
-		// 保存先が共通 .git や worktree の中なら、何も作らずに断る
-		if (!(await stateDirIsolated(jobs, repos))) {
-			process.stderr.write("--state-dir は、対象リポジトリの .git や worktree の中には置けません。別の場所を指定してください。\n");
-			process.exit(2);
-		}
-		// 同じ state root でこのアプリは 1 つだけ。回復より先に取る（先発の健全なジョブを止めないため）
-		const inst = await acquireInstanceLock(jobs.stateDir);
-		if (!inst.ok) {
-			process.stderr.write(
-				inst.reason === "held"
-					? "同じ --state-dir を使う、ほかのサーバがすでに動いています。先にそちらを止めるか、別の --state-dir を指定してください。\n"
-					: "--state-dir の排他（flock）を取れませんでした。flock コマンドと --state-dir の書き込み権限を確認してください。\n",
-			);
-			process.exit(2);
-		}
-	}
-	await recoverJobs(jobs, repos); // 前回の実行中のジョブを interrupted にし、古い排他を掃除する（自動では再開しない）
+	versionInfo = await readPinned(opts.pinnedFile);
 	const server = createServer(makeHandler(repos, opts));
 	server.listen(opts.port, HOST, () => {
 		const addr = server.address();
 		const port = typeof addr === "object" && addr ? addr.port : opts.port;
 		process.stdout.write(`listening http://${HOST}:${port}\n`);
+		process.stdout.write(versionInfo.pinned ? `稼働版 ${versionInfo.oid} (${versionInfo.ref ?? "?"}, ${versionInfo.pinnedAt ?? "?"})\n` : "稼働版 固定なし（作業ツリーをそのまま使っています）\n");
 	});
 	// 停止: 新しい統合は受けず、実行中の統合は終わる（応答を書き終える）まで待つ。途中で止めると、状態ファイルが残って recover が要る。
 	// 一律の強制終了は設けない（強制するなら SIGKILL。そのときは recover）
@@ -443,7 +400,6 @@ async function main(): Promise<void> {
 		const closed = new Promise<void>((done) => server.close(() => done()));
 		server.closeIdleConnections();
 		void (async () => {
-			await stopJobs(); // 実行中のジョブは interrupted にして止め、結果の確定中のものだけ待つ
 			await drainMerges();
 			server.closeAllConnections();
 			await closed;

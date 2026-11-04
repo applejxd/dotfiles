@@ -379,6 +379,32 @@ function unwrapScp(tokens: string[], targets: readonly string[]): string | null 
 	return ["cp", ...flags, ...local.map(shq)].join(" ");
 }
 
+// 役割の deny_except で、[bash] deny から外せる語 (decide.ts の DENY_EXCEPT_WORDS と同じ)
+const WORKTREE_REMOVE = "git worktree remove";
+// 元のコマンド全体がこの 1 形式に一致するときだけ例外にする。解析器の解釈には依存しない。
+// `-` で始まるトークン (-f・--force・--・-C) と、引用・展開・リダイレクト・区切り・前置きは、一致しない (deny のまま)
+const WORKTREE_REMOVE_PLAIN = /^git worktree remove(?: [A-Za-z0-9_./@%+=:,][A-Za-z0-9_./@%+=:,-]*)+$/;
+
+/**
+ * `deny_except` に `git worktree remove` を持つ役割で、`[pi.confirm] local_git` が真のときだけ、この deny を外す。
+ * 元のコマンド全体が WORKTREE_REMOVE_PLAIN に一致するときだけ true (normalize や分割の結果は見ない)。
+ * 一致するとき全体が 1 コマンドなので、複合コマンドの他の部分の deny には影響しない。force 付きは一致せず deny のまま。
+ * see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外
+ */
+function worktreeRemoveExcepted(cmd: string, pi: Obj, profile: Obj): boolean {
+	if (pi.confirm?.local_git !== true) return false;
+	const except = profile.deny_except;
+	if (!Array.isArray(except) || !except.includes(WORKTREE_REMOVE)) return false;
+	return WORKTREE_REMOVE_PLAIN.test(cmd);
+}
+
+/** 文脈の `[bash] deny` から、指定のパターンだけを除いたものを返す。 */
+function withoutDeny(ctx: Ctx, pattern: string): Ctx {
+	const bash = (ctx.common as Obj).bash ?? {};
+	const deny = ((bash.deny as unknown[] | undefined) ?? []).filter((p) => p !== pattern);
+	return { ...ctx, common: { ...ctx.common, bash: { ...bash, deny } } } as Ctx;
+}
+
 /** bash の判定器を作る。`tables` は tables.toml を JSON にしたもの。 */
 export function makeBashDecider(tables: Tables): BashDecider {
 	const decide = (
@@ -406,7 +432,11 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		const targets = ((pi.remote_exec?.targets as unknown[] | undefined) ?? []).map(String);
 		const inner = remote ? null : unwrapRemoteExec(cmd, targets);
 		if (inner !== null) return decide(inner, cwd, pi, profile, common, true);
-		const deny = bashCommonDeny(ctx, cmd);
+		const deny = bashCommonDeny(
+			// 例外は直接実行だけ (ssh のリモート側を再帰判定しているときは効かせない)
+			!remote && worktreeRemoveExcepted(rawCmd, pi, profile) ? withoutDeny(ctx, WORKTREE_REMOVE) : ctx,
+			cmd,
+		);
 		if (deny) return { commonDeny: deny, roleRule: null };
 		const g = guide(cmd, pi);
 		if (g) return { commonDeny: null, roleRule: g };
