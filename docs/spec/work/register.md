@@ -12,7 +12,9 @@
 ## 登録するもの
 
 - `session_start`: runtime を開く（`createRuntime` → `start`）。holder は `<pid>:<sessionId>`。
-- ツール `work`: 引数は `WORK_TOOL_SCHEMA`。`handleWork` → `ok` なら `submit`。失敗は理由を返し、状態は変わらない。
+- ツール `work`: 引数は `WORK_TOOL_SCHEMA`。`handleWork` → `ok` なら `submit`。`submit` が失敗したときは、永続済みのイベント数 (`applied`) で分ける。
+  0 件なら「拒否: 状態は変わっていない」。1 件以上なら「失敗: 一部は記録済み。`list` で現在の状態を確認」を返し、
+  `details` に `partial: true` と `applied` (件数と種別だけ。本文・秘密は入れない)。runtime はイベントを1件ずつ永続し、成功分を反映してから失敗を返すため。
 - `/work`: 台帳の一覧（`list` 相当）を通知で表示する。読み取り専用なら注記を付ける。
 - パネル: 変化のたびに `renderPanel`（5 行以内）をウィジェット `work` へ。UI が無い ctx では出さない。
 - 通知: runtime の警告は `notices.select("run.warning")` を通し、silent なら出さない。
@@ -22,7 +24,8 @@
 ## べき等・読み取り専用
 
 - new / fork / resume で `session_start` が複数回来ても、同じ cwd と session の runtime は 1 つだけ（`opening` を共有）。session が変われば閉じて開き直す。
-- 読み取り専用・off・degraded では追記せず、理由（別の会話が駆動中など）を text で返す。`list` は読み取れる。
+- 読み取り専用・縮退・off では台帳のイベントを追記せず、理由（別の会話が駆動中など）を text で返す。`list` は読み取れる。
+  観測ログ（journal）は別で、読み取り専用でも `.tmp/work/journal/` に追記する。
 
 ## 限界
 

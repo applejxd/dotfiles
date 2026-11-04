@@ -171,7 +171,19 @@ export function registerWork(pi: any, opts: RegisterWorkOptions): void {
 			}
 			const s = await rt.submit(r.events);
 			emit("tool.call", { tool: "work", op, ok: s.ok });
-			if (!s.ok) return text(`拒否: 台帳に書けない (${s.error ?? "不明"})。状態は変わっていない`, { error: s.error ?? "failed" });
+			if (!s.ok) {
+				// runtime はイベントを1件ずつ永続し、成功した分を状態へ反映してから失敗を返す
+				const n = s.applied?.length ?? 0;
+				if (n > 0) {
+					const types = s.applied.map((e: any) => e.type);
+					return text(`失敗: 一部は記録済み (${s.error ?? "不明"})。list で現在の状態を確認してください`, {
+						error: s.error ?? "failed",
+						partial: true,
+						applied: { count: n, types },
+					});
+				}
+				return text(`拒否: 台帳に書けない (${s.error ?? "不明"})。状態は変わっていない`, { error: s.error ?? "failed" });
+			}
 			return text(r.text, r.details);
 		},
 	});

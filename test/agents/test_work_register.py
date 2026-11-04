@@ -515,3 +515,67 @@ def test_index_ts_は_1_行の呼び出しだけ足す():
 def test_register_ts_は旗の既定が無効():
     src = REGISTER.read_text(encoding="utf-8")
     assert 'env.PI_WORK_TOOL === "1"' in src and 'env.PI_WORK !== "0"' in src
+
+
+# ── 追記の部分失敗 ──
+# plan は goal と各タスクのイベントを 1 件ずつ追記する。{"arm": N} で N 件目の後から追記を失敗させる。
+
+
+def _partial(tmp_path, arm):
+    return run(
+        tmp_path,
+        [
+            start(),
+            {"arm": arm},
+            tool(PLAN),
+            tool({"op": "list"}),
+            shutdown(),
+            start(sid="again"),
+            tool({"op": "list"}),
+        ],
+    )
+
+
+@needs_node
+def test_後続の追記だけ失敗したら_一部は記録済みと返す(tmp_path):
+    r = _partial(tmp_path, 1)
+    res = r["results"][1]
+    assert text(res).startswith("失敗: 一部は記録済み")
+    assert "状態は変わっていない" not in text(res)
+    assert "list" in text(res)
+
+
+@needs_node
+def test_部分失敗の_details_は_partial_と_applied_の件数と種別だけ(tmp_path):
+    d = _partial(tmp_path, 1)["results"][1]["details"]
+    assert d["partial"] is True
+    assert d["applied"]["count"] == 1
+    assert len(d["applied"]["types"]) == 1
+    assert set(d["applied"]) == {"count", "types"}
+
+
+@needs_node
+def test_部分失敗の後の状態は永続済みの_prefix_と一致する(tmp_path):
+    r = _partial(tmp_path, 1)
+    full = run(
+        tmp_path / "ok",
+        [start(), tool(PLAN), tool({"op": "list"})],
+    )
+    # 途中までしか反映されていないので、最後まで成功した場合の一覧とは違う
+    assert text(r["results"][2]) != text(full["results"][2])
+
+
+@needs_node
+def test_部分失敗の後に再_open_しても状態が一致する(tmp_path):
+    r = _partial(tmp_path, 1)
+    assert text(r["results"][2]) == text(r["results"][-1])
+
+
+@needs_node
+def test_最初の追記で失敗したら_状態は変わっていないと返す(tmp_path):
+    r = _partial(tmp_path, 0)
+    res = r["results"][1]
+    assert text(res).startswith("拒否")
+    assert "状態は変わっていない" in text(res)
+    assert "partial" not in res["details"]
+    assert text(r["results"][2]) == text(r["results"][-1])
