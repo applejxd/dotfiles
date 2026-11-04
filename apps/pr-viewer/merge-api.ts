@@ -61,19 +61,6 @@ export function stopMerges(): void {
 
 const gates = new Set<string>();
 
-/** 統合の処理が、このリポジトリで実行中か（ジョブの起動の排他に使う。ジョブ側は merge_running で断る）。 */
-export function mergeRunning(repoId: string): boolean {
-	return gates.has(repoId);
-}
-
-let jobProbe: (repoId: string) => boolean = () => false;
-/** ジョブが実行中（予約を含む）かを答える関数を登録する（job-api.ts が起動時に 1 回呼ぶ。循環 import を避ける）。 */
-export function setJobProbe(fn: (repoId: string) => boolean): void {
-	jobProbe = fn;
-}
-
-const JOB_RUNNING_TEXT = "pi への依頼（ジョブ）が実行中です。終わってから統合してください。";
-
 /** リポジトリ単位の「待たない」排他。取れなければ 409 busy。別のプロセスとの排他は、統合器のロックファイルが担う。 */
 async function gated<T>(repo: Repo, fn: () => Promise<T>): Promise<T> {
 	if (stopping) throw new ApiError(503, "shutting_down", "サーバを停止しています。");
@@ -246,8 +233,6 @@ export async function mergePlan(ctx: PrCtx, pr: MergePr, body: Record<string, un
 	if (Object.keys(body).length !== 0) throw bad("bad_request", "リクエストの形が正しくありません。");
 	return await gated(ctx.repo, async () => {
 		const blockers: Blocker[] = [];
-		// ジョブは統合先の ref を動かさないが、実行中の worktree・保護 ref の照合を乱す。リポジトリ単位で断る
-		if (jobProbe(ctx.repo.repoId)) blockers.push({ code: "job_running", message: JOB_RUNNING_TEXT });
 		// plan はメッセージを使わない（検査を通すための仮の値 "plan" を渡す）
 		const r = await planMerge({ repo: ctx.repo.gitDir, source: ctx.branch, target: ctx.target, message: "plan" });
 		const hints = await reviewHints(ctx);
@@ -313,11 +298,6 @@ export async function mergeExecute(ctx: PrCtx, body: Record<string, unknown>, en
 	return await gated(ctx.repo, async () => {
 		const req = randomUUID();
 		const who = { req, repo: ctx.repo.repoId, pr: ctx.prKey, expect: input.expect };
-		// ジョブとの排他: gated の確認と同じ tick で見る（ジョブ側の予約も同期。どちらかが必ず先に断られる）
-		if (jobProbe(ctx.repo.repoId)) {
-			diag({ ...who, result: "job_running", commit: null, recorded: false });
-			throw new ApiError(409, "job_running", JOB_RUNNING_TEXT);
-		}
 		const deps = env.testDelayMs > 0 ? { beforeAdvance: () => new Promise<void>((done) => setTimeout(done, env.testDelayMs)) } : undefined;
 		const r = await executeMerge(
 			{

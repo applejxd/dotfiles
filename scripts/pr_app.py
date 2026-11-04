@@ -7,38 +7,47 @@
     python3 scripts/pr_app.py expose | unexpose          tailnet へ HTTPS で出す／やめる（tailscale serve。Funnel は使わない）
 
 設定ファイル（既定 ~/.config/pr-viewer/env。`PRAPP_ENV_FILE` で変更）は systemd の EnvironmentFile 形式。
-キー: PRAPP_ALLOW_MERGE・PRAPP_ALLOW_JOBS・PRAPP_ALLOW_CREATE・PRAPP_PORT・PRAPP_REPOS・PRAPP_ROOT。
+キー: PRAPP_ALLOW_MERGE・PRAPP_ALLOW_CREATE・PRAPP_PORT・PRAPP_REPOS・PRAPP_ROOT。
 呼び出し側の環境変数が設定ファイルより優先する。**権限の旗は既定で全部無効**（`1` のときだけ `--allow-*` を付ける）。
 起動元は、このスクリプトが入っているチェックアウトの根（`PRAPP_ROOT` で上書き可）。`apps/pr-viewer/server.ts` が無ければ停止する。
 `PRAPP_DRY_RUN=1` では systemd・tailscale を触らず、ユニットの内容と実行するコマンドを表示するだけ。
+常駐（`serve --pinned`。ユニットが使う）は、起動元の `develop` を `.tmp/pr-app/current/` へ書き出した版から動く。
+`restart` のときだけ、その版を作り直す。仕様: docs/spec/pr-viewer.md#稼働版の固定。
 仕様: docs/spec/pr-viewer.md#6-アプリ。終了コード: 0 = 成功、2 = 使い方・前提の不足。
 """
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import sys
+import tarfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 UNIT = "pr-viewer.service"
 KEYS = (
     "PRAPP_ALLOW_MERGE",
-    "PRAPP_ALLOW_JOBS",
     "PRAPP_ALLOW_CREATE",
     "PRAPP_PORT",
     "PRAPP_REPOS",
     "PRAPP_ROOT",
 )
 DEFAULT_PORT = "8780"
+# 稼働版として書き出す ref と範囲（サーバが読むのは apps/pr-viewer と、そこから import する harness だけ）
+PIN_REF = "develop"
+PIN_PATHS = ("apps/pr-viewer", "home/dot_config/pi/harness")
+PIN_FILE = "PINNED.json"
 WSL_TAILSCALE = "/mnt/c/Program Files/Tailscale/tailscale.exe"
 EXIT_USAGE = 2
 
 USAGE = """使い方: pr_app.py <サブコマンド> [リポジトリのパス…]
-  serve [リポジトリ…]    前面で起動する（既定は設定ファイルの PRAPP_REPOS → 起動元）
+  serve [リポジトリ…]    前面で起動する（既定は設定ファイルの PRAPP_REPOS → 起動元）。作業ツリーをそのまま使う
+  serve --pinned …       稼働版（.tmp/pr-app/current）から起動する（ユニットが使う。無ければ作る）
   install [リポジトリ…]  systemd の user ユニットを作って enable --now（Linux のみ）
-  restart / logs / uninstall / status
+  restart                稼働版を develop の先頭で作り直して再起動する / logs / uninstall / status
   expose / unexpose      tailnet へ HTTPS で出す／やめる（tailscale serve。Funnel は使わない）
 PRAPP_DRY_RUN=1 で、systemd・tailscale を触らずに内容とコマンドだけ表示する。
 """
@@ -127,7 +136,7 @@ def unit_text(root: Path) -> str:
         "Type=simple\n"
         f"EnvironmentFile=-{env_path}\n"
         "Environment=PATH=%h/.local/bin:%h/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin\n"
-        f"ExecStart=/usr/bin/env python3 {systemd_quote(str(script))} serve\n"
+        f"ExecStart=/usr/bin/env python3 {systemd_quote(str(script))} serve --pinned\n"
         "Restart=on-failure\n"
         "RestartSec=5\n"
         "\n"
@@ -142,7 +151,6 @@ def env_text(repos: str, port: str) -> str:
         "# pr_app.py の設定（systemd の EnvironmentFile 形式。変えたら: pr_app.py restart）\n"
         "# 旗は 1 で有効。既定は全部無効。有効にする前に docs/spec/pr-viewer.md の §6 を読む\n"
         "PRAPP_ALLOW_MERGE=0\n"
-        "PRAPP_ALLOW_JOBS=0\n"
         "PRAPP_ALLOW_CREATE=0\n"
         f"PRAPP_PORT={port}\n"
         f'PRAPP_REPOS="{repos}"\n'
@@ -215,7 +223,89 @@ def tailscale_bin() -> str:
     )
 
 
-def cmd_serve(repos: list[str]) -> int:
+def pin_dir(root: Path) -> Path:
+    return root / ".tmp" / "pr-app" / "current"
+
+
+def read_pin(d: Path) -> dict | None:
+    """固定の記録（PINNED.json）。無い・壊れているときは None。"""
+    try:
+        j = json.loads((d / PIN_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    oid = j.get("oid") if isinstance(j, dict) else None
+    return (
+        j
+        if isinstance(oid, str) and len(oid) == 40 and all(c in "0123456789abcdef" for c in oid)
+        else None
+    )
+
+
+def pin_valid(d: Path) -> bool:
+    return (
+        read_pin(d) is not None
+        and (d / "apps" / "pr-viewer" / "server.ts").is_file()
+        and (d / "apps" / "pr-viewer" / "web" / "index.html").is_file()
+    )
+
+
+def build_pin(root: Path) -> Path:
+    """root の PIN_REF の先頭を git archive で current.new へ書き出す。worktree は作らない（本体の一覧・統合の判定を乱さない）。"""
+    git = shutil.which("git")
+    if git is None:
+        raise Stop("git が見つからない。稼働版を作れない")
+    r = subprocess.run(
+        [git, "-C", str(root), "rev-parse", "--verify", f"{PIN_REF}^{{commit}}"],
+        capture_output=True,
+        encoding="utf-8",
+        check=False,
+    )
+    oid = r.stdout.strip()
+    if r.returncode != 0 or len(oid) != 40:
+        raise Stop(f"{root} に {PIN_REF} が見つからない（稼働版は git のチェックアウトから作る）")
+    stage = pin_dir(root).with_name("current.new")
+    shutil.rmtree(stage, ignore_errors=True)
+    stage.mkdir(parents=True)
+    try:
+        proc = subprocess.Popen(
+            [git, "-C", str(root), "archive", "--format=tar", oid, "--", *PIN_PATHS],
+            stdout=subprocess.PIPE,
+        )
+        assert proc.stdout is not None
+        with tarfile.open(fileobj=proc.stdout, mode="r|") as tf:
+            if hasattr(tarfile, "data_filter"):
+                tf.extractall(stage, filter="data")
+            else:  # pragma: no cover
+                tf.extractall(stage)
+        if proc.wait() != 0:
+            raise Stop("git archive が失敗した")
+        stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        (stage / PIN_FILE).write_text(
+            json.dumps({"oid": oid, "ref": PIN_REF, "pinnedAt": stamp}) + "\n", encoding="utf-8"
+        )
+        if not pin_valid(stage):
+            raise Stop(f"{PIN_REF} の先頭に apps/pr-viewer/server.ts と web/ が無い")
+    except (tarfile.TarError, OSError) as e:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise Stop(f"稼働版の書き出しに失敗した: {e}") from e
+    except Stop:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
+    return stage
+
+
+def swap_pin(root: Path, stage: Path) -> None:
+    """作った版を current へ入れ替える（古い版は消す）。"""
+    cur = pin_dir(root)
+    old = cur.with_name("current.old")
+    shutil.rmtree(old, ignore_errors=True)
+    if cur.exists():
+        cur.rename(old)
+    stage.rename(cur)
+    shutil.rmtree(old, ignore_errors=True)
+
+
+def cmd_serve(repos: list[str], pinned: bool = False) -> int:
     fv = read_env_file(env_file())
     root = resolve_root(fv)
     port = setting("PRAPP_PORT", fv) or DEFAULT_PORT
@@ -229,27 +319,45 @@ def cmd_serve(repos: list[str]) -> int:
             "--allow-merge",
             "統合を有効にして起動します。Funnel（公開）を使っていないことを確かめてください",
         ),
-        (
-            "PRAPP_ALLOW_JOBS",
-            "--allow-jobs",
-            "「変更を依頼」(pis -p のジョブ) を有効にして起動します",
-        ),
         ("PRAPP_ALLOW_CREATE", "--allow-create", "「起票」を有効にして起動します"),
     ):
         if setting(name, fv) == "1":
             flags.append(flag)
             print(f"注意: {note}", file=sys.stderr)
+    run_dir = root
+    if pinned:
+        run_dir = pin_dir(root)
+        if not pin_valid(run_dir):
+            swap_pin(root, build_pin(root))  # 初回（または壊れているとき）だけ、起動時に作る
+        flags += ["--pinned-file", str(run_dir / PIN_FILE)]
+        info = read_pin(run_dir) or {}
+        print(
+            f"稼働版: {info.get('oid', '?')}（{info.get('ref', '?')}・{info.get('pinnedAt', '?')}）",
+            flush=True,
+        )
     argv = ["node", "apps/pr-viewer/server.ts"]
     for r in repo_list:
         argv += ["--repo", r]
     argv += ["--port", port, *flags]
     if shutil.which("mise"):
-        argv = ["mise", "exec", "--", *argv]
+        if pinned:
+            # 稼働版の場所には mise.toml が無い。本体で node を解決して絶対パスで使う
+            w = subprocess.run(
+                ["mise", "which", "node"],
+                cwd=root,
+                capture_output=True,
+                encoding="utf-8",
+                check=False,
+            )
+            if w.returncode == 0 and w.stdout.strip():
+                argv[0] = w.stdout.strip()
+        else:
+            argv = ["mise", "exec", "--", *argv]
     print(
         f"起動: http://127.0.0.1:{port}/ （リポジトリ: {' '.join(repo_list)}。止める: Ctrl+C）",
         flush=True,
     )
-    os.chdir(root)
+    os.chdir(run_dir)
     os.execvp(argv[0], argv)
     return 0  # pragma: no cover
 
@@ -315,7 +423,23 @@ def cmd_uninstall() -> int:
 
 def cmd_restart() -> int:
     need_systemd()
-    sc("restart", UNIT, check=True)
+    fv = read_env_file(env_file())
+    root = resolve_root(fv)
+    if dry_run():
+        print(f"[dry-run] {PIN_REF} の先頭を {pin_dir(root)} へ作り直す")
+        sc("restart", UNIT, check=True)
+    else:
+        stage = build_pin(root)  # 失敗したら、ここで止める（稼働中の版はそのまま）
+        sc("stop", UNIT)
+        swap_pin(root, stage)
+        print(f"稼働版を作り直した: {(read_pin(pin_dir(root)) or {}).get('oid', '?')}")
+        sc("start", UNIT, check=True)
+    unit = unit_dir() / UNIT
+    if unit.is_file() and "--pinned" not in unit.read_text(encoding="utf-8"):
+        print(
+            "注意: このユニットは旧形式で、稼働版を使わない。本体のチェックアウトで install をやり直す",
+            file=sys.stderr,
+        )
     sc("--no-pager", "status", UNIT)
     return 0
 
@@ -366,7 +490,8 @@ def main(argv: list[str] | None = None) -> int:
     rest = args[1:]
     try:
         if cmd == "serve":
-            return cmd_serve(rest)
+            pinned = "--pinned" in rest
+            return cmd_serve([a for a in rest if a != "--pinned"], pinned)
         if cmd == "install":
             return cmd_install(rest)
         simple = {

@@ -366,7 +366,6 @@ def test_merge_routes_are_disabled_without_allow_merge(make):
         False,
         ["develop"],
     )
-    assert caps["jobs"] is False  # ジョブは別の旗（--allow-jobs）。ここでは無効のまま
 
 
 def test_allow_merge_takes_no_value_and_unknown_flags_are_refused(tmp_path):
@@ -396,7 +395,6 @@ def test_capabilities_has_no_paths_and_reports_merge(w):
         False,
         ["develop"],
     )
-    assert caps["jobs"] is False  # ジョブは --allow-jobs を付けない限り無効
 
 
 # ---------------------------------------------------------------- 4 Origin（merge 経路だけ必須）
@@ -1334,9 +1332,9 @@ def test_merge_api_import_boundary_and_no_direct_ref_writes():
     for name in ("merge.ts", "merge-git.ts"):
         for s in re.findall(r"""(?:from|import)\s*\(?\s*["']([^"']+)["']""", src[name]):
             assert s.startswith(("./", "node:")), (name, s)
-    # child_process を使うのは git-view.ts・merge-git.ts、そして pis を起動する job-runner.ts
+    # child_process を使うのは git-view.ts・merge-git.tsだけ（ジョブの撤去後。pis は起動しない）
     users = {n for n, t in src.items() if "child_process" in t}
-    assert users == {"git-view.ts", "merge-git.ts", "job-runner.ts"}, users
+    assert users == {"git-view.ts", "merge-git.ts"}, users
 
 
 def test_merge_api_never_reads_the_approval_state_as_authority():

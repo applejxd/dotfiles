@@ -1,7 +1,0 @@
-{"job": {
-  "id": "44444444-4444-4444-8444-444444444444", "kind": "address_review", "state": "failed", "reasons": ["exit_nonzero"],
-  "createdAt": "2099-01-01T05:00:00+00:00", "startedAt": "2099-01-01T05:00:01+00:00", "endedAt": "2099-01-01T05:00:30+00:00", "elapsedSec": 29,
-  "baseOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "resultOid": null,
-  "batchIds": ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
-  "files": null, "exitCode": 1
-}}

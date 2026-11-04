@@ -1,8 +1,0 @@
-{"job": {
-  "id": "33333333-3333-4333-8333-333333333333", "kind": "address_review", "state": "needs_review", "reasons": ["risk_path"],
-  "createdAt": "2099-01-01T04:00:00+00:00", "startedAt": "2099-01-01T04:00:01+00:00", "endedAt": "2099-01-01T04:02:00+00:00", "elapsedSec": 119,
-  "baseOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "resultOid": null,
-  "batchIds": ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
-  "files": [{"path": "AGENTS.md", "status": "M"}],
-  "exitCode": 0
-}}
