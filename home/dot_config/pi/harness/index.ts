@@ -26,7 +26,7 @@ import { integrationConfig, tightenIntegration } from "./integration-gate.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
 import { createRedactor } from "./redact.ts";
-import { MAX_BODY_FILE_BYTES, MUST_CONFIRM_INTEGRATION_PREFIX, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, outcomeReason, parseFinishTarget, parseMergeTree, parseNumstat, type BodyFileResult, type ConfirmRaw, type IntegrationFacts, type MergeCheck } from "./confirm-view.ts";
+import { MAX_BODY_FILE_BYTES, MUST_CONFIRM_INTEGRATION_PREFIX, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, explainSection, outcomeReason, parseFinishTarget, parseMergeTree, parseNumstat, type BodyFileResult, type ConfirmRaw, type IntegrationFacts, type MergeCheck } from "./confirm-view.ts";
 import { gitSync } from "./gitrun.ts";
 import { previewBlocked, profileDefaults } from "./freezone.ts";
 import { appendOperations, appendResult, decorateEditResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
@@ -142,6 +142,11 @@ function describeCall(tool: string, input: any): string {
 		if (p.extra) lines.push(p.extra);
 		if (p.added) lines.push(p.added);
 		text = `${text}\n\n${lines.join("\n")}`;
+	}
+	// 手順の一覧 (表示だけ。判定には使わない)。単純なコマンドでは出さない
+	if (tool === "bash") {
+		const ex = explainSection(String(input?.command ?? ""));
+		if (ex) text = `${text}\n\n${ex}`;
 	}
 	return text;
 }
@@ -605,7 +610,7 @@ export default async function (pi: ExtensionAPI) {
 				if (!ctx.hasUI || CHILD) return block(NO_UI_REASON);
 				const text = isShell ? String(event.input?.command ?? "") : `${tool}: ${JSON.stringify(event.input)}`;
 				const facts = isShell && d.reason.startsWith(MUST_CONFIRM_INTEGRATION_PREFIX) ? gatherIntegrationFacts(text, ctx.cwd) : undefined;
-				const view = buildMustConfirmView(text, d.reason, (p) => readBodyFile(p, ctx.cwd, tool), facts);
+				const view = buildMustConfirmView(text, d.reason, (p) => readBodyFile(p, ctx.cwd, tool), facts, { explain: isShell });
 				if (view.kind === "block") return block(view.reason);
 				const timeoutMs = confirmTimeoutSeconds(rules) * 1000;
 				const outcome = classifyConfirm(await confirmDetailed(ctx, view.title, view.body, timeoutMs), timeoutMs);
