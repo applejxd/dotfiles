@@ -390,7 +390,7 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。
 
 ## 既知の制約
 
-- 作業台帳の置き場は、名前の正規表現 (`.git/pi-work`・`.tmp/work`) に加え、`judge/ledger_root.ts` の `ledgerRoots(cwd, env)` が fs だけで解いた実体（`--separate-git-dir`・`GIT_DIR`・worktree の common-dir）とも照合する。bash の `ledgerHit` とファイルツールの `decideFile` が使う。
+- 作業台帳の置き場は、名前の正規表現 (`.git/pi-work`・`.tmp/work`) に加え、`judge/ledger_root.ts` の `ledgerRoots(cwd, env)` が fs だけで解いた実体（`--separate-git-dir`・`GIT_DIR`・worktree の common-dir）とも照合する。bash の `ledgerHit` とファイルツールの `decideFile`（`@` などの pi のパス解釈の各形も照合）が使う。結果は 2 秒の TTL でキャッシュする。common-dir 自身の削除・移動（`.git` 名以外）も拒否する。既知の制約: 広い祖先（`~`・作業ツリー全体）の再帰削除は既存の rm の判定に任せる。TTL の間に作られた `.git` は最大 2 秒拾えない。
 - 結果は cwd ごとに最大 64 件キャッシュする（同じプロセスの中で `.git` を作り直すと古いまま）。読めない・不正な `.git` は例外にせず、名前の照合だけに戻る。試験は `test_pi_ledger_root.py`。
 - gitflow-lite のリポジトリで develop / main を直接編集・コミットさせない制限は、判定器の外側の層（[CHG-0049](../../change/0049-gitflow-convention-guard.md)）に置いていたが、2026-10-31 に撤去した（[CHG-0050](../../change/0050-slim-guarded-action.md)）。今は機械では止めず、指示で運用する。`decide` は変えていない
 - `[pi.external_read]` だけを開けている。OpenCode が開けている `[opencode.sandbox] work_read`（`~/src` など）は

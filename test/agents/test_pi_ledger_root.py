@@ -62,10 +62,10 @@ def _judge(requests, env=None):
     return json.loads(proc.stdout)
 
 
-def _roots(cases, many=0):
+def _roots(cases, many=0, ops=None):
     proc = subprocess.run(
         [_node(), str(ROOT / "test" / "agents" / "pi" / "ledger_root_driver.mjs")],
-        input=json.dumps({"cases": cases, "many": many}),
+        input=json.dumps({"cases": cases, "many": many, "ops": ops or []}),
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -98,12 +98,13 @@ def _decisions(commands, cwd, role="implementer", env=None, **flags):
     ]
 
 
-def _file(tool, path, cwd, role="implementer"):
+def _file(tool, path, cwd, role="implementer", **flags):
     return {
         "tool": tool,
         "input": {"path": str(path), "content": "x"},
         "cwd": str(cwd),
         "role": role,
+        **flags,
     }
 
 
@@ -303,3 +304,162 @@ def test_sibling_with_the_same_prefix_is_not_a_ledger(tmp_path):
     (proj / ".git").write_text(f"gitdir: {store}\n", encoding="utf-8")
     assert _decisions([f"echo x > {store}/pi-work/x"], proj) == ["deny"]
     assert "deny" not in _decisions([f"echo x > {store}/pi-workbench/x"], proj)
+
+
+# ─── 独立 review の指摘: `@` などの変種・common-dir 自身の削除・symlink の cwd・TTL ───────────
+
+
+@pytest.fixture
+def meta_repo(tmp_path):
+    """作業ツリー直下に common-dir `git-meta` を置く構成 (`--separate-git-dir=<proj>/git-meta`)。"""
+    base = tmp_path.resolve()
+    proj = base / "proj"
+    meta = proj / "git-meta"
+    proj.mkdir()
+    _git(proj, "init", "-q", f"--separate-git-dir={meta}")
+    (meta / "pi-work" / "log").mkdir(parents=True)
+    (meta / "pi-work-backup").mkdir()
+    (proj / "git-meta2").mkdir()
+    (proj / "src").mkdir()
+    return proj, meta
+
+
+@pytest.mark.parametrize("bypass", [False, True])
+@pytest.mark.parametrize("role", ROLES)
+@pytest.mark.parametrize("tool", ["write", "edit"])
+def test_at_prefix_and_other_pi_path_forms_are_denied_for_file_tools(meta_repo, tool, role, bypass):
+    proj, meta = meta_repo
+    flags = {"bypass": True} if bypass else {}
+    paths = [
+        "@git-meta/pi-work/log/x",
+        f"@{meta}/pi-work/log/x",
+        f"file://{meta}/pi-work/log/x",
+        "@git-meta/pi-work/log/a\u00a0b",
+        "@git-meta/pi-work/./log/x",
+    ]
+    out = _judge([_file(tool, p, proj, role, **flags) for p in paths])
+    assert [r["decision"] for r in out] == ["deny"] * len(paths)
+
+
+def test_tilde_form_is_denied_for_file_tools(meta_repo):
+    proj, _ = meta_repo
+    out = _judge([_file("write", "~/git-meta/pi-work/log/x", proj)], env={"HOME": str(proj)})
+    assert out[0]["decision"] == "deny"
+
+
+def test_at_prefix_ordinary_file_and_reads_are_not_denied(meta_repo):
+    proj, _ = meta_repo
+    out = _judge([_file("write", "@src/x.py", proj), _file("write", "src/x.py", proj)])
+    assert [r["decision"] for r in out] == ["allow", "allow"]
+    # read は台帳を拒否しない (従来どおり)
+    assert _judge([_file("read", "@git-meta/pi-work/log/x", proj)])[0]["decision"] != "deny"
+
+
+@pytest.mark.parametrize("bypass", [False, True])
+@pytest.mark.parametrize("role", ROLES)
+def test_removing_or_moving_the_common_dir_itself_is_denied(meta_repo, role, bypass):
+    proj, meta = meta_repo
+    commands = [
+        "rm -rf git-meta",
+        "rmdir git-meta",
+        "mv git-meta /tmp/gone",
+        "find git-meta -delete",
+        "rm -rf ./git-meta/",
+        f"rm -rf {meta}",
+        "unlink git-meta",
+        "rm -rf src/../git-meta",
+    ]
+    flags = {"bypass": True} if bypass else {}
+    assert _decisions(commands, proj, role, **flags) == ["deny"] * len(commands)
+
+
+def test_common_dir_neighbours_and_reads_are_not_denied(meta_repo):
+    proj, _ = meta_repo
+    commands = [
+        "rm -rf git-meta/pi-work-backup",
+        "rm -rf git-meta2",
+        "ls git-meta",
+        "git -C git-meta log",
+        "grep x git-meta/HEAD",
+        "find git-meta -name HEAD",
+        "rm -rf src",
+    ]
+    out = _judge([_bash(c, cwd=str(proj), role="implementer") for c in commands])
+    assert "deny" not in [r["decision"] for r in out], out
+
+
+def test_normal_dot_git_directory_removal_is_unchanged(tmp_path):
+    proj = tmp_path.resolve() / "proj"
+    proj.mkdir()
+    _git(proj, "init", "-q")
+    from_new = _decisions(["rm -rf .git", "ls .git"], proj)
+    assert from_new[1] != "deny"
+    # `.git` の通常構成は新しい規則の対象にしない (従来の判定のまま)
+    assert _roots([{"cwd": str(proj)}])["results"][0][0] == str(proj / ".git" / "pi-work")
+
+
+@pytest.mark.parametrize("use_alias", [True, False])
+def test_symlinked_cwd_finds_the_ledger_of_the_real_side(sep_repo, tmp_path, use_alias):
+    proj, sep = sep_repo
+    sub = proj / "sub"
+    sub.mkdir()
+    alias = tmp_path.resolve() / "alias"
+    alias.symlink_to(sub)
+    cwd = alias if use_alias else sub
+    target = sep / "pi-work" / "log" / "x"
+    assert str(sep / "pi-work") in _roots([{"cwd": str(cwd)}])["results"][0]
+    assert _decisions([f"echo x > {target}"], cwd, bypass=True) == ["deny"]
+    assert _judge([_file("write", target, cwd, bypass=True)])[0]["decision"] == "deny"
+    assert _decisions([f"grep x {target}"], cwd) != ["deny"]
+
+
+def test_symlinked_cwd_keeps_both_fallback_forms(tmp_path):
+    base = tmp_path.resolve()
+    real = base / "real"
+    real.mkdir()
+    alias = base / "alias"
+    alias.symlink_to(real)
+    roots = _roots([{"cwd": str(alias)}])["results"][0]
+    assert str(alias / ".tmp" / "work") in roots and str(real / ".tmp" / "work") in roots
+
+
+def test_ttl_serves_cache_within_the_window_and_refreshes_after(tmp_path):
+    base = tmp_path.resolve()
+    proj = base / "proj"
+    store = base / "store"
+    proj.mkdir()
+    store.mkdir()
+    ops = [
+        {"op": "roots", "cwd": str(proj), "now": 1000},
+        {"op": "write", "path": str(proj / ".git"), "text": f"gitdir: {store}\n"},
+        {"op": "roots", "cwd": str(proj), "now": 1500},
+        {"op": "roots", "cwd": str(proj), "now": 3100},
+        {"op": "roots", "cwd": str(proj), "now": 500},
+    ]
+    first, within, after, backwards = _roots([], ops=ops)["ops"]
+    want = str(store / "pi-work")
+    assert want not in first and within == first  # 期限内は fs を引き直さない
+    assert want in after  # 期限後は `.git` の出現を拾う
+    assert want in backwards  # 時刻が戻ったときは再解決する
+
+
+def test_ttl_boundary_is_exclusive_and_empty_results_are_not_cached(tmp_path):
+    proj = tmp_path.resolve() / "proj"
+    proj.mkdir()
+    ops = [
+        {"op": "roots", "cwd": str(proj), "now": 0},
+        {"op": "write", "path": str(proj / ".git"), "text": f"gitdir: {proj}/s\n"},
+        {"op": "roots", "cwd": str(proj), "now": 1999},
+        {"op": "roots", "cwd": str(proj), "now": 2000},
+    ]
+    a, b, c = _roots([], ops=ops)["ops"]
+    assert a == b  # 1999ms はまだ期限内
+    assert c != a  # 2000ms で再解決
+
+
+def test_existing_protections_and_worktrees_dir_are_unchanged(meta_repo):
+    proj, _ = meta_repo
+    assert _decisions(["echo x > .tmp/work/x", "echo x > .git/pi-work/x"], proj) == ["deny", "deny"]
+    assert "deny" not in _decisions(["echo x > .tmp/worktrees/x"], proj)
+    out = _judge([_file("write", proj / ".tmp" / "worktrees" / "x" / "a", proj)])
+    assert out[0]["decision"] == "allow"

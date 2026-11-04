@@ -249,7 +249,7 @@ function decideFile(
 	if (write) {
 		// `.git` 以外の名前の git-common-dir (separate-git-dir・GIT_DIR) の台帳は名前の glob に当たらないので、fs で解いた置き場と照合する
 		const roots = ledgerRoots(cwd);
-		if (candidates(path, cwd).some((c) => underLedgerRoot(c, roots))) {
+		if (piPathVariants(path).some((v) => candidates(v, cwd).some((c) => underLedgerRoot(c, roots)))) {
 			return {
 				commonDeny: response("deny", `\`${path}\` は作業台帳の置き場 (ハーネスだけが書く)`, "rule"),
 				roleRule: null,

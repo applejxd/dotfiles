@@ -12,7 +12,7 @@ import { basename, pyRegex, shlexSplit, ShlexError, split, stripChars } from "./
 import { argv } from "./shellparse.ts";
 import { splitCommandSegments } from "./normalize.ts";
 import { inlineCodeHead } from "./rules_exec.ts";
-import { ledgerRoots, underLedgerRoot } from "./ledger_root.ts";
+import { ledgerCommonDirs, ledgerRoots, underLedgerRoot } from "./ledger_root.ts";
 import {
 	baseName,
 	clip200,
@@ -200,6 +200,25 @@ function unwrapCommand(tokens: string[]): { rest: string[]; skipped: string[] } 
 	return { rest: cur, skipped };
 }
 
+/** common-dir 自身 (台帳を含む `.git` 以外の名前の置き場) と等しい対象か。削除・移動系だけがこれで拒否される。 */
+function commonDirHit(token: string, base: string | null): boolean {
+	if (base === null) return false;
+	const raw = stripChars(token, "'\"");
+	if (!raw || raw.startsWith("-") || Array.from("$`").some((ch) => raw.includes(ch))) return false;
+	const commons = ledgerCommonDirs(base);
+	if (commons.length === 0) return false;
+	const expanded = expandUser(raw);
+	const abs = normpath(isAbsolute(expanded) ? expanded : join(base, expanded));
+	const forms = [abs, realpathLoose(abs)];
+	try {
+		forms.push(strictResolve(isAbsolute(expanded) ? expanded : `${base}${sep}${expanded}`));
+	} catch {
+		// 字面の判定に任せる
+	}
+	return forms.some((f) => commons.includes(f.length > 1 && f.endsWith(sep) ? f.slice(0, -1) : f));
+}
+const LEDGER_REMOVE_MOVE = new Set(["rm", "rmdir", "unlink", "mv", "shred"]);
+
 /** 台帳への書き込み・削除 (リダイレクト・書き込みオプション・symlink の別名・置き場そのものの削除) を、追加の判定として拒否する。 */
 function checkLedgerWrite(ctx: Ctx, cmd: string): string | null {
 	const workspace = workspaceRoot(ctx);
@@ -219,6 +238,12 @@ function checkLedgerWrite(ctx: Ctx, cmd: string): string | null {
 		}
 		if (tokens.length === 0) continue;
 		const head = baseName(tokens[0]);
+		// 削除・移動は、台帳を含む common-dir 自身が対象でも拒否する (配下だけでは見えない)
+		if (LEDGER_REMOVE_MOVE.has(head) || (head === "find" && tokens.includes("-delete"))) {
+			for (const token of tokens.slice(1)) {
+				if (commonDirHit(token, workspace)) return deny(token);
+			}
+		}
 		let base = workspace;
 		let readOnly = LEDGER_READ_ONLY.has(head);
 		if (head === "git") {
