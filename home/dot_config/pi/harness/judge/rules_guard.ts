@@ -80,6 +80,13 @@ function ledgerHit(token: string, base: string | null): boolean {
 	const forms = [raw];
 	const eq = raw.indexOf("=");
 	if (eq > 0) forms.push(raw.slice(eq + 1));
+	// 連結した短いオプションの値 (`-oledger/x`・`-aoledger/x`): 先頭の `-` と 1〜3 文字の英字を剥いだ候補を全部加える
+	if (/^-[A-Za-z]/u.test(raw)) {
+		for (let n = 1; n <= 3; n++) {
+			if (!/^[A-Za-z]+$/u.test(raw.slice(1, 1 + n))) break;
+			forms.push(raw.slice(1 + n));
+		}
+	}
 	for (const form of forms) {
 		if (!form) continue;
 		if (LEDGER_RE.test(normalizeGuardPath(form))) return true;
@@ -125,7 +132,16 @@ function gitReadOnly(tokens: string[], base: string | null): { readOnly: boolean
 /** `git -C <dir>` の基点の更新。 */
 function chdirBase(cur: string | null, dir: string): string | null {
 	const d = expandUser(stripChars(dir, "'\""));
-	return cur === null && !isAbsolute(d) ? null : normpath(isAbsolute(d) ? d : join(cur ?? "", d));
+	if (cur === null && !isAbsolute(d)) return null;
+	if (Array.from("$`").some((ch) => d.includes(ch))) return null;
+	const full = isAbsolute(d) ? d : `${cur ?? ""}${sep}${d}`;
+	const lexical = normpath(full);
+	try {
+		// symlink の後ろの `..` を字句で畳むと実体とずれるので、ずれる・解決できないときは基点を不明 (null) にする
+		return strictResolve(full) === lexical ? lexical : null;
+	} catch {
+		return null;
+	}
 }
 
 /** 値を取るラッパーのオプション (次のトークンを 1 つ食う)。 */
@@ -204,6 +220,8 @@ function checkLedgerWrite(ctx: Ctx, cmd: string): string | null {
 			const g = gitReadOnly(tokens, workspace);
 			readOnly = g.readOnly;
 			base = g.base;
+			// `-C` の基点が不明 (symlink の後ろの `..` など) で書き込みうる形は、台帳に当たりうるとして拒否する
+			if (base === null && workspace !== null && !readOnly) return deny("git -C");
 		} else if (head === "find") {
 			readOnly = !tokens.some((t) => FIND_WRITE_FLAGS.has(t));
 		} else if (head === "less") {

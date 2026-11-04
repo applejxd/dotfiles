@@ -385,3 +385,38 @@ def test_wrapped_ledger_reads_are_not_denied(role):
 def test_wrapped_ledger_writes_are_denied(role):
     for (cmd, flags), decision in _decide(WRAPPED_WRITES, role):
         assert decision == "deny", f"{cmd!r} {flags} -> {decision}"
+
+
+# ─── 連結した短いオプションの値・`git -C`・`cd` の基点 (symlink の後ろの `..`) ───────────────────
+ALIAS_GLUED = [
+    "sort -oledger/../x /tmp/a",
+    "sort -oledger/x /tmp/a",
+    "sort -aoledger/x /tmp/a",
+    "sort -ao.tmp/work/x /tmp/a",
+    "git -Cledger/.. log -1 --output=x",
+    "git -C ledger/.. log -1 --output=x",
+    "cd ledger/.. && echo x > y",
+]
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_glued_values_and_chdir_bases_through_a_symlink_are_denied(role, tmp_path):
+    (tmp_path / ".tmp" / "work" / "journal").mkdir(parents=True)
+    (tmp_path / "ledger").symlink_to(tmp_path / ".tmp" / "work" / "journal")
+    for (cmd, flags), decision in _decide(ALIAS_GLUED, role, cwd=str(tmp_path)):
+        assert decision == "deny", f"{cmd!r} {flags} -> {decision}"
+
+
+def test_glued_values_through_a_symlink_do_not_overmatch(tmp_path):
+    (tmp_path / ".tmp" / "work" / "journal").mkdir(parents=True)
+    (tmp_path / ".tmp" / "worktrees").mkdir()
+    (tmp_path / "ledger").symlink_to(tmp_path / ".tmp" / "work" / "journal")
+    cmds = [
+        "sort -o.tmp/worktrees/x /tmp/a",
+        "sort -o/tmp/out /tmp/a",
+        "grep -e.tmp/work x",
+        "grep -eledger/../x y",
+        "git -C .tmp/worktrees log -1",
+    ]
+    for (cmd, flags), decision in _decide(cmds, cwd=str(tmp_path)):
+        assert decision != "deny", f"{cmd!r} {flags} -> {decision}"
