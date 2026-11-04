@@ -54,6 +54,8 @@
     outside: "作業ツリーの外に書き込もうとしました",
     spawn_failed: "pi を起動できませんでした",
     shutdown: "アプリの停止で中断しました",
+    stop_unconfirmed: "pi の残りを止めたと確認できないため、commit していません（作業ツリーの lock を残しています）",
+    stale_lock: "前の作業の lock が残っています（wt_owner reap で解除してからやり直してください）",
   };
   var WHY = {
     unsupported_platform: "この環境（Linux 以外）では使えません。",
@@ -74,7 +76,7 @@
     dirty: "作業ツリーに未コミットの変更があります。",
     head_mismatch: "作業ツリーの HEAD が PR と一致しません。",
     in_progress: "作業ツリーで別の git 操作が進行中です。",
-    worktree_busy: "作業ツリーをほかの作業（子エージェント・対話の pi・別の依頼）が使っています。終わってからやり直してください。",
+    worktree_busy: "作業ツリーをほかの作業（子エージェント・対話の pi・別の依頼）が使っています。終わってからやり直してください（残骸の lock は wt_owner reap で解除）。",
     fence_request_present: "作業ツリーに .opencode があるため実行できません。",
     external_code: "作業ツリーの設定に外部コードの実行指定があります。",
     tampered: "作業ツリーの記録が書き換えられています。確認が必要です。",

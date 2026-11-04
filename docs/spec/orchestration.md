@@ -60,9 +60,9 @@
 
 - **理由欄**は 1 行 `owner=<kind> id=<id> pid=<pid> started=<unix 秒>`。`id` は空白を含まない 1 語。
 - **kind**: `worker`（親が起動した子エージェント）・`job`（PR ビューアのジョブ）・`create`（起票の作成中だけ）・`train`（統合用の枝の組み立て）・`interactive`（人の対話 pi。任意）。
-- **生死**: `pid` が生きている間だけ「有効」（`kill -0`）。死んでいれば「残骸」で、引き継ぐ・解除してよい。`owner=` で始まらない lock（人が付けたもの・理由なし）は「不明の lock」として自動では解除しない。
-- **道具**: `scripts/wt_owner.py`（`claim <wt> --kind <k> --id <id> [--pid N]`・`release <wt> [--id <id>]`・`status [<wt>]`・`reap`。他の有効な owner・不明の lock で終了コード 3）。同じ規則の TS 実装が `apps/pr-viewer/worktree-owner.ts`。`--pid` を省くと、シェルではない最初の祖先（= 呼び出した AI）の pid になる。
-- **4 経路**: (1) 子エージェント = 親が起動の直前に手で `claim`、commit 後に `release`（ハーネスは改造しない）。(2) ジョブ = 起動前検査（`preflight`）が他の有効な owner・不明の lock・cwd が worktree の中のプロセスを `worktree_busy`（HTTP 409）で拒否し、開始で `claim(kind=job, id=<jobId>)`、終了・失敗・キャンセル・回復で `release`。(3) 起票 = `worktree add --lock` で作成中だけ `kind=create`、終われば解除（巻き戻しより先）。(4) 人の対話 pi = 任意。
+- **生死**: `pid` が生きている間だけ「有効」（`kill -0`）。死んでいれば「残骸」。**残骸は `claim` が自動では奪わない**（`unlock`→`lock` は原子的でなく、古い観測で他方の新しい lock を外しうるため。終了コード 3・「`reap` で解除してから」）。解除は明示の回復操作 `reap` だけが、観測した理由欄を再読して一致する場合に限り行う。`owner=` で始まらない lock（人が付けたもの・理由なし）は「不明の lock」として自動では解除しない。
+- **道具**: `scripts/wt_owner.py`（`claim <wt> --kind <k> --id <id> [--pid N]`・`release <wt> [--id <id>]`・`status [<wt>]`・`reap`。他の有効な owner・残骸・不明の lock で終了コード 3）。同じ規則の TS 実装が `apps/pr-viewer/worktree-owner.ts`。`--pid` を省くと、シェルではない最初の祖先（= 呼び出した AI）の pid になる。
+- **4 経路**: (1) 子エージェント = 親が起動の直前に手で `claim`、commit 後に `release`（ハーネスは改造しない）。(2) ジョブ = 起動前検査（`preflight`）が他の有効な owner・残骸・不明の lock・cwd が worktree の中のプロセスを `worktree_busy`（HTTP 409）で拒否し、開始で `claim(kind=job, id=<jobId>)`（起動前検査の後に残骸が現れて拒否されたときは、ジョブは `failed`・理由 `worktree_busy`＋`stale_lock`。`reap` で解除してからやり直す）、終了・失敗・キャンセル・回復で `release`（**停止を確認できなかったジョブ（`stop_unconfirmed`）は lock を残す**）。(3) 起票 = `worktree add --lock` で作成中だけ `kind=create`、終われば解除（巻き戻しより先）。(4) 人の対話 pi = 任意。
 - **限界**: lock を忘れた経路は検出できない。cwd 走査は、cwd が別の場所の子エージェントを見つけられない。pid の再利用は見分けない（`kill -0` だけ）。全件検査の前に `status` で worker の lock が無いことを確かめる（検査中の編集による誤失敗の防止）。
 
 ### worktree の掃除の規則

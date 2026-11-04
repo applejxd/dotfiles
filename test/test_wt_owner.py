@@ -113,13 +113,111 @@ def test_claim_is_refused_while_another_live_owner_holds_it(repo):
     assert "id=j1" in (_reason(repo, wt) or "")
 
 
-def test_claim_takes_over_a_stale_lock_of_a_dead_pid(repo):
+def test_claim_refuses_a_stale_lock_and_only_reap_then_claim_succeeds(repo):
+    # 意図の変更: 以前は残骸を claim が引き継いだ。unlock→lock は原子的でないので、残骸は拒否（fail closed）にした
     wt = _wt(repo)
     dead = str(_dead_pid())
     assert _run(repo, "claim", "x", "--kind", "job", "--id", "j1", "--pid", dead).returncode == 0
-    r = _run(repo, "claim", "x", "--kind", "worker", "--id", "w1", "--pid", str(os.getpid()))
-    assert r.returncode == 0, r.stderr
+    mine = ["claim", "x", "--kind", "worker", "--id", "w1", "--pid", str(os.getpid())]
+    r = _run(repo, *mine)
+    assert r.returncode == 3, r.stderr
+    assert "reap" in r.stderr and "残骸" in r.stderr
+    assert "id=j1" in (_reason(repo, wt) or "")  # 奪っていない
+    assert _run(repo, "reap").returncode == 0
+    assert _run(repo, *mine).returncode == 0
     assert "id=w1" in (_reason(repo, wt) or "")
+
+
+def test_concurrent_claims_never_both_succeed(repo):
+    # 残骸を reap した直後に、複数の主体が同時に取りに行く。成功は 1 つだけ
+    dead = str(_dead_pid())
+    assert _run(repo, "claim", "x", "--kind", "job", "--id", "j0", "--pid", dead).returncode == 0
+    assert _run(repo, "reap").returncode == 0
+    procs = []
+    for i in range(6):
+        args = ["claim", "x", "--kind", "worker", "--id", f"w{i}", "--pid", str(os.getpid())]
+        procs.append(
+            subprocess.Popen(
+                [sys.executable, str(SCRIPT), *args],
+                cwd=repo,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                env={**os.environ, **ENV},
+            )
+        )
+    codes = []
+    for p in procs:
+        p.communicate()
+        codes.append(p.returncode)
+    assert codes.count(0) == 1 and all(c in (0, 3) for c in codes), codes
+
+
+def test_concurrent_claims_on_a_stale_lock_all_refuse(repo):
+    dead = str(_dead_pid())
+    assert _run(repo, "claim", "x", "--kind", "job", "--id", "j0", "--pid", dead).returncode == 0
+    procs = [
+        subprocess.Popen(
+            [sys.executable, str(SCRIPT), "claim", "x", "--kind", "worker", "--id", f"w{i}"],
+            cwd=repo,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            env={**os.environ, **ENV},
+        )
+        for i in range(4)
+    ]
+    codes = []
+    for p in procs:
+        p.communicate()
+        codes.append(p.returncode)
+    assert codes == [3] * 4, codes
+    assert "id=j0" in (_reason(repo, _wt(repo)) or "")
+
+
+def test_reap_does_not_unlock_a_lock_replaced_after_observation(repo):
+    # 観測のあとで別の主体の有効な lock へ入れ替わっていたら、reap は外さない（再読して照合する）
+    wt = _wt(repo)
+    assert (
+        _run(
+            repo, "claim", "x", "--kind", "job", "--id", "j1", "--pid", str(_dead_pid())
+        ).returncode
+        == 0
+    )
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import wt_owner
+    finally:
+        sys.path.pop(0)
+    real_locks = wt_owner.locks
+    calls = {"n": 0}
+
+    def swapping() -> dict:
+        calls["n"] += 1
+        res = real_locks()
+        if calls["n"] == 1:
+            _git(repo, "worktree", "unlock", str(wt))
+            _git(
+                repo,
+                "worktree",
+                "lock",
+                "--reason",
+                f"owner=job id=j2 pid={os.getpid()} started=1",
+                str(wt),
+            )
+        return res
+
+    old = os.getcwd()
+    os.chdir(repo)
+    wt_owner.locks = swapping
+    try:
+        wt_owner.cmd_reap(None)
+    finally:
+        wt_owner.locks = real_locks
+        os.chdir(old)
+    assert "id=j2" in (_reason(repo, wt) or "")
 
 
 def test_human_lock_is_never_overwritten_or_released(repo):

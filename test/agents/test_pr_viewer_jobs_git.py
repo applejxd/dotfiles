@@ -239,11 +239,12 @@ def test_preflight_rejects_a_human_lock_and_a_reasonless_lock(w):
     assert w.preflight()["code"] == "worktree_busy"
 
 
-def test_preflight_ignores_a_stale_owner_with_a_dead_pid(w):
+def test_preflight_rejects_a_stale_owner_with_a_dead_pid(w):
+    # 意図の変更: 以前は残骸を無視して ok だった。残骸も worktree_busy（reap で解除してから）
     p = subprocess.Popen(["true"])
     p.wait()
     _lock(w, f"owner=worker id=w1 pid={p.pid} started=1")
-    assert w.preflight()["ok"] is True
+    assert w.preflight()["code"] == "worktree_busy"
 
 
 def test_preflight_rejects_a_process_whose_cwd_is_in_the_worktree(w):

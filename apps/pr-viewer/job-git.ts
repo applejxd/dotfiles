@@ -69,7 +69,7 @@ const REASONS: Record<string, string> = {
 	fence_request_present: "worktree に .opencode があるため、実行しません。",
 	tampered: "worktree の管理情報が想定と違います。",
 	failed: "失敗しました。",
-	worktree_busy: "この作業ツリーをほかの作業（子エージェント・対話の pi・別の依頼）が使っています。",
+	worktree_busy: "この作業ツリーをほかの作業（子エージェント・対話の pi・別の依頼）が使っています。残骸の lock は wt_owner reap で解除してからやり直してください。",
 };
 
 function refuse(code: string): Refusal {
@@ -253,7 +253,7 @@ export async function preflight(input: PreflightInput): Promise<{ ok: true; pre:
 		const adminDir = layout.adminDir;
 		// 所有: 他の有効な owner（不明の lock を含む）と、cwd が worktree の中のプロセスがいれば拒否
 		const own = await readOwner(common, mine[0].path);
-		if (own !== null && (own.state === "unknown" || (own.state === "owner" && own.alive))) return refuse("worktree_busy");
+		if (own !== null && own.state !== "none") return refuse("worktree_busy"); // 残骸も拒否（wt_owner reap で解除してから）
 		if (findByCwd(worktree).length > 0) return refuse("worktree_busy");
 
 		if (await externalCodeIn(common, adminDir)) return refuse("external_code");

@@ -7,7 +7,7 @@
     python3 scripts/wt_owner.py reap
 
 理由欄は 1 行 `owner=<kind> id=<id> pid=<pid> started=<unix 秒>`。kind は worker・job・create・train・interactive。
-pid が生きている間だけ「有効」、死んでいれば「残骸」（claim が引き継ぎ、reap が解除する）。
+pid が生きている間だけ「有効」、死んでいれば「残骸」（claim は拒否して終了コード 3。reap だけが解除する）。
 `owner=` で始まらない lock（人が付けたもの）は「不明の lock」として、自動では解除しない。
 <worktree> は絶対パス、または名前（`.tmp/worktrees/<name>`）。リポジトリ内（どの worktree でもよい）から実行する。
 仕様: docs/spec/orchestration.md#worktree-の所有の表明。TS 版（PR ビューア）は apps/pr-viewer/worktree-owner.ts で、規則は同じ。
@@ -180,7 +180,13 @@ def cmd_claim(a: argparse.Namespace) -> int:
             if st.owner.alive:
                 print(describe(wt, st), file=sys.stderr)
                 return EXIT_BUSY
-            git("worktree", "unlock", str(wt))  # 残骸の引き継ぎ
+            # 残骸は自動で奪わない（unlock→lock は原子的でなく、古い観測で他方の新しい lock を外しうる）
+            print(describe(wt, st), file=sys.stderr)
+            print(
+                "残骸の lock があります。`wt_owner.py reap` で解除してから claim してください",
+                file=sys.stderr,
+            )
+            return EXIT_BUSY
         r = git("worktree", "lock", "--reason", owner.reason(), str(wt))
         if r.returncode == 0:
             print(f"{wt}: claim しました（{owner.reason()}）")
@@ -228,6 +234,9 @@ def cmd_reap(_a: argparse.Namespace) -> int:
     for wt, reason in sorted(locks().items()):
         owner = parse_owner(reason)
         if owner is None or owner.alive:
+            continue
+        # 再読して、観測した理由欄と一致する場合だけ解除する（別の主体が新しく claim していたら外さない）
+        if locks().get(wt) != reason:
             continue
         if git("worktree", "unlock", str(wt)).returncode == 0:
             print(f"{wt}: 残骸を解除しました（{reason}）")
