@@ -132,11 +132,34 @@ def test_alive_owner_lock_is_kept(w):
     assert wt.exists() and w.branches() == ["feature/a"]
 
 
-def test_stale_owner_lock_is_released_and_removed(w):
+def test_stale_owner_lock_is_not_released_and_worktree_is_kept(w):
+    # 意図して変更: 旧い挙動（残骸を自動で unlock して掃除する）を、「解除せず残して reap を案内する」へ
     wt = w.feature("a")
     reason = f"owner=worker id=w1 pid={_dead_pid()} started={int(time.time())}"
     _git(w.repo, "worktree", "lock", "--reason", reason, str(wt))
     (wt / "local.ign").write_text("ign\n")
+    r = _run(w.repo, "a")
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert "残骸の lock" in r.stdout and "wt_owner.py reap" in r.stdout
+    assert wt.exists() and (wt / "local.ign").exists() and w.branches() == ["feature/a"]
+    assert _git(w.repo, "worktree", "list", "--porcelain").count("locked") == 1
+
+
+def test_stale_owner_lock_can_be_cleaned_after_reap(w):
+    wt = w.feature("a")
+    reason = f"owner=worker id=w1 pid={_dead_pid()} started={int(time.time())}"
+    _git(w.repo, "worktree", "lock", "--reason", reason, str(wt))
+    assert _run(w.repo, "a").returncode == 3
+    reap = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "wt_owner.py"), "reap"],
+        cwd=w.repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, **ENV},
+        check=False,
+    )
+    assert reap.returncode == 0, reap.stdout + reap.stderr
     r = _run(w.repo, "a")
     assert r.returncode == 0, r.stdout + r.stderr
     assert not wt.exists() and w.branches() == []

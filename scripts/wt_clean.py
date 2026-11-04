@@ -174,6 +174,13 @@ def clean_one(repo: Path, name: str, target: str, dry: bool) -> Result:
                 return Result(
                     name, "拒否", f"有効な owner がいる: {owner.kind} {owner.id} pid={owner.pid}"
                 )
+            # 残骸（pid が死んだ lock）は解除しない。reap が理由欄を再読して解除するまで残す
+            return Result(
+                name,
+                "拒否",
+                f"残骸の lock がある（{owner.kind} {owner.id} pid={owner.pid}）。"
+                "python3 scripts/wt_owner.py reap で解除してから、もう一度",
+            )
         if risky_config(wt) or in_progress(wt):
             return Result(name, "拒否", "確かめられない設定、または merge・rebase などの途中")
         st = git(wt, "status", "--porcelain", "--untracked-files=all")
@@ -194,8 +201,6 @@ def clean_one(repo: Path, name: str, target: str, dry: bool) -> Result:
             why = backup(wt, name, common_dir(repo) / "pi-cleanup-backups", files)
             if why:
                 return Result(name, "残した", why)
-        if reason is not None:
-            git(repo, "worktree", "unlock", str(wt))  # 残骸の lock
         # status が空（無視ファイルのみ）と確かめた後に、--force なしで削除する（git が無視ファイルごと消す）
         r = git(repo, "worktree", "remove", str(wt))
         if r.returncode != 0:

@@ -1167,7 +1167,8 @@ def test_cleanup_keeps_a_worktree_with_a_live_owner_lock(w):
     assert "feature/a" in _git(w.repo, "branch", "--list", "feature/a")
 
 
-def test_cleanup_removes_a_worktree_with_a_stale_owner_lock(w):
+def test_cleanup_keeps_a_worktree_with_a_stale_owner_lock(w):
+    # 意図して変更: 旧い挙動（残骸を unlock して worktree を削除）を、「解除せず残して reap を案内」へ
     w.feature("feature/a", {"a.txt": "a\n"})
     wt = w.tmp / "wt-a"
     _git(w.repo, "worktree", "add", "-q", str(wt), "feature/a")
@@ -1177,8 +1178,10 @@ def test_cleanup_removes_a_worktree_with_a_stale_owner_lock(w):
     _git(w.repo, "worktree", "lock", "--reason", reason, str(wt))
     rc, out, _ = w.merge("feature/a", "m\n", "--cleanup", "branch_and_worktree")
     assert rc == 0 and out["ok"], out
-    assert out["result"]["cleanup"]["done"] == ["worktree", "branch"], out
-    assert not wt.exists()
+    assert "worktree" not in out["result"]["cleanup"]["done"], out
+    assert any("wt_owner.py reap" in x for x in out["result"]["warnings"]), out
+    assert wt.exists() and "locked" in _git(w.repo, "worktree", "list", "--porcelain")
+    assert "feature/a" in _git(w.repo, "branch", "--list", "feature/a")
 
 
 def test_cleanup_keeps_a_worktree_with_an_untracked_file(w):
