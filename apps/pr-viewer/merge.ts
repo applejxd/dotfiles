@@ -25,7 +25,9 @@ import {
 	parseStatus,
 	readIdentity,
 	resolveCommonDir,
+	resolveGitDirs,
 	runGit,
+	sanitizeGitMessage,
 	tarFiles,
 } from "./merge-git.ts";
 import { readOwner } from "./worktree-owner.ts";
@@ -95,6 +97,13 @@ const REASONS: Record<string, string> = {
 
 function refuse(code: string, reason?: string, details?: Record<string, unknown>): Refusal {
 	return { ok: false, code, reason: reason ?? REASONS[code] ?? REASONS.failed, ...(details ? { details } : {}) };
+}
+
+/** 「統合に失敗しました。」に git の標準エラーの先頭を添える（表示の追加だけ。code は変えない）。空なら従来どおり。 */
+function failedWithGit(rawErr: string): Refusal {
+	const g = sanitizeGitMessage(rawErr);
+	if (g === "") return refuse("failed");
+	return refuse("failed", `${REASONS.failed}（git: ${g}）`, { git: g });
 }
 
 const DETAIL_PATHS = 20;
@@ -615,8 +624,9 @@ async function executeMergeInner(
 			const bad = await checkWorktree(ctx, p.wt, plan.touched);
 			if (bad) return bad;
 		}
-		const commit = await makeCommit(ctx, plan, ident);
-		if (!commit) return refuse("failed");
+		const made = await makeCommit(ctx, plan, ident);
+		const commit = made.oid;
+		if (!commit) return failedWithGit(made.err);
 
 		const st: State = {
 			id: lock.id,
@@ -653,7 +663,8 @@ async function executeMergeInner(
 			// 自分のコミットは反映されていない。作業ツリーが汚れていないと確かめられたときだけ状態を消す
 			// (ref が別の誰かに進められていても、作業ツリーが汚れていなければ、残す理由が無い)
 			if (!p.wt || (await worktreeIsRestored(p.wt, plan.touched))) removeState(ctx.gitDir);
-			return refuse(now === plan.target.oid && advanced === "failed" ? "failed" : "not_ff");
+			if (now === plan.target.oid && advanced.state === "failed") return failedWithGit(advanced.err);
+			return refuse("not_ff");
 		}
 		removeState(ctx.gitDir);
 
@@ -669,7 +680,7 @@ async function executeMergeInner(
 }
 
 /** merge commit（親は target・source の順）を作る。hook は走らない。メッセージは標準入力。 */
-async function makeCommit(ctx: Ctx, plan: Plan, ident: Identity): Promise<string | null> {
+async function makeCommit(ctx: Ctx, plan: Plan, ident: Identity): Promise<{ oid: string | null; err: string }> {
 	const env = {
 		GIT_AUTHOR_NAME: ident.name,
 		GIT_AUTHOR_EMAIL: ident.email,
@@ -682,26 +693,29 @@ async function makeCommit(ctx: Ctx, plan: Plan, ident: Identity): Promise<string
 		input: msg,
 		write: true,
 		env,
+		captureErr: true,
 	});
 	const oid = r.out.trim();
-	return r.code === 0 && OID_RE.test(oid) ? oid : null;
+	return { oid: r.code === 0 && OID_RE.test(oid) ? oid : null, err: r.err ?? "" };
 }
 
 /** target を commit へ進める。worktree があれば merge --ff-only (実行時の現在の枝を進める)、無ければ旧先頭を渡した update-ref (CAS)。
  *  worktree の経路では、HEAD が target のままであることを直前に確かめるだけで、外部の git による HEAD の切替との競合は防げない。 */
-async function advanceTarget(ctx: Ctx, oldOid: string, commit: string, w: Wt | null): Promise<"ok" | "failed"> {
+async function advanceTarget(ctx: Ctx, oldOid: string, commit: string, w: Wt | null): Promise<{ state: "ok" | "failed"; err: string }> {
 	if (w) {
 		const r = await runGit(["merge", "--ff-only", "--no-overwrite-ignore", "--no-edit", "--no-stat", "-q", "--no-autostash", "--no-verify-signatures", commit], {
 			cwd: w.path,
 			write: true,
+			captureErr: true,
 		});
-		return r.code === 0 ? "ok" : "failed";
+		return { state: r.code === 0 ? "ok" : "failed", err: r.err ?? "" };
 	}
 	const r = await runGit(["update-ref", "--no-deref", "-m", "pr-viewer merge", ctx.target.ref, commit, oldOid], {
 		gitDir: ctx.gitDir,
 		write: true,
+		captureErr: true,
 	});
-	return r.code === 0 ? "ok" : "failed";
+	return { state: r.code === 0 ? "ok" : "failed", err: r.err ?? "" };
 }
 
 const BACKUP_LIMIT = 200 * 1024 * 1024;
@@ -812,10 +826,69 @@ function manual(details: Record<string, unknown>): Refusal {
 	return { ...refuse("failed", "手で確認が要ります。"), details };
 }
 
-/** 公開の復旧。想定外の例外は、絶対パスなどを含まない固定の拒否に変える (S8)。 */
-export async function recoverMerge(repo: string): Promise<{ ok: true; state: "clean" | "completed" | "cleared" } | Refusal> {
+type RecoverOk = { ok: true; state: "clean" | "completed" | "cleared"; details?: { staleLocks: StaleLock[] }; message?: string };
+type StaleLock = { path: string; ageSec: number };
+
+const LOCK_REFS_DEPTH = 4;
+
+/** ディレクトリ直下の *.lock と、refs/ 配下の *.lock（深さ 4 まで）を数える。読み取りだけで、消さない。統合器自身の排他ロックは除く。 */
+function scanLocks(dir: string, now: number, out: StaleLock[]): void {
+	const add = (p: string): void => {
+		try {
+			const t = lstatSync(p);
+			if (t.isFile()) out.push({ path: p, ageSec: Math.max(0, Math.round((now - t.mtimeMs) / 1000)) });
+		} catch {
+			// 先に消えた
+		}
+	};
 	try {
-		return await recoverMergeInner(repo);
+		for (const e of readdirSync(dir)) if (e.endsWith(".lock") && e !== LOCK_NAME) add(join(dir, e));
+	} catch {
+		// 読めない
+	}
+	const walk = (d: string, depth: number): void => {
+		let names: string[];
+		try {
+			names = readdirSync(d);
+		} catch {
+			return;
+		}
+		for (const n of names) {
+			const p = join(d, n);
+			if (n.endsWith(".lock")) {
+				add(p);
+				continue;
+			}
+			if (depth >= LOCK_REFS_DEPTH) continue;
+			try {
+				if (lstatSync(p).isDirectory()) walk(p, depth + 1);
+			} catch {
+				// 先に消えた
+			}
+		}
+	};
+	walk(join(dir, "refs"), 1);
+}
+
+/** 古いロックの一覧（git-dir と共通ディレクトリの両方）。診断だけで、自動では消さない（持ち主の git が生きているかは利用者が判断する）。 */
+async function listStaleLocks(repo: string): Promise<StaleLock[]> {
+	const dirs = await resolveGitDirs(repo);
+	if (!dirs) return [];
+	const out: StaleLock[] = [];
+	const now = Date.now();
+	for (const d of new Set([dirs.gitDir, dirs.commonDir])) scanLocks(d, now, out);
+	return out;
+}
+
+/** 公開の復旧。想定外の例外は、絶対パスなどを含まない固定の拒否に変える (S8)。成功のとき、古いロックがあれば診断を追加する。 */
+export async function recoverMerge(repo: string): Promise<RecoverOk | Refusal> {
+	try {
+		const r = await recoverMergeInner(repo);
+		if (!r.ok) return r;
+		const locks = await listStaleLocks(repo).catch(() => [] as StaleLock[]);
+		if (locks.length === 0) return r;
+		const names = locks.map((l) => l.path.replace(/[\u0000-\u001F\u007F]/g, "?")).join(" ");
+		return { ...r, details: { staleLocks: locks }, message: `持ち主の git が動いていないことを確認してから、これらのファイルを削除してください: ${names}` };
 	} catch {
 		return manual({ cause: "exception" });
 	}
