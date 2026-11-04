@@ -983,6 +983,15 @@ def _kill_during_merge(w: World, source: str, delay: float) -> None:
     with contextlib.suppress(ProcessLookupError):
         os.killpg(p.pid, signal.SIGKILL)
     p.wait()
+    # node が死んでも、git の子が実際に消えるのは負荷の下で遅れうる。ロック・ref・作業ツリーを持ったまま次へ進まないよう、
+    # プロセスグループが空になるのを待つ（上限つき）
+    gone = time.monotonic() + 10
+    while time.monotonic() < gone:
+        try:
+            os.killpg(p.pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.005)
 
 
 def test_kill_9_during_merge_then_manual_recovery(w):
@@ -1028,6 +1037,8 @@ def test_kill_9_during_merge_then_manual_recovery(w):
             assert len(_parents(w)) == 2 and (w.repo / f"big/{attempt}-0000.txt").exists()
         else:
             assert not (w.repo / f"big/{attempt}-0000.txt").exists()
+            # kill が git の ORIG_HEAD.lock を残すことがある。recover はまだ診断しない（todo #127）ので、利用者が手で消す操作を模す
+            (w.git_dir() / "ORIG_HEAD.lock").unlink(missing_ok=True)
             rc, out, _ = w.merge(name)  # 解除の後の統合が成功する
             assert rc == 0 and out["ok"], out
         _git(w.repo, "checkout", "--", "other.txt")
