@@ -1020,8 +1020,25 @@ def test_child_result_updates_the_assigned_todo(env):
         PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"),
     )
     assert proc.returncode == 0, proc.stderr
-    # 完了した子を割り当てた項目は done になり、メモに結果が残る
-    assert "[x] #1: investigate — child worker: done" in proc.stdout, proc.stdout
+    # 子の正常終了は要求の充足ではない: done にせず blocked (親の確認待ち) にし、メモに結果が残る
+    assert "[x] #1" not in proc.stdout, proc.stdout
+    assert (
+        "[~] #1: investigate — 実行終了。親の確認待ち（実差分・検査）。child worker: done"
+        in proc.stdout
+    ), proc.stdout
+
+
+def test_child_finish_does_not_touch_an_already_done_todo(env):
+    rounds = [
+        [{"name": "todo", "args": {"action": "add", "text": "investigate"}}],
+        [{"name": "todo", "args": {"action": "set", "id": 1, "status": "done"}}],
+        [_task(agent="worker", task="t", todo=1)],
+        [{"name": "todo", "args": {"action": "list", "all": True}}],
+    ]
+    proc = _run_task_with_todo_ext(env, rounds)
+    assert proc.returncode == 0, proc.stderr
+    assert "[x] #1: investigate" in proc.stdout, proc.stdout
+    assert "[~] #1" not in proc.stdout and "親の確認待ち" not in proc.stdout, proc.stdout
 
 
 def _run_task_with_todo_ext(env, rounds):

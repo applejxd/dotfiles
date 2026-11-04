@@ -1385,12 +1385,15 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 
 	const TODO_REQUIRED_AGENTS = new Set(["explore", "review", "worker"]);
 
-	// 割り当てた ToDo の項目へ結果を反映する (done なら done、そうでなければメモだけ)。todo 拡張が入口を置く
+	// 割り当てた ToDo の項目へ結果を反映する。子の終了は要求の充足ではないので、正常終了でも done にせず blocked (親の確認待ち) にする。
+	// 既に done / cancelled の項目は todo 拡張が触らない。失敗・中断はメモだけ。todo 拡張が入口を置く
 	const linkTodo = (id: number | undefined, job: Job, r: RoundResult, ctx?: any) => {
 		if (id === undefined) return;
 		const note = `child ${job.agent}: ${r.status} (${fmtStats(r.stats)})`;
 		try {
-			(globalThis as any).__piTodoUpdate?.({ id, status: r.status === "done" ? "done" : undefined, note });
+			(globalThis as any).__piTodoUpdate?.(r.status === "done"
+				? { id, status: "blocked", note: `実行終了。親の確認待ち（実差分・検査）。${note}`, onlyIfOpen: true }
+				: { id, status: undefined, note });
 		} catch (e) {
 			warnUser(ctx, `ToDo #${id} へ子の結果を反映できなかった: ${errMsg(e)}`);
 		}
@@ -1474,7 +1477,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			"Run a task in a child agent. The child is a separate pi process with the same guard, and cannot see this conversation, " +
 			"so put everything it needs into `task`. Forms (do not mix their fields):\n" +
 			"- new: {agent, task, keep?, background?, model?, effort?, todo?, isolation?}. The child stops when it finishes unless keep=true; then it stays idle and a jobId is returned. " +
-			"background=true returns at once and notifies you on completion. model and effort: see the list below (set them only when the user asks; omit them to use the role default). todo is a todo id to update when the child finishes; it is required for explore / review / worker when the todo tool is active (add a todo item first). " +
+			"background=true returns at once and notifies you on completion. model and effort: see the list below (set them only when the user asks; omit them to use the role default). todo is a todo id to annotate when the child finishes (a normal finish sets it to blocked = awaiting your check of the real diff; it never marks it done, so set done yourself after verifying); it is required for explore / review / worker when the todo tool is active (add a todo item first). " +
 			"isolation: \"worktree\" runs the worker isolated in a git worktree (a single new worker task only; not with keep).\n" +
 			"- tasks: {tasks:[{agent, task, model?, effort?}, ...], background?}. Runs them in parallel (waiting for free slots) and returns every result.\n" +
 			"- follow-up: {jobId, task, background?}. Sends another request to a kept child; it remembers the earlier conversation. One request at a time per job.\n" +
@@ -1495,7 +1498,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 				background: Type.Optional(Type.Boolean({ description: "new / tasks / follow-up: return at once and be notified on completion" })),
 				model: Type.Optional(Type.String({ description: "new task only: a model from the catalog in this description (only when the user asks), your own model, or a declared agent's model" })),
 				effort: Type.Optional(Type.Union([...EFFORTS, ""].map((e) => Type.Literal(e)), { description: "new task only: thinking level (only when the user asks). \"\" means unset" })),
-				todo: Type.Optional(Type.Number({ description: "new task only: a todo id to mark done (or annotate) when the child finishes" })),
+				todo: Type.Optional(Type.Number({ description: "new task only: a todo id to annotate when the child finishes (normal finish -> blocked, awaiting parent verification; never auto-done)" })),
 				isolation: Type.Optional(Type.Union([Type.Literal("worktree"), Type.Literal("")], { description: "new worker task only: \"worktree\" runs the worker isolated in a git worktree (not with keep)" })),
 				tasks: Type.Optional(
 					Type.Array(

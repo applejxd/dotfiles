@@ -101,7 +101,7 @@ CLI の終了コード: 0 = 全て処理、3 = 一部を残した・拒否、2 =
 | 機能 | 状態 | 内容 | 正本 |
 | --- | --- | --- | --- |
 | 子の結果の保存 | 実装済 | 完了通知に、結果の全文を `.tmp/subagents/<通番>-<job id>.md` に書く（50 件・7 日） | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
-| ToDo の連動 | 実装済 | 子が完了すると、`todo` の項目を `done` にして結果を `note` へ書く | 同上 |
+| ToDo の連動 | 実装済 | 子が完了しても、`todo` の項目は `done` にせず `blocked`（親の確認待ち）にして結果を `note` へ書く | 同上 |
 | セッションごとの一時置き場 | 実装済 | `$TMPDIR` は `.tmp/s/<ID>/`。セッションの終わりに消える。残すものは `.tmp/keep/` 以下 | [一時置き場](guard/pi-extensions.md#セッションごとの一時置き場tmpsid) |
 | 圧縮に備えた復帰の記録 | 実装済 | `checkpoint`（圧縮の前後の記録） | [圧縮](guard/pi-extensions.md#圧縮旧-checkpoint) |
 

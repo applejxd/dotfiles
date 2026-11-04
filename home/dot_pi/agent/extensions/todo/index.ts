@@ -329,9 +329,11 @@ export default function (pi: ExtensionAPI) {
 	// 利用者の操作。モデルへは渡さず、custom エントリで残す (再開・分岐で戻せるように)
 	const persist = () => pi.appendEntry(STATE_ENTRY, { todos: todos.map((t) => ({ ...t })), nextId } satisfies Details);
 	// 子エージェントの結果を、割り当てた項目へ反映する入口 (harness の guarded_task が呼ぶ)。status が無ければメモだけ
-	(globalThis as any).__piTodoUpdate = (u: { id: number; status?: Status; note?: string }) => {
+	(globalThis as any).__piTodoUpdate = (u: { id: number; status?: Status; note?: string; onlyIfOpen?: boolean }) => {
 		const t = todos.find((x) => x.id === u.id);
 		if (!t) return false;
+		// 既に done / cancelled の項目は、子の終了では触らない
+		if (u.onlyIfOpen && (t.status === "done" || t.status === "cancelled")) return false;
 		if (u.status) t.status = u.status;
 		if (u.note) t.note = u.note.trim();
 		persist();
