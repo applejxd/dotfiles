@@ -78,7 +78,7 @@ export async function readOwner(gitDir: string, wt: string): Promise<OwnerState 
 
 /**
  * 所有を表明する（lock）。他の有効な owner・不明の lock があれば ok:false（holder に現状）。
- * 残骸（死んだ pid）は引き継ぐ。同じ id の再 claim は冪等（pid・時刻は付け直さない）。
+ * 残骸（死んだ pid）も拒否（holder.alive=false。reap で解除してから）。同じ id の再 claim は冪等（pid・時刻は付け直さない）。
  */
 export async function claim(gitDir: string, wt: string, o: { kind: OwnerKind; id: string; pid?: number }): Promise<ClaimResult> {
 	const owner: Owner = { kind: o.kind, id: o.id, pid: o.pid ?? process.pid, started: Math.floor(Date.now() / 1000) };
@@ -90,14 +90,32 @@ export async function claim(gitDir: string, wt: string, o: { kind: OwnerKind; id
 		if (st.state === "unknown") return { ok: false, holder: st };
 		if (st.state === "owner") {
 			if (st.owner.id === o.id) return { ok: true };
-			if (st.alive) return { ok: false, holder: st };
-			await runGit(["worktree", "unlock", path], { gitDir, write: true }); // 残骸の引き継ぎ
+			// 残骸も自動では奪わない（unlock→lock は原子的でなく、古い観測で他方の新しい lock を外しうる）。reap だけが解除する
+			return { ok: false, holder: st };
 		}
 		// lock は既に locked なら失敗する（= 取り合いに負けたら再読みして拒否側へ）
 		const r = await runGit(["worktree", "lock", "--reason", reason, path], { gitDir, write: true });
 		if (r.code === 0) return { ok: true };
 	}
 	return { ok: false, holder: await readOwner(gitDir, wt) };
+}
+
+/**
+ * 残骸（pid が死んだ owner の lock）だけを解除する。観測した理由欄を再読して一致する場合だけ unlock する。
+ * 返り値は解除した worktree の数。
+ */
+export async function reap(gitDir: string): Promise<number> {
+	const m = await lockReasons(gitDir);
+	if (m === null) return 0;
+	let n = 0;
+	for (const [wt, reason] of m) {
+		const o = parseOwner(reason);
+		if (o === null || isAlive(o.pid)) continue;
+		const again = await lockReasons(gitDir);
+		if (again === null || again.get(wt) !== reason) continue;
+		if ((await runGit(["worktree", "unlock", wt], { gitDir, write: true })).code === 0) n++;
+	}
+	return n;
 }
 
 /** 解除する。id が違う・自分の lock でないときは解除しない（false）。lock が無ければ true。 */

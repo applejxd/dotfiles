@@ -408,7 +408,12 @@ def test_pre_commit_config_splits_stages():
     config, stages = _hook_stages()
     assert set(config["default_install_hook_types"]) == {"pre-commit", "pre-push"}
     assert config["default_stages"] == ["pre-commit"]
-    heavy = {"lint-templates-local", "raspi-regression-local", "verify-stamp-push"}
+    heavy = {
+        "lint-templates-local",
+        "raspi-regression-local",
+        "verify-stamp-push",
+        "gitleaks-prepush",
+    }
     for hook_id in heavy:
         assert stages[hook_id] == ["pre-push"], hook_id
     for hook_id in stages.keys() - heavy:

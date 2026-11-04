@@ -60,9 +60,9 @@
 
 - **理由欄**は 1 行 `owner=<kind> id=<id> pid=<pid> started=<unix 秒>`。`id` は空白を含まない 1 語。
 - **kind**: `worker`（親が起動した子エージェント）・`job`（PR ビューアのジョブ）・`create`（起票の作成中だけ）・`train`（統合用の枝の組み立て）・`interactive`（人の対話 pi。任意）。
-- **生死**: `pid` が生きている間だけ「有効」（`kill -0`）。死んでいれば「残骸」で、引き継ぐ・解除してよい。`owner=` で始まらない lock（人が付けたもの・理由なし）は「不明の lock」として自動では解除しない。
-- **道具**: `scripts/wt_owner.py`（`claim <wt> --kind <k> --id <id> [--pid N]`・`release <wt> [--id <id>]`・`status [<wt>]`・`reap`。他の有効な owner・不明の lock で終了コード 3）。同じ規則の TS 実装が `apps/pr-viewer/worktree-owner.ts`。`--pid` を省くと、シェルではない最初の祖先（= 呼び出した AI）の pid になる。
-- **4 経路**: (1) 子エージェント = 親が起動の直前に手で `claim`、commit 後に `release`（ハーネスは改造しない）。(2) ジョブ = 起動前検査（`preflight`）が他の有効な owner・不明の lock・cwd が worktree の中のプロセスを `worktree_busy`（HTTP 409）で拒否し、開始で `claim(kind=job, id=<jobId>)`、終了・失敗・キャンセル・回復で `release`。(3) 起票 = `worktree add --lock` で作成中だけ `kind=create`、終われば解除（巻き戻しより先）。(4) 人の対話 pi = 任意。
+- **生死**: `pid` が生きている間だけ「有効」（`kill -0`）。死んでいれば「残骸」。**残骸は `claim` が自動では奪わない**（`unlock`→`lock` は原子的でなく、古い観測で他方の新しい lock を外しうるため。終了コード 3・「`reap` で解除してから」）。解除は明示の回復操作 `reap` だけが、観測した理由欄を再読して一致する場合に限り行う。`owner=` で始まらない lock（人が付けたもの・理由なし）は「不明の lock」として自動では解除しない。
+- **道具**: `scripts/wt_owner.py`（`claim <wt> --kind <k> --id <id> [--pid N]`・`release <wt> [--id <id>]`・`status [<wt>]`・`reap`。他の有効な owner・残骸・不明の lock で終了コード 3）。同じ規則の TS 実装が `apps/pr-viewer/worktree-owner.ts`。`--pid` を省くと、シェルではない最初の祖先（= 呼び出した AI）の pid になる。
+- **4 経路**: (1) 子エージェント = 親が起動の直前に手で `claim`、commit 後に `release`（ハーネスは改造しない）。(2) ジョブ = 起動前検査（`preflight`）が他の有効な owner・残骸・不明の lock・cwd が worktree の中のプロセスを `worktree_busy`（HTTP 409）で拒否し、開始で `claim(kind=job, id=<jobId>)`（起動前検査の後に残骸が現れて拒否されたときは、ジョブは `failed`・理由 `worktree_busy`＋`stale_lock`。`reap` で解除してからやり直す）、終了・失敗・キャンセル・回復で `release`（**停止を確認できなかったジョブ（`stop_unconfirmed`）は lock を残す**）。(3) 起票 = `worktree add --lock` で作成中だけ `kind=create`、終われば解除（巻き戻しより先）。(4) 人の対話 pi = 任意。
 - **限界**: lock を忘れた経路は検出できない。cwd 走査は、cwd が別の場所の子エージェントを見つけられない。pid の再利用は見分けない（`kill -0` だけ）。全件検査の前に `status` で worker の lock が無いことを確かめる（検査中の編集による誤失敗の防止）。
 
 ### worktree の掃除の規則
@@ -101,7 +101,7 @@ CLI の終了コード: 0 = 全て処理、3 = 一部を残した・拒否、2 =
 | 機能 | 状態 | 内容 | 正本 |
 | --- | --- | --- | --- |
 | 子の結果の保存 | 実装済 | 完了通知に、結果の全文を `.tmp/subagents/<通番>-<job id>.md` に書く（50 件・7 日） | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
-| ToDo の連動 | 実装済 | 子が完了すると、`todo` の項目を `done` にして結果を `note` へ書く | 同上 |
+| ToDo の連動 | 実装済 | 子が完了しても、`todo` の項目は `done` にせず `blocked`（親の確認待ち）にして結果を `note` へ書く | 同上 |
 | セッションごとの一時置き場 | 実装済 | `$TMPDIR` は `.tmp/s/<ID>/`。セッションの終わりに消える。残すものは `.tmp/keep/` 以下 | [一時置き場](guard/pi-extensions.md#セッションごとの一時置き場tmpsid) |
 | 圧縮に備えた復帰の記録 | 実装済 | `checkpoint`（圧縮の前後の記録） | [圧縮](guard/pi-extensions.md#圧縮旧-checkpoint) |
 
@@ -120,7 +120,7 @@ CLI の終了コード: 0 = 全て処理、3 = 一部を残した・拒否、2 =
 
 ## 計画と自走
 
-計画は利用者と対話し、実装は止めずに自走して最後に報告する。統合は利用者のボタンが最終関門なので、見込みの実装は安全。コードは変えない取り決め（規約）で、全体の指示はグローバル指示（`agent-instructions.md`）にある。
+計画は利用者と対話し、実装は止めずに自走して最後に報告する。統合前の変更は元に戻せる。ただし、作業領域（共有 `.git` は書き込める）・試験や hook の実行・ホストへの影響は、統合の前に起こりうる。ガードは「うっかり防止」であり、敵対的な迂回への防御を保証しない（[保証の範囲](guard/index.md#目的と保証の範囲)）。見込みの実装は、この範囲の保証のもとで進める。コードは変えない取り決め（規約）で、全体の指示はグローバル指示（`agent-instructions.md`）にある。
 
 | 段 | 内容 |
 | --- | --- |

@@ -253,10 +253,10 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 入口の検査 | 統合と同じ: (1) `--allow-jobs` が無ければ 403 `jobs_disabled`（GET も同じ） (2) `Tailscale-Funnel-Request` があれば 403 `forbidden_funnel` (3) POST は Origin 必須（GET は Origin が付いているときだけ照合）で、違えば 403 `forbidden_origin` (4) `X-PRV: 1`・JSON (5) 本文 64 KB・未知のキーは 400。ほかに 400 `bad_request`・`bad_expect`（`expect` は 2 キー必須・40 桁）・`bad_batches`・`bad_digest`、409 `stale_view`・`stale_input`・`nothing_to_do`・`merged`、413 `too_large`、429 `quota`、501 `unsupported_platform`、503 `pis_missing`・`shutting_down` |
 | 入力 | `input.batches` は、その PR の**未受領（`receipt` が無い）で宛先がこの feature の worktree** の `submit`（最大 10 件）。コメントは `GET …/review` と同じ見え方。`inputDigest` は batchId の列と各コメントの id・本文の SHA-256。画面の値と起動の瞬間の値が違えば 409 `stale_input`（見ていない内容を渡さない）。`blockers`（コードと日本語の文）が空でなければ起動できず、POST も同じ検査で断る |
 | 状態機械 | `starting` → `running` → `finalizing` → 終端。終端は `succeeded`（commit した）・`no_change`・`needs_review`（検査を通らず commit していない。作業ツリーはそのまま残す）・`failed`・`timed_out`・`cancelled`・`interrupted`（アプリの停止・再起動）の **7 種**。状態は前へだけ進み、終端は変えられない。`tampered`（改ざんの検出）は独立の状態ではなく `failed` + reason `tampered` |
-| `reasons`（コードだけ。本文・パスを含めない） | `exit_nonzero`・`output_limit`・`timeout`・`cancelled`・`shutdown`・`spawn_failed`・`bad_argv`・`exception`・`lock_failed`・`claim_failed`・`state_failed`・`tampered`・`ref_moved`・`commit_failed`・`no_identity`・`reset_failed`、検査の理由（`risk_path`・`risk_config`・`unsupported_file`・`too_many_files`・`too_large`・`binary`・`outside`・`add_failed`） |
+| `reasons`（コードだけ。本文・パスを含めない） | `exit_nonzero`・`output_limit`・`timeout`・`cancelled`・`shutdown`・`spawn_failed`・`bad_argv`・`exception`・`stop_unconfirmed`・`stale_lock`・`lock_failed`・`claim_failed`・`state_failed`・`tampered`・`ref_moved`・`commit_failed`・`no_identity`・`reset_failed`、検査の理由（`risk_path`・`risk_config`・`unsupported_file`・`too_many_files`・`too_large`・`binary`・`outside`・`add_failed`） |
 | 起動前の検査（P1〜P6） | P1 旗・Linux・`pis` が絶対パスの実行可能ファイル。P2 `expect`・batch・digest の一致と、batch が未受領で宛先がこの worktree であること。P3 feature を checkout している worktree がちょうど 1 つ・共通側から見た管理情報の整合（`worktrees/<n>/gitdir`・`.git` ポインタ・`commondir`。**この間は worktree の `.git` を読む git を動かさない**）・`config`・`config.worktree` に外部コードが無い・進行中の操作（merge・rebase・cherry-pick・bisect など）が無い・HEAD が feature で OID が `expect.source`・`status --untracked-files=all` が空（`dirty`）。P4 `.opencode` が worktree にも HEAD にも無い。P5 同じ枝の排他・リポジトリの統合との排他・全体の同時数・日次の上限。P6 記録の採取（`.git` ポインタ・`worktrees/<n>/{HEAD,gitdir,commondir}`・`config.worktree`・`info/attributes`・`info/exclude` のハッシュと、feature・統合先・develop・main・master の OID。state dir の `job.json` に保存） |
 | 終了後の照合・検査・commit（Q1〜Q7） | Q1 プロセスグループと `PR_VIEWER_JOB_ID` の印つきプロセス、および cwd が当該 worktree の中のプロセスを、検査の前に掃除する（正常終了でも）。Q2 P6 の記録と照合し、1 つでも違えば commit せず `failed`（`tampered`）。Q3 使い捨ての `GIT_INDEX_FILE` で `read-tree` → `add -A` → `write-tree`（worktree の `.git`・index は使わない）。同じ tree なら `no_change`。Q4 `diff-tree --raw --no-renames` の結果に規則を当てる: A/M/D だけ・モードは通常ファイル（100644）だけ（symlink・実行ビット・モード変更・gitlink は不可）・`.git`・`.gitmodules`（別名を含む）・制御文字・`..` や絶対パス・4096 バイト超のパスは不可・200 件以内・blob 1 MiB 以内・合計 4 MiB 以内・バイナリ不可。Q5 `risk_paths`（`rules.json`）・`.gitattributes`・`.opencode/**` に当たる、または設定を読めないときは `needs_review`。Q6 `commit-tree`（件名は固定の日本語。本文にジョブ ID・batch ID・件数。作者は共通ディレクトリの設定だけから読む。hook は git 実行器の安全設定が止める）。Q7 ref を更新する直前にもう一度 Q2 の照合をして、`update-ref <新> <旧>` の CAS で更新し、worktree で `reset -q` して index を HEAD に揃える（作業ツリーは変えない） |
-| pi の起動 | `pis --role worker --allowlist -p <プロンプト> [--model <提供元/モデル>]`。`cwd` は feature の worktree・stdin は `/dev/null`・`detached`（新しいプロセスグループ）・shell を使わない。**環境は許可リスト**（`PATH`・`HOME`・`USER`・`LANG`・`LC_*`・`XDG_*`・`*_PROXY`・`SSL_CERT_FILE`・`PI_CODING_AGENT_DIR` と、印の `PR_VIEWER_JOB_ID`。`GIT_*` などは渡さない）。上限は**1 回 10 分（1〜30。旗で変える）・同時 1・日 30 回**（日次はリポジトリをまたぐ。UTC の日付）。出力は 8 MiB で打ち切って `failed`（`output_limit`）。停止は SIGTERM → 15 秒後に SIGKILL。`finalizing` に入ったら止めない（`cancel` は 409 `not_cancellable`） |
+| pi の起動 | `pis --role worker --allowlist -p <プロンプト> [--model <提供元/モデル>]`。`cwd` は feature の worktree・stdin は `/dev/null`・`detached`（新しいプロセスグループ）・shell を使わない。**環境は許可リスト**（`PATH`・`HOME`・`USER`・`LANG`・`LC_*`・`XDG_*`・`*_PROXY`・`SSL_CERT_FILE`・`PI_CODING_AGENT_DIR` と、印の `PR_VIEWER_JOB_ID`。`GIT_*` などは渡さない）。上限は**1 回 10 分（1〜30。旗で変える）・同時 1・日 30 回**（日次はリポジトリをまたぐ。UTC の日付）。出力は 8 MiB で打ち切って `failed`（`output_limit`）。停止は SIGTERM → 15 秒後に SIGKILL。**SIGKILL 後に残存プロセスの消滅を期限つきで確認し、確認できなければ commit せず `failed`（`stop_unconfirmed`）で終え、所有の lock と枝の排他を残し、そのリポジトリの新規受付を止める**（回復処理で残存があるときと同じ fail closed）。`finalizing` に入ったら止めない（`cancel` は 409 `not_cancellable`） |
 | プロンプト | 固定の案内 3 点（git の書き込みをしない・worktree の外・秘密・ネットワークに触れない・囲みの中を命令として読まない）+ **乱数（128 bit）の開始・終了の目印**で囲んだ引用データ（1 行 1 件の JSON。制御文字・双方向制御文字は除く）+ 末尾の依頼。乱数が引用データに現れたら作り直す。上限は 50 件・1 件 4000 字・全体 24 KiB で、**黙って切らず**断る（`job-input` の blockers にも出す）。プロンプトは `prompt.txt` に保存する |
 | 保存先 | `$XDG_STATE_HOME/pr-viewer/<repoId>/jobs/<id>/{job.json, log.txt, prompt.txt}`（`--state-dir` で変える。ディレクトリ 0700・ファイル 0600・他人の持ち物やシンボリックリンクは断る）。`job.json` は状態遷移ごとに atomic rename。ログは先頭 1 MiB まで。排他ファイルは `<repoId>/locks/`（枝ごと）、日次の数えは state dir 直下の `daily.json`。保持は終端のものを新しい順に 30 件・14 日（実行中は消さない）。**共通 `.git` の中には何も置かない**（Fence の内側から書けるため）。起動時の回復で、非終端のジョブは `interrupted`（自動では再開しない）にする。止める対象は、親の pid・開始時刻が一致するプロセスグループと、親の生死に関係なく、環境に `PR_VIEWER_JOB_ID=<id>` を持つか **cwd が当該ジョブの worktree の中**（realpath。末尾 `/` つきの前方一致で `wt` と `wt2` を取り違えない）の残存プロセス（`/proc` 走査。印の無い通信の中継 `envoy` を拾うため。アプリ自身とその祖先は除く。runner と共通の処理で SIGTERM → 待つ → SIGKILL → 消滅を**最大 10 秒ポーリング**して確認。X3-a の実測は [pr-merge-spike](../research/agents/pr-merge-spike.md#x3-a-pis--p-の実機実測)）。消滅を確認できないジョブは状態・ロックを変えず、そのリポジトリのジョブ受付を止める（503 `recovery_failed`）。回復の前に、state root ごとの OS の排他（flock。`<stateDir>/instance.lock`。アプリが落ちれば外れる）を取り、取れなければ（同じ state dir の先発が生きている）回復も状態変更もせず終了コード 2 で断る。古い排他は掃除する。画面へ返すログは、生ログの行境界でだけ返し（途中の `from` は次の行頭から・上限を超える 1 行は「省略」の表示に置き換える・書きかけの行は終端まで待つ）、ANSI・制御文字を除き、既知の根のパスと絶対パスを `<path>` に置き換える（1 回 16 KB） |
 | 統合との排他 | リポジトリ単位。ジョブの予約（検査の途中から終端まで）がある間、統合の `merge-plan` は blocker `job_running` を返し、`merge` は 409 `job_running`。統合が実行中なら、ジョブの起動は 409 `merge_running`。同じ PR の二重起動は 409 `job_running`・全体の同時数を超えれば 409 `busy`。確認と予約は同じ tick の同期処理で、同一プロセス内には窓が無い。別プロセスの `merge-cli.ts` はジョブを知らない（運用で守る） |
@@ -272,7 +272,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 他サイトからの CSRF・DNS rebinding・Funnel 経由 | 止まる（Funnel は統合と同じく二次情報に基づく） | 統合と同じ入口の検査（上の表。根拠は「統合」の表） |
 | コメント・ファイルに仕込んだ**プロンプト注入** | **止まらない** | 引用データの囲みと案内は、モデルが従う保証ではない。被害を狭めるのは、`pis --allowlist`（通信先を固定）・Fence・Q4・Q5（commit に入る変更の形・範囲の検査）・commit 後の人の確認と統合の承認。注入された pi が、worktree 内の通常のファイルを書き換えることは防げない（検査を通れば commit される） |
 | 共通 `.git` の ref・`worktrees/<n>/`・worktree の `.git` ポインタの改ざん（Fence 内の pi が書ける） | **検出であって防止ではない** | P6 と Q2 の照合（commit の前に 2 回）。1 つでも違えば commit せず `failed`（`tampered`）。OS で書き込みを止めているわけではない（検査と更新の間の窓は狭めるだけ）。検出できるのはアプリが記録した項目だけ。後続の `pis` を人が手で起動する場合は対象外 |
-| 検査をすり抜ける変更 | 一部だけ止まる | `risk_paths`・`.gitattributes`・`.opencode/**`・symlink・巨大・バイナリは `needs_review`。通常のコードに紛れた悪意は検出できない。**commit に pre-commit は走らない**ので、秘密の検出（gitleaks）などが効かない（push の前の hook・人の確認で拾う） |
+| 検査をすり抜ける変更 | 一部だけ止まる | `risk_paths`・`.gitattributes`・`.opencode/**`・symlink・巨大・バイナリは `needs_review`。通常のコードに紛れた悪意は検出できない。**ジョブの commit（commit-tree）や統合の merge commit に pre-commit は走らない**ので、commit 段の gitleaks は効かない。公開前の最後の網は pre-push 段の `gitleaks-prepush`（push する範囲の全コミットを検査。途中コミットで入れて消した秘密も拾う）と人の確認。ジョブの成功表示を「公開可能」と読まない |
 | tailnet 内の他の機器・同一端末の他プロセス（偽造クライアント） | **止まらない** | Origin と `X-PRV` は、ヘッダーを偽造できるクライアントを止めない。認証は入れない方針。`--allow-jobs` を付けると、到達できるクライアントは依頼を起動できる |
 | 費用の暴走 | 上限まで | 1 回 10 分・同時 1・日 30 回・出力 8 MiB。上限内の費用は使われる。日次の数えは、state dir を消すと戻る |
 | 秘密の漏れ | 一部だけ止まる | pi へ渡す環境は許可リスト。ログはパスを `<path>` に置き換え、1 回 16 KB。だが、worktree 内の秘密（追跡外のファイルなど）は pi から読め、ログ・commit に出うる。`--allowlist` の通信先へ送ることは防げない |
@@ -280,7 +280,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 #### 有効化の手順（利用者が行う。取り込みだけでは有効にならない）
 
-1. **実機の実測 X3-a は未実施**。本物の `pis` と LLM では一度も動かしていない（試験は偽の pis だけ）。有効化の前に、補助スクリプト `pk x3a` で、使い捨ての feature に対して `pis --role worker --allowlist -p` が動くこと・所要時間・費用・commit が通ることを実測する（スクリプトは取り込みの後に用意する）。
+1. **実機の実測 X3-a は実施済み**（2026-11-04。結果は [pr-merge-spike.md の X3-a](../research/agents/pr-merge-spike.md)。起動・編集・取り出し・停止の 7 項目。停止後の取り残しは cwd 走査で反映済み）。**実運用での利用はまだ**（実レビュー反映で最後まで回していない）。有効化の前に、補助スクリプト `pk x3a` で、使い捨ての feature に対して `pis --role worker --allowlist -p` の所要時間・費用・commit が通ることを確かめる。
 2. 取り込みの後、使う pi / pis を再起動する。`--allow-jobs` を付けなければ何も変わらない（既定で無効）。
 3. `node apps/pr-viewer/server.ts --repo <パス> --allow-jobs` で起動し、`GET /api/capabilities` の `jobs` が `true` になることを確かめる（`jobsReason` が `pis_missing` なら `--pis-command` で絶対パスを指定する）。
 4. 安全な試験用リポジトリ・小さな feature・1 件のコメントで 1 回試す。結果（`succeeded`・`needs_review` など）と、`git log` の commit を人が確かめる。異常終了したジョブは `interrupted` になり、再開されない（コメントは受領済み。画面の「再送」で送り直す）。
@@ -289,7 +289,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 #### 既知の制限（ジョブ）
 
 - Linux 専用。Windows・macOS では起動を断る（Windows 実機は未検証）。
-- 実機の実測（X3-a）が未実施。偽の pis と実 git の試験だけで確かめている。
+- 実機の実測（X3-a）は実施済み（[pr-merge-spike.md](../research/agents/pr-merge-spike.md)）。実運用の利用は未で、費用・手戻りは未測定。
 - 衝突の解決（段 A4b）は未実装。`address_review` だけ。
 - worktree の外（共通 `.git` の ref など）への pi の書き込みは、OS では止めず、検出するだけ。
 - 同じ worktree に人と pi が同時に書く場合の競合は検知しない。
@@ -399,6 +399,8 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 条件の定義は [CHG-0060 §6](../change/0060-local-pr-viewer.md)。
 
+> 注: C1・C8・C11・C15 の「窓口の pi が保留を作る・ペア・制御ポート」は旧経路の設計で、置き換え済み（CHG-0062）。現行の統合は人の POST でアプリが行う（§6「統合」）。ここは当時の条件の記録として残す。
+
 | # | 満たす設計要素 | 確かめる試験 | 限界 |
 | --- | --- | --- | --- |
 | C1 | アプリは指示を送るだけ。保留の作成も実行も窓口の pi（§8） | 承認の縦断。アプリの import 検査 | 段 5 は未実装。偽ペアの余地（権限は上がらない） |
@@ -438,14 +440,14 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | feature の worktree からの書き込み | `refs/pi/review/*` を feature の worktree の `pis` から書けるか（`refs/pi/pending` は確認済み） |
 | C13 | 保持期限と圧縮は v1 で未実装。上限で止まる |
 | UI ポートは認証なし | tailnet が保証する決定。統合（`--allow-merge`）を有効にすると、到達できるクライアントは統合できる（§6 統合の表）。素の `pi`（Fence なし）では、モデルが変更系の API を直接呼べる（判定器の拒否はうっかり防止の水準） |
-| ジョブ（段 A4a） | **実機の実測（X3-a）は未実施**。本物の `pis`・LLM では動かしていない（偽の `pis` の試験だけ）。`--allow-jobs` は既定で無効。共通 `.git` の改ざんは検出であって防止ではない。commit に pre-commit が走らない。Linux 専用。詳細は §6「ジョブ」の止められるもの・既知の制限 |
+| ジョブ（段 A4a） | **実機の実測（X3-a）は実施済み**（[pr-merge-spike.md](../research/agents/pr-merge-spike.md)）。実運用の利用は未。`--allow-jobs` は既定で無効。共通 `.git` の改ざんは検出であって防止ではない。commit に pre-commit が走らない。Linux 専用。詳細は §6「ジョブ」の止められるもの・既知の制限 |
 | ブランチ削除後 | PR の一覧・詳細は、生きているブランチの ref から作る。ブランチを消した PR は画面から見えない（review ref と最後の source は残る。§2 の「branch と review ref の和集合」は**未実装**。独立 review の指摘 M6） |
 | 起票（B1） | `--allow-create` は既定で無効。アプリが作った worktree が `git flow feature finish` の後 detached で残る可能性は**未実測**。**検査後の symlink 差し替え（TOCTOU）は対象外**（パス名で git を起動するため、能動的なディレクトリ差し替えには保証が無い）。競合相手の枝・worktree は消さない（残骸が手動の片付けになる側に倒す）。秘密らしい文字列の検出は機械的で、漏れうる。Fence 内のエージェントへの判定器の拒否は未実装 |
 | 画面からの「再送」 | 送信履歴の各 batch に「再送」ボタンがある（`resendOf` つきの新しい `submit`）。受領の記録と注入の間に落ちたときの手動の救済 |
 | 段 5 の開始条件 | **判定器でアプリのポートへの変更系の呼び出しを拒否するまで、段 5 は有効化しない** |
 | 偽のペア | モデルもペア要求を送れる。権限は上がらないが、窓口の指示を横取りして断ることはできる（制御ポートは repo の内容を返さない） |
 | 行の再対応づけ | しない。outdated は blob の比較だけ |
-| ref の同期 | 通常の clone / push では同期されない。mirror で流出しうる。削除は即時消去ではない（未決。CHG-0060 §7） |
+| ref の同期 | 通常の clone / push では同期されない（`refs/pi/review/*`）。バックアップするなら ref を明示して push する（例: `git push <remote> 'refs/pi/review/*:refs/pi/review/*'`）。**自動では保存されない**。mirror で流出しうる。削除は即時消去ではない（未決。CHG-0060 §7） |
 
 ## 13 関連
 

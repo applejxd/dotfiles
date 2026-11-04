@@ -52,7 +52,7 @@ description: "feature を起票して worker に実装を切り出し、成果�
    （素の pi で実行すると、bypass でも必須確認になる。[CHG-0053](../../../docs/change/0053-worktree-integration-gate.md)）。
    押されたあとの衝突・復旧は、ビューアの表示と [PR ビューア](../../../docs/spec/pr-viewer.md) の手順に従う。
    docs の更新表や `_PI_TESTS` の同じ位置の衝突は、両方の行を残す。
-9. **後始末の確認**: `git log --oneline -3`・`git worktree list`・`git status --short`。todo を done にする。
+9. **後始末の確認**: `git log --oneline -3`・`git worktree list`・`git status --short`。todo は子の完了で blocked（確認待ち）になる。実差分を確かめてから done にする。
 10. **押下待ちで止まらない**: PR の要約を出したら（統合は、あとで利用者が「統合する」を押す）、待たずに他の feature・docs・検査へ進む。止まるのは、利用者の方針決定がないと進められる作業が無いときだけ。実機や操作の確認待ちも同じ（確認が要る項目を記録して次へ）。
 
 ## 積み重ね (依存する feature)

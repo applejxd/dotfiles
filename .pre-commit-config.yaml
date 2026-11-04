@@ -15,6 +15,16 @@ repos:
         language: system
         pass_filenames: false
 
+      # ジョブの commit・統合の merge commit・途中コミットは commit 段を通らない。
+      # push する範囲の全履歴を見る。see docs/spec/development.md#hook-の-stage-の分け方
+      - id: gitleaks-prepush
+        name: Detect secrets in pushed history
+        entry: python3 scripts/gitleaks_prepush.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
   - repo: local
     hooks:
       - id: yamllint-local

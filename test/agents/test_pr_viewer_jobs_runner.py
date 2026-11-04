@@ -62,7 +62,8 @@ const h = R.runJob({{
   store, job, pre: pf.pre, record: pf.record, pisCommand: arg.pis,
   argvTail: {{ prompt: arg.prompt, model: arg.model }},
   timeoutMs: arg.timeoutMs, outputLimitBytes: arg.limit, riskPaths: [/^docs\\/secret/],
-  deps: {{ graceMs: arg.grace, drainMs: arg.drain, env: {{ ...process.env, ...arg.extraEnv }}, finalize: finalizeDeps }},
+  deps: {{ graceMs: arg.grace, drainMs: arg.drain, procRoot: arg.procRoot, confirmMs: arg.confirm,
+    env: {{ ...process.env, ...arg.extraEnv }}, finalize: finalizeDeps }},
 }});
 {body}
 const rec = await h.done;
@@ -491,6 +492,23 @@ def test_unmarked_descendant_in_the_worktree_is_killed_but_lookalikes_are_not(w)
             p.wait()
 
 
+def test_unconfirmed_stop_is_not_committed_and_keeps_the_locks(w):
+    # 停止対象が残り続ける（偽の /proc に印つきの pid が居座る）と、正常終了でも commit しない（fail closed）
+    base = w.rev()
+    proc = w.tmp / "proc"
+    pre = (
+        'fs.mkdirSync(arg.procRoot + "/4194301", { recursive: true });'
+        'fs.writeFileSync(arg.procRoot + "/4194301/environ", "A=b\\0PR_VIEWER_JOB_ID=" + job.id + "\\0");'
+    )
+    w.mode("edit")
+    res = w.run(pre=pre, procRoot=str(proc), confirm=300)
+    job = res["job"]
+    assert job["state"] == "failed" and job["reasons"] == ["stop_unconfirmed"], job
+    assert w.rev() == base  # commit していない
+    assert len(res["locks"]) == 1  # 枝の排他を残す
+    assert f"owner=job id={job['id']} " in (_lock_reason(w) or "")  # 所有の lock も残す
+
+
 def test_confirm_wait_is_bounded_and_does_not_block_when_nothing_remains(w):
     # 即時に消えるものしか無いとき、消滅確認の待ち（既定 10 秒）を使わない
     w.mode("noop")
@@ -716,14 +734,20 @@ def test_job_is_refused_when_another_live_owner_took_the_worktree(w):
     assert _lock_reason(w) == other  # 他人の lock は解除しない
 
 
-def test_job_takes_over_a_stale_lock_and_releases_it(w):
+def test_job_is_refused_with_stale_lock_and_does_not_take_it_over(w):
+    # 意図の変更: 以前は残骸の lock を引き継いで成功した。残骸は自動で奪わず、worktree_busy + stale_lock で拒否する（reap が要る）
     p = subprocess.Popen([sys.executable, "-c", "pass"])
     p.wait()
     other = f"owner=worker id=w1 pid={p.pid} started=1"
-    _git(w.repo, "worktree", "lock", "--reason", other, str(w.wt))
+    pre = (
+        'execFileSync("git", ["-C", arg.repo, "worktree", "lock", "--reason", '
+        f'"{other}", {json.dumps(str(w.wt))}]);'
+    )  # 起動前検査のあとで残骸が現れる
     w.mode("edit")
-    assert w.run()["job"]["state"] == "succeeded"
-    assert _lock_reason(w) is None
+    job = w.run(pre=pre)["job"]
+    assert job["state"] == "failed" and job["reasons"] == ["worktree_busy", "stale_lock"], job
+    assert job["pid"] is None
+    assert _lock_reason(w) == other  # 奪っていない
 
 
 def test_shutdown_during_a_job_releases_the_lock(w):

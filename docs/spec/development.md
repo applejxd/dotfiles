@@ -103,7 +103,7 @@ python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
 | stage | hook |
 | --- | --- |
 | commit | gitleaks・YAML・ruff・frontmatter・`common-toml-local`・docs の索引・`verify-stamp`・空白・Markdown lint など（速いもの） |
-| push | `lint-templates-local` (テンプレートの描画 lint)、`raspi-regression-local` (Raspberry Pi の回帰テスト)、`verify-stamp-push` (印の警告) |
+| push | `lint-templates-local` (テンプレートの描画 lint)、`raspi-regression-local` (Raspberry Pi の回帰テスト)、`verify-stamp-push` (印の警告)、`gitleaks-prepush` (push する範囲の全履歴の秘密検出。`scripts/gitleaks_prepush.py`) |
 
 hook ごとの所要時間は [開発ガイドの実測メモ](../research/testing/development-timing-notes.md)。
 
