@@ -39,6 +39,10 @@ export type Request = {
 	boundary?: boolean;
 	/** サンドボックスが実際に開けた場所 (起動時の許可)。boundary のとき、作業ツリーの外の判定に使う */
 	allowed?: { read: string[]; write: string[] };
+	/** 担当の worktree (cwd つきの子だけ)。edit / write の書込み先がこの外なら、bypass でも deny する (bash は対象外) */
+	writeRoot?: string;
+	/** writeRoot があるときも書ける一時の置き場 (TMPDIR・/tmp・キャッシュ) */
+	tmpRoots?: string[];
 };
 
 const DECISIONS: readonly string[] = ["allow", "ask", "deny"];
@@ -156,6 +160,7 @@ function decideFile(
 	pi: Record<string, any>,
 	common: Common,
 	allowed?: Request["allowed"],
+	writeScope?: { root: string; tmpRoots: string[] },
 ): { commonDeny: Response | null; roleRule: Response | null } {
 	const write = FILE_WRITE_TOOLS.includes(tool);
 	const key = write ? "write_deny_globs" : "read_deny_globs";
@@ -176,6 +181,20 @@ function decideFile(
 	}
 
 	const absolute = candidates(path, cwd).at(-1)!;
+	if (write && writeScope) {
+		const root = realpathLoose(writeScope.root);
+		const okTmp = writeScope.tmpRoots.some((t) => t !== "" && inside(absolute, realpathLoose(t)));
+		if (!inside(absolute, root) && !okTmp) {
+			return {
+				commonDeny: response(
+					"deny",
+					`この子は担当の worktree (${root}) の外へ書けない。本体や他の worktree は編集できない (\`${path}\`)`,
+					"rule",
+				),
+				roleRule: null,
+			};
+		}
+	}
 	const insideCwd = inside(absolute, realpathLoose(cwd));
 	if (write) {
 		const askGlobs = loadFileGlobs(common, "write_ask_globs");
@@ -238,6 +257,11 @@ function validate(request: unknown): string | null {
 		const value = request[key];
 		if (value !== undefined && typeof value !== "boolean") return `${key} が真偽値ではありません`;
 	}
+	if (request.writeRoot !== undefined && (typeof request.writeRoot !== "string" || !isAbsolute(request.writeRoot))) {
+		return "writeRoot が絶対パスではありません";
+	}
+	const tr = request.tmpRoots;
+	if (tr !== undefined && !(Array.isArray(tr) && tr.every((x) => typeof x === "string"))) return "tmpRoots が文字列の配列ではありません";
 	const allowed = request.allowed;
 	if (allowed !== undefined) {
 		const strings = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === "string");
@@ -274,7 +298,7 @@ function decideInner(request: unknown, common: Common): Response {
 	} else if (FILE_READ_TOOLS.includes(tool) || FILE_WRITE_TOOLS.includes(tool)) {
 		const path = toolInput.path ?? (["grep", "find", "ls"].includes(tool) ? "." : undefined);
 		if (typeof path !== "string" || !path) return errorResponse(`${tool} の path がありません`);
-		({ commonDeny, roleRule } = decideFile(tool, path, cwd, pi, common, req.boundary ? req.allowed : undefined));
+		({ commonDeny, roleRule } = decideFile(tool, path, cwd, pi, common, req.boundary ? req.allowed : undefined, req.writeRoot ? { root: req.writeRoot, tmpRoots: req.tmpRoots ?? [] } : undefined));
 	} else if (tool === TASK_TOOL) {
 		commonDeny = null;
 		roleRule = response("allow", "子エージェントは同じハーネスと判定器で動く", "rule");

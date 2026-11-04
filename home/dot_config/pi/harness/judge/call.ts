@@ -35,6 +35,10 @@ export type CallDeciderOptions = {
 	boundary: boolean;
 	/** サンドボックスが開けた場所。boundary のときの、作業ツリーの外の判定に使う */
 	allowed?: { read: string[]; write: string[] };
+	/** cwd つきの子の担当 worktree (PI_HARNESS_WRITE_ROOT)。あれば edit / write の書込みをこの中と tmpRoots に限る */
+	writeRoot?: string;
+	/** writeRoot があっても書ける一時の置き場 */
+	tmpRoots?: string[];
 };
 
 export function createCallDecider(o: CallDeciderOptions): (tool: string, input: unknown, cwd: string) => Decision {
@@ -67,6 +71,7 @@ export function createCallDecider(o: CallDeciderOptions): (tool: string, input: 
 			bypass: typeof o.bypass === "function" ? o.bypass() : o.bypass,
 			boundary: o.boundary,
 			...(o.boundary && o.allowed ? { allowed: o.allowed } : {}),
+			...(o.writeRoot ? { writeRoot: o.writeRoot, tmpRoots: o.tmpRoots ?? [] } : {}),
 		};
 		// judge() は例外を投げず、異常は source: error の deny にする。念のため形も確かめる
 		try {

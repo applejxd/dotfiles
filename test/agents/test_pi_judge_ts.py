@@ -212,3 +212,85 @@ def test_boundary_never_relaxes_the_common_denies_or_a_broken_request():
     assert out[0]["decision"] == "deny" and out[1]["decision"] == "deny"
     assert out[2]["decision"] == "deny" and out[2]["source"] == "error"
     assert out[3]["decision"] == "deny" and out[3]["source"] == "error"
+
+
+# ─── cwd つきの子の書込み範囲 (writeRoot) ───────────────────────────────
+
+
+def _write_root_case(tmp_path):
+    """root (担当) ・兄弟・本体・TMPDIR の置き場と、外へ抜けるシンボリックリンクを作る。"""
+    main = tmp_path / "main"
+    root = main / ".tmp" / "wt" / "mine"
+    sib = main / ".tmp" / "wt" / "other"
+    tmp = tmp_path / "tmpdir"
+    for d in (root, sib, tmp):
+        d.mkdir(parents=True)
+    (root / "link").symlink_to(main)
+    return main, root, sib, tmp
+
+
+def _wreq(root, path, tool="write", **extra):
+    return {
+        "tool": tool,
+        "input": {"path": str(path), "content": "x"},
+        "cwd": str(root),
+        "role": "implementer",
+        "writeRoot": str(root),
+        "tmpRoots": [str(extra.pop("tmp", ""))],
+        **extra,
+    }
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_write_root_denies_edit_and_write_outside_even_with_bypass(tmp_path):
+    main, root, sib, tmp = _write_root_case(tmp_path)
+    outside = [
+        main / "f.txt",  # 本体
+        sib / "f.txt",  # 兄弟 worktree
+        root / ".." / "other" / "f.txt",  # `..` で抜ける
+        root / "link" / "f.txt",  # ルート内のリンクが外を指す
+        root / "link" / "new" / "deep.txt",  # 外の新規ファイル (存在しない祖先)
+        tmp_path / "elsewhere" / "f.txt",
+    ]
+    reqs = [
+        _wreq(root, p, tool=t, bypass=b, tmp=tmp)
+        for p in outside
+        for t in ("write", "edit")
+        for b in (False, True)
+    ]
+    out = _judge(reqs)
+    for r, o in zip(reqs, out, strict=True):
+        assert o["decision"] == "deny", (r["input"]["path"], o)
+        assert "担当の worktree" in o["reason"], o
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_write_root_allows_inside_and_tmpdir(tmp_path):
+    _main, root, _sib, tmp = _write_root_case(tmp_path)
+    reqs = [
+        _wreq(root, root / "f.txt", tmp=tmp),
+        _wreq(root, root / "new" / "deep.txt", tmp=tmp, bypass=True),
+        _wreq(root, tmp / "scratch.txt", tmp=tmp),
+        _wreq(root, tmp / "scratch.txt", tool="edit", tmp=tmp, bypass=True),
+    ]
+    out = _judge(reqs)
+    assert [o["decision"] for o in out] == ["allow", "allow", "ask", "allow"], (
+        out
+    )  # TMPDIR は deny されず従来どおり
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_without_write_root_the_judgement_is_unchanged(tmp_path):
+    main, root, sib, tmp = _write_root_case(tmp_path)
+    base = [_wreq(root, p, tmp=tmp) for p in (main / "f.txt", sib / "f.txt", root / "f.txt")]
+    plain = [{k: v for k, v in r.items() if k not in ("writeRoot", "tmpRoots")} for r in base]
+    out = _judge(plain)
+    assert [o["decision"] for o in out] == ["ask", "ask", "allow"], out
+    # 読み取りと bash は writeRoot の対象外
+    read = _wreq(root, main / "f.txt", tool="read", tmp=tmp)
+    bash = {**_wreq(root, root, tmp=tmp), "tool": "bash", "input": {"command": "ls"}}
+    plain_out = _judge(
+        [{k: v for k, v in r.items() if k not in ("writeRoot", "tmpRoots")} for r in (read, bash)]
+    )
+    with_out = _judge([read, bash])
+    assert [o["decision"] for o in with_out] == [o["decision"] for o in plain_out]

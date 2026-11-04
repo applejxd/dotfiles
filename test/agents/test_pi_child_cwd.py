@@ -112,3 +112,25 @@ def test_no_warning_without_cwd_even_if_main_changes(env, repo):
         env, repo, {"agent": "worker", "task": "do it"}, bash(f"touch {repo}/by-child.txt")
     ).stdout
     assert WARN not in out, out
+
+
+def test_cwd_child_gets_write_root_and_cwdless_child_does_not(env, repo, linked):
+    out = run_task(env, repo, worker(str(linked)), bash("echo WR=[$PI_HARNESS_WRITE_ROOT]")).stdout
+    assert f"WR=[{linked}]" in out, out
+    out = run_task(
+        env, repo, {"agent": "worker", "task": "do it"}, bash("echo WR=[$PI_HARNESS_WRITE_ROOT]")
+    ).stdout
+    assert "WR=[]" in out, out
+
+
+def test_cwd_child_cannot_write_outside_its_worktree_even_with_bypass(env, repo, linked):
+    def write(path: Path) -> list:
+        return [{"name": "guarded_write", "args": {"path": str(path), "content": "x\n"}}]
+
+    inside = linked / "by-child-in.txt"
+    run_task(env, repo, worker(str(linked)), write(inside))
+    assert inside.exists()
+    outside = repo / "by-child-out.txt"
+    out = run_task(env, repo, worker(str(linked)), write(outside)).stdout
+    assert not outside.exists(), out
+    assert "担当の worktree" in out, out
