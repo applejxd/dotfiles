@@ -366,7 +366,8 @@ export function next(state: SchedState, res: Resources, now: number): Action[] {
 			!unfinished.some((t) => t.state === "waiting" || t.state === "checking" || t.state === "running") &&
 			!out.some((a) => a.kind === "wake_parent")
 		) {
-			out.push({ kind: "wake_parent", reason: "stuck" });
+			// 未承認の task (台帳が proposed に落としたもの) が残っているなら、利用者の承認待ち。無ければ行き詰まり
+			out.push({ kind: "wake_parent", reason: unfinished.some((t) => t.state === "proposed") ? "awaiting_approval" : "stuck" });
 		}
 	}
 	if (out.length === 0) out.push({ kind: "none" });

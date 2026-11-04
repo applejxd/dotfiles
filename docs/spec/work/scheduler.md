@@ -19,7 +19,7 @@ glob の意味: writes の重なりは台帳の門と同じ `globs.ts` の既定
 
 起動候補にするのは、承認の時点の task（`Node.approved`）だけ。`adapt.ts` の `schedStateOf` は、承認の後に追加された task（`approved` が無い ready／waiting）を `proposed` として渡し、`readyOf` は除く。「承認済みの計画」ではなく「承認の時点の task」だけが走る。
 
-親を起こす理由（`wake_parent`）: 全 task が終端で失敗が 1 つも無いときだけ `all_done`、終端だが `failed` を含むときは `failed`。実行中も着手可能も無く待ちだけが残るときは `stuck`（失敗した上流の下流など）。
+親を起こす理由（`wake_parent`）は排他で、優先順位は次のとおり。(1) 全 task が終端: 失敗が 1 つも無ければ `all_done`、`failed` を含めば `failed`。(2) 予算で止まっている: `budget`。(3) 実行中も着手可能も無く、待ち・実行・検査の task も無い: 未承認の task（台帳が `proposed` に落としたもの。承認後に足した task を含む）が残っていれば `awaiting_approval`（利用者が `/goal approve` で承認する）、無ければ `stuck`（失敗した上流の下流など）。`awaiting_approval` は未承認が残る限り `failed`・`stuck` より優先する（終端でない task が残るので、(1) は成り立たない）。driver は理由を文字列のまま親へ渡すだけで、arbiter の `proposeChildren` は理由を読まない。
 
 ## 並列化の方式
 

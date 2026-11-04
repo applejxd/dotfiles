@@ -4,6 +4,7 @@
 import { DEFAULT_BUDGET, LIMITS, newGoal, renderDetail, setBudget, THRESHOLDS } from "../goal-core.ts";
 import type { Budget, GoalCommand, GoalState, PauseReason } from "../goal-types.ts";
 import { EventError, makeEvent } from "./events.ts";
+import { isTaskLike, rootGoalId } from "./reduce.ts";
 import type { LedgerState } from "./reduce.ts";
 import type { NewEvent, Node } from "./types.ts";
 
@@ -25,6 +26,8 @@ export interface GoalResult {
 	error?: string;
 	/** draft のメモ (台帳には書かない。LLM に下書きさせる配線が使う) */
 	draft?: string;
+	/** approve のとき、承認の対象 (確認画面に出す) */
+	approval?: { total: number; titles: string[] };
 }
 
 /** 台帳に載らない実行中の値 (resume で 0 に戻るもの・停止の理由)。配線が持ち、導出に重ねる */
@@ -40,6 +43,24 @@ export interface GoalRuntime {
 }
 
 const LIVE = ["draft", "planned", "active", "paused"];
+
+/** `/goal approve` (goal-core.ts の解析には載せない。配線が直接渡す) */
+export interface GoalApproveCommand {
+	kind: "approve";
+}
+
+/** active / paused の goal の、まだ承認されていない非終端の task (承認後に足されたもの)。title は最大 10 件、total は総件数 */
+export function pendingApproval(state: LedgerState): { total: number; titles: string[] } {
+	const cur = currentGoal(state);
+	if (!cur) return { total: 0, titles: [] };
+	const out: string[] = [];
+	for (const t of state.nodes.values()) {
+		if (!isTaskLike(t) || rootGoalId(state.nodes, t.id) !== cur.id) continue;
+		if (t.state === "done" || t.state === "cancelled" || t.state === "skipped" || t.approved === true) continue;
+		out.push(t.title);
+	}
+	return { total: out.length, titles: out.slice(0, 10) };
+}
 
 const hashOf = (s: string): string => {
 	let h = 0x811c9dc5;
@@ -104,7 +125,7 @@ const fail = (error: string): GoalResult => ({ ok: false, events: [], error });
 const noop = (text: string): GoalResult => ({ ok: true, events: [], text });
 
 /** `/goal` のコマンドを、利用者専用イベント (出所は常に user) へ変換する。入力を変更せず決定的。status・draft・何も変わらない操作は events が空 */
-export function goalCommandToEvents(cmd: GoalCommand, state: LedgerState, now: number): GoalResult {
+export function goalCommandToEvents(cmd: GoalCommand | GoalApproveCommand, state: LedgerState, now: number): GoalResult {
 	try {
 		return convert(cmd, state, now);
 	} catch (e) {
@@ -113,13 +134,25 @@ export function goalCommandToEvents(cmd: GoalCommand, state: LedgerState, now: n
 	}
 }
 
-function convert(cmd: GoalCommand, state: LedgerState, now: number): GoalResult {
+function convert(cmd: GoalCommand | GoalApproveCommand, state: LedgerState, now: number): GoalResult {
 	const cur = currentGoal(state);
 	const live = cur !== null && LIVE.includes(cur.state);
 	const U = "user" as const;
 	switch (cmd.kind) {
 		case "error":
 			return fail(cmd.message);
+		case "approve": {
+			if (!cur || !live) return fail("承認待ちの計画はありません");
+			const hash = cur.attrs.planHash;
+			if (cur.state === "draft" || cur.state === "planned") {
+				if (typeof hash !== "string") return fail("計画がまだ提案されていません");
+				return { ok: true, events: [makeEvent("plan.approved", cur.id, { hash }, U)] };
+			}
+			// active / paused: 承認後に足された task の再承認 (goal の状態は変わらない)
+			const p = pendingApproval(state);
+			if (p.total === 0 || typeof hash !== "string") return fail("承認待ちの計画はありません");
+			return { ok: true, events: [makeEvent("plan.approved", cur.id, { hash }, U)], approval: p };
+		}
 		case "status": {
 			const g = goalStateOf(state);
 			if (g) return noop(renderDetail(g, { bypass: false }));

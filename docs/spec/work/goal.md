@@ -24,6 +24,7 @@
 ## 守る条件
 
 - モデル・system 出所は `plan.approved`・`budget.adjusted`・`goal.resumed` を作れず、reducer も拒否する。モデルだけでは目標を active にできない。
+- `goalCommandToEvents` は `{kind: "approve"}` も受ける（`/goal` の引数解析には載せず、配線が直接渡す）。計画の承認前は従来どおり `plan.approved`。active・paused は、承認後に足した未承認の task（`pendingApproval`）があるときだけ再承認の `plan.approved` と、承認の対象（title 最大 10 件と総件数）を `approval` で返す。対象が無ければ失敗。
 - 予算は常に有限（範囲外・0・無限は拒否）。変換は入力を変更せず決定的。
 - 差分試験: 乱数のコマンド列で、`goal-core.ts` 直接と、変換 → `reduce` → 導出の `GoalState` が一致する（`updatedAt` を除く）。
 

@@ -34,6 +34,7 @@ const pi = {
 	registerCommand: (name, c) => commands.set(name, c),
 };
 const notices = [];
+const confirms = [];
 const opt = { root: join(sc.dir, ".tmp", "work"), timers: { setInterval: () => 0, clearInterval: () => {} }, ...(sc.off ? { enabled: false } : {}) };
 const journal = { emit: () => {} };
 delete globalThis.__piWorkRuntime;
@@ -48,7 +49,10 @@ const mkCtx = (s) => ({
 	ui: {
 		setWidget: () => {},
 		notify: (message, level) => notices.push({ message, level }),
-		confirm: async () => s.confirm !== false,
+		confirm: async (title, body) => {
+			confirms.push({ title, body });
+			return s.confirm !== false;
+		},
 	},
 });
 
@@ -62,7 +66,7 @@ const snap = () => {
 			const n = st.nodes.get(id);
 			return { id, state: n.state, title: n.title, budget: n.budget ?? null, pauseReason: n.pauseReason ?? null };
 		}),
-		tasks: [...st.nodes.values()].filter((n) => n.kind === "task").map((n) => ({ title: n.title, state: n.state })),
+		tasks: [...st.nodes.values()].filter((n) => n.kind === "task").map((n) => ({ title: n.title, state: n.state, approved: n.approved === true })),
 	};
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -152,6 +156,7 @@ console.log(
 		hasTool: !!lastTool,
 		results,
 		notices,
+		confirms,
 	}),
 );
 await Promise.all(

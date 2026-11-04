@@ -425,12 +425,16 @@ const apply = (d: Draft, ev: LedgerEvent): void => {
 			const n = d.goalNode(id);
 			const r = next("goal", n.state, "plan.approved");
 			if (n.attrs.planHash !== data.hash) throw new ReduceError(`計画の hash が一致しない (${String(n.attrs.planHash)} ≠ ${data.hash})`);
+			const reapprove = n.state === "active" || n.state === "paused";
+			const open = [...d.nodes.values()].filter(
+				(t) => isTaskLike(t) && rootGoalId(d.nodes, t.id) === id && t.state !== "done" && t.state !== "cancelled" && t.state !== "skipped",
+			);
+			// 再承認は承認の対象 (未承認の非終端 task) が 1 件以上あるときだけ。空の承認を作らない
+			if (reapprove && !open.some((t) => t.approved !== true)) throw new ReduceError("承認の対象 (未承認の task) が無い");
 			const e = d.edit(id);
 			e.attrs.approvedBy = "user";
 			e.state = r.to as never;
-			for (const t of [...d.nodes.values()]) {
-				if (!isTaskLike(t) || rootGoalId(d.nodes, t.id) !== id) continue;
-				if (t.state === "done" || t.state === "cancelled" || t.state === "skipped") continue; // 終端の task には立てない
+			for (const t of open) {
 				const te = d.edit(t.id);
 				te.approved = true;
 				if (t.state === "proposed") te.state = next("task", "proposed", "plan.approved").to as never;

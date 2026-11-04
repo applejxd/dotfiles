@@ -104,10 +104,10 @@ def test_late_add_keeps_invariants():
     assert R()["late"]["viol"] == []
 
 
-def test_active_goal_cannot_be_reapproved_or_reproposed():
+def test_active_goal_cannot_be_reproposed_and_empty_reapprove_is_rejected():
     r = R()["reapprove"]
-    assert "未定義の遷移" in r["e1"]
-    assert "未定義の遷移" in r["e2"]
+    assert "未定義の遷移" in r["e1"]  # plan.proposed は active では受け付けない
+    assert "承認の対象" in r["e2"]  # 未承認の task が無い再承認は拒否 (空の承認を作らない)
 
 
 def test_second_late_task_stays_unapproved():
@@ -244,3 +244,61 @@ def test_fuzz_keeps_invariants():
 
 def test_fuzz_never_starts_unapproved_tasks():
     assert R()["fuzz"]["unapproved"] == []
+
+
+# ── 再承認: 承認後に足した task を、利用者が後から承認する ─────────────────
+
+
+def test_reapprove_is_accepted_and_stamps_late_task():
+    r = R()["reapproveOk"]
+    assert r["err"] is None
+    assert r["approved"] is True
+
+
+def test_reapprove_keeps_goal_state_active():
+    assert R()["reapproveOk"]["gState"] == "active"
+
+
+def test_reapprove_makes_late_task_a_start_candidate():
+    r = R()["reapproveOk"]
+    id2 = R()["reapprove"]["id2"]
+    assert id2 in r["starts"]
+    assert id2 in r["readyIds"]
+    assert r["sched"][id2] == "ready"
+
+
+def test_reapprove_second_time_is_rejected_for_no_targets():
+    assert "承認の対象" in R()["reapproveOk"]["again"]
+
+
+def test_reapprove_keeps_approved_by_user():
+    assert R()["reapproveOk"]["approvedBy"] == "user"
+
+
+def test_reapprove_keeps_invariants():
+    assert R()["reapproveOk"]["viol"] == []
+
+
+def test_reapprove_paused_goal_by_user_only():
+    r = R()["reapprovePaused"]
+    assert "利用者専用" in r["byModel"]
+    assert "利用者専用" in r["bySystem"]
+    assert r["beforeOk"] is None
+    assert r["byUser"] is None
+    assert r["approved"] is True
+    assert r["gState"] == "paused"
+    assert r["viol"] == []
+
+
+def test_wake_reason_all_done_before_late_task():
+    assert R()["wake"]["allDone"] == ["all_done"]
+
+
+def test_wake_reason_awaiting_approval_for_late_task():
+    assert R()["wake"]["awaiting"] == ["awaiting_approval"]
+
+
+def test_late_task_starts_after_reapprove():
+    w = R()["wake"]
+    assert w["starts"] == [w["id"]]
+    assert w["viol"] == []

@@ -43,6 +43,7 @@ const short = (r) => ({
 	...(r.error !== undefined ? { error: r.error } : {}),
 	...(r.text !== undefined ? { text: r.text } : {}),
 	...(r.draft !== undefined ? { draft: r.draft } : {}),
+	...(r.approval !== undefined ? { approval: r.approval } : {}),
 	events: r.events.map((e) => ({ type: e.type, node: e.node, source: e.source, data: e.data })),
 });
 
@@ -51,7 +52,14 @@ const runCmds = ({ cmds, now0 = 1000, step = 1000 }) => {
 	const steps = [];
 	cmds.forEach((c, i) => {
 		const now = now0 + i * step;
-		const cmd = core.parseGoalArgs(c);
+		// 文字列は /goal の引数。{task: タイトル, state?} は承認後に足す task (モデル出所)。{kind} は解析済みのコマンド (approve など)
+		if (typeof c === "object" && c.task !== undefined) {
+			const node = { kind: "task", parent: s.goals[s.goals.length - 1], title: c.task, writes: [], after: [] };
+			s = append(s, [ev.makeEvent("node.added", c.id ?? `t${i}`, { node }, "model")], now);
+			steps.push({ task: c.task, seq: s.seq });
+			return;
+		}
+		const cmd = typeof c === "object" ? c : core.parseGoalArgs(c);
 		const r = gl.goalCommandToEvents(cmd, s, now);
 		if (r.ok) s = append(s, r.events, now);
 		steps.push({ cmd, ...short(r), goal: gl.goalStateOf(s), seq: s.seq });
