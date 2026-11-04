@@ -183,15 +183,9 @@ _PI_TESTS = (
     "test_pi_pending_command",
     "test_btw_view",
     "test_pi_todo_view",
-    "test_work_core",
-    "test_work_store",
-    "test_work_digest",
-    "test_work_journal",
-    "test_pi_plan_literal",
-    "test_pi_plan_failclosed",
-    "test_pi_plan_sites",
+    "test_work_*",
+    "test_pi_plan_*",
     "test_pi_stage_table",
-    "test_work_sched",
 )
 _OC_TESTS = (
     "test_generate_opencode*",

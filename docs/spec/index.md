@@ -84,6 +84,7 @@
 | [保留（撤去済み・履歴）](guard/pi-pending.md) | 非同期承認（`/pending approve`・`git_integrate`）の撤去の事実、残る `/pending`、残骸 ref の掃除 |
 | [ローカル PR ビューアの設計](pr-viewer.md) | PR 風のレビュー画面（別アプリ + git の ref + 薄い pi 拡張）。ref のスキーマ v1、状態の導出、レビューコメント送信の撤去、アプリの安全規則、統合・ジョブ・起票、試験、既知の制限（ペアリング・承認の指示の旧設計は撤去済み） |
 | [作業台帳 (work ledger) の核](work/ledger.md) | 台帳の型・遷移表・不変条件 I1〜I10・投影（ready の取り出し）・設計上の判断（純関数。配線は別の feature） |
+| [モデル向けツール `work`](work/tool.md) | `todo` の置換。add/set/note/list/plan/cancel の純関数・守る条件・todo との対応・限界（配線は別の feature） |
 | [オーケストレーションと並列作業の機能一覧](orchestration.md) | 親子の分担・子の起動と制御・役割と権限・gitflow と worktree・承認と保留・検査・記録を、カテゴリ別の表にした総覧（状態と正本つき）。未実装は案件へのリンク |
 | [並列実行基盤（スケジューラ）](work/scheduler.md) | 作業台帳の上の純関数のスケジューラ。優先順位・背圧・並列化の方式の選択表・予約・429 と AIMD・writes の重なり |
 | [pis のサンドボックス（pi の側）](guard/pi-sandbox.md) | agent 置き場・セッション・認証、プロキシ必須の環境での通信、拒否リスト型の通信、緩和のゲート |
