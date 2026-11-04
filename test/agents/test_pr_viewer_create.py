@@ -219,7 +219,6 @@ def test_capabilities_and_repos_expose_create_and_target_oid(make):
         True,
         ["develop"],
     )
-    assert caps["jobs"] is False
     status, repos = w.server.get("/api/repos")
     assert repos["repos"][0]["targetOid"] == _git(w.repo, "rev-parse", "develop").strip()
 

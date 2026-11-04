@@ -15,8 +15,6 @@ import type { BranchRef, FileEntry, Hunk, Repo } from "./git-view.ts";
 import { mergeExecute, mergePlan } from "./merge-api.ts";
 import type { MergeEnv, PostResult } from "./merge-api.ts";
 import { blobsFor, getReview, isUntouchedBrief, postComment, postSubmit } from "./review-api.ts";
-import { jobCancel, jobGet, jobInput, jobList, jobStart } from "./job-api.ts";
-import type { JobsConfig } from "./job-api.ts";
 import type { PrCtx } from "./review-api.ts";
 import { createFeatureRoute } from "./feature-api.ts";
 import type { CreateEnv } from "./feature-api.ts";
@@ -360,22 +358,12 @@ function ctxOf(repo: Repo, c: Computed): PrCtx {
 
 /** 書き込み API（POST）の入口。body は検査済みの JSON のオブジェクト。 */
 export function isPostRoute(pathname: string): boolean {
-	return isFeaturePostRoute(pathname) || /^\/api\/prs\/[^/]+\/[^/]+\/(?:comments|submit|merge-plan|merge|jobs)$/.test(pathname) || isJobPostRoute(pathname);
+	return isFeaturePostRoute(pathname) || /^\/api\/prs\/[^/]+\/[^/]+\/(?:comments|submit|merge-plan|merge)$/.test(pathname);
 }
 
 /** 起票の POST（Origin 必須・--allow-create が要る経路）。 */
 export function isFeaturePostRoute(pathname: string): boolean {
 	return /^\/api\/repos\/[^/]+\/features$/.test(pathname);
-}
-
-/** ジョブ系の POST（起動・停止。Origin 必須・--allow-jobs が要る経路）。 */
-export function isJobPostRoute(pathname: string): boolean {
-	return /^\/api\/prs\/[^/]+\/[^/]+\/jobs(?:\/[^/]+\/cancel)?$/.test(pathname);
-}
-
-/** ジョブ系の GET（job-input・一覧・状態）。 */
-export function isJobGetRoute(pathname: string): boolean {
-	return /^\/api\/prs\/[^/]+\/[^/]+\/(?:job-input|jobs(?:\/[^/]+)?)$/.test(pathname);
 }
 
 /** 統合系の POST（Origin 必須・--allow-merge が要る経路）。 */
@@ -388,41 +376,25 @@ export async function handlePost(
 	pathname: string,
 	body: Record<string, unknown>,
 	env: MergeEnv,
-	jobs: JobsConfig,
 	createEnv: CreateEnv = { testDelayMs: 0, testFail: null },
 ): Promise<PostResult> {
-	const cancel = /^\/api\/prs\/([^/]+)\/([^/]+)\/jobs\/([^/]+)\/cancel$/.exec(pathname);
-	if (cancel) {
-		const { repo, c } = await findPr(repos, cancel[1], cancel[2]);
-		return await jobCancel(ctxOf(repo, c), cancel[3], body, jobs);
-	}
 	const f = /^\/api\/repos\/([^/]+)\/features$/.exec(pathname);
 	if (f) {
 		const repo = /^r[0-9a-f]{8}$/.test(f[1]) ? repos.find((r) => r.repoId === f[1]) : undefined;
 		if (!repo) throw notFound();
 		return await createFeatureRoute(repo, body, createEnv);
 	}
-	const m = /^\/api\/prs\/([^/]+)\/([^/]+)\/(comments|submit|merge-plan|merge|jobs)$/.exec(pathname);
+	const m = /^\/api\/prs\/([^/]+)\/([^/]+)\/(comments|submit|merge-plan|merge)$/.exec(pathname);
 	if (!m) throw notFound();
 	const { repo, c } = await findPr(repos, m[1], m[2]);
 	const ctx = ctxOf(repo, c);
 	if (m[3] === "merge-plan") return await mergePlan(ctx, c.summary, body, env);
 	if (m[3] === "merge") return await mergeExecute(ctx, body, env);
-	if (m[3] === "jobs") return await jobStart(ctx, c.summary, body, jobs);
 	return { status: 201, body: m[3] === "comments" ? await postComment(ctx, body) : await postSubmit(ctx, body) };
 }
 
 /** API の入口。成功なら応答の本体、失敗なら ApiError を投げる。 */
-export async function handleApi(repos: Repo[], pathname: string, query: URLSearchParams, jobs?: JobsConfig): Promise<unknown> {
-	const jm = /^\/api\/prs\/([^/]+)\/([^/]+)\/(job-input|jobs)(?:\/([^/]+))?$/.exec(pathname);
-	if (jm) {
-		if (!jobs || (jm[3] === "job-input" && jm[4] !== undefined)) throw notFound();
-		const { repo, c } = await findPr(repos, jm[1], jm[2]);
-		const ctx = ctxOf(repo, c);
-		if (jm[3] === "job-input") return await jobInput(ctx, c.summary, jobs);
-		if (jm[4] === undefined) return await jobList(ctx, jobs);
-		return await jobGet(ctx, jm[4], query.get("from"), jobs);
-	}
+export async function handleApi(repos: Repo[], pathname: string, query: URLSearchParams): Promise<unknown> {
 	if (pathname === "/api/repos") {
 		const out: Array<{ repoId: string; name: string; target: string; targetOid: string; unpushed: number | null }> = [];
 		for (const r of repos) {

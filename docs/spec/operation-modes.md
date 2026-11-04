@@ -11,17 +11,17 @@ pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結�
 | --- | --- | --- |
 | 層 0 | pi + ガード。通常のコーディングエージェント。単独で完結する | 不要 |
 | 層 1 | pi の中のオーケストレーション。親が `guarded_task` で worker を並列に起動する。git-flow の worktree、`scripts/wt_owner.py`・`scripts/bundle.py`・`scripts/wt_clean.py` | 不要 |
-| 層 2 | PR ビューア。人の操作盤（見る・コメント・統合ボタン・「pi に依頼」ジョブ・起票）。**任意** | 本体 |
+| 層 2 | PR ビューア。人の操作盤（見る・コメント・統合ボタン・起票）。**任意** | 本体 |
 
 ## 2. 段階 × 運用モード
 
 | 段階 | pi 単独 | ビューア併用 |
 | --- | --- | --- |
 | 起票 | 親が `git flow feature start <名前> --worktree --no-fetch` | 同左、または画面の「＋ 起票」（`--allow-create`） |
-| 実装 | 親が worker を起動（起動前に `wt_owner.py claim`） | 同左。加えて画面の「pi に依頼」ジョブ（`--allow-jobs`）が `pis -p` で実装 |
-| 検査 | 親が `mise run verify`・`verify:all` | worker 経路は同左。ジョブ経路は、アプリが変更の規則（ファイルの種類・モード・大きさ・`risk_paths` など）を検査する。pre-commit・`verify`・`verify:all` を通したことにはならない |
-| commit | 親が `git add -A` → `git_commit`（`dir` に worktree。feature の worktree では確認なし） | worker 経路は同左。ジョブ経路は、規則を通った変更をアプリが commit する（[ジョブ](pr-viewer.md#ジョブ段-a4achg-0062-34)） |
-| レビュー | TUI の会話と差分の確認だけ | 画面でコメント → 送信（`refs/pi/review/<prKey>`）→ 対話 pi またはジョブが受け取る（§4） |
+| 実装 | 親が worker を起動（起動前に `wt_owner.py claim`） | 同左。画面からの「pi に依頼」ジョブは撤去済み |
+| 検査 | 親が `mise run verify`・`verify:all` | worker 経路のみ（ジョブ経路は撤去済み） |
+| commit | 親が `git add -A` → `git_commit`（`dir` に worktree。feature の worktree では確認なし） | worker 経路は同左（ジョブ経路は撤去済み） |
+| レビュー | TUI の会話と差分の確認だけ | 画面でコメント → 送信（`refs/pi/review/<prKey>`）→ 対話 pi が受け取る（§4） |
 | 統合 | 人が TUI の必須確認に答える。または `merge-cli`（§3） | 人が画面の「統合する」を 2 段確認で押す（`--allow-merge`） |
 | 掃除 | `git flow feature finish` なら finish が枝と worktree を消す。ビューア/`merge-cli` で統合した場合は `scripts/wt_clean.py <名前>`（§3 の統合の節） | 統合時の cleanup 指定。または `wt_clean.py` |
 | 複数 feature のまとめ取り込み | `scripts/bundle.py`（統合用の枝 `feature/bundle-N`）→ 1 回統合 | 同左。bundle の枝を画面で統合（構成員の枝は、bundle に含まれている間は PR 一覧に並ばない。切り替えで表示） |
@@ -50,9 +50,9 @@ TUI を使わず端末で統合するときは `apps/pr-viewer/merge-cli.ts`。�
 **利用者が自分の端末で実行するもの。AI の直接呼び出し（`merge`・`recover`）は判定器が deny する**（`home/dot_config/pi/harness/judge/rules_guard.ts`。`plan` は拒否しない）。
 
 - 対象は `feature/`・`bugfix/` の枝 → `develop`。Git 2.43 以上が要る。
-- **実行中のジョブ・他の git 操作・エディタの自動保存・生成処理を止めてから**実行する（別プロセスの CLI はビューアのジョブを知らない。[ジョブの制限](pr-viewer.md#止められるもの止められないものジョブ正直に)）。
+- **他の git 操作・エディタの自動保存・生成処理を止めてから**実行する（別プロセスの CLI はビューアを知らない）。
 - `plan` で見た OID を `--expect-source`・`--expect-target` に渡すと、計画後に動いた枝を拒否できる。
-- **画面の統合にあって CLI に無いもの**: リスクのあるパス（`risk_paths`）の警告と追加の確認、ジョブ実行中の検査、レビュー記録への統合結果の書き込み（PR の状態は git から決まるので、画面は「統合済み」と表示する）、2 段の確認。CLI は `merge` を実行した時点で統合するので、`plan` の変更ファイル一覧を自分で見てから実行する（統合器本体、つまり衝突の事前検査・排他・取り消し手順は同じ）。
+- **画面の統合にあって CLI に無いもの**: リスクのあるパス（`risk_paths`）の警告と追加の確認、レビュー記録への統合結果の書き込み（PR の状態は git から決まるので、画面は「統合済み」と表示する）、2 段の確認。CLI は `merge` を実行した時点で統合するので、`plan` の変更ファイル一覧を自分で見てから実行する（統合器本体、つまり衝突の事前検査・排他・取り消し手順は同じ）。
 
 ```sh
 node apps/pr-viewer/merge-cli.ts plan <repo> --source <枝>
@@ -98,9 +98,8 @@ node apps/pr-viewer/merge-cli.ts recover <repo>
 | （なし） | 閲覧・コメント・送信だけ | まず無旗で使う |
 | `--allow-merge` | 画面の「統合する」 | 統合を画面で押したいとき。有効化の手順を先に読む |
 | `--allow-create` | 画面の「＋ 起票」 | 画面から feature を作りたいとき |
-| `--allow-jobs` | 「pi に依頼」ジョブ（Linux のみ） | 実機で `pis -p` を確かめた後 |
 
-権限の旗（`--allow-merge`・`--allow-create`・`--allow-jobs`）は**既定で無効**。取り込みだけでは有効にならず、旗を付けた起動が要る。`--state-dir <パス>` は権限ではなく、ジョブの記録・退避の保存先の指定（絶対パス。省略時は `$XDG_STATE_HOME/pr-viewer`、未設定なら `~/.local/state/pr-viewer`。リポジトリの中には置けない）。
+権限の旗（`--allow-merge`・`--allow-create`）は**既定で無効**。取り込みだけでは有効にならず、旗を付けた起動が要る。`--state-dir <パス>` は権限ではなく、統合の退避の保存先の指定（絶対パス。省略時は `$XDG_STATE_HOME/pr-viewer`、未設定なら `~/.local/state/pr-viewer`。リポジトリの中には置けない）。
 
 レビューの流れ:
 
@@ -111,24 +110,17 @@ node apps/pr-viewer/merge-cli.ts recover <repo>
 1. その pi の worktree（既定は主 worktree）を宛先にして送信する。
 2. 次の利用者入力の前に、pi が受け取る（`home/dot_config/pi/harness/pr-review.ts` の `before_agent_start`）。
 
-(2) ジョブ向け:
-
-1. **feature の worktree を宛先**にして送信する。
-2. 「変更を依頼…」→ 渡すコメントの確認 → 最終確認 → 「依頼する」。
-
-ジョブは**未受領でコメントありのバッチだけ**を渡す（`review-api.ts`・`job-api.ts`）。先に対話 pi が受領したものは渡せない。ジョブの受領は、アプリが起動前に記録する（[ジョブ](pr-viewer.md#ジョブ段-a4achg-0062-34)）。
-
 統合ボタンは 2 段確認で、衝突を事前に検査する。取り消し手順は [統合を取り消す](pr-viewer.md#統合を取り消す巻き戻し利用者が行う手順は試験-test_pr_viewer_merge_undopy-が実-git-で固定)。起票は [起票](pr-viewer.md#起票段-b1chg-0062-5)、掃除は統合時の cleanup 指定か `wt_clean.py`。
 
 安全の前提（待ち受け先・公開の禁止・Origin 検査）は [pr-viewer.md の統合の節](pr-viewer.md)を読む。ここには写さない。
 
 ## 5. モードの切り替えと共存
 
-- **ビューアを外す**: 層 0・1 は動く。失うのは、画面・新しいコメントを画面から入力する入口・ジョブ・画面の統合ボタン（既存の `refs/pi/review` の記録・未受領のレビューは残り、pi は読める）。統合は §3 に戻る。
-- **併用で増えるもの**: `refs/pi/review/*`（レビューの記録）と、`--state-dir` のジョブの記録。
-- **同じ worktree を複数の主体（worker・ジョブ・人）で触らない**。`wt_owner` の lock とジョブの起動前検査（`worktree_busy`）が止める。lock を忘れた経路は検出できない。[worktree の所有の表明](orchestration.md#worktree-の所有の表明)。
-- **ビューアあり→なしへの移行は、静止点で行う**（途中で止めると残骸が出る）。次が片付いてから、サービスを止める・旗を外す。(1) 実行中のジョブがない（残っていたら取り消す。ジョブの記録は `--state-dir` に残るが、移行後は使わない）。(2) 統合が途中でない（`merge-cli plan` が `recover_needed` を返さない）。(3) 送信済みで pi が未受領のレビュー（宛先の worktree の pi が次の入力で受け取る。不要なら無視してよい）。(4) `python3 scripts/wt_owner.py status` に `owner=job` の lock が残っていない（残骸は `reap`）。`refs/pi/review/*` の記録は残り、pi はそのまま読める。逆（なし→あり）は、旗を付けて起動するだけ（PR の一覧と状態は git から導く）。
-- **ビューアが落ちた**: 状態は git の ref にあるので、まずビューアを再起動する（多くはこれで戻る）。統合の途中だったなら、他の git が動いていないことを確かめてから `merge-cli.ts recover <repo>`。ジョブは `interrupted` になり、自動では再開しない（画面の「再送」）。ジョブが残した lock は `python3 scripts/wt_owner.py reap`（pid が死んでいるものだけ）。どうしても急ぐときだけ `merge-cli`（上の「画面の統合にあって CLI に無いもの」に注意）。
+- **ビューアを外す**: 層 0・1 は動く。失うのは、画面・新しいコメントを画面から入力する入口・画面の統合ボタン（既存の `refs/pi/review` の記録・未受領のレビューは残り、pi は読める）。統合は §3 に戻る。
+- **併用で増えるもの**: `refs/pi/review/*`（レビューの記録）と、統合の退避（`--state-dir`）。
+- **同じ worktree を複数の主体（worker・人）で触らない**。`wt_owner` の lock が止める。lock を忘れた経路は検出できない。[worktree の所有の表明](orchestration.md#worktree-の所有の表明)。
+- **ビューアあり→なしへの移行は、静止点で行う**（途中で止めると残骸が出る）。次が片付いてから、サービスを止める・旗を外す。(1) 統合が途中でない（`merge-cli plan` が `recover_needed` を返さない）。(2) 送信済みで pi が未受領のレビュー（宛先の worktree の pi が次の入力で受け取る。不要なら無視してよい）。(3) `python3 scripts/wt_owner.py status` に lock が残っていない（残骸は `reap`）。`refs/pi/review/*` の記録は残り、pi はそのまま読める。逆（なし→あり）は、旗を付けて起動するだけ（PR の一覧と状態は git から導く）。
+- **ビューアが落ちた**: 状態は git の ref にあるので、まずビューアを再起動する（多くはこれで戻る）。統合の途中だったなら、他の git が動いていないことを確かめてから `merge-cli.ts recover <repo>`。残した lock は `python3 scripts/wt_owner.py reap`（pid が死んでいるものだけ）。どうしても急ぐときだけ `merge-cli`（上の「画面の統合にあって CLI に無いもの」に注意）。
 
 ## 6. よくある疑問
 
@@ -138,8 +130,8 @@ node apps/pr-viewer/merge-cli.ts recover <repo>
 **pi 単独で外出先から承認できるか。**
 できない。保留・非同期承認は撤去済み。外出先の承認はビューア併用（`--allow-merge`）が前提。
 
-**ジョブと対話の pi の違いは。**
-対話の pi は人が TUI で操作し、次の入力でレビューを受け取る。ジョブは画面から起動する `pis -p` で、人が張り付かずにコメントを実装する。同じ worktree を同時に触らせない。
+**「pi に依頼」ジョブと対話の pi の違いは。**
+ジョブは撤去済み。依頼はチャットとレビューコメントで足りる（対話の pi が次の入力でレビューを受け取る）。
 
 **どのモードを選ぶか。**
 手元で完結するなら pi 単独。画面で差分を見たい・離れた場所から統合したいなら、無旗で使い始め、必要な旗だけ足す。

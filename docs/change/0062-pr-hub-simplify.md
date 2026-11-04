@@ -15,7 +15,7 @@ PR の管理・統合を、**LLM を載せた pi の TUI の外**にある小さ
 | 方法 | 計画役が、現状の事実とコードを読み、3 案を比べた。サンクコストは理由にせず、将来の費用と便益で選んだ |
 | 決定 | §4（2026-11-03）。**案 2、merge commit、押下契機のヘッドレス、衝突解消に LLM を許す（結果は人が承認）** |
 | 置き換える | CHG-0061 の方針（受信箱・`queue`・`auto`・2b）。CHG-0060 の「承認はアプリで閉じ、実行は窓口の pi」。保留系（`pending-*`・`exclusive-lock`・`integrate-*`・`git_integrate`） |
-| 実装 | 段 A1〜A3・A4a・A5・B1 は実装済み。A4b（衝突を解決）・B（再判断）・C（再判断）は未着手（§5） |
+| 実装 | 段 A1〜A3・A5・B1 は実装済み。**A4a（ジョブ）は実装したが撤去済み**（実運用で 1 度も使わず、依頼はチャットとレビューコメントで足りる。以下のジョブの記述は履歴として残す）。A4b（衝突を解決）・B（再判断）・C（再判断）は未着手（§5） |
 
 ## 2. 根本原因（実測）
 
@@ -59,7 +59,7 @@ squash（1 つ親）は祖先関係を断つので、積み重ねで衝突する
 - 衝突: アプリが一覧に「develop と衝突」と出し、統合ボタンを使えなくする。「衝突を解決」で、feature の worktree で `pis -p` を 1 回起動する（develop を枝に取り込み、衝突を解消してコミットする）。結果は feature 側のコミットで、あなたが差分を承認してから統合する。**LLM が人の承認なしに develop へ入れることはない**。
 - レビュー反映: 「変更を依頼」で、コメントを引用データとして囲んで `pis -p` に渡す。終わったら、アプリが決定的な関門（範囲・登録漏れ・空ファイル）を実行する。
 - 1 worktree に同時 1 run。時間切れで終了し、アプリの終了でプロセスグループを止める。
-- **A4a の実装（2026-11）**: 「変更を依頼」だけを、feature の実 worktree で `pis --role worker --allowlist -p` を 1 回起動する形で実装した。コメントは乱数の囲みの引用データとして渡し、アプリは pi の出力を解釈せず、終了後に照合（起動前の記録との比較）・検査（A/M/D の通常ファイルだけ・上限・`risk_paths` など）を通った変更だけを commit する（通らなければ `needs_review` で commit しない）。上限は 1 回 10 分・同時 1・日 30 回。X3-a（本物の `pis` と LLM での実測）は未実施で、既定で無効。A4b（衝突を解決）は、同じ起動・検査・commit の仕組みの上に、develop の取り込みを足す予定（まだ設計のみ）。
+- **A4a の実装（2026-11。撤去済み: [pr-viewer.md §6](../spec/pr-viewer.md)）**: 「変更を依頼」だけを、feature の実 worktree で `pis --role worker --allowlist -p` を 1 回起動する形で実装した。コメントは乱数の囲みの引用データとして渡し、アプリは pi の出力を解釈せず、終了後に照合（起動前の記録との比較）・検査（A/M/D の通常ファイルだけ・上限・`risk_paths` など）を通った変更だけを commit する（通らなければ `needs_review` で commit しない）。上限は 1 回 10 分・同時 1・日 30 回。X3-a（本物の `pis` と LLM での実測）は未実施で、既定で無効。A4b（衝突を解決）は、同じ起動・検査・commit の仕組みの上に、develop の取り込みを足す予定（まだ設計のみ）。
 
 ### 3.4.1 安全
 
@@ -126,7 +126,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | A1 | 統合器（`merge.ts`）と CLI（`merge-cli.ts`）を、実 git の試験で作る（アプリへは未接続。**実装済み**。2 回の独立 review を経て、自動の復旧をやめた。§3.5） | X1 合格 |
 | A2 | アプリへ接続: `POST .../merge-plan`・`POST .../merge`・承認シート。Origin 必須・`--allow-merge`・Funnel ヘッダーの拒否・判定器の curl 拒否・`risk_paths` に `apps/pr-viewer/**`。旧経路とは**併用禁止**（事前検査で断る。窓は残る）。**実装済み**（G: 判定器・S: サーバ API・U: 画面の 3 feature。計画・実装とも独立 review 済み。設計は [pr-viewer.md §6「統合」](../spec/pr-viewer.md)。有効化には取り込みの後の `chezmoi apply`・pi 再起動・実機確認が要る） | A1 |
 | A3 | 合流可否・「develop が N 進んだ」・「未 push N 件」の表示（読み取りのみ）。**実装済み**（`behind`・`overlap`・`unpushed`。設計は [pr-viewer.md §6](../spec/pr-viewer.md)） | A2 |
-| A4 | 「変更を依頼」「衝突を解決」（`pis -p` の起動）。**A4a（変更を依頼）は実装済み**（`--allow-jobs` 既定無効・X3-a の実機実測は未実施。設計は [pr-viewer.md §6「ジョブ」](../spec/pr-viewer.md)）。A4b（衝突を解決）は未着手 | X3 合格（X3-a は A4a の有効化の前に実施） |
+| A4 | 「変更を依頼」「衝突を解決」（`pis -p` の起動）。**A4a（変更を依頼）は実装したが撤去済み**（実運用で未使用。経緯は [pr-viewer.md §6](../spec/pr-viewer.md)）。A4b（衝突を解決）は未着手 | X3 合格（X3-a は A4a の有効化の前に実施） |
 | A5 | 撤去（保留・受信箱・`git_integrate`・`/pending approve` など。約 2,900 行 + 試験約 20 ファイル）。**実装済み**（2026-11-03。1 つの feature・1 回の保存で、PR ビューアが作るこの feature の統合 merge commit を `git revert -m 1` すれば旧経路が戻る（履歴には撤去本体・develop の取り込み・後続修正があり、本体 commit だけの revert は後続修正と競合しうる）。残骸の ref の掃除は利用者が `pk pending-clean` で行う。保存は利用者の確認後） | A2〜A4 の運用で足りること |
 | B1 | 起票: アプリが新しい feature（枝と worktree）を作り、依頼文 brief をレビュー記録へ残す（`POST /api/repos/<repoId>/features`。LLM・pis は呼ばない）。**実装済み・既定で無効**（`--allow-create`）。設計は [pr-viewer.md §6「起票」](../spec/pr-viewer.md) | A2 |
 | B（再判断） | アプリのジョブ実行（worktree の作成・worker の起動・コミット・検査）とマネージャー役（計画・review・衝突） | A の運用。`pis -p` の役割の試験 |
