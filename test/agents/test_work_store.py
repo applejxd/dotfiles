@@ -254,6 +254,7 @@ def test_second_writer_rejected_not_discarded(tmp_path: Path) -> None:
         [_node(), str(DRIVER), "child-hold", str(root), "3000"],
         stdout=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
         cwd=ROOT,
     )
     try:
@@ -263,6 +264,7 @@ def test_second_writer_rejected_not_discarded(tmp_path: Path) -> None:
             [_node(), str(DRIVER), "child-try", str(root), "second"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             cwd=ROOT,
             timeout=60,
             check=False,
@@ -435,6 +437,7 @@ def test_simultaneous_takeover_exactly_one_wins(tmp_path: Path) -> None:
                 [_node(), str(DRIVER), "child-race", str(root), f"c{k}", str(start)],
                 stdout=subprocess.PIPE,
                 text=True,
+                encoding="utf-8",
                 cwd=ROOT,
             )
             for k in range(3)
@@ -459,6 +462,7 @@ def test_kill9_mid_turn_loses_zero_acked_events(tmp_path: Path, seed: int) -> No
         [_node(), str(DRIVER), "child-append", str(root), "100000", str(seed)],
         stdout=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
         cwd=ROOT,
     )
     acks: list[int] = []
