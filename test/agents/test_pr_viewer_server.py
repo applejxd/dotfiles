@@ -992,3 +992,95 @@ def test_unpushed_counts_commits_ahead_of_origin_and_is_null_without_upstream(hu
     assert by_name["hub-app"]["target"] == "develop" and by_name["hub-app"]["repoId"] == _repo_id(
         hub.repo
     )
+
+
+# ---------------------------------------------------------------- 含まれる枝 (includedIn。表示だけの印)
+
+
+def _serve_one(repo: Path, web_base: Path) -> Server:
+    return Server(
+        [
+            "--repo",
+            str(repo),
+            "--port",
+            "0",
+            "--web-dir",
+            str(_web_dir(web_base)),
+            "--allow-host",
+            "x.example.net",
+        ]
+    )
+
+
+@pytest.fixture(scope="module")
+def incl(tmp_path_factory):
+    base = tmp_path_factory.mktemp("incl")
+    w = World()
+    repo = _init(base / "incl-app")
+    w.repo = repo
+    _commit(repo, {"README.md": "x\n"}, "init")
+    for name in ("a", "b", "c", "dup1", "gone"):
+        _git(repo, "switch", "-q", "develop")
+        _git(repo, "switch", "-q", "-c", f"feature/{name}")
+        _commit(repo, {f"{name}.txt": f"{name}\n"}, f"feat: {name}")
+    # dup1 と同じ oid の枝
+    _git(repo, "branch", "feature/dup2", "feature/dup1")
+    # 構成員 a・b・c・dup1 を取り込んだ統合用の枝
+    _git(repo, "switch", "-q", "develop")
+    _git(repo, "switch", "-q", "-c", "feature/train-1")
+    for name in ("a", "b", "dup1", "c"):
+        _git(repo, "merge", "-q", "--no-ff", "-m", f"merge {name}", f"feature/{name}")
+    # c は train の取り込み後に追加のコミットが載るので、train には含まれない
+    _git(repo, "switch", "-q", "feature/c")
+    _commit(repo, {"c2.txt": "c2\n"}, "feat: c2")
+    # gone は develop へ統合済み (0 コミット。一覧に出ない)
+    _git(repo, "switch", "-q", "develop")
+    _git(repo, "merge", "-q", "--no-ff", "-m", "merge gone", "feature/gone")
+    w.server = _serve_one(repo, base)
+    yield w
+    w.server.stop()
+
+
+def test_members_of_a_train_are_marked_included_and_the_train_is_not(incl):
+    assert _pr(incl, incl.repo, "feature/a")["includedIn"] == "feature/train-1"
+    assert _pr(incl, incl.repo, "feature/b")["includedIn"] == "feature/train-1"
+    assert "includedIn" not in _pr(incl, incl.repo, "feature/train-1")
+
+
+def test_a_branch_that_advanced_after_the_train_is_not_included(incl):
+    assert "includedIn" not in _pr(incl, incl.repo, "feature/c")
+
+
+def test_same_oid_member_branches_are_both_included_in_the_train(incl):
+    # dup1・dup2 は同じ先頭。互いを「含む枝」とは数えず、train だけが含む枝になる
+    for name in ("dup1", "dup2"):
+        assert _pr(incl, incl.repo, f"feature/{name}")["includedIn"] == "feature/train-1"
+
+
+def test_same_oid_pair_alone_is_not_included(tmp_path):
+    repo = _init(tmp_path / "pair-app")
+    _commit(repo, {"README.md": "x\n"}, "init")
+    _git(repo, "switch", "-q", "-c", "feature/p")
+    _commit(repo, {"p.txt": "p\n"}, "feat: p")
+    _git(repo, "branch", "feature/q", "feature/p")
+    srv = _serve_one(repo, tmp_path)
+    try:
+        _, body = srv.get("/api/prs")
+        assert {p["branch"] for p in body["prs"]} == {"feature/p", "feature/q"}
+        assert all("includedIn" not in p for p in body["prs"])
+    finally:
+        srv.stop()
+
+
+def test_merged_prs_get_no_included_in(incl):
+    _, body = incl.server.get("/api/prs")
+    for p in body["prs"]:
+        if p["state"] != "open":
+            assert "includedIn" not in p
+    assert "feature/gone" not in {p["branch"] for p in body["prs"]}
+
+
+def test_included_pr_is_still_readable_by_id(incl):
+    a = _pr(incl, incl.repo, "feature/a")
+    status, body = incl.server.get(f"/api/prs/{a['id']}")
+    assert status == 200 and body["pr"]["branch"] == "feature/a"

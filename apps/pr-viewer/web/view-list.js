@@ -10,6 +10,14 @@
     ["empty", "起票のみ"],
   ];
 
+  var SHOW_KEY = "prv.showIncluded";
+  function loadShow() {
+    try { return window.localStorage.getItem(SHOW_KEY) === "1"; } catch (e) { return false; }
+  }
+  function saveShow(v) {
+    try { window.localStorage.setItem(SHOW_KEY, v ? "1" : "0"); } catch (e) {}
+  }
+
   function row(pr, rv) {
     var bt = rv && rv.brief && typeof rv.brief.title === "string" ? rv.brief.title : "";
     return h(
@@ -39,7 +47,8 @@
         ),
         pr.state === "open" && pr.behind > 0
           ? h("div", { class: "rw small" }, h("span", { class: "behind", text: pr.target + " が " + pr.behind + " 進んだ" }))
-          : null
+          : null,
+        pr.includedIn ? h("div", { class: "rw small muted included", text: "→ " + pr.includedIn + " に含まれる" }) : null
       )
     );
   }
@@ -72,11 +81,18 @@
     var repo = "";
     var query = "";
     var box = h("div");
+    var showIncluded = loadShow();
+    var incN = prs.filter(function (p) { return !!p.includedIn; }).length;
     var seg = h("div", { class: "seg", role: "group", "aria-label": "状態で絞り込み" });
     var btns = {};
+    var cnts = {};
+    function pool() {
+      return prs.filter(function (p) { return showIncluded || !p.includedIn; });
+    }
     FILTERS.forEach(function (f) {
-      var n = f[0] === "all" ? prs.length : prs.filter(function (p) { return p.state === f[0]; }).length;
-      var b = h("button", { class: "btn", type: "button", "aria-pressed": "false" }, f[1], " ", h("span", { class: "cnt", text: n }));
+      var cnt = h("span", { class: "cnt", text: 0 });
+      cnts[f[0]] = cnt;
+      var b = h("button", { class: "btn", type: "button", "aria-pressed": "false" }, f[1], " ", cnt);
       b.addEventListener("click", function () {
         filter = f[0];
         update();
@@ -104,11 +120,27 @@
       });
     }
 
+    var incBox = null;
+    if (incN > 0) {
+      var cb = h("input", { type: "checkbox", class: "show-included" });
+      cb.checked = showIncluded;
+      cb.addEventListener("change", function () {
+        showIncluded = cb.checked;
+        saveShow(showIncluded);
+        update();
+      });
+      incBox = h("label", { class: "muted small incl-toggle" }, cb, " 含まれる枝も表示（" + incN + " 件）");
+    }
+
     function update() {
+      var base = pool();
+      Object.keys(cnts).forEach(function (k) {
+        cnts[k].textContent = String(k === "all" ? base.length : base.filter(function (p) { return p.state === k; }).length);
+      });
       Object.keys(btns).forEach(function (k) {
         btns[k].setAttribute("aria-pressed", k === filter ? "true" : "false");
       });
-      var shown = prs.filter(function (p) {
+      var shown = base.filter(function (p) {
         return (
           (filter === "all" || p.state === filter) &&
           (!repo || p.repoId === repo) &&
@@ -147,6 +179,7 @@
         h("div", { class: "listhead" }, h("h1", { text: "PR 一覧" }), h("span", { class: "muted", text: prs.length + " 件" }), mk ? h("span", { class: "listact" }, mk) : null),
         unpushedNote(repos, repos.length > 1),
         h("div", { class: "toolbar" }, seg, sel, search),
+        incBox,
         box
       )
     );

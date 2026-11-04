@@ -248,7 +248,9 @@
     d.keys.summary = JSON.stringify((rv && rv.summary) || null);
     d.batches = h("div", { class: "live-batches" }, PRV.batchList(rv, ctx));
     d.keys.batches = JSON.stringify([(rv && rv.batches) || [], (rv && rv.worktrees) || []]);
-    var main = [PRV.briefCard ? PRV.briefCard(rv) : null, behindCard(pr), d.summary, generalCard(ctx), files, commits, d.batches];
+    var inc = h("p", { class: "muted small included-note" });
+    inc.hidden = true;
+    var main = [inc, PRV.briefCard ? PRV.briefCard(rv) : null, behindCard(pr), d.summary, generalCard(ctx), files, commits, d.batches];
     d.bar = PRV.reviewBar(ctx, notice);
     var me = PRV.mergeEntry ? PRV.mergeEntry(ctx) : null;
     var je = PRV.jobEntry ? PRV.jobEntry(ctx) : null;
@@ -262,6 +264,17 @@
         d.bar,
         me ? me.bar : null
       )
+    );
+    /* 一覧の includedIn（他の open な PR の枝に含まれる）を 1 行で注記する。取れなければ省略（表示だけ） */
+    PRV.api.prs().then(
+      function (l) {
+        var me2 = ((l && l.prs) || []).filter(function (p) { return p.id === pr.id; })[0];
+        if (me2 && typeof me2.includedIn === "string" && me2.includedIn) {
+          inc.textContent = "→ " + me2.includedIn + " に含まれる枝です（一覧では既定で隠れます）。";
+          inc.hidden = false;
+        }
+      },
+      function () {}
     );
   }
 

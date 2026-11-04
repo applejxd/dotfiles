@@ -24,7 +24,7 @@ pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結�
 | レビュー | TUI の会話と差分の確認だけ | 画面でコメント → 送信（`refs/pi/review/<prKey>`）→ 対話 pi またはジョブが受け取る（§4） |
 | 統合 | 人が TUI の必須確認に答える。または `merge-cli`（§3） | 人が画面の「統合する」を 2 段確認で押す（`--allow-merge`） |
 | 掃除 | `git flow feature finish` なら finish が枝と worktree を消す。ビューア/`merge-cli` で統合した場合は `scripts/wt_clean.py <名前>`（§3 の統合の節） | 統合時の cleanup 指定。または `wt_clean.py` |
-| 複数 feature のまとめ取り込み | `scripts/train.py`（統合用の枝 `feature/train-N`）→ 1 回統合 | 同左。train の枝を画面で統合 |
+| 複数 feature のまとめ取り込み | `scripts/train.py`（統合用の枝 `feature/train-N`）→ 1 回統合 | 同左。train の枝を画面で統合（構成員の枝は、train に含まれている間は PR 一覧に並ばない。切り替えで表示） |
 
 ## 3. pi 単独の運用
 

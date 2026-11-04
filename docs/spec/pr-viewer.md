@@ -161,6 +161,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 方式 | GET だけ（副作用なし）。応答は JSON・`Cache-Control: no-store`。エラーは `{"error": {"code", "message"}}`（メッセージにパスや内部の例外を含めない） |
 | エンドポイント | `/api/repos`・`/api/prs`・`/api/prs/<repoId>/<prKey>`（概要・コミット・ファイル）・`/api/prs/<repoId>/<prKey>/diff?path=<p>` |
 | 一覧に出す PR | `feature/*`・`bugfix/*` の枝のうち、**差分が無く（0 コミット。統合先と同じか祖先）、レビューの記録（`refs/pi/review/<prKey>`）も無い枝は出さない**（統合済みで枝だけ残っているもの。中身が空で PR とは言えない）。記録があれば「統合済み」として出る。記録の有無を読めなかったときは隠さない。一覧に出さないだけで、ID を直接指定すれば詳細は読める |
+| 含まれる枝 | open な PR の枝の先頭が、別の open な PR の枝の先頭の祖先（別のコミット）なら、前者に `includedIn`（含む枝の名前）を付け、**一覧では既定で隠す**（統合用の枝 `feature/train-N` の構成員を並べないため。表示だけで、切り替え「含まれる枝も表示（N 件）」で出る。選択は `localStorage`）。ID を直接指定すれば従来どおり読める・操作できる。git が失敗したときは付けない（隠さない側）。統合・判定・権限には使わない |
 | 統合先の進み・両側の変更・未 push（A3。読み取りだけ） | `PrSummary` に `behind`（分岐点から統合先が進んだコミット数。`rev-list --count <base>..<target>`）と `overlap`（`{count, paths, truncated}`。`behind > 0` のときだけ、`diff --name-only -z <base> <target>` と PR 側の変更ファイル（改名は旧パスも）の積集合。パスは最大 20 件。統合先側の変更が 2000 件を超えたら `paths: []`・`truncated: true` で「多数」）を足した。`/api/repos` の各要素に `unpushed`（統合先の枝が `<target>@{upstream}`、なければ `refs/remotes/origin/<target>` より先にある件数。上流が読めないときは `null`）を足した（どれも既存の項目は変えない後方互換の追加）。**`overlap` は衝突の目安であって判定ではない**（可否は統合の確認画面が `merge-tree` で出す）。`unpushed` は `fetch` をしない「最後に取得した状態との比較」 |
 | 上限 | diff 全体 2 MB・1 ファイル 200 KB・ファイル一覧 400 件・コミット一覧 200 件・1 回の git は 10 秒 / 出力 4 MB。超えたら省略表示か 500 |
 | 配信 | `/` と `/web/<名前>` は、許可リストにあるファイル（`index.html`・`app.css`・`*.js`）だけ。ディレクトリの走査は許さない |
