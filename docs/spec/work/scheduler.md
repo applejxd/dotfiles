@@ -51,6 +51,8 @@ scope 違反・numstat の急減・bundle の衝突・破棄率 40% 超を検出
 
 ## 限界
 
+`awaiting_approval`（未承認の task がある・承認済み task が未承認 task に依存して起動できない）の `wake_parent` は、接着層が利用者へ通知する（[起動の通知](driver-run.md#起動の通知)）。スケジューラ自身は通知せず、理由を返すだけ。
+
 `writes` の正しさは LLM 依存（実行時に検出して学習）。バックオフ・見積りの既定値・生存数の上限は仮で未測定。見込みの破棄率は件数が足りないと判定しない。試験: `test/agents/test_work_sched.py`（方式の選択表の総当たり・glob の偽陰性・性質試験）。
 
 [仕様の索引へ戻る](../index.md)

@@ -99,14 +99,17 @@ for (const s of sc.steps) {
 			const out = [];
 			for (const e of s.model) {
 				const node = e.node ?? snap().goals.at(-1)?.id;
+				// data 内の "$GOAL" は現在の goal の id に置き換える (台帳へ直接足す task の parent に使う)
+				const gid = snap().goals.at(-1)?.id ?? "";
+				const data = JSON.parse(JSON.stringify(e.data ?? {}).replaceAll("$GOAL", gid));
 				let made = true;
 				try {
-					ev.makeEvent(e.type, node, e.data ?? {}, e.source ?? "model");
+					ev.makeEvent(e.type, node, data, e.source ?? "model");
 				} catch {
 					made = false; // 作る段階で拒否される
 				}
 				// 作る段階を迫る生のイベントを runtime へ直接出し、runtime 側でも拒否されることを見る
-				const submitted = await rt.submit([{ type: e.type, node, data: e.data ?? {}, source: e.source ?? "model" }]);
+				const submitted = await rt.submit([{ type: e.type, node, data, source: e.source ?? "model" }]);
 				out.push({ ok: submitted.ok, error: submitted.error ?? null, made });
 			}
 			r.model = out;

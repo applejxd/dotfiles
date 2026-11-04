@@ -43,6 +43,11 @@
 `register.ts` が公開する `globalThis.__piWorkRuntime()`（runtime）と `__piWorkHolder()`（holder）を `registryRuntime` が読む（旧の登録簿 `__piWork = {runtime, holder}` も読む）。
 台帳の runtime は `register.ts` が持つので、**スケジューラを使うには `PI_WORK_TOOL=1` も要る**（無ければ runtime が取れず何も起動しない）。
 
+## 起動の通知
+
+スケジューラの `wake_parent`（`awaiting_approval`・`budget`・`stuck` など）は、`tick` が `wake` の効果にして返す。接着層は理由を通知の選別の表（[notices](notices.md)）の事象へ写し（`wakeNotice`）、見せ方が silent でなければ利用者へ 1 行で知らせる。
+承認待ちは `wait.plan-approval`（alert）で `/goal approve` を案内する。送り口は `notify` オプション（既定は UI があれば `ctx.ui.notify`）。同じ理由は `memo.lastWake` で毎 tick は出さず、送り口が失敗しても tick は続け、journal に `driver-run.notify-error` を残す。通知は承認イベントを作らない（承認は利用者の `/goal approve` だけ）。
+
 ## 限界
 
 - 完了後の検査は `check` オプション（省略時は checking のまま。別の経路が `check.result` を入れる）。

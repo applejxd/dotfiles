@@ -61,7 +61,7 @@ function fakeJob(id) {
 	return j;
 }
 
-async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [], approve = true, budget = BIG, jobsMax = 6, others = 0, mode, check = true, spawnError, canSpawn, noCan, lateAck, isoFinal, submitHook, realJobs } = {}) {
+async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [], approve = true, budget = BIG, jobsMax = 6, others = 0, mode, check = true, spawnError, canSpawn, noCan, lateAck, isoFinal, submitHook, realJobs, notify } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), "driver-run-"));
 	let clock = 1_700_000_000_000;
 	const now = () => (clock += 1);
@@ -113,6 +113,7 @@ async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [],
 		spawnChild,
 		...(noCan === undefined ? { canSpawn: canSpawn ?? (() => ({ ok: true, reason: "" })) } : noCan === true ? {} : { canSpawn: noCan }),
 		jobs: jobsLike,
+		...(notify ? { notify } : {}),
 		now,
 		timers,
 		ownerRole: "worker",
@@ -159,6 +160,76 @@ async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [],
 const spawnedTasks = (s) => s.runsOf ? [...s.runtime.state().nodes.values()].filter((n) => n.kind === "run").map((n) => n.parent).sort() : [];
 
 const cases = {
+	// B3: T 承認済み・U 未承認・T → U の依存。起動ゼロ、承認待ちの通知 1 回、重複なし、承認後に起動
+	async wakeApproval() {
+		const notes = [];
+		const s = await mk({ tasks: [T("T", [])], notify: (m, l) => notes.push([m, l]) });
+		const E = ev.makeEvent;
+		const h = (type, node, data, source = "model") => E(type, node, data, source, { holder: H });
+		const a = await s.runtime.submit([h("node.added", "U", { node: { kind: "task", parent: "G", title: "task U", writes: [], after: [], attrs: { role: "worker", size: "S", kind: "ro" } } })]);
+		const b = await s.runtime.submit([h("edge.added", "T", { from: "T", to: "U" })]);
+		await s.start();
+		await s.run.kick();
+		await flush();
+		const first = { spawns: s.calls.length, notes: notes.length, msg: notes[0]?.[0], level: notes[0]?.[1] };
+		const seq0 = s.runtime.state().seq;
+		for (let i = 0; i < 3; i++) {
+			await s.run.kick();
+			await flush();
+		}
+		const again = { spawns: s.calls.length, notes: notes.length };
+		const seqSame = seq0 === s.runtime.state().seq;
+		const after = { U: s.runtime.state().nodes.get("U")?.approved === true, T: s.runtime.state().nodes.get("T")?.approved === true };
+		// 利用者が承認 (再承認) する
+		const ap = await s.runtime.submit([E("plan.approved", "G", { hash: "h1", approvalIds: ["U"] }, "user", { holder: H })]);
+		await s.run.kick();
+		await flush();
+		const r = { ok: [a.ok, b.ok], first, again, after, seqSame, ap: ap.ok, apErr: ap.error ?? null, spawnedAfter: spawnedTasks(s), approvedEvents: s.runtime.state().nodes.get("G")?.state };
+		await s.cleanup();
+		return r;
+	},
+	// 通知の送り口が例外を投げても tick は続く (で、他の task は起動する)
+	async wakeNotifyThrows() {
+		let calls = 0;
+		const s = await mk({ tasks: [T("T", [])], notify: () => (calls++, (() => { throw new Error("ui down"); })()) });
+		const E = ev.makeEvent;
+		await s.runtime.submit([E("node.added", "U", { node: { kind: "task", parent: "G", title: "task U", writes: [], after: [], attrs: { role: "worker", size: "S", kind: "ro" } } }, "model", { holder: H })]);
+		await s.runtime.submit([E("edge.added", "T", { from: "T", to: "U" }, "model", { holder: H })]);
+		await s.start();
+		await s.run.kick();
+		await flush();
+		await s.run.kick();
+		await flush();
+		const r = { calls, live: s.run.live().length, spawns: s.calls.length };
+		await s.cleanup();
+		return r;
+	},
+	// wake の理由ごとの通知 (純関数) と、選別の表で見せ方
+	async wakeReasons() {
+		const nt = await load("notices.ts");
+		const out = {};
+		for (const reason of ["awaiting_approval", "provider_exhausted", "budget", "failed", "all_done", "stuck", "invalid_writes:T1", "zzz"]) {
+			const w = dr.wakeNotice(reason);
+			out[reason] = { event: w.event, message: w.message, show: nt.select(w.event).show };
+		}
+		return out;
+	},
+	// UI 無し (既定の送り口) でも落ちない。ctx.ui.notify を使う
+	async wakeDefaultSink() {
+		const s = await mk({ tasks: [T("T", [])] });
+		const E = ev.makeEvent;
+		await s.runtime.submit([E("node.added", "U", { node: { kind: "task", parent: "G", title: "task U", writes: [], after: [], attrs: { role: "worker", size: "S", kind: "ro" } } }, "model", { holder: H })]);
+		await s.runtime.submit([E("edge.added", "T", { from: "T", to: "U" }, "model", { holder: H })]);
+		const notes = [];
+		s.ctx.hasUI = true;
+		s.ctx.ui = { notify: (m, l) => notes.push([m, l]) };
+		await s.start();
+		await s.run.kick();
+		await flush();
+		const r = { notes, spawns: s.calls.length };
+		await s.cleanup();
+		return r;
+	},
 	// 旗なし・PI_WORK=0・子では登録しない (何も起動しない)
 	async gating() {
 		const out = {};

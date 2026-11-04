@@ -735,7 +735,7 @@ def test_persisted_rejection_leaves_nothing_approved(tmp_path):
 
 # ── 確認画面の題の安全化・伏字化 ──
 def node_added(tid, title):
-    node = {"kind": "task", "parent": None, "title": title, "writes": [], "after": []}
+    node = {"kind": "task", "parent": "$GOAL", "title": title, "writes": [], "after": []}
     return {"type": "node.added", "node": tid, "data": {"node": node}}
 
 
@@ -761,8 +761,8 @@ HOSTILE = [
 @pytest.mark.parametrize("title", HOSTILE)
 def test_body_has_no_raw_control_or_secret(tmp_path, title):
     body, out = body_for(tmp_path, [title])
-    if not out["confirms"]:  # work が題を拒否した場合も、画面に出ない
-        return
+    # work が題を拒否すると確認画面が出ず、検査が空振りする。空振りは失敗にする (画面本文の単体の検査は test_work_approve_body.py)
+    assert out["confirms"], "確認画面が出なかった (題が拒否された): 試験が何も検証していない"
     assert not any(ch in body for ch in "\x85\x9b\u202e\u2066\u200b\ufeff\x1b")
     assert SECRET not in body
     assert "\u0301" * 3 not in body
@@ -803,9 +803,11 @@ def test_model_added_raw_ansi_title_is_sanitized(tmp_path):
     ev["node"] = "t9"
     steps = [START, goal("作業"), {"model": [ev]}, goal("approve")]
     out = run(tmp_path, steps, env=BOTH)
-    if out["results"][2]["model"][0]["ok"] and out["confirms"]:
-        body = out["confirms"][0]["body"]
-        assert "\x1b" not in body and "\x9b" not in body
+    assert out["results"][2]["model"][0]["ok"] and out["confirms"], (
+        "台帳へ直接足せず確認画面も出ない: 空振り"
+    )
+    body = out["confirms"][0]["body"]
+    assert "\x1b" not in body and "\x9b" not in body
 
 
 def test_wide_title_still_clipped_with_id(tmp_path):

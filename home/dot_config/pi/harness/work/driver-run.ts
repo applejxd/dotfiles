@@ -9,6 +9,8 @@ import { emptyMemo, onFinished, onOutput, onSpawned, onUsage, reconcile, tick } 
 import type { Memo, RunResult, SpawnSpec, Spawner } from "./driver.ts";
 import { makeEvent } from "./events.ts";
 import type { Journal } from "./journal.ts";
+import { select } from "./notices.ts";
+import type { NoticeEvent } from "./notices.ts";
 import type { LedgerState } from "./reduce.ts";
 import type { Runtime, RuntimeTimers } from "./runtime.ts";
 import type { EventType, NewEvent } from "./types.ts";
@@ -88,7 +90,20 @@ export const registryRuntime: RuntimeSource = () => {
 	return r && r.runtime && typeof r.holder === "string" ? r : null;
 };
 
+/** wake_parent の理由 → 通知の選別の表の事象と、利用者への 1 行。承認待ちは wait.plan-approval (alert) で /goal approve を案内する。see docs/spec/work/driver-run.md#起床の通知 */
+export function wakeNotice(reason: string): { event: NoticeEvent; message: string } {
+	if (reason === "awaiting_approval") return { event: "wait.plan-approval", message: "⏳ 承認待ちの task があり、起動できません。/goal approve で承認してください" };
+	if (reason === "provider_exhausted") return { event: "resource.429", message: "⏸ プロバイダの上限に達したため止まっています" };
+	if (reason === "budget") return { event: "budget.paused", message: "⏸ 予算の上限で止まっています (/goal budget で変更)" };
+	if (reason === "failed") return { event: "run.failed", message: "⚠ 失敗した task があります" };
+	if (reason === "all_done") return { event: "goal.done", message: "✅ すべての task が完了しました" };
+	if (reason.startsWith("invalid_writes:")) return { event: "run.warning", message: `⚠ 書き込み集合が不正な task があります (${reason.slice(15, 60)})` };
+	return { event: "wait.confirm", message: `⏳ 進められません (${reason.slice(0, 40)})。確認してください` };
+}
+
 export interface DriverRunOptions {
+	/** 利用者への 1 行の通知の送り口 (既定: UI があれば ctx.ui.notify)。失敗しても tick は続く */
+	notify?: (message: string, level: string) => void;
 	child: boolean;
 	env?: Record<string, string | undefined>;
 	runtime: RuntimeSource;
@@ -208,6 +223,21 @@ export function registerDriverRun(pi: any, opts: DriverRunOptions): DriverRun | 
 				(e) => finished(spec.runId, h, { status: "failed", answer: "", errors: [String(e?.message ?? e)], blocked: [] }),
 			);
 		return { runId: spec.runId, pid: sp.job.pid ?? 0 };
+	};
+
+	/** wake の通知。選別の表で silent なら出さない。失敗は握りつぶさず journal へ残す */
+	const notifyWake = (reason: string): void => {
+		try {
+			const w = wakeNotice(reason);
+			emit("notice", { kind: "driver-run.wake", reason: reason.slice(0, 60), event: w.event });
+			const show = select(w.event).show;
+			if (show === "silent") return;
+			const level = show === "alert" ? "warning" : "info";
+			if (opts.notify) opts.notify(w.message, level);
+			else if (ctx?.hasUI) ctx.ui.notify(w.message, level);
+		} catch (e) {
+			emit("notice", { kind: "driver-run.notify-error", reason: reason.slice(0, 60), error: String((e as Error)?.message ?? e).slice(0, 100) });
+		}
 	};
 
 	// steer・abort は既存の Job の操作
@@ -361,6 +391,8 @@ export function registerDriverRun(pi: any, opts: DriverRunOptions): DriverRun | 
 			holder: rt.holder,
 		});
 		memo = r.memo;
+		// 起床 (wake) は台帳の書き込みの成否と独立に、利用者へ 1 行で通知する。承認イベントは作らない (承認は利用者の /goal approve だけ)
+		for (const e of r.effects) if (e.kind === "wake") notifyWake(e.reason);
 		// 台帳の予約が通らなければ子は起動しない (台帳に無い子を作らない)
 		if (!(await submit(rt, r.events))) return;
 		for (const e of r.effects) {
