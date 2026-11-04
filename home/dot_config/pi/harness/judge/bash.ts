@@ -16,7 +16,7 @@ import { findMatch, normalize, patternMatches, splitCommandSegments } from "./no
 import type { Common } from "./policy.ts";
 import { basename, pyLen, pyRegex, shlexSplit, ShlexError } from "./pystr.ts";
 import { clip200, expandCdTargets, splitHeredocBody } from "./shared.ts";
-import { localGitDestructiveReason, worktreeRemoveArgs } from "./gitdestructive.ts";
+import { localGitDestructiveReason } from "./gitdestructive.ts";
 
 // 検査の上限。check_bash.py と同じ
 const MAX_COMMAND_LEN = 10000;
@@ -381,24 +381,21 @@ function unwrapScp(tokens: string[], targets: readonly string[]): string | null 
 
 // 役割の deny_except で、[bash] deny から外せる語 (decide.ts の DENY_EXCEPT_WORDS と同じ)
 const WORKTREE_REMOVE = "git worktree remove";
-// 引数が展開・グロブ・引用・リダイレクトなどで、force の有無を確定できない形は、単純な文字だけではないので deny のままにする
-// (判定は gitdestructive.ts の worktreeRemoveArgs を確認側と共有する)
+// 元のコマンド全体がこの 1 形式に一致するときだけ例外にする。解析器の解釈には依存しない。
+// `-` で始まるトークン (-f・--force・--・-C) と、引用・展開・リダイレクト・区切り・前置きは、一致しない (deny のまま)
+const WORKTREE_REMOVE_PLAIN = /^git worktree remove(?: [A-Za-z0-9_./@%+=:,][A-Za-z0-9_./@%+=:,-]*)+$/;
 
 /**
  * `deny_except` に `git worktree remove` を持つ役割で、`[pi.confirm] local_git` が真のときだけ、この deny を外す。
- * パターンに当たるセグメントのすべてが「単純な文字だけ」であることが条件 (引用・リダイレクト・空白以外の区切り・展開を含むと false)。
- * force 付きは deny を外したあと、`localGitConfirm` (gitdestructive.ts) が mustConfirm の ask にする。
+ * 元のコマンド全体が WORKTREE_REMOVE_PLAIN に一致するときだけ true (normalize や分割の結果は見ない)。
+ * 一致するとき全体が 1 コマンドなので、複合コマンドの他の部分の deny には影響しない。force 付きは一致せず deny のまま。
  * see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外
  */
 function worktreeRemoveExcepted(cmd: string, pi: Obj, profile: Obj): boolean {
 	if (pi.confirm?.local_git !== true) return false;
 	const except = profile.deny_except;
 	if (!Array.isArray(except) || !except.includes(WORKTREE_REMOVE)) return false;
-	for (const segment of [...splitCommandSegments(cmd), ...normalize(cmd)]) {
-		if (!patternMatches(segment, WORKTREE_REMOVE)) continue;
-		if (!worktreeRemoveArgs(segment)?.simple) return false;
-	}
-	return true;
+	return WORKTREE_REMOVE_PLAIN.test(cmd);
 }
 
 /** 文脈の `[bash] deny` から、指定のパターンだけを除いたものを返す。 */

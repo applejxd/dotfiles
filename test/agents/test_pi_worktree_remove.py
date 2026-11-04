@@ -1,9 +1,8 @@
-"""pi の implementer / worker だけ、``git worktree remove`` の force なしを許可する (``deny_except``)。
+"""pi の implementer / worker だけ、``git worktree remove`` の単純な 1 行を許可する (``deny_except``)。
 
-- force なしは deny でも mustConfirm でもない (通常・bypass・boundary の全モード)。
-- force 付き (``-f``・``-ff``・``--force``・省略形・束ね・前置・複合) は mustConfirm の ask (bypass でも)。
-- force の有無を確定できない形は deny のまま。既定が deny の役割・``local_git`` を切った場合・未知の語は deny。
-- pi 以外 (Claude・OpenCode) の生成物は変わらない。
+- 例外が効くのは、元のコマンド全体が ``git worktree remove`` + 単純なパスだけの 1 行に一致するときだけ。
+- force 付き・前置き・複合・引用・変数・リダイレクト・行継続・前後の空白は deny のまま (確認つきで通す案は採らない)。
+- 既定が deny の役割・``local_git`` を切った場合・未知の語は deny。pi 以外 (Claude・OpenCode) の生成物は変わらない。
 
 see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外
 """
@@ -11,14 +10,11 @@ see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外
 from __future__ import annotations
 
 import copy
-import json
-import subprocess
 import sys
 
 import pytest
 from agents_common import ROOT, load_common
 from test_pi_confirm import _bash, _judge, _modes, needs_node
-from test_pi_judge_ts import _node
 
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 import generate as gen
@@ -28,56 +24,75 @@ pytestmark = needs_node
 ALLOWED_ROLES = ["implementer", "worker"]
 DENIED_ROLES = ["explorer", "reader", "committer", "orchestrator"]
 
+# 許可される形 (deny でも mustConfirm でもない)
 PLAIN = [
-    "git worktree remove ../wt",
+    "git worktree remove .tmp/worktrees/a",
+    "git worktree remove ../a",
     "git worktree remove /abs/path/wt",
     "git worktree remove .",
-    "git -C /repo worktree remove ../wt",
-    "git --git-dir /repo/.git worktree remove ../wt",
+    "git worktree remove a b c",
+    "git worktree remove ../wt-1_2.3",
+    "git worktree remove 123",
+    "git worktree remove a@b%c+d=e:f,g",
+]
+
+# deny のままになる形 (両役割・全モード)
+DENIED = [
+    "git worktree remove -f x",
+    "git worktree remove --force x",
+    "git worktree remove x -f",
+    "git worktree remove -ff x",
+    "git worktree remove --for x",
+    "git worktree remove --forc x",
+    "git worktree remove -- x",
     "git worktree remove -- -f",
-    "git worktree remove ../wt -- -f",
-    "cd /repo && git worktree remove ../wt",
-    "git worktree list",
-    "git worktree prune",
-]
-
-FORCE = [
-    "git worktree remove -f ../wt",
-    "git worktree remove -ff ../wt",
-    "git worktree remove --force ../wt",
-    "git worktree remove --for ../wt",
-    "git worktree remove --forc ../wt",
-    "git worktree remove ../wt -f",
-    "git worktree remove ../wt --force",
-    "git worktree remove -f -f ../wt",
-    "git -C /repo worktree remove -f ../wt",
-    "git --git-dir /repo/.git worktree remove -f ../wt",
-    "git --git-dir=/repo/.git worktree remove -ff ../wt",
-    "env git worktree remove -f ../wt",
-    "FOO=1 git worktree remove -f ../wt",
-    "command git worktree remove -f ../wt",
-    "bash -c 'git worktree remove -f ../wt'",
-    "echo a; git worktree remove -f ../wt",
-    "true && git worktree remove -f ../wt",
-    "echo $(git worktree remove -f ../wt)",
+    "git -C . worktree remove x",
+    "git -C . worktree remove './a -- b' -f",
+    "env git worktree remove './a -- b' -f",
+    "xargs -a .tmp/flags git worktree remove ../wt",
+    "xargs git worktree remove",
     "echo ../wt | xargs git worktree remove -f",
-    "git worktree remove ../wt && git worktree remove -f ../w2",
-]
-
-# force の有無を確定できない形は deny のまま
-UNDECIDABLE = [
-    "git worktree remove $F ../wt",
-    "git worktree remove ../wt $F",
-    "git worktree remove $(echo -f) ../wt",
-    "git worktree remove `echo -f` ../wt",
-    "git worktree remove ../w* ",
-    "git worktree remove -?",
-    "git worktree remove -[f] ../wt",
-    "git worktree remove {-f,x}",
-    "git worktree remove ~/wt",
+    "git worktree remove --force>/dev/null ../wt",
+    "git worktree remove > -- -f ../wt",
+    "git worktree remove './a -- b' -f",
+    "git worktree remove \\\n--force x",
+    "git worktree remove a \\\nb",
+    " git worktree remove a",
+    "git worktree remove a ",
+    "git worktree remove a\n",
+    "\tgit worktree remove a",
+    "git worktree remove\ta",
+    "git worktree remove  a",
+    "git  worktree remove a",
+    "cd x && git worktree remove a",
+    "git worktree remove a; git push",
+    "git worktree remove a && git push",
+    "git worktree remove a && git push origin main",
+    "git push origin main; git worktree remove a",
+    "git worktree remove a && git stash drop",
+    "git worktree remove a | cat",
+    "git worktree remove a &",
+    "git worktree remove a\ngit push",
+    "git worktree remove $X",
+    "git worktree remove $(echo -f) a",
+    "git worktree remove `echo -f` a",
+    'git worktree remove "a"',
+    "git worktree remove 'a'",
+    "git worktree remove .tmp/worktrees/a\\ b",
+    "bash -c 'git worktree remove a'",
+    "sudo git worktree remove a",
+    "command git worktree remove a",
+    "FOO=1 git worktree remove a",
+    "git worktree remove a b -f",
+    "git worktree remove ~/x",
+    "git worktree remove a*",
+    "git worktree remove a?",
+    "git worktree remove a[1]",
+    "git worktree remove {a,b}",
     "git worktree remove !x",
-    "git worktree remove 'unterminated",
-    "git worktree remove ../wt; git worktree remove $X",
+    "git worktree remove a 2>&1",
+    "git worktree remove a#b",
+    "git worktree remove",
 ]
 
 
@@ -89,7 +104,7 @@ def _results(commands, **kw):
 
 @pytest.mark.parametrize("role", ALLOWED_ROLES)
 @pytest.mark.parametrize("command", PLAIN)
-def test_plain_form_is_not_denied_nor_forced_to_confirm(role, command):
+def test_plain_form_is_neither_denied_nor_forced_to_confirm(role, command):
     for _, res in _results([command], role=role):
         assert res["decision"] != "deny", (role, command, res)
         assert not res.get("mustConfirm"), (role, command, res)
@@ -105,90 +120,37 @@ def test_plain_form_decisions_are_the_default_ones(role):
 
 
 @pytest.mark.parametrize("role", ALLOWED_ROLES)
-@pytest.mark.parametrize("command", FORCE)
-def test_force_form_must_be_confirmed_even_with_bypass_and_boundary(role, command):
-    for _, res in _results([command], role=role):
-        assert res["decision"] == "ask", (role, command, res)
-        assert res.get("mustConfirm") is True, (role, command, res)
-
-
-@pytest.mark.parametrize("role", ALLOWED_ROLES)
-@pytest.mark.parametrize("command", UNDECIDABLE)
-def test_undecidable_form_stays_denied(role, command):
+@pytest.mark.parametrize("command", DENIED)
+def test_everything_else_stays_denied(role, command):
     for _, res in _results([command], role=role):
         assert res["decision"] == "deny", (role, command, res)
-
-
-# argv の解釈差で force を見逃しうる形 (反例)。deny のままか、確認必須の ask でなければならない
-AMBIGUOUS = [
-    "git worktree remove --force>/dev/null ../wt",
-    "git worktree remove > -- -f ../wt",
-    "git worktree remove './a -- b' -f",
-    "git worktree remove \\\n--force x",
-    "git worktree remove '-f' x",
-    'git worktree remove "--force" x',
-    "git worktree remove -\\f x",
-    "git worktree remove $'\\x2df' x",
-    "git worktree remove --force 2>&1 x",
-    "git worktree remove --force >&2 x",
-    "git worktree remove --force <<< x",
-    "git worktree remove --force | cat",
-    "git worktree remove --force x &",
-    "git worktree remove x 2>&1 -f",
-    "git worktree remove x >/dev/null -f",
-]
-
-
-@pytest.mark.parametrize("role", ALLOWED_ROLES)
-@pytest.mark.parametrize("command", AMBIGUOUS)
-def test_ambiguous_argv_is_denied_or_must_confirm(role, command):
-    for _, res in _results([command], role=role):
-        ok = res["decision"] == "deny" or (
-            res["decision"] == "ask" and res.get("mustConfirm") is True
-        )
-        assert ok, (role, command, res)
-
-
-@pytest.mark.parametrize("role", ALLOWED_ROLES)
-@pytest.mark.parametrize(
-    "command",
-    [
-        "git worktree remove --force x",
-        "git worktree remove -f x",
-        "git worktree remove x -ff",
-        "git worktree remove --for x",
-    ],
-)
-def test_simple_force_is_always_ask_must_confirm(role, command):
-    for _, res in _results([command], role=role):
-        assert res["decision"] == "ask" and res.get("mustConfirm") is True, (role, command, res)
-
-
-@pytest.mark.parametrize("role", ALLOWED_ROLES)
-@pytest.mark.parametrize(
-    "command",
-    [
-        "git worktree remove '.tmp/worktrees/a b'",
-        'git worktree remove ".tmp/worktrees/a b"',
-        "git worktree remove .tmp/worktrees/a\\ b",
-    ],
-)
-def test_quoted_or_spaced_path_stays_denied(role, command):
-    for _, res in _results([command], role=role):
-        assert res["decision"] == "deny", (role, command, res)
-
-
-@pytest.mark.parametrize("role", ALLOWED_ROLES)
-def test_plain_worktree_path_is_neither_denied_nor_forced(role):
-    for _, res in _results(["git worktree remove .tmp/worktrees/a"], role=role):
-        assert res["decision"] != "deny" and not res.get("mustConfirm"), (role, res)
 
 
 @pytest.mark.parametrize("role", DENIED_ROLES)
-@pytest.mark.parametrize("command", PLAIN[:6] + FORCE[:8])
-def test_roles_without_the_exception_deny_every_form(role, command):
+@pytest.mark.parametrize("command", PLAIN[:4])
+def test_roles_without_the_exception_deny_plain_too(role, command):
     for _, res in _results([command], role=role):
         assert res["decision"] == "deny", (role, command, res)
+
+
+@pytest.mark.parametrize("role", ALLOWED_ROLES)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git worktree prune",
+        "git worktree move a b",
+        "git worktree repair",
+        "git worktree remove-foo a",
+        "git push origin main",
+    ],
+)
+def test_other_worktree_subcommands_are_unchanged(role, command):
+    # prune / move / repair は従来どおり (deny パターンの対象外なら deny ではない。対象なら deny のまま)。例外を足す前と同じ結果であること
+    base = copy.deepcopy(gen.pi_judge_data(load_common())["common"])
+    base["pi"]["profiles"][role].pop("deny_except")
+    want = _judge([_bash(command, role=role)], common=base)[0]
+    got = _judge([_bash(command, role=role)])[0]
+    assert got["decision"] == want["decision"], (command, got, want)
 
 
 def test_switching_local_git_off_disables_the_exception():
@@ -222,21 +184,6 @@ def test_a_role_without_deny_except_is_denied_even_if_others_have_it():
     assert res["decision"] == "deny", res
 
 
-@pytest.mark.parametrize("role", ALLOWED_ROLES)
-@pytest.mark.parametrize(
-    "command",
-    [
-        "git worktree remove ../wt && git push origin main",
-        "git push origin main; git worktree remove ../wt",
-        "git worktree remove ../wt && git stash drop",
-        "git worktree remove ../wt && git filter-branch",
-    ],
-)
-def test_other_denies_are_unaffected(role, command):
-    for _, res in _results([command], role=role):
-        assert res["decision"] == "deny", (role, command, res)
-
-
 def test_the_exception_is_only_for_implementer_and_worker():
     profiles = load_common()["pi"]["profiles"]
     with_exception = sorted(n for n, p in profiles.items() if "deny_except" in p)
@@ -265,44 +212,3 @@ def test_the_common_deny_still_has_it_and_other_clis_are_unchanged():
         r.get("resource", "").startswith("git worktree remove") and r.get("effect") == "deny"
         for r in opencode
     ), "OpenCode の deny に git worktree remove が残っていない"
-
-
-# judge_golden.mjs の期待値 (golden_worktree.mjs) が、必須確認の欠落を成功扱いしないこと
-_GOLDEN_CASES = [
-    # (got, 期待される一致の可否)
-    ({"decision": "ask", "mustConfirm": True, "source": "rule"}, True),
-    ({"decision": "ask", "source": "default"}, False),
-    ({"decision": "ask", "mustConfirm": False}, False),
-    ({"decision": "allow"}, False),
-    ({"decision": "deny", "check": "check_policy_deny"}, False),
-    ({}, False),
-    (None, False),
-    ({"decision": "bogus", "mustConfirm": True}, False),
-]
-
-
-@pytest.mark.parametrize("role", ALLOWED_ROLES)
-def test_golden_expectation_rejects_missing_must_confirm(role):
-    request = {"tool": "bash", "role": role, "input": {"command": "git worktree remove --force ."}}
-    expected = {
-        "check": "check_policy_deny",
-        "decision": "deny",
-        "reason": "`git worktree remove` は deny パターンに一致する",
-    }
-    script = (
-        "import { worktreeRemoveMatches } from './test/agents/pi/golden_worktree.mjs';"
-        "const [cases, request, expected] = JSON.parse(process.argv[1]);"
-        "console.log(JSON.stringify(cases.map((g) => worktreeRemoveMatches(g, expected, request))));"
-    )
-    payload = json.dumps([[g for g, _ in _GOLDEN_CASES], request, expected])
-    proc = subprocess.run(
-        [_node(), "--input-type=module", "-e", script, payload],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        cwd=ROOT,
-        timeout=60,
-        check=False,
-    )
-    assert proc.returncode == 0, proc.stderr[-2000:]
-    assert json.loads(proc.stdout) == [want for _, want in _GOLDEN_CASES]

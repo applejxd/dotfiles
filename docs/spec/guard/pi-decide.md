@@ -112,7 +112,7 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
   GraphQL の `createRepository`・`updateRepository`・`deleteRepository`・`archiveRepository`・`transferRepository`・`createRef`・`updateRef`・`deleteRef`・`createCommitOnBranch`・`mergePullRequest`。
   これは **GitHub API 経由の push 相当**（コンテンツ API・Git データ API）を塞ぐ。それ以外の書き込みは ask（確認に格上げ）
 - **表に無い外部書き込みは、従来どおり**（役割の既定の ask。サンドボックスでは allow）。この表では「すべて」を捕捉できない（すり抜けを許容する範囲）
-- **元に戻せないローカルの git 操作**（`[pi.confirm] local_git = true`。`judge/gitdestructive.ts`）: `git branch -D/-M/-f/--delete --force`（`-fd`・`-df` など束ねた形を含む）、`git clean`（`-n`/`--dry-run` が無いもの）、`git tag -d/--delete/-f`、`git checkout -B`、`git switch -C/--force-create`、`git worktree remove` の force（`-f`・`--force`。[例外](#git-worktree-remove-の例外)）。
+- **元に戻せないローカルの git 操作**(`[pi.confirm] local_git = true`。`judge/gitdestructive.ts`): `git branch -D/-M/-f/--delete --force`(`-fd`・`-df` など束ねた形を含む)、`git clean`(`-n`/`--dry-run` が無いもの)、`git tag -d/--delete/-f`、`git checkout -B`、`git switch -C/--force-create`、`git worktree remove` の force は、元に戻せない操作の一覧に残す (deny が外れる形に force は付かないので通常は働かない多層防御。[例外](#git-worktree-remove-の例外))。
   前置の環境変数・`env`・`git` のグローバルオプション（`-C`・`-c`・`--git-dir`・`--work-tree` など）を読み飛ばしてから、サブコマンドとフラグを見る（`--` 以降と、値を取るオプションの値は数えない。`git clean -e '-n' -f` は dry-run と見なさない）。
   評価の位置は、確認表の直後・`bashAsk` の前。**ask が既定の役割（親・`worker`）は、bypass でもサンドボックスの緩和でも ask のまま（理由の先頭は「確認が必要な元に戻せない git 操作 (bypass でも確認する): 」）**。
   **既定が deny の役割（`explorer`・`reader`・`committer`）は deny**: これらは `[bash] ask` が役割の既定の deny より先に当たり、`git branch -D`・`git clean`・`docker rm` が bypass で allow になっていた（2026-10-29 に実測。ask 一般の扱いは[次の節](#既定が-deny-の役割の-ask)）。
@@ -145,29 +145,29 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 
 ## git worktree remove の例外
 
-`[bash] deny` の `git worktree remove` は、**pi の `implementer`（親）と `worker` だけ**、`--force` なしを許可する
-（[CHG-0062](../../change-history/0062.md)）。force 付きは bypass でも省略できない必須確認。`explorer`・`reader`・`committer`・`orchestrator` は deny のまま。
+`[bash] deny` の `git worktree remove` は、**pi の `implementer`（親）と `worker` だけ**、単純な 1 行の force なしだけを許可する
+（[CHG-0062](../../change-history/0062.md)）。force 付きは deny のまま（確認つきで通す案は、解析の取りこぼしが続いたので採らなかった）。`explorer`・`reader`・`committer`・`orchestrator` は deny のまま。
 
 - **設定**: `[pi.profiles.implementer]` と `[pi.profiles.worker]` の `deny_except = ["git worktree remove"]`。許す語は判定器（`decide.ts` の
   `DENY_EXCEPT_WORDS`）が「`git worktree remove`」に固定し、未知の語・配列でない値は `source: error` の deny。`[bash] deny` と `[bash.deny_guide]` は変えない
   （Claude Code・Copilot・OpenCode の生成物は同じ。pi だけの変更）
 - **deny を外す条件**（`judge/bash.ts` の `worktreeRemoveExcepted`、共通の deny を引く前）: `[pi.confirm] local_git` が真で、役割が例外に載っていること。
-  パターンに当たるセグメント（元の分割と正規化の両方）の**すべてが「単純な文字だけ」**であること（`[A-Za-z0-9_./@%+=:,-]` と空白だけ。
-  引用符・バックスラッシュ・リダイレクト `<>`・パイプ・`;` `&`・括弧・`$` `` ` `` `{` `*` `?` `[` `~` `!`・改行を含むと deny のまま。fail closed）。
-  **代償**: 空白を含むパスなど引用が要る正当なコマンドも deny のまま（この repo の worktree 名は空白を含まない）。
-  引用・リダイレクトが無ければ argv の曖昧さが無いので、例外側と確認側は**同じ解析関数**（`gitdestructive.ts` の `worktreeRemoveArgs`。
-  `simple` と `force` を返す。`--` 以降は数えない）を使い、解釈差で force を見逃さない。`local_git` を切れば例外も無効
-- **force の検出**（`judge/gitdestructive.ts`、[confirm](#confirm) の「元に戻せないローカルの git 操作」の一つ）: `-f`・`-ff`・束ねた形、
-  `--force` と git の省略形（`--for` など）。位置は不問（`path -f` も）。`--` 以降は数えない。前置の環境変数・`env`・`command`・`-C`・`--git-dir`・
-  `;` `&&` `bash -c` `$()` `xargs` は既存の正規化が読む。引用内の語も拾う（誤検出で確認に倒れる側を許す）
-- **緩めたあとの判定**: force なしは `source: default`（親は ask、bypass で allow、`pis` の境界の中で allow。`[pi.shell] allow` には載せない）。
-  force 付きは `mustConfirm` の ask（`worker` は子で UI が無いので実質拒否）
-- **Python 版と golden**: `decide.py` は `deny_except` を知らず deny のまま。`judge_golden.mjs` は一括許容をせず、`golden_worktree.mjs` の
-  標本ごとの期待値で比べる（force 付きの標本は `ask` かつ `mustConfirm` が必須。欠落・通常の ask・allow は不一致。負例は `test_pi_worktree_remove.py`）
+  **元のコマンド文字列の全体**が、正規表現 `^git worktree remove(?: [A-Za-z0-9_./@%+=:,][A-Za-z0-9_./@%+=:,-]*)+$` に一致すること
+  （`git worktree remove` の後ろに、単一の空白で区切った、`-` で始まらない単純なトークンが 1 個以上）。
+  `normalize` の結果や分割したセグメントは見ない（解析器の解釈に依存しない）。前後の空白・連続する空白・引用符・バックスラッシュ・行継続・
+  リダイレクト・パイプ・`;` `&`・括弧・`$` `` ` `` `{` `*` `?` `[` `~` `!`・`-` で始まるトークン（`-f`・`--force`・`--`・`-C`）・
+  前置の `env`・`git -C`・`xargs`・`bash -c`・`cd … &&`・複合は、すべて一致せず deny のまま（fail closed）。
+  全体が 1 コマンドなので、複合コマンドの他の部分の deny には影響しない。`local_git` を切れば例外も無効
+  - **代償**: 空白を含むパスなど引用が要る正当なコマンドも deny のまま（この repo の worktree 名は空白を含まない）
+- **force の検出**（`judge/gitdestructive.ts` の `case "worktree"`、[confirm](#confirm)）: 多層防御として残す。deny が外れる形に force は付かないので通常は働かず、
+  何かの不具合で force 付きが deny を通ったときだけ、`mustConfirm` の ask になる
+- **緩めたあとの判定**: force なしは `source: default`（親は ask、bypass で allow、`pis` の境界の中で allow。`[pi.shell] allow` には載せない）
+- **Python 版と golden**: `decide.py` は `deny_except` を知らず deny のまま。TS も例外が効くのは force なしの 1 行だけで、golden の標本（force 付き）は
+  どちらも deny なので、`judge_golden.mjs` に許容は無い。負例は `test_pi_worktree_remove.py`
 - **残る限界**:
   - force なしでも、`.gitignore` 対象のファイル（例: `.tmp/`・`.venv`）と detached のコミットは失う。退避（tgz）は `wt_clean.py` と PR ビューアの cleanup（`apps/pr-viewer/merge.ts` の退避）にあるが、bash からの直接実行にはない
-  - force なしの `git worktree remove` が守るのは、変更済み・未追跡のファイルがあるときと、`git worktree lock`（所有の表明）したときだけ（後者は `-f` 2 回が要る）。
-    claim を忘れた worktree は lock で守られない
+  - force なしの `git worktree remove` が守るのは、変更済み・未追跡のファイルがあるときと、`git worktree lock`（所有の表明）したときだけ。
+    claim を忘れた worktree は lock で守られない。lock した worktree は force が 2 回要るが、force 付きは deny なので消せない
   - bypass を継ぐ worker は、claim のない clean な他の worktree を plain で消せる
   - 保証は「うっかり防止」。git の alias・外部スクリプト・動的に組み立てた文字列は見ない。反映には `chezmoi apply` と pi の再起動が要る
 - **試験**: `test_pi_worktree_remove.py`
