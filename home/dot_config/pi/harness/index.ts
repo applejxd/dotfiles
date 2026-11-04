@@ -1389,7 +1389,24 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		if (baseline) mainBaselines.set(job, baseline);
 		return { job, model };
 	};
-	registerDriverRun(pi, { child: CHILD, runtime: registryRuntime, spawnChild, jobs, ownerRole: ROLE }); // PI_WORK_SCHEDULER=1 のときだけ動く (work/driver-run.ts)
+	registerDriverRun(pi, {
+		child: CHILD,
+		runtime: registryRuntime,
+		spawnChild,
+		jobs,
+		ownerRole: ROLE,
+		// guarded_task の execute と同じ起動前の判定: deny は起動しない・ask は保留 (自動承認しない)・/plan 中は書き込みの役割を起動しない
+		canSpawn: (spec, c) => {
+			const d = decide("task", { agent: spec.role, task: spec.prompt }, c?.cwd ?? process.cwd());
+			if (d.decision === "deny") return { ok: false, reason: `判定で deny: ${d.reason}` };
+			if (d.decision !== "allow") return { ok: false, hold: true, reason: `確認が要るため保留: ${d.reason}` };
+			if ((globalThis as any).__piPlanMode === true) {
+				const refused = planModeRefusal(spec.role);
+				if (refused) return { ok: false, reason: refused };
+			}
+			return { ok: true, reason: "" };
+		},
+	}); // PI_WORK_SCHEDULER=1 のときだけ動く (work/driver-run.ts)
 
 	// 隔離の job の結果の行。opt-in の間は、隔離しない worker にも「none」を出して誤認を防ぐ
 	const isolationLines = (job: Job): string[] => {
