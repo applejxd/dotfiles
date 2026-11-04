@@ -396,6 +396,7 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule("検証の入口", ("scripts/verify.py",), ("test_verify", "test_verify_stamp")),
     Rule("検証の印", ("scripts/verify_stamp.py",), ("test_verify_stamp",)),
+    Rule("push 前の秘密検出", ("scripts/gitleaks_prepush.py",), ("test_gitleaks_prepush",)),
     Rule("並列実装の混線の検査", ("scripts/parallel_check.py",), ("test_parallel_check",)),
     Rule(
         "並列実装の関門", ("scripts/feature_gate.py",), ("test_feature_gate", "test_parallel_check")
