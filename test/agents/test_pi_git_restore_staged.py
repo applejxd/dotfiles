@@ -285,3 +285,14 @@ def test_the_common_deny_still_has_it_and_other_clis_are_unchanged():
         p.pop("deny_except", None)
     assert gen.build_claude_permissions(common) == gen.build_claude_permissions(without)
     assert gen.build_opencode_permissions(common) == gen.build_opencode_permissions(without)
+
+
+@pytest.mark.parametrize("command", ["git checkout feature/x", "git switch feature/x"])
+def test_the_implementer_already_may_run_hook_triggering_git_operations(command):
+    """この例外が implementer に新しい能力を与えない前提（review）。checkout / switch が全モードで deny でないこと。
+
+    git は `restore --staged` でも `post-checkout` hook を呼ぶが、implementer は元から checkout / switch で hook を動かせる。
+    この前提が崩れたら（implementer に checkout / switch の deny が付いたら）、例外の理由を見直す。
+    """
+    for _, res in _results([command], role="implementer"):
+        assert res["decision"] != "deny", (command, res)
