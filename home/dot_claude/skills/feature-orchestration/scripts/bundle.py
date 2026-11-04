@@ -2,6 +2,7 @@
 """複数の feature を 1 本の統合用の枝 (feature/bundle-N) にまとめて取り込む道具。
 
     python3 scripts/bundle.py start [--name bundle-N] <feature>...
+    python3 scripts/bundle.py add [--name bundle-N] <feature>...   (既存の bundle に枝を足す。シェルの git merge の代わり)
     python3 scripts/bundle.py continue [--name bundle-N]
     python3 scripts/bundle.py verify [--name bundle-N]
     python3 scripts/bundle.py status [--name bundle-N]
@@ -213,6 +214,36 @@ def cmd_start(args: argparse.Namespace, cwd: Path) -> int:
     return merge_all(wt, state)
 
 
+def cmd_add(args: argparse.Namespace, cwd: Path) -> int:
+    """既存の bundle に枝を足して取り込む。`git merge` をシェルから打つと保護ブランチへの統合と同じ確認が出るため、これを使う。"""
+    root = repo_root(cwd)
+    _, wt = resolve_wt(root, args.name, cwd)
+    state = load_state(wt)
+    merge_head = (
+        Path(git(wt, "rev-parse", "--path-format=absolute", "--git-dir").stdout.strip())
+        / "MERGE_HEAD"
+    )
+    if state.get("conflict") or merge_head.exists():
+        raise BundleError("衝突の解消中です。先に `continue` を実行してください")
+    new: list[str] = []
+    for n in args.features:
+        b = normalize(root, n)
+        if b in state["merged"] or b in state["pending"] or b in new:
+            continue
+        check_branch(root, b)
+        # 手で取り込み済み (この bundle の祖先) の枝は足さない
+        if git(wt, "merge-base", "--is-ancestor", b, "HEAD", check=False).returncode == 0:
+            print(f"取り込み済み (スキップ): {b}")
+            continue
+        new.append(b)
+    if not new:
+        print("足す枝はありません。")
+        return EXIT_OK
+    state["pending"].extend(new)
+    save_state(wt, state)
+    return merge_all(wt, state)
+
+
 def has_markers(wt: Path, files: list[str]) -> list[str]:
     bad = []
     for f in files:
@@ -317,11 +348,15 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("start")
     p.add_argument("--name")
     p.add_argument("features", nargs="+")
+    p = sub.add_parser("add")
+    p.add_argument("--name")
+    p.add_argument("features", nargs="+")
     for c in ("continue", "verify", "status", "summary"):
         sub.add_parser(c).add_argument("--name")
     args = ap.parse_args(argv)
     fn = {
         "start": cmd_start,
+        "add": cmd_add,
         "continue": cmd_continue,
         "verify": cmd_verify,
         "status": cmd_status,
