@@ -183,6 +183,10 @@ _PI_TESTS = (
     "test_pi_pending_command",
     "test_btw_view",
     "test_pi_todo_view",
+    "test_work_core",
+    "test_work_store",
+    "test_work_digest",
+    "test_work_journal",
 )
 _OC_TESTS = (
     "test_generate_opencode*",
@@ -392,6 +396,11 @@ RULES: tuple[Rule, ...] = (
     Rule("away-shift", ("home/dot_claude/skills/away-shift/**",), ("test_away_guard",)),
     Rule(
         "experiment-loop", ("home/dot_claude/skills/experiment-loop/scripts/*.py",), ("test_exp",)
+    ),
+    Rule(
+        "review-loop",
+        ("home/dot_claude/skills/review-loop/scripts/*.py",),
+        ("test_review_converge",),
     ),
     Rule(
         "models の道具",

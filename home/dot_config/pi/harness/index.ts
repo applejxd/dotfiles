@@ -46,6 +46,7 @@ import { registerPendingCommand } from "./pending-command.ts";
 import { buildBoard, renderBoard } from "./board.ts";
 import { collectBoardInput } from "./board-collect.ts";
 import { registerAutoCheckpoint } from "./autocheckpoint.ts";
+import { registerJournal } from "./work/journal.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でフルガードが抜けたとき、組み込みが同じ名前で戻って
@@ -826,6 +827,8 @@ export default async function (pi: ExtensionAPI) {
 	registerAutoCheckpoint(pi, { child: CHILD, compactInstructions: COMPACT_INSTRUCTIONS });
 	// 自動で出る通知 (子・ジョブの完了・todo の続き・保存と再開) の表示を畳む (表示だけ。PI_QUIET_NOTICES=0 で無効)
 	if (!CHILD) registerQuietNotices(pi);
+	// 作業の観測ログ (追記のみ。挙動は変えない。PI_JOURNAL=0 で無効)。todo・autocheckpoint の後に登録して settle の entries を見る
+	registerJournal(pi, { child: CHILD });
 
 	const agents: Record<string, any> = rules.agents ?? {};
 	if (!CHILD && supportsChildTasks() && roleTools.includes("task") && Object.keys(agents).length > 0) registerTask(pi, agents);
