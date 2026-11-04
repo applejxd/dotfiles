@@ -57,6 +57,7 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "unguarded.ts", harness / "unguarded.ts")
     shutil.copy2(HARNESS_SRC.parent / "session-tmp.ts", harness / "session-tmp.ts")
     shutil.copy2(HARNESS_SRC.parent / "model-choice.ts", harness / "model-choice.ts")
+    shutil.copy2(HARNESS_SRC.parent / "autocheckpoint.ts", harness / "autocheckpoint.ts")
     shutil.copy2(HARNESS_SRC.parent / "pending-store.ts", harness / "pending-store.ts")
     for name in (
         "pending-command.ts",

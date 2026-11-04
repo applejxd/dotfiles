@@ -44,6 +44,7 @@ import { reconcilePending } from "./pending-store.ts";
 import { registerPendingCommand } from "./pending-command.ts";
 import { buildBoard, renderBoard } from "./board.ts";
 import { collectBoardInput } from "./board-collect.ts";
+import { registerAutoCheckpoint } from "./autocheckpoint.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でフルガードが抜けたとき、組み込みが同じ名前で戻って
@@ -804,6 +805,8 @@ export default async function (pi: ExtensionAPI) {
 	// ローカル PR ビューアの道具 (pr_summary・pr_comments) と、次の入力の前の注入。役割に道具があり、子でないときだけ登録する
 	// see docs/spec/pr-viewer.md
 	registerPr(pi, { Type, prefix: PREFIX, child: CHILD, hasTool: (name) => roleTools.includes(name) });
+	// 文脈の使用率による自動の保存と圧縮 (親のみ。PI_AUTOCHECKPOINT=0 で無効)
+	registerAutoCheckpoint(pi, { child: CHILD, compactInstructions: COMPACT_INSTRUCTIONS });
 
 	const agents: Record<string, any> = rules.agents ?? {};
 	if (!CHILD && supportsChildTasks() && roleTools.includes("task") && Object.keys(agents).length > 0) registerTask(pi, agents);
