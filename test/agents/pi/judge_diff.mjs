@@ -69,8 +69,15 @@ export const applyLedger = (diffs, ledger) => {
 		const row = d.cur ?? d.old;
 		const id = ident(row);
 		const k = ledgerKey({ ...id, old: label(d.old), new: label(d.cur) });
-		if (index.has(k)) used.add(k);
-		else unlisted.push(d);
+		if (index.has(k)) {
+			used.add(k);
+			// 実際に強さが下がる差 (relax) は、台帳の class の自己申告 (neutral・false-positive など) に依らず、承認者と理由が要る
+			const e = index.get(k);
+			const filled = (v) => typeof v === "string" && v.trim() !== "";
+			if (d.cls === "relax" && !(filled(e.approver) && filled(e.reason))) {
+				unlisted.push({ ...d, rejected: "緩和 (relax) には台帳の承認者と理由が要る" });
+			}
+		} else unlisted.push(d);
 	}
 	return { unlisted, stale: ledger.filter((e) => !used.has(ledgerKey(e))) };
 };
@@ -79,6 +86,7 @@ const describeDiff = (d) => {
 	const row = d.cur ?? d.old;
 	return JSON.stringify({
 		class: d.cls,
+		...(d.rejected ? { rejected: d.rejected } : {}),
 		kind: row.kind,
 		id: row.id,
 		role: row.role,
