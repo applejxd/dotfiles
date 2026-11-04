@@ -610,10 +610,11 @@ def test_task_input_isolation_is_validated(env):
     proc = _rounds(env, [bad])
     # "other" はスキーマ (リテラルの Union) で弾かれ、残りの 4 つが parseTaskInput の拒否
     assert proc.stdout.count("invalid guarded_task input") == len(bad) - 1, proc.stdout
+    # pi の版でスキーマ検証の文言が違う（1.4: must be equal to constant / 1.5: expected "worktree"）。どちらでも通す
     assert (
         "isolation: must be equal to constant" in proc.stdout
-        and '"isolation": "other"' in proc.stdout
-    ), proc.stdout
+        or 'isolation: expected "worktree"' in proc.stdout
+    ) and '"isolation": "other"' in proc.stdout, proc.stdout
 
 
 def test_task_isolation_is_refused_when_it_cannot_be_set_up(env):
