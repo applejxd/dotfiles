@@ -148,8 +148,9 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 `[bash] deny` の `git worktree remove` は、**pi の `implementer`（親）と `worker` だけ**、単純な 1 行の force なしだけを許可する
 （[CHG-0062](../../change-history/0062.md)）。force 付きは deny のまま（確認つきで通す案は、解析の取りこぼしが続いたので採らなかった）。`explorer`・`reader`・`committer`・`orchestrator` は deny のまま。
 
-- **設定**: `[pi.profiles.implementer]` と `[pi.profiles.worker]` の `deny_except = ["git worktree remove", "git restore --staged"]`（後者は[次の節](#git-restore---staged-の例外)）。許す語は判定器（`decide.ts` の
-  `DENY_EXCEPT_WORDS`）が「`git worktree remove`」に固定し、未知の語・配列でない値は `source: error` の deny。`[bash] deny` と `[bash.deny_guide]` は変えない
+- **設定**: `[pi.profiles.implementer]` と `[pi.profiles.worker]` の `deny_except` に `git worktree remove`。implementer にはさらに `git restore --staged` を足す
+  （[次の節](#git-restore---staged-の例外)。worker には足さない）。許す語は判定器（`decide.ts` の
+  `DENY_EXCEPT_WORDS`）が「`git worktree remove`」「`git restore --staged`」の 2 語に固定し、未知の語・配列でない値は `source: error` の deny。`[bash] deny` と `[bash.deny_guide]` は変えない
   （Claude Code・Copilot・OpenCode の生成物は同じ。pi だけの変更）
 - **deny を外す条件**（`judge/bash.ts` の `worktreeRemoveExcepted`、共通の deny を引く前）: `[pi.confirm] local_git` が真で、役割が例外に載っていること。
   **元のコマンド文字列の全体**が、正規表現 `^git worktree remove(?: [A-Za-z0-9_./@%+=:,][A-Za-z0-9_./@%+=:,-]*)+$` に一致すること
@@ -176,20 +177,24 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 
 ## git restore --staged の例外
 
-`[bash] deny` の `git restore` は、**pi の `implementer`（親）と `worker` だけ**、**index だけを戻す厳密な 1 形式**を許可する
-（[CHG-0062](../../change-history/0062.md)）。作業ツリーを変える形は、従来どおり deny のまま。`explorer`・`reader`・`committer`・`orchestrator` は deny のまま。
+`[bash] deny` の `git restore` は、**pi の `implementer`（親）だけ**、**index だけを戻す厳密な 1 形式**を許可する
+（[CHG-0062](../../change-history/0062.md)）。作業ツリーを変える形は、従来どおり deny のまま。`worker`・`explorer`・`reader`・`committer`・`orchestrator` は deny のまま。
 
-- **設定**: 上の節と同じ `deny_except` に語 `git restore --staged` を足す（判定器の `DENY_EXCEPT_WORDS` が許す語を固定）。`[bash] deny`・`[bash.deny_guide]` は変えない。
-  worker は `shell_deny` にも `git restore` があるので、例外に当たったときは `shell_deny` の `git restore` も外す（他の語は残る）
+- **worker を対象にしない理由**: worker は `git add`・`git commit`・`git checkout`・`git switch`・`git restore` がすべて deny で、unstage の需要が無い。
+  また hook を起動しうる操作を持たないので、この例外が worker に新しい能力（下の限界）を与えてしまう
+- **設定**: 上の節の `deny_except` に、implementer だけ語 `git restore --staged` を足す（判定器の `DENY_EXCEPT_WORDS` が許す語を固定。役割の `deny_except` に語があるときだけ効く）。`[bash] deny`・`[bash.deny_guide]` は変えない。
+  `shell_deny` にも `git restore` がある役割が将来載ったときのため、例外に当たったときは `shell_deny` の `git restore` も外す（他の語は残る）
 - **許可する形**（`judge/bash.ts` の `restoreStagedExcepted`、`[pi.confirm] local_git` が真のときだけ）: **元のコマンド全体**が正規表現
   `^git restore (?:--staged|-S)(?: --)?((?: [A-Za-z0-9_./@%+=:,][A-Za-z0-9_./@%+=:,-]*)+)$` に一致し、パスが 1〜50 件で、どのパスも `..` を含まないこと。
-  `.` 単独は許す（index 全体を戻すだけで、作業ツリーは変わらない）。解析器の解釈は見ない（fail closed）
+  `.` 単独は許す（サブディレクトリで実行したときは index 全体でなく cwd 以下が対象。作業ツリーは変わらない）。解析器の解釈は見ない（fail closed）
 - **許可しない形（従来の判定のまま）**: `--worktree`/`-W`（`-SW` を含む）・`--source`/`-s`・`-p`/`--patch`・`--overlay`/`--no-overlay`・`--ours`/`--theirs`・`--merge`・
   `--ignore-unmerged`・`--pathspec-from-file`・`--pathspec-file-nul`・`--staged` の省略形・フラグを後ろに置く形・`--` を 2 回・パス無し・`git restore .` と `git restore a`（作業ツリーを変える）・
   `..` を含むパス・空白/クォート/展開/グロブ/リダイレクト/`~`・前置き（`env`・`sudo`・`cd … &&`・`git -C`）・複合（`;` `&&` `|`）・ssh 経由・前後や連続の空白・51 件以上。
   大文字小文字違い（`GIT RESTORE`）は、従来から deny に当たらず役割の既定（ask）。例外でも変わらない
-- **緩めたあとの判定**: 他の規則に当たらない許可形は `source: default`（親・worker は ask、bypass で allow、`pis` の境界の中で allow）。bypass でも、通るのは許可形だけ
-- **限界**: 保証は「うっかり防止」。index に積んだ内容（ステージ）は失うが、作業ツリーのファイルは残る。`git reset`・`git checkout --`・`git stash` は変えない。
+- **緩めたあとの判定**: 他の規則に当たらない許可形は `source: default`（親は ask、bypass で allow、`pis` の境界の中で allow）。bypass でも、通るのは許可形だけ
+- **限界**: 保証は「うっかり防止」。**repo に `post-checkout` hook があると、許可した形でも git が最後にそれを実行する**（`builtin/checkout.c` の `checkout_paths()` が `post_checkout_hook` を呼ぶ）。
+  implementer は `git checkout`・`git switch`・`git_commit` で既に repo の hook を動かせるので、新しい境界ではない（worker に許さないのはこのため）。
+  index に積んだ内容（ステージ）は失うが、作業ツリーのファイルは残る。`git reset`・`git checkout --`・`git stash` は変えない。
   git の alias・外部スクリプト・動的に組み立てた文字列は見ない。pi だけの変更（Claude Code・OpenCode の生成物は同じ）。反映には `chezmoi apply` と pi の再起動が要る
 - **試験**: `test_pi_git_restore_staged.py`
 
@@ -260,7 +265,7 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 
 | 役割 | `tools` | `default` | ほか | 使うもの |
 | --- | --- | --- | --- | --- |
-| `implementer` | 7 つのツール・`task`・`todo`・`ask`・`mcp__*` | ask | `deny_except` に `git worktree remove`（force なしを許可。[例外](#git-worktree-remove-の例外)）。`shell_deny` は git の状態を変える操作など（`git flow`・`git-flow` の拒否は [CHG-0050](../../change/0050-slim-guarded-action.md) で撤去） | 親（主エージェント） |
+| `implementer` | 7 つのツール・`task`・`todo`・`ask`・`mcp__*` | ask | `deny_except` に `git worktree remove`（force なしを許可。[例外](#git-worktree-remove-の例外)）と `git restore --staged`（[例外](#git-restore---staged-の例外)）。`shell_deny` は git の状態を変える操作など（`git flow`・`git-flow` の拒否は [CHG-0050](../../change/0050-slim-guarded-action.md) で撤去） | 親（主エージェント） |
 | `reader` | read・grep・find・ls | deny | — | 利用者が `pis --role reader` で選ぶ読み取り専用の親。子の `plan` 役も使う（`[pi.agents.plan]`。bash を持たないので、`skill_scripts` の許可が通らない）。harness の読み取り専用の子の一覧 `READ_ONLY_CHILD_PROFILES` に含む（`/btw` の入口と、計画モードの間に起動できる子）。bash を持たない役割の試験にも使う |
 | `explorer` | `reader` + bash | deny | `shell_allow` に `wc` と読み取り専用の git（`status` / `diff` / `log` / `show` / `ls-files`） | 子の `explore` / `review` |
 | `committer` | bash・read・grep・find・ls | deny | `shell_allow` に `git status` / `git diff` / `git log` など。`shell_deny` に git の状態を変える操作 | 子の `commit` |

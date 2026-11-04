@@ -1,5 +1,6 @@
-"""pi の implementer / worker だけ、``git restore --staged <パス>...`` の厳密な 1 形式を許可する (``deny_except``)。
+"""pi の implementer だけ、``git restore --staged <パス>...`` の厳密な 1 形式を許可する (``deny_except``)。
 
+- worker は対象外 (``git add`` / ``git commit`` などを持たず、unstage の需要も無い)。許可形も全モードで deny。
 - 許可するのは、index だけを戻す形 (作業ツリーを変えない)。元のコマンド全体が 1 形式に一致するときだけ。
 - 作業ツリーを変えうる形・オプション付き・前置き・複合・引用・展開・グロブ・リダイレクトは、従来の deny のまま。
 - 既定が deny の役割・``local_git`` を切った場合は deny。``git reset`` / ``git checkout --`` / ``git stash`` は変えない。
@@ -21,8 +22,8 @@ import generate as gen
 
 pytestmark = needs_node
 
-ALLOWED_ROLES = ["implementer", "worker"]
-DENIED_ROLES = ["explorer", "reader", "committer", "orchestrator"]
+ALLOWED_ROLES = ["implementer"]
+DENIED_ROLES = ["worker", "explorer", "reader", "committer", "orchestrator"]
 
 PLAIN = [
     "git restore --staged a.txt",
@@ -34,6 +35,8 @@ PLAIN = [
     "git restore --staged ./a",
     "git restore --staged /abs/a",
     "git restore --staged a/b.c_d-e@f%g+h=i:j,k",
+    "git restore --staged :/",
+    "git restore --staged @",
     "git restore --staged " + " ".join(f"f{i}" for i in range(50)),
 ]
 
@@ -48,6 +51,22 @@ DENIED = [
     "git restore --staged --worktree",
     "git restore -S -W a",
     "git restore -SW a",
+    "git restore -WS a",
+    "git restore --stag a",
+    "git restore --staged=x a",
+    "git restore --no-staged a",
+    "git restore --work a",
+    "git restore --staged --work a",
+    "git restore --worktree",
+    "git restore --staged a\x00",
+    "git restore --staged a\x00b",
+    "git restore --staged a\r",
+    "git restore --staged a\rb",
+    "git restore --staged a\u00a0b",
+    "git restore --staged a\u2003b",
+    "git restore --staged\u3000a",
+    "git restore \uff0d\uff0dstaged a",
+    "git restore --staged a\u3000b",
     "git restore -W a",
     "git restore --worktree a",
     "git restore -s HEAD~1 --staged a",
@@ -237,14 +256,23 @@ def test_switching_local_git_off_disables_the_exception():
 
 def test_a_role_without_the_word_is_denied_even_if_others_have_it():
     common = copy.deepcopy(gen.pi_judge_data(load_common())["common"])
-    common["pi"]["profiles"]["worker"]["deny_except"] = ["git worktree remove"]
-    res = _judge([_bash("git restore --staged a", role="worker")], common=common)[0]
+    common["pi"]["profiles"]["implementer"]["deny_except"] = ["git worktree remove"]
+    res = _judge([_bash("git restore --staged a", role="implementer")], common=common)[0]
     assert res["decision"] == "deny", res
     # worktree remove の例外は、もう一方の語を持たなくても働く
     assert (
-        _judge([_bash("git worktree remove ../wt", role="worker")], common=common)[0]["decision"]
+        _judge([_bash("git worktree remove ../wt", role="implementer")], common=common)[0][
+            "decision"
+        ]
         != "deny"
     )
+
+
+def test_only_the_implementer_has_the_word():
+    profiles = load_common()["pi"]["profiles"]
+    assert [
+        n for n, p in profiles.items() if "git restore --staged" in p.get("deny_except", [])
+    ] == ["implementer"]
 
 
 def test_the_common_deny_still_has_it_and_other_clis_are_unchanged():

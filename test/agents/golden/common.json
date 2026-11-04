@@ -1538,8 +1538,7 @@
    "worker": {
     "default": "ask",
     "deny_except": [
-     "git worktree remove",
-     "git restore --staged"
+     "git worktree remove"
     ],
     "shell_deny": [
      "git add",
