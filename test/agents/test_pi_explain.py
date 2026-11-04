@@ -284,8 +284,11 @@ def test_long_list_folds_around_the_hit_and_never_hides_without_a_hit(table):
     assert any(re.search(r"\b4\. ", x) for x in hit) and any(re.search(r"\b6\. ", x) for x in hit)
     assert not any(re.search(r"\b(1|2|3|7|8|9|10)\. ", x) for x in hit)
     assert "  … 3 手順を省略 (原文で確認)" in hit and "  … 4 手順を省略 (原文で確認)" in hit
-    # 当たりが無いときは隠さずに全部出す
-    assert "省略" not in v["fold_nohit"] and len(v["fold_nohit"].split("\n")) >= 12
+    # 当たりが無いときは、自明な手順 (echo) だけを省略し、副作用の候補つきの git push は残す
+    nohit = v["fold_nohit"].split("\n")
+    assert any(re.search(r"\b5\. `git push`", x) for x in nohit) and not any(
+        re.search(r"\b(1|2|3|4|6|10)\. ", x) for x in nohit
+    )
     # 短いとき (6 手順以下) は折りたたまない
     assert "省略" not in v["fold_few"] and "1. " in v["fold_few"]
 
@@ -296,6 +299,65 @@ def test_fold_keeps_steps_with_side_effect_marks(table):
     assert any(re.search(r"\b2\. .*副作用の候補", x) for x in lines)
     assert any("← 確認の理由に当たった箇所" in x and re.search(r"\b9\. ", x) for x in lines)
     assert "  … 1 手順を省略 (原文で確認)" in lines and "  … 5 手順を省略 (原文で確認)" in lines
+
+
+HITMARK = "← 確認の理由に当たった箇所"
+
+
+def _omitted(text: str) -> list[int]:
+    return [int(m) for m in re.findall(r"… (\d+) 手順を省略", text)]
+
+
+def test_integration_confirm_uses_integration_verbs_as_hit(table):
+    v = table["view"]
+    body = v["real_integ"]
+    # 全文は常に出る。手順は 3 手順 + 省略の 1 行に減り、git merge に印が付き、cd が残る
+    assert "コマンド (全文):\ncd .tmp/worktrees/bundle-5 && git merge --no-edit feature/x" in body
+    assert v["real_steps"] >= 11 and sum(_omitted(body)) >= 10
+    lines = body.split("\n")
+    assert any(re.search(r"\b2\. .*git merge.*" + HITMARK, x) for x in lines)
+    assert any(re.search(r"\b1\. 作業場所を", x) for x in lines)
+    assert len([x for x in lines if re.match(r"  \d+\. ", x)]) <= 4
+    # 統合以外の ask では統合の動詞を hit にしない (印は付かない)
+    assert HITMARK not in v["real_ask"]
+    assert {
+        "git merge",
+        "git cherry-pick",
+        "git pull",
+        "git am",
+        "git rebase",
+        "git reset",
+        "git update-ref",
+    } <= set(v["integ_hit"])
+    assert any(x.startswith("git flow") and "finish" in x for x in v["integ_hit"])
+
+
+def test_long_list_without_hit_omits_only_obvious_read_steps(table):
+    v = table["view"]
+    # 読み取り・整形だけの 8 手順 (hit なし) は省略されるが、残りが 0 になるときは全部出す
+    assert "省略" not in v["q_readonly"] and "8. " in v["q_readonly"]
+    assert "省略" not in v["q_all_quiet_but_one"]
+    # 危険な手順を 1 つ混ぜると、それは残り、読み取りは省略される
+    for k, pat in [
+        ("q_rm", r"9\. `rm -rf x`"),
+        ("q_curl", r"9\. `curl"),
+        ("q_push", r"9\. `git push`"),
+        ("q_branch_d", r"9\. `git branch -D"),
+    ]:
+        assert re.search(pat, v[k]) and 8 in _omitted(v[k]), k
+    assert re.search(r"10\. `sh`", v["q_curl"])
+    # cd は省略しない
+    assert re.search(r"1\. 作業場所を", v["q_cd"])
+    # リダイレクト・書き込みの印がある手順は、表にあるコマンドでも残る
+    assert re.search(r"7\. `tail -2 f`.*副作用の候補", v["q_tailw"]) and 6 in _omitted(v["q_tailw"])
+    assert re.search(r"7\. `sort -o g f`", v["q_sorto"]) and 6 in _omitted(v["q_sorto"])
+    # 捨てるだけのリダイレクト (>/dev/null 2>&1) は省略してよく、あとの rm は残る
+    assert re.search(r"10\. `rm x`", v["q_dev_null"]) and 9 in _omitted(v["q_dev_null"])
+    # $(…) の入れ子: 中に省略できない手順があれば親も残す。全部読み取りなら親と一緒に省略する
+    assert 'echo "$(curl' in v["q_subst_bad"] and "10. コマンド置換" in v["q_subst_bad"]
+    assert 10 in _omitted(v["q_subst_ok"]) and re.search(r"11\. `rm x`", v["q_subst_ok"])
+    # 6 手順以下は折りたたまない
+    assert "省略" not in v["q_few"] and "省略" not in v["q_few_ro"]
 
 
 def test_must_confirm_body_places_list_below_the_raw_command(table):

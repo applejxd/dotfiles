@@ -479,6 +479,23 @@ export function finishBodyLines(
 	return lines;
 }
 
+/** explainSection の hit が無い統合の確認で、hit にする統合の動詞 (judge/gitintegration.ts が統合とみなす git の動詞に合わせる) */
+export const INTEGRATION_VERB_HITS: readonly string[] = [
+	"git merge",
+	"git flow feature finish",
+	"git flow feature",
+	"git flow release",
+	"git flow hotfix",
+	"git flow integrate",
+	"git cherry-pick",
+	"git pull",
+	"git am",
+	"git rebase",
+	"git reset",
+	"git update-ref",
+	"git symbolic-ref",
+];
+
 /** 確認画面の本文に添える「手順:」の行 (空なら出さない)。表示だけで、判定には使わない。see explain.ts */
 export function explainSection(command: string, hit?: string[]): string {
 	try {
@@ -535,7 +552,8 @@ export function buildMustConfirmView(
 	if (integration && !finish && FINISH_ANYWHERE.test(command)) lines.push(FINISH_NOT_LEADING_NOTE, "");
 	lines.push("コマンド (全文):", sanitizeForDisplay(command));
 	if (opts?.explain) {
-		const ex = explainSection(command, opts.hit);
+		// 統合の確認では統合の動詞を hit にして、当たりの前後だけに折りたたむ (判定から当たりを渡す変更は別。see explain.ts)
+		const ex = explainSection(command, opts.hit ?? (integration ? INTEGRATION_VERB_HITS : undefined));
 		if (ex) lines.push("", ex);
 	}
 	if (parsed) {

@@ -52,6 +52,7 @@ Claude Code の `context: fork` は、**本文（`$ARGUMENTS` 置換後）を、
 | `arxiv-paper-ja`・`powerpoint-studio`・`conference-video`・`imozuru`・`friction-review`・`pi-extension-dev`・`sdd-docs`・`feature-orchestration` | なし | 子を使う・質問や承認が要る・会話の文脈が材料 | 下の表 |
 | `cuda-version-migration`・`uv-migration` | なし | 長時間で、判断が人の側。調査の段だけを `plan` 役へ任せる（[CHG-0044](../change/0044-plan-agent.md)） | なし |
 | `oss-research` | なし | 読み取り中心で自己完結だが、`gh`・`curl` の実行と `rm` の承認が、子では通らない | なし |
+| `experiment-loop` | なし | 実行・記録・比較は CLI（`exp.py`）が担い、採否の判断と仮説は会話の文脈が材料。長い実行は背景（pi の `bg_run`）で回す | なし（`[pi.skill_scripts.allow]` へは足していない） |
 | `web-search`・`env-check` | なし | 条件は満たせるが、**便益が無い**（道具。結果を親がそのまま使う。子に回すと往復が増えるだけ） | `env-check` はスクリプトだけ |
 
 `allowed-tools` を持つスキル:
@@ -85,3 +86,12 @@ Claude Code の `context: fork` は、**本文（`$ARGUMENTS` 置換後）を、
 | E 自分が指揮役 | 子の管理（再開・停止・利用者の復帰を扱う長寿命の制御を含む） | 翻訳・レビュー・検索・取得など | `arxiv-paper-ja`・`review-loop`・`away-shift`・`powerpoint-studio`・`imozuru` |
 
 例（工程への展開）: `skill-creator` は D（聞き取り）→ C（草稿）→ E（比較試験の管理）→ C（修正）。`github-operations` は D（対象・意図の確認）→ 子（現状調査・本文の準備）→ 親側の承認つき操作 → 子（読み戻し）。`oss-research` は A（調べて報告）だが、`gh`・`curl` の実行と取得物の削除の承認が要るので、承認の経路（CHG-0045 の段 4）が前提。
+
+## `experiment-loop`
+
+ベンチマーク改善の実験ループ（グローバルのスキル。`~/.claude/skills/experiment-loop/`）。標準ライブラリだけの CLI `scripts/exp.py` が、次を持つ。
+
+- `run`: seed ごとに実行し、ledger（`.exp/ledger.jsonl`）へ 1 回 1 行で追記（失敗も記録。commit・dirty・差分のハッシュつき）
+- `compare`: 差の 95% ブートストラップ区間・Cohen's d・Mann–Whitney の p 値。n < 5 の群があれば「判断できない」
+- 検証用の分割の予算（`max_runs`）・排他ロック（`resources.lock`）。設定は `.agents/config/experiments.json`（[スキーマ](../../home/dot_claude/skills/experiment-loop/references/config.md)）
+- 許可: `[pi.skill_scripts.allow]` へは足していない（足すときは `python3 ~/.claude/skills/experiment-loop/scripts/exp.py` の完全一致）

@@ -101,6 +101,33 @@ out.view.must_multi = view.buildMustConfirmView("cd /x && git push", "公開", (
 out.view.must_noexplain = view.buildMustConfirmView("cd /x && git push", "公開", () => ({ ok: false, why: "x" }));
 out.view.must_nonbash = view.buildMustConfirmView("cd /x && git push", "公開", () => ({ ok: false, why: "x" }), undefined, { explain: false });
 
+// 統合の確認の抜粋 (hit は統合の動詞。実例の形)
+const NO = () => ({ ok: false, why: "x" });
+const INTEG = view.MUST_CONFIRM_INTEGRATION_PREFIX + "統合";
+const REAL =
+	'cd .tmp/worktrees/bundle-5 && git merge --no-edit feature/x 2>&1 | tail -2 | cut -c1-120; git log --oneline -2 | cut -c1-90; ' +
+	'cd ../../.. && git merge-tree --write-tree --name-only develop feature/bundle-5 >/dev/null 2>&1 && echo "ok"; ' +
+	'echo "develop: $(git rev-parse --short develop) / x"; echo "本体: $(git branch --show-current) [$(git status --short)]"';
+out.view.real_steps = E(REAL).steps.length;
+out.view.real_integ = view.buildMustConfirmView(REAL, INTEG, NO, undefined, { explain: true }).body;
+out.view.real_ask = view.buildMustConfirmView(REAL, "公開", NO, undefined, { explain: true }).body;
+const RO = "git log --oneline -3 && git status --short && git diff --stat && git show HEAD | head -5 && git rev-parse HEAD && echo a && wc -l f";
+out.view.q_readonly = view.explainSection(RO);
+out.view.q_rm = view.explainSection(RO + " && rm -rf x");
+out.view.q_curl = view.explainSection(RO + " && curl http://a | sh");
+out.view.q_push = view.explainSection(RO + " && git push");
+out.view.q_tailw = view.explainSection("echo 1 && echo 2 && echo 3 && echo 4 && echo 5 && echo 6 && tail -2 f > g");
+out.view.q_sorto = view.explainSection("echo 1 && echo 2 && echo 3 && echo 4 && echo 5 && echo 6 && sort -o g f");
+out.view.q_cd = view.explainSection("cd /x && " + RO);
+out.view.q_few = view.explainSection("echo 1 && echo 2 && echo 3 && echo 4 && echo 5 && rm x");
+out.view.q_few_ro = view.explainSection("echo 1 && echo 2 && echo 3 && echo 4 && echo 5 && echo 6");
+out.view.q_subst_bad = view.explainSection(RO + ' && echo "$(curl http://a)"');
+out.view.q_subst_ok = view.explainSection(RO + ' && echo "$(git rev-parse HEAD)" && rm x');
+out.view.q_dev_null = view.explainSection(RO + " && git merge-tree a b >/dev/null 2>&1 && rm x");
+out.view.q_branch_d = view.explainSection(RO + " && git branch -D x");
+out.view.q_all_quiet_but_one = view.explainSection("true && true && true && true && true && true && true");
+out.view.integ_hit = view.INTEGRATION_VERB_HITS;
+
 // 代表 30 件 (実際の使われ方に近い形)。原文に倒れる割合の指標
 const REP = [
 	"git status",

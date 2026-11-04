@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { sanitizeForDisplay } from "./confirm-view.ts";
 import { patternMatches } from "./judge/normalize.ts";
 
-export type Step = { no: number; text: string; raw: string; marks: string[]; hit: boolean; level: number };
+export type Step = { no: number; text: string; raw: string; marks: string[]; hit: boolean; level: number; quiet?: boolean };
 
 /** 手順の数の上限 (入れ子を含む全体) */
 export const MAX_STEPS = 16;
@@ -20,7 +20,7 @@ export const MAX_STEP_CHARS = 200;
 export const MAX_LEVEL = 3;
 const MAX_CMD_CHARS = 100;
 
-type Part = { text: string; raw: string; marks: string[]; level: number; hit: boolean };
+type Part = { text: string; raw: string; marks: string[]; level: number; hit: boolean; quiet?: boolean };
 type Doc = { quoted: boolean; body: string };
 type W = { raw: string; value: string };
 type R = { fd: string; op: string; target: W | null; dup: boolean; doc?: Doc };
@@ -225,8 +225,29 @@ function hitSimple(ctx: Ctx, ...raws: string[]): boolean {
 	);
 }
 
-function part(text: string, raw: string, level: number, marks: string[] = [], hit = false): Part {
-	return { text, raw, marks, level, hit };
+function part(text: string, raw: string, level: number, marks: string[] = [], hit = false, quiet = false): Part {
+	return { text, raw, marks, level, hit, quiet };
+}
+
+// 自明な読み取り・整形の手順 (hit が無い長い一覧で省略してよい)。固定の表にあるものだけ
+const QUIET_CMDS = new Set(["echo", "printf", "cut", "tail", "head", "wc", "sort", "uniq", "tr", "true"]);
+const QUIET_GIT = new Set(["log", "status", "diff", "show", "rev-parse", "merge-tree", "ls-files", "for-each-ref"]);
+
+/** コマンド語が省略してよい表にあるか (marks・リダイレクトは呼び出し側で見る) */
+function quietWords(vals: string[]): boolean {
+	const cmd = vals[0] ?? "";
+	const rest = vals.slice(1);
+	if (rest.some((v) => v === "--output" || v.startsWith("--output="))) return false;
+	if (cmd === "sort") return !rest.some((v) => v === "-o" || /^-[A-Za-z]*o/.test(v));
+	if (QUIET_CMDS.has(cmd)) return true;
+	if (cmd !== "git") return false;
+	const sub = vals[1] ?? "";
+	const args = vals.slice(2);
+	if (QUIET_GIT.has(sub)) return true;
+	if (sub === "branch") return args.length > 0 && args.every((v) => v === "--list" || v === "--show-current");
+	if (sub === "worktree") return args[0] === "list";
+	if (sub === "config") return args[0] === "--get";
+	return false;
 }
 
 /** 解析できない部分 (原文のまま 1 手順) */
@@ -583,7 +604,9 @@ function explainCall(c: Call, src: Src, level: number, ctx: Ctx, pre: string[]):
 	if (extras.length > 0) text += `し、${extras.join("、")}`;
 	if (c.conn === "||") text = `前が失敗したときだけ: ${text}`;
 	const hit = hitSimple(ctx, c.raw, raws.join(" "));
-	return [part(text, c.raw, level, marks, hit), ...children];
+	// リダイレクトは、捨てる・複製・入力だけなら (印が付かない)、省略してよい。ヒアドキュメントがあれば残す
+	const quiet = W.length > 0 && marks.length === 0 && c.after !== "&" && !c.redirs.some((r) => r.doc) && quietWords(vals);
+	return [part(text, c.raw, level, marks, hit, quiet), ...children];
 }
 
 // 表示用: 制御文字などを可視化し、改行・タブを 1 行に畳み、長さを切る
@@ -616,6 +639,7 @@ export function explainCommand(cmd: string, hit?: string[]): { steps: Step[]; co
 			marks: p.marks.map((m) => fit(m)),
 			hit: ctx.hits.length > 0 && p.hit,
 			level: p.level,
+			quiet: p.quiet === true,
 		}));
 		if (extra > 0) steps.push({ no: steps.length + 1, text: `ほか ${extra} 手順`, raw: "", marks: [], hit: false, level: 0 });
 		return { steps, complete: ctx.complete };
@@ -628,11 +652,31 @@ export function explainCommand(cmd: string, hit?: string[]): { steps: Step[]; co
 export const FOLD_OVER = 6;
 
 /**
+ * 当たりが無い長い一覧: 自明な読み取り・整形の手順 (最上位で、入れ子の中も全部そうなもの) だけを省略する。
+ * 入れ子の中に省略できない手順があれば親を残す。残りが 0 になるときは全部出す
+ */
+function quietMask(steps: Step[]): boolean[] {
+	const show = steps.map(() => true);
+	for (let i = 0; i < steps.length; i++) {
+		if (steps[i].level !== 0) continue;
+		let j = i + 1;
+		while (j < steps.length && steps[j].level > 0) j++;
+		const group = steps.slice(i, j);
+		if (group.every((s) => s.quiet === true && s.marks.length === 0 && !s.hit && s.raw !== "")) {
+			for (let k = i; k < j; k++) show[k] = false;
+		}
+		i = j - 1;
+	}
+	return show.some((v) => v) ? show : steps.map(() => true);
+}
+
+/**
  * 表示する手順の印。折りたたむとき、当たった手順・その前後 1 手順・副作用の候補つきの手順・「ほか N 手順」は残し、
  * ほかを省略する (原文は確認画面に全文がある)。当たりが無いときは全部出す (隠さない)
  */
 export function foldMask(steps: Step[]): boolean[] {
-	if (steps.length <= FOLD_OVER || !steps.some((s) => s.hit)) return steps.map(() => true);
+	if (steps.length <= FOLD_OVER) return steps.map(() => true);
+	if (!steps.some((s) => s.hit)) return quietMask(steps);
 	return steps.map((s, i) => s.hit || s.marks.length > 0 || s.raw === "" || !!steps[i - 1]?.hit || !!steps[i + 1]?.hit);
 }
 

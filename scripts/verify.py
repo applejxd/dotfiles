@@ -384,6 +384,9 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule("away-shift", ("home/dot_claude/skills/away-shift/**",), ("test_away_guard",)),
     Rule(
+        "experiment-loop", ("home/dot_claude/skills/experiment-loop/scripts/*.py",), ("test_exp",)
+    ),
+    Rule(
         "models の道具",
         ("scripts/models.py",),
         ("test_models_tool", "test_pi_model_catalog"),
@@ -413,6 +416,11 @@ RULES: tuple[Rule, ...] = (
     Rule("統合用の枝 (bundle)", ("scripts/bundle.py",), ("test_bundle",)),
     Rule("worktree の掃除", ("scripts/wt_clean.py",), ("test_wt_clean",)),
     Rule("マージ待ちの一覧", ("scripts/prs.py",), ("test_prs",)),
+    Rule(
+        "オーケストレーションのプロファイル検出",
+        ("home/dot_claude/skills/feature-orchestration/scripts/*.py", "test/orch_fixtures.py"),
+        ("test_orch_profile",),
+    ),
     Rule(
         "ステージの空ファイル検査", ("scripts/check_staged_drop.py",), ("test_check_staged_drop",)
     ),
