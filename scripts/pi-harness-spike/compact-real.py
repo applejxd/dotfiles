@@ -91,6 +91,15 @@ try:
         "settle-snapshot.ts",
         "goal.ts",
         "goal-run.ts",
+        "driver-run.ts",
+        "driver.ts",
+        "adapt.ts",
+        "aimd.ts",
+        "digest.ts",
+        "sched.ts",
+        "strategy.ts",
+        "reserve.ts",
+        "overlap.ts",
     ):
         shutil.copy2(SRC / "work" / name, harness / "work" / name)
     rules = gen.build_pi_harness({}, load_common())

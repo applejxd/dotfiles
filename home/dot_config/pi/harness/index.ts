@@ -26,6 +26,7 @@ import { integrationConfig, tightenIntegration } from "./integration-gate.ts";
 import { createShadow } from "./judge/shadow.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
+import { registerDriverRun, registryRuntime } from "./work/driver-run.ts";
 import { createRedactor } from "./redact.ts";
 import { MAX_BODY_FILE_BYTES, MUST_CONFIRM_INTEGRATION_PREFIX, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, explainSection, outcomeReason, parseFinishTarget, parseMergeTree, parseNumstat, type BodyFileResult, type ConfirmRaw, type IntegrationFacts, type MergeCheck } from "./confirm-view.ts";
 import { gitSync } from "./gitrun.ts";
@@ -1388,6 +1389,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		if (baseline) mainBaselines.set(job, baseline);
 		return { job, model };
 	};
+	registerDriverRun(pi, { child: CHILD, runtime: registryRuntime, spawnChild, jobs, ownerRole: ROLE }); // PI_WORK_SCHEDULER=1 のときだけ動く (work/driver-run.ts)
 
 	// 隔離の job の結果の行。opt-in の間は、隔離しない worker にも「none」を出して誤認を防ぐ
 	const isolationLines = (job: Job): string[] => {

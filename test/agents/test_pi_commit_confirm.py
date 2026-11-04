@@ -458,6 +458,15 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
         "settle-snapshot.ts",
         "goal.ts",
         "goal-run.ts",
+        "driver-run.ts",
+        "driver.ts",
+        "adapt.ts",
+        "aimd.ts",
+        "digest.ts",
+        "sched.ts",
+        "strategy.ts",
+        "reserve.ts",
+        "overlap.ts",
     ):
         shutil.copy2(HARNESS_SRC.parent / "work" / name, harness / "work" / name)
     shutil.copy2(HARNESS_SRC.parent / "pending-store.ts", harness / "pending-store.ts")
