@@ -478,6 +478,19 @@ def test_fake_server_job_routes() -> None:
     )
 
 
+def test_list_hides_included_branches_with_a_toggle() -> None:
+    """含まれる枝 (includedIn): 既定で隠し、切り替えと件数を出す。DOM は textContent で作る（表示だけ）。"""
+    lst = (WEB / "view-list.js").read_text(encoding="utf-8")
+    assert "!p.includedIn" in lst and "showIncluded" in lst  # 既定で隠す
+    assert 'type: "checkbox"' in lst and "localStorage" in lst and "prv.showIncluded" in lst
+    assert "incN > 0" in lst and "件）" in lst  # 0 件のときは切り替えを出さない
+    assert re.search(r'text: "→ " \+ pr\.includedIn \+ " に含まれる"', lst)
+    pr = (WEB / "view-pr.js").read_text(encoding="utf-8")
+    assert "inc.textContent = " in pr and "me2.includedIn" in pr
+    for text in (lst, pr):
+        assert "innerHTML" not in text
+
+
 def test_create_api_and_screen_are_wired() -> None:
     """起票 (CHG-0062 段 B1): API ・画面の接続と、form を使わないこと。"""
     api = (WEB / "api.js").read_text(encoding="utf-8")

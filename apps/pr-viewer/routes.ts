@@ -50,6 +50,8 @@ export type PrSummary = {
 	behind: number;
 	/** 分岐後に PR の枝と統合先の両方が変更したファイル（衝突の可能性の目安。判定ではない） */
 	overlap: Overlap;
+	/** 先頭が、別の open な PR の枝に含まれているとき、その枝の名前（表示だけ。一覧で既定では隠す） */
+	includedIn?: string;
 };
 export type Overlap = { count: number; paths: string[]; truncated: boolean };
 type Commit = LastCommit;
@@ -177,6 +179,49 @@ async function markEmpty(repo: Repo, s: PrSummary, reviewed: Set<string> | null)
 	return (await isUntouchedBrief(repo, s.prKey, s.sourceOid)) ? { ...s, state: "empty" } : s;
 }
 
+type Holder = { branch: string; oid: string; atUnix: number };
+
+/** oid を含む feature/・bugfix/ の枝（自分を含む）。読めなかったら null（隠さない側に倒す）。 */
+async function holdersOf(repo: Repo, oid: string): Promise<Holder[] | null> {
+	if (!isOid(oid)) return null;
+	const r = await git(
+		repo,
+		["for-each-ref", "--contains", oid, "--format=%(refname)%00%(objectname)%00%(committerdate:unix)", "refs/heads/feature/", "refs/heads/bugfix/"],
+		true,
+	);
+	if (r.code !== 0) return null;
+	const out: Holder[] = [];
+	for (const line of r.out.split("\n")) {
+		const f = line.split("\0");
+		if (f.length < 3 || !f[0].startsWith("refs/heads/") || !isOid(f[1])) continue;
+		out.push({ branch: f[0].slice("refs/heads/".length), oid: f[1], atUnix: Number(f[2]) || 0 });
+	}
+	return out;
+}
+
+/**
+ * open な PR の枝の先頭が、別の open な PR の枝の先頭の祖先（別のコミット）なら、前者に includedIn を付ける。
+ * 表示だけの印。判定・権限には使わない。git が失敗した PR には付けない。
+ */
+async function markIncluded(repo: Repo, prs: PrSummary[]): Promise<PrSummary[]> {
+	const open = new Map<string, PrSummary>();
+	for (const p of prs) if (p.state === "open") open.set(p.branch, p);
+	const held = new Map<string, Holder[]>();
+	for (const p of open.values()) {
+		const hs = await holdersOf(repo, p.sourceOid);
+		if (!hs) continue;
+		const real = hs.filter((h) => h.branch !== p.branch && h.oid !== p.sourceOid && open.has(h.branch));
+		if (real.length > 0) held.set(p.branch, real);
+	}
+	return prs.map((p) => {
+		const hs = held.get(p.branch);
+		if (!hs) return p;
+		// 自分は含まれていない枝（統合の単位）を先に、次に新しいものを選ぶ
+		const best = [...hs].sort((a, b) => Number(held.has(a.branch)) - Number(held.has(b.branch)) || b.atUnix - a.atUnix)[0];
+		return { ...p, includedIn: best.branch };
+	});
+}
+
 async function listRepoPrs(repo: Repo): Promise<PrSummary[]> {
 	const target = await resolveTarget(repo);
 	if (!target) return []; // 使えないリポジトリは一覧に出さない
@@ -191,7 +236,7 @@ async function listRepoPrs(repo: Repo): Promise<PrSummary[]> {
 		if (c.summary.commits === 0 && reviewed && !reviewed.has(c.summary.prKey)) continue;
 		out.push(await markEmpty(repo, c.summary, reviewed));
 	}
-	return out;
+	return await markIncluded(repo, out);
 }
 
 async function findPr(repos: Repo[], repoId: string, prKey: string): Promise<{ repo: Repo; c: Computed; b: BranchRef }> {
