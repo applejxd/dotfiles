@@ -43,7 +43,10 @@ pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結�
 
 ### 統合
 
-保護ブランチへの統合（`git merge`・`git flow feature finish` など）は、判定器（`home/dot_config/pi/harness/integration-gate.ts`）が**必須確認**にする（bypass でも省略不可。feature の linked worktree の中の、現在のブランチを動かす操作は日常として除く）。承認画面は TUI でその場で答える。このリポジトリの運用規約では、統合は利用者が行うものとし、AI は実行しない（[AGENTS.md](../../AGENTS.md)）。外出先から承認する手段は、pi 単独には無い（保留・非同期承認は撤去済み。[履歴](guard/pi-pending.md)）。
+保護ブランチへの統合（`git merge`・`git flow feature finish` など）は、判定器（`home/dot_config/pi/harness/integration-gate.ts`）が**必須確認**にする（bypass でも省略不可。feature の linked worktree の中の、現在のブランチを動かす操作は日常として除く）。承認画面は TUI でその場で答える。このリポジトリの運用規約では、統合は既定では利用者が行う（ビューアのボタン）。**利用者がチャットで統合を明示的に指示したときに限り**、AI が統合コマンドを実行してよい。
+実行すると上の必須確認の画面が出て、利用者が TUI で承認する（指示が無いときは実行しない。[AGENTS.md](../../AGENTS.md)）。
+チャット経由には、ビューアの統合器（衝突の事前検査・排他・取り消し手順）・2 段の確認・リスクのあるパスの警告が無い。実行の前に、本体が `develop` で clean・
+全件検査が合格・`git merge-tree` が衝突なし、を AI が確かめる。実行する統合コマンドの形は、初回の実行で確かめて、この節に追記する（未確認）。外出先から承認する手段は、pi 単独には無い（保留・非同期承認は撤去済み。[履歴](guard/pi-pending.md)）。
 
 TUI を使わず端末で統合するときは `apps/pr-viewer/merge-cli.ts`。ビューアのサーバなしで同じ統合器が動く。結果は JSON 1 行。終了コードは成功 0・拒否 2・想定外の例外 1。
 
