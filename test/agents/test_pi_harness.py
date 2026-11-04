@@ -62,7 +62,24 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "autocheckpoint.ts", harness / "autocheckpoint.ts")
     shutil.copy2(HARNESS_SRC.parent / "quiet-notices.ts", harness / "quiet-notices.ts")
     (harness / "work").mkdir()
-    for name in ("journal.ts", "types.ts"):
+    for name in (
+        "journal.ts",
+        "types.ts",
+        "register.ts",
+        "runtime.ts",
+        "tool.ts",
+        "panel.ts",
+        "notices.ts",
+        "text-width.ts",
+        "store.ts",
+        "root.ts",
+        "reduce.ts",
+        "events.ts",
+        "invariants.ts",
+        "project.ts",
+        "globs.ts",
+        "transitions.ts",
+    ):
         shutil.copy2(HARNESS_SRC.parent / "work" / name, harness / "work" / name)
     shutil.copy2(HARNESS_SRC.parent / "pending-store.ts", harness / "pending-store.ts")
     for name in (
