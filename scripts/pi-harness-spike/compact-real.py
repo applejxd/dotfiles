@@ -42,6 +42,8 @@ try:
         "explain.ts",
         "autocheckpoint.ts",
         "quiet-notices.ts",
+        "goal-core.ts",
+        "goal-types.ts",
         "actions.ts",
         "text-viewer.ts",
         "confirm-present.ts",
@@ -87,6 +89,8 @@ try:
         "settle.ts",
         "arbiter.ts",
         "settle-snapshot.ts",
+        "goal.ts",
+        "goal-run.ts",
     ):
         shutil.copy2(SRC / "work" / name, harness / "work" / name)
     rules = gen.build_pi_harness({}, load_common())

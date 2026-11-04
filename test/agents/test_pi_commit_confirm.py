@@ -433,6 +433,8 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     shutil.copy2(HARNESS_SRC.parent / "model-choice.ts", harness / "model-choice.ts")
     shutil.copy2(HARNESS_SRC.parent / "autocheckpoint.ts", harness / "autocheckpoint.ts")
     shutil.copy2(HARNESS_SRC.parent / "quiet-notices.ts", harness / "quiet-notices.ts")
+    shutil.copy2(HARNESS_SRC.parent / "goal-core.ts", harness / "goal-core.ts")
+    shutil.copy2(HARNESS_SRC.parent / "goal-types.ts", harness / "goal-types.ts")
     (harness / "work").mkdir()
     for name in (
         "journal.ts",
@@ -454,6 +456,8 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
         "settle.ts",
         "arbiter.ts",
         "settle-snapshot.ts",
+        "goal.ts",
+        "goal-run.ts",
     ):
         shutil.copy2(HARNESS_SRC.parent / "work" / name, harness / "work" / name)
     shutil.copy2(HARNESS_SRC.parent / "pending-store.ts", harness / "pending-store.ts")
