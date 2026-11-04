@@ -34,6 +34,7 @@ response: { decision: allow | ask | deny, reason, source: rule | check | default
 | `bypass` | 真なら ask を allow にする（deny は変えない。[confirm](#confirm) の ask は除く） |
 | `boundary` | サンドボックス（Fence）の内側と**証明できているか**（フルガードがカナリアで実測した結果。環境変数の自己申告ではない）。真のときだけ、評価の順番の 4' の緩和が効く |
 | `allowed` | `{ read, write }`。サンドボックスが実際に開けた場所。`boundary` が真のとき、作業ツリーの外の読み書きの判定に使う（形が違えば `source: error` の deny） |
+| `writeRoot` / `tmpRoots` | 任意。`writeRoot`（絶対パス）があるとき、`edit` / `write` は**既存の許可より先に**、書込み先が `writeRoot` と `tmpRoots`（文字列の配列。`writeRoot` を含むものは無視）の外なら deny（bypass でも）。書込み先は pi の正規化（`@`・`file://`・`~`・Unicode 空白）の全解釈と、symlink の厳格な解決（対象が無くても追う）で見る。無いときの判定は変わらない。形が違えば `source: error` の deny |
 
 `source` は判定がどこで決まったか。
 

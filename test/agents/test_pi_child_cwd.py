@@ -134,3 +134,11 @@ def test_cwd_child_cannot_write_outside_its_worktree_even_with_bypass(env, repo,
     out = run_task(env, repo, worker(str(linked)), write(outside)).stdout
     assert not outside.exists(), out
     assert "担当の worktree" in out, out
+
+
+def test_cwd_child_cannot_write_outside_via_at_prefixed_absolute_path(env, repo, linked):
+    outside = repo / "by-child-at.txt"
+    args = {"path": f"@{outside}", "content": "x\n"}
+    out = run_task(env, repo, worker(str(linked)), [{"name": "guarded_write", "args": args}]).stdout
+    assert not outside.exists(), out
+    assert "担当の worktree" in out, out

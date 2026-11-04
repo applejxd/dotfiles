@@ -156,7 +156,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 - **フッター**: `activity` が、動いている子が 3 件以下なら `🤖 explore 12s, review 40s`、それより多ければ件数
 - **やらないこと**: プロジェクト内の定義ファイルからの役割（`--no-approve` と衝突）、子から子（入れ子）
 - **worktree 隔離**: `guarded_task` の `isolation: "worktree"`（opt-in。単独の新規 `worker` のみ）。仕様は [CHG-0029](../../change/0029-worktree-isolation.md)。
-- **子の実行場所（`cwd`）**: `guarded_task` の新規と `tasks` の各要素に任意の `cwd`（絶対パス）。親（`ctx.cwd`）のリポジトリの `git worktree list --porcelain` に載る worktree（主・linked）と realpath が完全に一致するときだけ許可し、シンボリックリンク・`..`・`.git`・相対・存在しない・別リポジトリは理由つきで拒否する（fail closed）。`isolation` とは併用不可。子のサンドボックス・役割は変えない。**`cwd` つきの子にだけ環境変数 `PI_HARNESS_WRITE_ROOT`（検証済み cwd の realpath）を渡し**（`cwd` なしの子・親には渡さない。子が自分の担当の外を `cwd` にして範囲を広げることも拒否する）、判定器（`judge/decide.ts` の `decideFile`）は **edit / write の書込み先が実体パス（存在する最も近い祖先を realpath で解決。`..`・リンクで外へ出るものも外）で WRITE_ROOT の中でも一時の置き場（`TMPDIR`・`/tmp`・`~/.cache`）の中でもないなら、bypass でも deny** する（共通の禁止と同じ、bypass より前に効く）。**強制するのは edit / write だけで、shell・試験・hook からの書き込みは未強制**（bash 経由で本体を変えられる。下の警告と `parallel_check.py` が見つける）。`cwd` つきの子が終わったとき、本体の `git status --porcelain` が起動前から変わっていれば、結果に `⚠ 本体の作業ツリーに…` の行（最大 5 件）を付ける（本体そのものを指定した場合と、git の失敗時は省く。起動は止めない）。worker は担当の worktree を `cwd` に指定して起動する。
+- **子の実行場所（`cwd`）**: `guarded_task` の新規と `tasks` の各要素に任意の `cwd`（絶対パス）。親（`ctx.cwd`）のリポジトリの `git worktree list --porcelain` に載る worktree（主・linked）と realpath が完全に一致するときだけ許可し、シンボリックリンク・`..`・`.git`・相対・存在しない・別リポジトリは理由つきで拒否する（fail closed）。`isolation` とは併用不可。子のサンドボックス・役割は変えない。**`cwd` つきの子にだけ環境変数 `PI_HARNESS_WRITE_ROOT`（検証済み cwd の realpath）を渡し**（`cwd` なしの子・親には渡さない。子が自分の担当の外を `cwd` にして範囲を広げることも拒否する）、判定器（`judge/decide.ts` の `decideFile`）は **edit / write の書込み先が、pi が行いうる解釈（先頭の `@`・`file://`・`~`・Unicode 空白の正規化の全組み合わせ）のどれか 1 つでも、厳格な解決（存在するシンボリックリンクは対象が無くても置き換えて追う。深さ 40 まで。`..`・リンクで外へ出るものも外）で WRITE_ROOT の中でも一時の置き場（`TMPDIR`・`/tmp`・`~/.cache`。WRITE_ROOT を含むものは除く）の中でもないなら、bypass でも deny** する（共通の禁止と同じ、bypass より前に効く）。**強制するのは edit / write だけで、shell・試験・hook からの書き込みは未強制**（bash 経由で本体を変えられる。下の警告と `parallel_check.py` が見つける）。`cwd` つきの子が終わったとき、本体の `git status --porcelain` が起動前から変わっていれば、結果に `⚠ 本体の作業ツリーに…` の行（最大 5 件）を付ける（本体そのものを指定した場合と、git の失敗時は省く。起動は止めない）。worker は担当の worktree を `cwd` に指定して起動する。
 
 ### 子の文脈 (AGENTS.md) の抜粋 (CHG-0059)
 
@@ -276,7 +276,7 @@ C2: …
 - 変更したファイルの一覧、試験の結果（コマンドと出力の要点）、確かめられなかったこと、判断に迷った点。
 ```
 
-**限界**: `cwd` つきの子は、edit / write では担当の外（本体・他の worktree）を書けない（bypass でも deny）。ただし **bash 経由の書き込みは強制で止まらない**（bypass 中は作業ツリーの外の書き込みの ask も allow になる）。`cwd` なしの子も同様に強制では止まらない。`scripts/parallel_check.py` が、取り込み前に、**Git が報告する変更**（追跡ファイルの変更と未追跡ファイル。リネームは旧パスも数える）の範囲で見つける。ignore されたファイル・worktree の外（例: `~`）への書き込み・symlink の先は見えない。子へのコミットの許可（`guarded_action` を子へ）は、親の手数が許容できないと分かるまで、作らない（親が diff を確かめてからコミットする方が安全）。
+**限界**: `cwd` つきの子は、edit / write では担当 worktree と明示した一時領域の外を書けない（bypass でも deny）。ただし **bash 経由の書き込みは強制で止まらない**（bypass 中は作業ツリーの外の書き込みの ask も allow になる）。`cwd` なしの子も同様に強制では止まらない。`scripts/parallel_check.py` が、取り込み前に、**Git が報告する変更**（追跡ファイルの変更と未追跡ファイル。リネームは旧パスも数える）の範囲で見つける。ignore されたファイル・worktree の外（例: `~`）への書き込み・symlink の先は見えない。子へのコミットの許可（`guarded_action` を子へ）は、親の手数が許容できないと分かるまで、作らない（親が diff を確かめてからコミットする方が安全）。
 
 ### 積み重ね（依存する feature）
 

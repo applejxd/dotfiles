@@ -10,9 +10,11 @@ see docs/spec/guard/pi-decide.md#ts-版への移植
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 from agents_common import ROOT
@@ -294,3 +296,86 @@ def test_without_write_root_the_judgement_is_unchanged(tmp_path):
     )
     with_out = _judge([read, bash])
     assert [o["decision"] for o in with_out] == [o["decision"] for o in plain_out]
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_write_root_denies_paths_pi_would_reinterpret(tmp_path):
+    """pi 本体は先頭の `@`・`file://`・`~`・Unicode 空白を正規化する。どの解釈でも外へ出るものは deny。"""
+    main, root, _sib, tmp = _write_root_case(tmp_path)
+    home = Path.home()
+    rel_up = os.path.relpath(main / "f.txt", root)
+    outside = [
+        f"@{main}/f.txt",  # 先頭 @ を除くと本体の絶対パス
+        f"@{tmp_path}/elsewhere/f.txt",
+        f"file://{main}/f.txt",
+        f"@file://{main}/f.txt",
+        f"@{main}/f\u00a0.txt",  # 空白の正規化を混ぜても外
+        f"@\u3000{rel_up}",
+        "~/pi-writeroot-probe.txt",  # ~ 展開でホーム (担当の外)
+        "@~/pi-writeroot-probe.txt",
+        f"@{rel_up}",  # `@` 付きでも `..` で抜ける
+    ]
+    assert not str(home).startswith(str(root))
+    reqs = [
+        _wreq(root, p, tool=t, bypass=b, tmp=tmp)
+        for p in outside
+        for t in ("write", "edit")
+        for b in (False, True)
+    ]
+    for r, o in zip(reqs, _judge(reqs), strict=True):
+        assert o["decision"] == "deny", (r["input"]["path"], o)
+    # 担当内の正当なパスは従来どおり
+    ok = _judge(
+        [
+            _wreq(root, "f.txt", tmp=tmp),
+            _wreq(root, "sub/new.txt", tmp=tmp, bypass=True),
+            _wreq(root, f"{root}/f.txt", tmp=tmp),
+        ]
+    )
+    assert [o["decision"] for o in ok] == ["allow", "allow", "allow"], ok
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_write_root_dangling_symlinks(tmp_path):
+    main, root, _sib, tmp = _write_root_case(tmp_path)
+    (root / "dang_out").symlink_to(main / "new.txt")  # 対象が未作成の外部ファイル
+    (root / "dang_in").symlink_to(root / "later.txt")  # 対象が未作成の担当内
+    (root / "dang_rel").symlink_to("../../../../outside_new.txt")  # 相対で外へ
+    (tmp / "dang_tmp").symlink_to(main / "tmp_new.txt")
+    (root / "loop_a").symlink_to(root / "loop_b")
+    (root / "loop_b").symlink_to(root / "loop_a")
+    denied = [
+        root / "dang_out",
+        root / "dang_rel",
+        tmp / "dang_tmp",
+        root / "loop_a",
+        root / "dang_out" / "x",
+    ]
+    reqs = [
+        _wreq(root, p, tool=t, bypass=b, tmp=tmp)
+        for p in denied
+        for t in ("write", "edit")
+        for b in (False, True)
+    ]
+    for r, o in zip(reqs, _judge(reqs), strict=True):
+        assert o["decision"] == "deny", (r["input"]["path"], o)
+    ok = _judge(
+        [
+            _wreq(root, root / "dang_in", tmp=tmp),
+            _wreq(root, root / "dang_in", tool="edit", tmp=tmp, bypass=True),
+        ]
+    )
+    assert [o["decision"] for o in ok] == ["allow", "allow"], ok
+
+
+@pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
+def test_write_root_ignores_tmp_root_that_contains_it(tmp_path):
+    main, root, _sib, _tmp = _write_root_case(tmp_path)
+    own = main / ".tmp" / "s" / "ID"  # root を含まない専用の一時領域
+    own.mkdir(parents=True)
+    for container in (main, tmp_path):  # TMPDIR=本体のルート / worktree が /tmp 配下の相当
+        for b in (False, True):
+            o = _judge([_wreq(root, main / "f.txt", bypass=b, tmpRoots=[str(container)])])[0]
+            assert o["decision"] == "deny", (container, o)
+    ok = _judge([_wreq(root, own / "x.txt", bypass=True, tmpRoots=[str(own)])])[0]
+    assert ok["decision"] == "allow", ok

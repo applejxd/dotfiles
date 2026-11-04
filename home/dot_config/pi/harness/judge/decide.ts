@@ -7,8 +7,10 @@
 //
 // node の型除去でそのまま動く書き方だけを使う。
 // see docs/spec/guard/pi-decide.md
-import { realpathSync } from "node:fs";
+import { lstatSync, readlinkSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { isAbsolute, join, normalize, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Common } from "./policy.ts";
 import {
 	expandUser,
@@ -135,6 +137,84 @@ function realpathLoose(path: string): string {
 	}
 }
 
+const PI_UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
+
+/**
+ * pi 本体が edit / write の前に行うパスの正規化 (Unicode 空白 → 先頭の `@` → `~` 展開 → `file://`) の、
+ * 適用する・しないの全組み合わせ。判定器と実行側の解釈の差を fail closed で潰すため、全部を候補にする。
+ */
+function piPathVariants(path: string): string[] {
+	const out = new Set<string>([path]);
+	for (let mask = 0; mask < 16; mask++) {
+		let s = path;
+		if (mask & 1) s = s.replace(PI_UNICODE_SPACES, " ");
+		if (mask & 2 && s.startsWith("@")) s = s.slice(1);
+		if (mask & 4) {
+			const home = homedir();
+			if (s === "~") s = home;
+			else if (s.startsWith("~/")) s = join(home, s.slice(2));
+		}
+		if (mask & 8 && /^file:\/\//.test(s)) {
+			try {
+				s = fileURLToPath(s);
+			} catch {
+				continue;
+			}
+		}
+		out.add(s);
+	}
+	return [...out];
+}
+
+/**
+ * 厳格な解決: 先頭から成分を辿り、存在する symlink は (対象が無くても) 文字列として置き換えて続ける。
+ * 深さの上限 (40) を超える・lstat が ENOENT 以外で失敗するときは例外 (呼び出し側が deny にする)。
+ */
+function strictResolve(path: string): string {
+	let queue = normpath(path).split(sep);
+	let resolved = sep;
+	let hops = 0;
+	while (queue.length > 0) {
+		const comp = queue.shift()!;
+		if (comp === "" || comp === ".") continue;
+		if (comp === "..") {
+			resolved = resolved === sep ? sep : resolved.slice(0, resolved.lastIndexOf(sep)) || sep;
+			continue;
+		}
+		const next = join(resolved, comp);
+		let link: string | null = null;
+		try {
+			if (lstatSync(next).isSymbolicLink()) link = readlinkSync(next);
+		} catch (e: any) {
+			if (e?.code !== "ENOENT") throw e;
+		}
+		if (link === null) {
+			resolved = next;
+			continue;
+		}
+		if (++hops > 40) throw new Error("symlink が深すぎる");
+		if (isAbsolute(link)) resolved = sep;
+		queue = [...link.split(sep), ...queue];
+	}
+	return resolved;
+}
+
+/** write の範囲判定: pi が行いうる解釈のどれか 1 つでも root / tmp の外へ出るなら false。 */
+function writeWithinScope(path: string, cwd: string, root: string, tmpRoots: string[]): boolean {
+	const rootReal = realpathLoose(root);
+	// root を包含する一時領域 (TMPDIR=本体のルート、/tmp 配下の worktree など) は例外にしない
+	const tmps = tmpRoots.filter((t) => t !== "").map((t) => realpathLoose(t)).filter((t) => !inside(rootReal, t));
+	try {
+		for (const v of piPathVariants(path)) {
+			const abs = strictResolve(isAbsolute(v) ? v : join(cwd, v));
+			if (!inside(abs, rootReal) && !tmps.some((t) => inside(abs, t))) return false;
+		}
+	} catch {
+		return false;
+	}
+	return true;
+}
+
 /** 照合に使うパスの形: 渡されたまま・cwd で解いた絶対パス・symlink を解いた実体。 */
 function candidates(path: string, cwd: string): string[] {
 	const expanded = expandUser(path);
@@ -183,8 +263,7 @@ function decideFile(
 	const absolute = candidates(path, cwd).at(-1)!;
 	if (write && writeScope) {
 		const root = realpathLoose(writeScope.root);
-		const okTmp = writeScope.tmpRoots.some((t) => t !== "" && inside(absolute, realpathLoose(t)));
-		if (!inside(absolute, root) && !okTmp) {
+		if (!writeWithinScope(path, cwd, writeScope.root, writeScope.tmpRoots)) {
 			return {
 				commonDeny: response(
 					"deny",
