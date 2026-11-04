@@ -756,3 +756,144 @@ def test_shutdown_during_a_job_releases_the_lock(w):
     res = w.run(body=body)
     assert res["job"]["state"] == "interrupted"
     assert _lock_reason(w) is None
+
+
+# ---- 所有の claim・release・reap の排他ガード（共通 git-dir の pi-wt-owner.guard。scripts/wt_owner.py と同じ規則） ----
+
+OWNER_TS = APP / "worktree-owner.ts"
+OWNER_PY = Path(__file__).resolve().parents[2] / "scripts" / "wt_owner.py"
+GUARD = "pi-wt-owner.guard"
+OWNER_SCRIPT = """const M = await import(process.argv[2]);
+const a = JSON.parse(process.argv[3]);
+try {
+  if (a.op === "claim") {
+    const r = await M.claim(a.gitDir, a.wt, { kind: "worker", id: a.id, pid: a.pid });
+    console.log(JSON.stringify({ ok: r.ok }));
+  } else if (a.op === "release") {
+    console.log(JSON.stringify({ ok: await M.release(a.gitDir, a.wt, a.id) }));
+  } else {
+    console.log(JSON.stringify({ ok: true, n: await M.reap(a.gitDir) }));
+  }
+} catch (e) {
+  console.log(JSON.stringify({ error: e.message }));
+}
+"""
+
+
+@pytest.fixture
+def owner_repo(tmp_path):
+    repo = _init(tmp_path / "repo")
+    _git(repo, "config", "user.name", "Example Dev")
+    _git(repo, "config", "user.email", "you@example.com")
+    _commit(repo, {"a.txt": "a\n"}, "init")
+    wt = tmp_path / "wt"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/x", str(wt), "develop")
+    script = tmp_path / "owner_run.mjs"
+    script.write_text(OWNER_SCRIPT, encoding="utf-8")
+    return repo, wt.resolve(), script
+
+
+def _ts_owner(
+    script: Path, repo: Path, wt: Path, op: str, wait_ms: int | None = None, **kw
+) -> subprocess.Popen:
+    env = {**os.environ}
+    if wait_ms is not None:
+        env["PI_WT_OWNER_GUARD_WAIT_MS"] = str(wait_ms)
+    arg = {"op": op, "gitDir": str((repo / ".git").resolve()), "wt": str(wt), **kw}
+    return subprocess.Popen(
+        [_node(), str(script), OWNER_TS.as_uri(), json.dumps(arg)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        cwd=repo,
+    )
+
+
+def _ts_result(p: subprocess.Popen) -> dict:
+    out, err = p.communicate()
+    assert p.returncode == 0, err
+    return json.loads(out.strip().splitlines()[-1])
+
+
+def _owner_reason(repo: Path, wt: Path) -> str | None:
+    cur = None
+    for line in _git(repo, "worktree", "list", "--porcelain", "-z").split("\0"):
+        if line.startswith("worktree "):
+            cur = Path(line[9:]).resolve()
+        elif cur == wt and (line == "locked" or line.startswith("locked ")):
+            return line[6:].strip()
+    return None
+
+
+def test_ts_claim_proceeds_over_a_stale_guard_and_removes_it(owner_repo):
+    repo, wt, script = owner_repo
+    guard = repo / ".git" / GUARD
+    guard.write_text("pid=1 t=1 n=dead\n", encoding="utf-8")
+    old = time.time() - 120
+    os.utime(guard, (old, old))
+    res = _ts_result(_ts_owner(script, repo, wt, "claim", id="w1", pid=os.getpid()))
+    assert res == {"ok": True}
+    assert not guard.exists()
+    assert "id=w1" in (_owner_reason(repo, wt) or "")
+
+
+def test_ts_fresh_guard_makes_claim_busy_and_release_reap_throw(owner_repo):
+    repo, wt, script = owner_repo
+    guard = repo / ".git" / GUARD
+    guard.write_text("pid=1 t=1 n=live\n", encoding="utf-8")
+    t0 = time.time()
+    assert _ts_result(_ts_owner(script, repo, wt, "claim", 300, id="w1", pid=os.getpid())) == {
+        "ok": False
+    }
+    assert time.time() - t0 >= 0.25
+    assert _owner_reason(repo, wt) is None  # 黙って進めていない
+    assert _ts_result(_ts_owner(script, repo, wt, "release", 300, id="w1")) == {
+        "error": "guard_busy"
+    }
+    assert _ts_result(_ts_owner(script, repo, wt, "reap", 300)) == {"error": "guard_busy"}
+    assert guard.read_text(encoding="utf-8") == "pid=1 t=1 n=live\n"  # 他人のガードは消さない
+
+
+def test_mixed_python_and_ts_claims_succeed_exactly_once(owner_repo):
+    # Python 3 + TS 3 が同時に claim する。ガードが共通なので、混在でも成功はちょうど 1 件
+    repo, wt, script = owner_repo
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null"}
+    for rnd in range(10):
+        py = [
+            subprocess.Popen(
+                [
+                    sys.executable,
+                    str(OWNER_PY),
+                    "claim",
+                    str(wt),
+                    "--kind",
+                    "worker",
+                    "--id",
+                    f"p{rnd}-{i}",
+                    "--pid",
+                    str(os.getpid()),
+                ],
+                cwd=repo,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                env=env,
+            )
+            for i in range(3)
+        ]
+        ts = [
+            _ts_owner(script, repo, wt, "claim", id=f"t{rnd}-{i}", pid=os.getpid())
+            for i in range(3)
+        ]
+        wins = 0
+        for p in py:
+            p.communicate()
+            assert p.returncode in (0, 3), p.returncode
+            wins += p.returncode == 0
+        for p in ts:
+            wins += _ts_result(p)["ok"] is True
+        assert wins == 1, (rnd, wins)
+        _git(repo, "worktree", "unlock", str(wt))

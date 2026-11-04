@@ -18,21 +18,32 @@ Windows は実機で未検証（pid の生死は os.kill(pid, 0) で見る）。
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import re
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 KINDS = ("worker", "job", "create", "train", "interactive")
 REASON_RE = re.compile(r"^owner=(\S+) id=(\S+) pid=(\d+) started=(\d+)$")
 EXIT_BUSY = 3
+# claim・release・reap の臨界区間の排他ガード（git の共通ディレクトリ内のファイル。TS 版と同じ名前・規則）。
+# `git worktree lock` 自体が「確認 → 書き込み」の非原子のため、これで囲む。docs/spec/orchestration.md#worktree-の所有の表明
+GUARD_NAME = "pi-wt-owner.guard"
+GUARD_WAIT_MS = 10000  # 環境変数 PI_WT_OWNER_GUARD_WAIT_MS で上書き（試験用）
+GUARD_STALE_SEC = 30  # この秒数より古いガードは残骸とみなす
 
 
 class OwnerError(Exception):
     """使い方か git の失敗（終了コード 2）。"""
+
+
+class GuardBusy(OwnerError):
+    """排他ガードを待ち時間内に取れなかった（fail closed。claim は終了コード 3、それ以外は 2）。"""
 
 
 @dataclass
@@ -91,6 +102,57 @@ def repo_root() -> Path:
     if r.returncode != 0:
         raise OwnerError("git リポジトリの中で実行してください")
     return Path(r.stdout.strip()).parent
+
+
+def common_dir() -> Path:
+    r = git("rev-parse", "--path-format=absolute", "--git-common-dir")
+    if r.returncode != 0:
+        raise OwnerError("git リポジトリの中で実行してください")
+    return Path(r.stdout.strip())
+
+
+def _guard_wait_sec() -> float:
+    try:
+        return int(os.environ.get("PI_WT_OWNER_GUARD_WAIT_MS", GUARD_WAIT_MS)) / 1000
+    except ValueError:
+        return GUARD_WAIT_MS / 1000
+
+
+@contextlib.contextmanager
+def guard() -> Iterator[None]:
+    """リポジトリごとの排他ガード。取れなければ GuardBusy（黙って進めない）。自分のガードだけを解放する。"""
+    path = common_dir() / GUARD_NAME
+    token = f"pid={os.getpid()} t={time.time_ns()} n={os.urandom(4).hex()}\n"
+    deadline = time.monotonic() + _guard_wait_sec()
+    while True:
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                raise GuardBusy(f"排他ガードを取れません（{path}）") from None
+            try:
+                st = path.stat()
+                if time.time() - st.st_mtime > GUARD_STALE_SEC:
+                    # 残骸。観測と同じファイルのときだけ消す（削除後の再取得は O_EXCL で競う）
+                    now = path.stat()
+                    if (now.st_ino, now.st_mtime_ns) == (st.st_ino, st.st_mtime_ns):
+                        path.unlink()
+                    continue
+            except OSError:
+                continue  # 消えた直後など。すぐ再試行
+            time.sleep(0.02 + (os.getpid() % 4) * 0.01)
+            continue
+        except OSError as e:
+            raise OwnerError(f"排他ガードを作れません: {e}") from e
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(token)
+        break
+    try:
+        yield
+    finally:
+        with contextlib.suppress(OSError):
+            if path.read_text(encoding="utf-8") == token:
+                path.unlink()
 
 
 def resolve(arg: str) -> Path:
@@ -167,6 +229,15 @@ def cmd_claim(a: argparse.Namespace) -> int:
     owner = Owner(
         a.kind, a.id, a.pid if a.pid is not None else default_owner_pid(), int(time.time())
     )
+    try:
+        with guard():
+            return _claim_locked(wt, owner, a)
+    except GuardBusy as e:
+        print(f"busy: {e}", file=sys.stderr)
+        return EXIT_BUSY
+
+
+def _claim_locked(wt: Path, owner: Owner, a: argparse.Namespace) -> int:
     for _ in range(2):
         st = state_of(wt)
         if st.kind == "unknown":
@@ -189,6 +260,10 @@ def cmd_claim(a: argparse.Namespace) -> int:
             return EXIT_BUSY
         r = git("worktree", "lock", "--reason", owner.reason(), str(wt))
         if r.returncode == 0:
+            # 理由欄を再読して、自分の lock であることを確かめる（一致しなければ失敗扱い）
+            if locks().get(wt) != owner.reason():
+                print(f"claim 後の理由欄が自分のものと一致しません: {wt}", file=sys.stderr)
+                return EXIT_BUSY
             print(f"{wt}: claim しました（{owner.reason()}）")
             return 0
     print(describe(wt, state_of(wt)), file=sys.stderr)
@@ -197,6 +272,11 @@ def cmd_claim(a: argparse.Namespace) -> int:
 
 def cmd_release(a: argparse.Namespace) -> int:
     wt = resolve(a.worktree)
+    with guard():
+        return _release_locked(wt, a)
+
+
+def _release_locked(wt: Path, a: argparse.Namespace) -> int:
     st = state_of(wt)
     if st.kind == "none":
         print(f"{wt}: lock はありません")
@@ -230,6 +310,11 @@ def cmd_status(a: argparse.Namespace) -> int:
 
 
 def cmd_reap(_a: argparse.Namespace) -> int:
+    with guard():
+        return _reap_locked()
+
+
+def _reap_locked() -> int:
     n = 0
     for wt, reason in sorted(locks().items()):
         owner = parse_owner(reason)
