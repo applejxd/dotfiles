@@ -355,7 +355,10 @@ export function next(state: SchedState, res: Resources, now: number): Action[] {
 	// ── 起こす ──
 	if (startedHere.length === 0 && activeRuns.length === 0) {
 		const unfinished = state.tasks.filter((t) => !TERMINAL.includes(t.state));
-		if (state.tasks.length > 0 && unfinished.length === 0) out.push({ kind: "wake_parent", reason: "all_done" });
+		// 全部が終端のとき: 失敗した task があれば failed (all_done は done / skipped / cancelled だけのとき)
+		if (state.tasks.length > 0 && unfinished.length === 0) {
+			out.push({ kind: "wake_parent", reason: state.tasks.some((t) => t.state === "failed") ? "failed" : "all_done" });
+		}
 		else if (budgetBlocked) out.push({ kind: "wake_parent", reason: "budget" });
 		else if (
 			!blocked &&

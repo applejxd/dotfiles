@@ -1066,6 +1066,21 @@ scen(
 )
 scen("invalid_writes", state([task("a", writes=["**"])]))
 scen("stuck", state([task("a", state="failed"), task("b", state="proposed", after=["a"])]))
+scen("wake_failed", state([task("a", state="failed")]))
+scen(
+    "wake_failed_mixed",
+    state([task("a", state="done"), task("b", state="failed"), task("c", state="cancelled")]),
+)
+scen(
+    "wake_done_skipped",
+    state([task("a", state="done"), task("b", state="skipped"), task("c", state="cancelled")]),
+)
+scen(
+    "wake_failed_but_running",
+    state([task("a", state="failed"), task("b", state="running")], [run("rb", "b")]),
+)
+scen("wake_failed_but_ready", state([task("a", state="failed"), task("b")]))
+scen("wake_stuck_blocked", state([task("a", state="blocked")]))
 scen("learned", state([task("a"), task("b")], stats={"byMethod": {}, "pairs": [["a", "b"]]}))
 scen(
     "cp",
@@ -1253,6 +1268,35 @@ def test_too_broad_writes_are_rejected_not_started():
 
 def test_stuck_when_dependency_failed():
     assert {"kind": "wake_parent", "reason": "stuck"} in S("stuck")
+
+
+def _wakes(name):
+    return [a["reason"] for a in S(name) if a["kind"] == "wake_parent"]
+
+
+def test_wake_failed_when_only_failed_is_terminal():
+    assert _wakes("wake_failed") == ["failed"]
+
+
+def test_wake_failed_when_mixed_with_done_and_cancelled():
+    assert _wakes("wake_failed_mixed") == ["failed"]
+
+
+def test_wake_all_done_only_for_done_skipped_cancelled():
+    assert _wakes("wake_done_skipped") == ["all_done"]
+
+
+def test_wake_failed_not_while_a_run_is_live():
+    assert _wakes("wake_failed_but_running") == []
+
+
+def test_wake_failed_not_while_ready_task_starts():
+    r = S("wake_failed_but_ready")
+    assert len(starts(r)) == 1 and _wakes("wake_failed_but_ready") == []
+
+
+def test_wake_stuck_for_blocked_only():
+    assert _wakes("wake_stuck_blocked") == ["stuck"]
 
 
 def test_learned_overlap_pairs_are_not_started_together():

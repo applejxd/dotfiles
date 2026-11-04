@@ -440,3 +440,61 @@ def test_property_other_seeds(seed0):
 
 def test_property_is_deterministic():
     assert _run("prop", "7", "10") == _run("prop", "7", "10")
+
+
+# ── 見積り (attrs.est) と無出力の見張り (onOutput) ──
+
+
+def test_estimate_adapter_uses_attrs_est_after_overrun():
+    c = case("estimate")
+    assert c["reserve"] == c["est"]
+    # 台帳の reserved は超過分で増えている (これが原因だった)
+    assert c["ledgerReserved"]["usd"] > c["est"]["usd"]
+
+
+def test_estimate_steer_after_overrun_once():
+    c = case("estimate")
+    assert c["k15"] == ["steer"] and c["k15b"] == []
+
+
+def test_estimate_abort_at_2x():
+    assert case("estimate")["k2"] == ["abort:usage-2x"]
+
+
+def test_estimate_falls_back_to_ledger_reserved_without_attrs():
+    assert case("estimate")["bareReserve"] == {"usd": 2, "tokens": 3, "ms": 4}
+
+
+def test_estimate_ignores_malformed_attrs_est():
+    assert case("estimate")["badReserve"] == {"usd": 2, "tokens": 3, "ms": 4}
+
+
+def test_stall_no_steer_before_5min():
+    assert case("stall")["at4"] == []
+
+
+def test_stall_steer_at_5min_exactly_once():
+    c = case("stall")
+    assert c["at5"] == ["steer:"] and c["at5b"] == []
+
+
+def test_stall_abort_at_10min():
+    assert case("stall")["at10"] == ["abort:stall"]
+
+
+def test_stall_output_resets_idle():
+    assert case("stall")["quiet"] == []
+
+
+def test_onoutput_records_time_and_aux_event():
+    c = case("stall")
+    assert c["auxTypes"] == ["notice"] and list(c["memoAt"].values()) == [1_000_000]
+
+
+def test_onoutput_ignores_finished_run():
+    c = case("stall")
+    assert c["deadEvents"] == 0 and c["deadMemoSame"] is True
+
+
+def test_adapter_reads_attrs_last_output_and_steered_at():
+    assert case("stall")["attr"] == {"lastOutputAt": 123, "steered": True, "stallSteered": True}

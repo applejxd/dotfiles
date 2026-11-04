@@ -19,12 +19,13 @@
 
 - 429（`status:"limit"`、または失敗の文言が `is429`）は run を `limit` で閉じ、`resource.429`（aux）を残し、AIMD を半減、task を `verdict retry` で ready に戻す。失敗に数えない。連続成功で `aimd` が +1。5 連続で `goal.paused` と `wake`（`provider_exhausted`）を 1 回だけ出す。
 - 失敗の理由は必ず非 null（無ければ「原因不明 (status=…)」）。run の note に残り、Digest の本文になる。
-- 起動時の見積りを `run.attrs.est` に残す（台帳の `reserved` は超過分だけ増え、比が 1 を超えないため）。steer は 1.5 倍で 1 回、abort は 2 倍で 1 回（`memo` で重複を防ぐ）。
+- 起動時の見積りを `run.attrs.est` に残す（台帳の `reserved` は超過分だけ増え、比が 1 を超えないため）。`adapt` がこれを `SchedRun.reserve` に使い、steer は 1.5 倍で 1 回、abort は 2 倍で 1 回（`memo` で重複を防ぐ）。
+- 無出力の見張り: 子の出力を受けたら `onOutput(state, runId, now, memo)` が aux の `notice` と、`memo.outputAt` の更新を返す（台帳の attrs を書く既存イベントが無いため記憶で持つ）。`adapt` は run の `attrs.lastOutputAt`・`attrs.steeredAt` も読む。stall の steer は 5 分で 1 回、abort は 10 分。
 - `Effect.spawn.workTool` は常に `false`。子に work ツールを渡さず、台帳へ書かせない。
 
 ## 限界
 
-- `SchedRun.lastOutputAt`（stall）は台帳のイベントに無く未配線。見込み（speculative）と競争（race）の 2 つ目の run は、台帳の門が task running の 2 つ目の予約を拒否する可能性があり、`rejected` に出る。
+- stall の見張りは、配線が子の出力のたびに `onOutput` を呼ぶことが前提（未配線）。見込み（speculative）と競争（race）の 2 つ目の run は、台帳の門が task running の 2 つ目の予約を拒否する可能性があり、`rejected` に出る。
 - `memo`（steer・abort・通知の重複防止）は呼び出し側が持ち回る（永続しない）。
 
 ## 配線の手順

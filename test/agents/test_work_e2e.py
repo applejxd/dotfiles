@@ -322,3 +322,32 @@ def test_forged_event_replay_rejects_both_and_goal_stays_planned(forge):
     assert t["rejected"] == ["4:plan.approved", "5:plan.approved"]
     assert t["goalState"] == "planned"
     assert t["violations"] == []
+
+
+# ── wake_parent の理由の区別 (all_done / failed / stuck) ──
+
+
+@pytest.fixture(scope="module")
+def wake() -> dict[str, dict]:
+    return {v: drive("wake", v) for v in ["failed", "mixed", "all", "cancelled", "downstream"]}
+
+
+def test_wake_failed_when_every_task_ends_and_some_failed(wake):
+    assert wake["failed"]["wakes"] == ["failed"]
+
+
+def test_wake_failed_when_done_and_failed_are_mixed(wake):
+    assert wake["mixed"]["wakes"] == ["failed"]
+
+
+def test_wake_all_done_when_every_task_is_done(wake):
+    assert wake["all"]["wakes"] == ["all_done"]
+
+
+def test_wake_all_done_with_cancelled(wake):
+    assert wake["cancelled"]["wakes"] == ["all_done"]
+
+
+def test_wake_stuck_when_downstream_cannot_start_after_failure(wake):
+    r = wake["downstream"]
+    assert r["wakes"] == ["stuck"] and r["starts"] == 0

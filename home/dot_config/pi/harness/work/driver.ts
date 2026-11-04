@@ -63,9 +63,11 @@ export interface Memo {
 	announced: boolean;
 	/** 直前に起こした理由 (同じ理由を繰り返し起こさない) */
 	lastWake: string;
+	/** run ごとの最後の出力時刻 (台帳の attrs に書く経路が無いので記憶で持つ。stall の見張りに使う) */
+	outputAt: Record<string, number>;
 }
 
-export const emptyMemo = (): Memo => ({ steered: [], aborting: [], announced: false, lastWake: "" });
+export const emptyMemo = (): Memo => ({ steered: [], aborting: [], announced: false, lastWake: "", outputAt: {} });
 
 export interface TickCtx {
 	now: number;
@@ -159,12 +161,11 @@ export function tick(state: LedgerState, ctx: TickCtx): TickResult {
 	const steered = new Set(memo0.steered);
 	const aborting = new Set(memo0.aborting);
 	const ss = schedStateOf(state, { now: ctx.now, resources: ctx.res, provider: ctx.aimd, budget: ctx.budget, stats: ctx.stats });
-	// 台帳の run.reserved は超過分だけ増える (reduce.charge) ので、見積りは起動時に attrs.est へ残したものを使う。
-	// これが無いと使用量 / 見積りの比が 1 を超えず、1.5 倍の steer・2 倍の abort に届かない
+	// 見積りは adapt が attrs.est から作る。台帳の attrs に無い記憶 (steer 済み・最後の出力) をここで重ねる
 	for (const r of ss.runs) {
-		const est = state.nodes.get(r.id)?.attrs.est as Money | undefined;
-		if (est && [est.usd, est.tokens, est.ms].every((v) => typeof v === "number")) r.reserve = { usd: est.usd, tokens: est.tokens, ms: est.ms };
 		if (steered.has(r.id)) r.steered = r.stallSteered = true;
+		const out = memo0.outputAt?.[r.id];
+		if (out !== undefined && out > (r.lastOutputAt ?? -1)) r.lastOutputAt = out;
 	}
 	ss.providerAnnounced = memo0.announced;
 	const actions = schedNext(ss, ctx.res, ctx.now);
@@ -272,6 +273,7 @@ export function tick(state: LedgerState, ctx: TickCtx): TickResult {
 		aborting: [...aborting].filter((id) => !live || live.has(id)).sort(cmpStr),
 		announced,
 		lastWake: wakeKey,
+		outputAt: Object.fromEntries(Object.entries(memo0.outputAt ?? {}).filter(([id]) => !live || live.has(id))),
 	};
 	return { events, effects, memo, rejected, actions };
 }
@@ -281,6 +283,19 @@ export function onSpawned(state: LedgerState, runId: string, pid: number, holder
 	const r = state.nodes.get(runId);
 	if (!r || r.kind !== "run" || r.state !== "reserved") return [];
 	return [mk("run.started", runId, { pid }, holder)];
+}
+
+/**
+ * 子の出力を受けた: 観測用の aux イベント (台帳の状態には効かない) と、stall の見張り用に記憶した最後の出力時刻を返す。
+ * 生きた run 以外は何もしない。台帳の attrs を更新する既存のイベントが無いので、時刻は Memo (outputAt) で持ち回る
+ */
+export function onOutput(state: LedgerState, runId: string, now: number, memo: Memo = emptyMemo()): { events: NewEvent[]; memo: Memo } {
+	const r = state.nodes.get(runId);
+	if (!r || r.kind !== "run" || (r.state !== "reserved" && r.state !== "started")) return { events: [], memo };
+	return {
+		events: [makeAux("notice", { kind: "run.output", run: runId, at: now })],
+		memo: { ...memo, outputAt: { ...(memo.outputAt ?? {}), [runId]: now } },
+	};
 }
 
 /** 子の使用量 (source: child) と評価役の使用量 (eval) を run へ足す。run → task → goal へ合算され、予算に効く */

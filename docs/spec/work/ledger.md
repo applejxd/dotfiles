@@ -56,3 +56,4 @@
 - 端から端の試験は `test_work_e2e.py`（store で永続 → 読み直して fold → メモリの fold と一致、kill -9 後の再生、sched・digest への接続、利用者専用イベントの偽装）
 - `globsMayOverlap` の実装は `globs.ts` に一本化した。`overlap.ts` も `globs.ts` の既定（保守的・gitignore 流）で呼ぶ（`strict` は撤去）
 - 食い違い 2 件は解消した（`xfail` を外した）: ①スラッシュ無しの glob（`*.py`）は sched も台帳の門と同じ判定で「重なる」とし、台帳が拒否するものを start しない ②`ready` は任意の `estimateMs` 見積りを受け、`adapt.readyOf` が sched と同じ見積り（`attrs.estimateMs`、無ければ役割×大きさの p50）を渡す。順序の一致は `test_work_e2e.py` が固定する
+- `adapt` は run の `attrs.est`（起動時の見積り）を `SchedRun.reserve` に使い、`attrs.lastOutputAt`・`attrs.steeredAt` も読む（超過後も 1.5 倍の steer・2 倍の abort が出る）。`wake_parent` の理由は `all_done`（失敗なしの全終端）・`failed`（失敗を含む全終端）・`stuck` に分けた。arbiter など理由を読む側は無い（`proposeChildren` は理由を見ない）。

@@ -196,6 +196,33 @@ function sched(variant) {
 	);
 }
 
+/** wake_parent の理由の区別 (all_done / failed / stuck)。実物の台帳で run を終わらせ、schedStateOf → next の wake を見る */
+function wake(variant) {
+	const E = ev.makeEvent;
+	const h = (type, node, data, source = "system") => E(type, node, data, source, { holder: H });
+	const T = (id, writes, after = []) => [id, writes, after, "worker", "S"];
+	const tasks = [T("T1", ["a/**"]), T("T3", ["docs/**"]), T("T4", ["lib/**"], ["T1"])];
+	const endRun = (rid, task, status) => [
+		h("run.reserved", rid, { task, est: EST }),
+		h("run.started", rid, { pid: 1 }),
+		h("note.appended", rid, { by: `run:${rid}`, text: status === "done" ? "## 結論\nok" : "失敗: だめ" }, "model"),
+		h("run.ended", rid, { status, usage: { usd: 0.1, tokens: 10, ms: 10 } }),
+	];
+	const pass = (task) => [h("check.result", task, { name: "t", ok: true })];
+	const extra = {
+		failed: [...endRun("R1", "T1", "failed"), ...endRun("R2", "T3", "failed"), h("verdict", "T4", { verdict: "cancel", reason: "x" }, "model")],
+		mixed: [...endRun("R1", "T1", "done"), ...pass("T1"), ...endRun("R2", "T3", "failed"), ...endRun("R3", "T4", "done"), ...pass("T4")],
+		all: [...endRun("R1", "T1", "done"), ...pass("T1"), ...endRun("R2", "T3", "done"), ...pass("T3"), ...endRun("R3", "T4", "done"), ...pass("T4")],
+		cancelled: [...endRun("R1", "T1", "done"), ...pass("T1"), h("verdict", "T3", { verdict: "cancel", reason: "x" }, "model"), ...endRun("R3", "T4", "done"), ...pass("T4")],
+		downstream: [...endRun("R1", "T1", "failed"), h("verdict", "T3", { verdict: "cancel", reason: "x" }, "model")],
+	}[variant];
+	if (!extra) throw new Error(`unknown variant ${variant}`);
+	const { state } = foldMemory([...scenario("ready", { tasks }), ...extra]);
+	const ss = ad.schedStateOf(state, { now: 5000, resources: RES });
+	const acts = sc.next(ss, RES, 5000);
+	out(`${JSON.stringify({ states: ss.tasks.map((t) => `${t.id}:${t.state}`), wakes: acts.filter((a) => a.kind === "wake_parent").map((a) => a.reason), starts: acts.filter((a) => a.kind === "start").length })}\n`);
+}
+
 function digest() {
 	const { state } = foldMemory(scenario("full"));
 	const input = ad.digestInputOf(state, "R1");
@@ -264,6 +291,7 @@ if (cmd === "replay") await replay(args[0], args[1] ?? "full");
 else if (cmd === "child") await child(args[0]);
 else if (cmd === "recover") await recover(args[0]);
 else if (cmd === "sched") sched(args[0]);
+else if (cmd === "wake") wake(args[0]);
 else if (cmd === "digest") digest();
 else if (cmd === "forge") await forge(args[0]);
 else {

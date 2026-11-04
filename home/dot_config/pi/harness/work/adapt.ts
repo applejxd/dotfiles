@@ -114,8 +114,18 @@ export function schedStateOf(state: LedgerState, opts: AdaptOptions): SchedState
 			reserve: { ...r.reserved },
 			spent: { ...r.spent },
 		};
+		// 台帳の run.reserved は超過分だけ増える (reduce.charge) ので、見積りは起動時に残した attrs.est を優先する
+		const est = r.attrs.est as Partial<Money> | undefined;
+		if (est && num(est.usd) !== undefined && num(est.tokens) !== undefined && num(est.ms) !== undefined) {
+			o.reserve = { usd: est.usd as number, tokens: est.tokens as number, ms: est.ms as number };
+		}
 		const last = num(r.attrs.lastOutputAt);
 		if (last !== undefined) o.lastOutputAt = last;
+		// steeredAt: steer を送った時刻 (使用量の wrap-up でも stall でも)。あれば二重に送らない
+		if (num(r.attrs.steeredAt) !== undefined) {
+			o.steered = true;
+			o.stallSteered = true;
+		}
 		if (typeof r.attrs.strategy === "string") o.strategy = r.attrs.strategy as SchedRun["strategy"];
 		const sp = r.attrs.speculative as { contract?: unknown; rev?: unknown } | undefined;
 		if (sp && typeof sp.contract === "string" && typeof sp.rev === "number") o.speculative = { contract: sp.contract, rev: sp.rev };

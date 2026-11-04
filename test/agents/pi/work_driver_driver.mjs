@@ -229,6 +229,82 @@ const cases = {
 			spent: s.state.nodes.get(r.runId).spent,
 		};
 	},
+	// 見積り: adapt は attrs.est (起動時の見積り) を reserve にする。超過後も 1.5 倍の steer・2 倍の abort が出る。attrs.est が無ければ従来どおり
+	estimate() {
+		const s = new Sim([T("T1", ["a/**"])]);
+		s.tick();
+		const r = s.spawned[0];
+		const est = r.reserve;
+		const reserveOf = () => ad.schedStateOf(s.state, { now: s.now, resources: s.res }).runs.find((x) => x.id === r.runId).reserve;
+		s.usage(r.runId, { usd: est.usd * 1.6, tokens: est.tokens * 1.6, ms: est.ms * 0.1 });
+		const ledgerReserved = s.state.nodes.get(r.runId).reserved;
+		const k15 = s.tick();
+		const k15b = s.tick();
+		s.usage(r.runId, { usd: est.usd * 0.5, tokens: est.tokens * 0.5, ms: est.ms * 0.1 });
+		const k2 = s.tick();
+		// attrs.est が無い run は台帳の reserved のまま
+		const bare = new Sim([T("T1", ["a/**"])]);
+		bare.push([ev.makeEvent("run.reserved", "r9", { task: "T1", est: { usd: 2, tokens: 3, ms: 4 } }, "system", { holder: H })]);
+		const bareReserve = ad.schedStateOf(bare.state, { now: bare.now, resources: bare.res }).runs[0].reserve;
+		// 不正な est (数でない) は無視
+		const bad = new Sim([T("T1", ["a/**"])]);
+		bad.push([ev.makeEvent("run.reserved", "r9", { task: "T1", est: { usd: 2, tokens: 3, ms: 4 }, attrs: { est: { usd: "x" } } }, "system", { holder: H })]);
+		const badReserve = ad.schedStateOf(bad.state, { now: bad.now, resources: bad.res }).runs[0].reserve;
+		return {
+			est,
+			reserve: reserveOf(),
+			ledgerReserved: { usd: ledgerReserved.usd, tokens: ledgerReserved.tokens },
+			k15: k15.effects.map((e) => e.kind),
+			k15b: k15b.effects.map((e) => e.kind),
+			k2: k2.effects.map((e) => `${e.kind}:${e.reason ?? ""}`),
+			bareReserve,
+			badReserve,
+		};
+	},
+	// 無出力の見張り: onOutput で最後の出力を覚え、5 分で steer (1 回)・10 分で abort。attrs の steeredAt・lastOutputAt も読む
+	stall() {
+		const s = new Sim([T("T1", [], [], "S", "ro")]);
+		s.tick();
+		const id = s.spawned[0].runId;
+		const o = dr.onOutput(s.state, id, s.now, s.memo);
+		s.memo = o.memo;
+		s.push(o.events);
+		const kinds = () => s.tick().effects.map((e) => `${e.kind}:${e.reason ?? ""}`);
+		s.now += 4 * 60_000;
+		const at4 = kinds();
+		s.now += 60_000;
+		const at5 = kinds();
+		const at5b = kinds();
+		s.now += 5 * 60_000;
+		const at10 = kinds();
+		// 出力があれば idle が戻る (別の run で確かめる)
+		const t = new Sim([T("T1", [], [], "S", "ro")]);
+		t.tick();
+		const tid = t.spawned[0].runId;
+		t.now += 4 * 60_000;
+		t.memo = dr.onOutput(t.state, tid, t.now, t.memo).memo;
+		t.now += 4 * 60_000;
+		const quiet = t.tick().effects.map((e) => e.kind);
+		// 終わった run には記録しない
+		t.finish(tid, DONE());
+		const dead = dr.onOutput(t.state, tid, t.now, t.memo);
+		// attrs の lastOutputAt・steeredAt を adapt が読む
+		const a = new Sim([T("T1", [], [], "S", "ro")]);
+		a.push([ev.makeEvent("run.reserved", "r9", { task: "T1", est: { usd: 1, tokens: 1, ms: 1 }, attrs: { lastOutputAt: 123, steeredAt: 456 } }, "system", { holder: H })]);
+		const ar = ad.schedStateOf(a.state, { now: a.now, resources: a.res }).runs[0];
+		return {
+			at4,
+			at5,
+			at5b,
+			at10,
+			quiet,
+			deadEvents: dead.events.length,
+			deadMemoSame: JSON.stringify(dead.memo) === JSON.stringify(t.memo),
+			memoAt: s.memo.outputAt,
+			auxTypes: o.events.map((e) => e.type),
+			attr: { lastOutputAt: ar.lastOutputAt, steered: ar.steered, stallSteered: ar.stallSteered },
+		};
+	},
 	// writes の重なり: 同時に start しない。台帳の門 (run.reserved) に拒否されない
 	overlap() {
 		const named = new Sim([T("T1", ["scripts/verify.py"]), T("T2", ["*.py"]), T("T3", ["src/**/*.ts"]), T("T4", ["src/a.ts"])]);
