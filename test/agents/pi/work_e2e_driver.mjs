@@ -68,7 +68,7 @@ export function foldMemory(newEvents) {
 const ser = (s) => JSON.stringify(rd.serialize(s));
 const canon = (x) => JSON.stringify(x, (_k, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1))) : v));
 const viol = (s) => inv.check(s).map((v) => `${v.inv}:${v.node ?? ""}:${v.message}`);
-const readyIds = (s) => pj.ready(s).map((n) => n.id);
+const readyIds = (s) => ad.readyOf(s).map((n) => n.id);
 
 async function persist(root, newEvents, { pid = process.pid } = {}) {
 	const st = store.createStore({ root, pid });

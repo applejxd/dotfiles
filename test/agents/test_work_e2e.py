@@ -241,18 +241,10 @@ def test_sched_serializes_overlapping_named_globs(sched):
     assert not ({"T3", "T4"} <= set(r["starts"]))  # src/**/*.ts と src/a.ts
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="統合で見つけた食い違い: *.py と scripts/verify.py を overlap.ts は素、台帳の門 (globs.ts の既定) は重なるとみなす",
-)
 def test_sched_and_ledger_agree_on_slashless_glob(sched):
     assert sched["named"]["rejected"] == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="統合で見つけた食い違い: project.ready は estimateMs 既定 1ms、sched は役割×大きさの p50 で臨界路を数える",
-)
 def test_sched_priority_matches_project_ready(sched):
     r = sched["basic"]
     order = [t for t in r["ready"] if t in r["starts"]]

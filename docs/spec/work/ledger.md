@@ -51,6 +51,5 @@
 
 - 台帳 → スケジューラ・digest の接続は `work/adapt.ts`（`schedStateOf`・`digestInputOf`。純関数）。台帳の `ready` と同じく active な goal の task・run だけを渡す
 - 端から端の試験は `test_work_e2e.py`（store で永続 → 読み直して fold → メモリの fold と一致、kill -9 後の再生、sched・digest への接続、利用者専用イベントの偽装）
-- `globsMayOverlap` の実装は `globs.ts` に一本化した。`overlap.ts` は `strict`（根からの厳密な一致）で呼ぶ
-- 既知の食い違い（試験は `xfail`）: ①スラッシュ無しの glob（`*.py`）を sched は素、台帳の門は重なるとみなし、台帳が `run.reserved` を拒否しうる ②`ready` と sched で臨界路の既定の見積りが違い、優先順位が揃わない
-- 配線時: sched の start を台帳へ書く前に `globs.ts` の既定の判定で再確認するか、台帳の門を `strict` に揃える
+- `globsMayOverlap` の実装は `globs.ts` に一本化した。`overlap.ts` も `globs.ts` の既定（保守的・gitignore 流）で呼ぶ（`strict` は撤去）
+- 食い違い 2 件は解消した（`xfail` を外した）: ①スラッシュ無しの glob（`*.py`）は sched も台帳の門と同じ判定で「重なる」とし、台帳が拒否するものを start しない ②`ready` は任意の `estimateMs` 見積りを受け、`adapt.readyOf` が sched と同じ見積り（`attrs.estimateMs`、無ければ役割×大きさの p50）を渡す。順序の一致は `test_work_e2e.py` が固定する

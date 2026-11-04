@@ -5,7 +5,8 @@ import type { ProviderState } from "./aimd.ts";
 import type { DigestInput } from "./digest.ts";
 import { isTaskLike, rootGoalId } from "./reduce.ts";
 import type { LedgerState } from "./reduce.ts";
-import { addMoney, historyKey, ZERO } from "./reserve.ts";
+import { ready } from "./project.ts";
+import { addMoney, durationP50, historyKey, ZERO } from "./reserve.ts";
 import type { Budget, Size } from "./reserve.ts";
 import type { Resources, SchedRun, SchedState, SchedTask } from "./sched.ts";
 import { emptyStats } from "./strategy.ts";
@@ -59,6 +60,29 @@ const taskOf = (n: Node, failures: number): SchedTask => {
 	if (usd !== undefined) t.costUsd = usd;
 	return t;
 };
+
+/** 完了した run の使用量から導いた履歴 (役割:大きさ)。active な goal の run だけ */
+const historyOf = (state: LedgerState): Record<string, Money[]> => {
+	const history: Record<string, Money[]> = {};
+	for (const r of state.nodes.values()) {
+		if (r.kind !== "run" || r.parent === undefined || r.state !== "done") continue;
+		const g = rootGoalId(state.nodes, r.id);
+		if (g === undefined || state.nodes.get(g)?.state !== "active") continue;
+		const t = state.nodes.get(r.parent);
+		if (t) (history[historyKey(roleOf(t), sizeOf(t))] ??= []).push({ ...r.spent });
+	}
+	return history;
+};
+
+/**
+ * project.ready をスケジューラと同じ見積り (attrs.estimateMs、無ければ役割×大きさの p50) で呼ぶ。
+ * ready の順序と sched の start の順序の出所を一つにする。
+ */
+export function readyOf(state: LedgerState, opts: { limit?: number; bundle?: string; history?: Record<string, Money[]> } = {}): Node[] {
+	const history = opts.history ?? historyOf(state);
+	const estimateMs = (n: Node): number => num(n.attrs.estimateMs) ?? durationP50(roleOf(n), sizeOf(n), history);
+	return ready(state, { limit: opts.limit, bundle: opts.bundle, estimateMs });
+}
 
 /**
  * 台帳の投影からスケジューラの入力を作る。対象は active な goal の task と run だけ (project.ready と同じ範囲)。

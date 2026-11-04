@@ -58,7 +58,7 @@ export function globsMayOverlap(a: string, b: string): boolean {
 	const ea = expandBraces(normalizeGlob(a));
 	const eb = expandBraces(normalizeGlob(b));
 	if (ea === null || eb === null) return true;
-	for (const x of ea) for (const y of eb) if (coreOverlap(normalizeGlob(x), normalizeGlob(y), { strict: true })) return true;
+	for (const x of ea) for (const y of eb) if (coreOverlap(normalizeGlob(x), normalizeGlob(y))) return true;
 	return false;
 }
 

@@ -507,11 +507,11 @@ def test_glob_overlap_is_symmetric_and_reflexive():
 
 
 def test_glob_overlap_is_not_trivially_true():
-    """保守的でも全部 true にはしない: 木の上で素な組のうち、少なくとも 6 割は false と答える"""
+    """保守的でも全部 true にはしない: 木の上で素な組のうち、半数近くは false と答える (台帳の門と同じ判定なので前置も重なる)"""
     pairs, got, sets = _overlap_table()
     disjoint = [g for (a, b), g in zip(pairs, got, strict=True) if not (sets[a] & sets[b])]
     assert disjoint
-    assert disjoint.count(False) / len(disjoint) > 0.6
+    assert disjoint.count(False) / len(disjoint) > 0.4
 
 
 EXACT = [
@@ -521,7 +521,11 @@ EXACT = [
     ("docs/**", "test/**", False),
     ("**/index.ts", "src/c/index.ts", True),
     ("src/*.ts", "src/a/x.ts", False),
-    ("*.py", "scripts/verify.py", False),
+    (
+        "*.py",
+        "scripts/verify.py",
+        True,
+    ),  # 台帳の門 (gitignore 流) と同じ: スラッシュの無い記法は全階層
     ("**/*.py", "scripts/verify.py", True),
     ("src/a*b", "src/c*d", False),
     ("src/a*b", "src/ab", True),
@@ -535,7 +539,7 @@ EXACT = [
     ("src/a/b/**", "src/a/b/z.ts", True),
     ("src/a/b/**", "src/a/x.ts", False),
     ("lib/q.ts", "lib/r.ts", False),
-    ("**/a/**", "b/c.ts", False),
+    ("**/a/**", "b/c.ts", True),  # 前置 (b/c.ts はディレクトリかもしれない) は保守的に重なる
 ]
 for _i, (_a, _b, _w) in enumerate(EXACT):
     case(f"glob{_i}", c("overlap", "globsMayOverlap", _a, _b))
@@ -579,8 +583,8 @@ case("brace2", c("overlap", "expandBraces", "a/{b"))
 def test_hot_hits_and_brace_expansion():
     assert result("hot0") == ["**/index.ts"]
     assert result("hot1") == []  # 木全体の宣言は hot とみなさない (writes の重なりで直列になる)
-    assert result("hot3") == ["scripts/verify.py"]
-    assert result("hot2") == []
+    assert result("hot3") == ["**/index.ts", "scripts/verify.py"]  # 前置も重なる (保守的)
+    assert result("hot2") == ["**/index.ts"]
     assert sorted(result("brace0")) == ["a/c", "a/d", "b/c", "b/d"]
     assert sorted(result("brace1")) == ["a/b", "a/c", "a/d"]
     assert result("brace2") is None
