@@ -49,6 +49,11 @@ const GUARD_TARGETS = [
 	"/.git/hooks",
 	".git/config",
 	".git/hooks",
+	// 作業台帳の置き場 (ハーネスだけが fs で書く)。"/.tmp/work/" は "/.tmp/worktrees/" に当たらない
+	"/.git/pi-work",
+	".git/pi-work",
+	"/.tmp/work/",
+	".tmp/work/",
 ];
 
 const guardHits = (token: string): boolean => {
@@ -56,7 +61,7 @@ const guardHits = (token: string): boolean => {
 	return GUARD_TARGETS.some((t) => expanded.includes(t));
 };
 
-const INLINE_PATH_RE = pyRegex(`['"]([^'"]*(?:\\.claude|\\.copilot|/agents|\\.git/|\\.pi/agent|config/pi/harness)[^'"]*)['"]`, "g");
+const INLINE_PATH_RE = pyRegex(`['"]([^'"]*(?:\\.claude|\\.copilot|/agents|\\.git/|\\.pi/agent|config/pi/harness|\\.tmp/work/)[^'"]*)['"]`, "g");
 const HOOK_ENV_RE = pyRegex("\\b(AGENTS_CONFIG_DIR|PYTHONPATH|CLAUDE_[A-Z_]*HOOK[A-Z_]*)=(\\S*)", "g");
 
 const MUTATING = new Set([

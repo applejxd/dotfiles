@@ -435,7 +435,9 @@
    "~/.pi/agent/settings.json",
    "~/.pi/agent/mcp.json",
    "~/.pi/agent/extensions/**",
-   "~/.config/pi/harness/**"
+   "~/.config/pi/harness/**",
+   "**/.git/pi-work/**",
+   "**/.tmp/work/**"
   ]
  },
  "hooks": [

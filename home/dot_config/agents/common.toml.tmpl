@@ -548,6 +548,9 @@ write_deny_globs = [
   "~/.pi/agent/mcp.json",
   "~/.pi/agent/extensions/**",
   "~/.config/pi/harness/**",
+  # 作業台帳の置き場。ハーネスだけが fs で書く (読み取りは許す)。see docs/spec/work/store.md#置き場
+  "**/.git/pi-work/**",
+  "**/.tmp/work/**",
 ]
 
 # deny の例外 (仕組みと CLI ごとの差は docs/spec/agent-config-generation.md#deny-の例外envexample-など)

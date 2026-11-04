@@ -6,6 +6,8 @@
 ## 置き場
 
 `<git-common-dir>/pi-work`。書けなければ `<cwd>/.tmp/work` へ退避する（`resolveStoreRoot`。`canWrite` は注入。どちらを選んだかと書けるかを返す）。
+
+**書き込みの保護**: `**/.git/pi-work/**` と `**/.tmp/work/**` は、モデルからは書けない（ハーネスだけが fs で書く）。ファイルツールは `[file] write_deny_globs`、bash のリダイレクト・`mv` / `cp` / `rm` / `tee`・インラインコードは `judge/rules_guard.ts` の `GUARD_TARGETS` で拒否する（読み取りは許す。試験は `test_pi_control_files_bash.py`）。サンドボックスの `denyWrite` には足さない（ハーネス自身が内側で書くため）。
 `pis` のサンドボックスで前者へ書けるかは未確認のため、退避を残している。
 
 ## ログの形式

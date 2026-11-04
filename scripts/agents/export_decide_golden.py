@@ -181,6 +181,10 @@ FILE_PATHS = (
     ".env.example",
     "src/../.env",
     "${ROOT}/.git/config",
+    # 作業台帳の置き場 (書き込みは deny、読み取りは従来どおり)
+    "${ROOT}/.git/pi-work/log/x.jsonl",
+    "${ROOT}/.git/pi-work/DEGRADED.json",
+    "${ROOT}/.tmp/work/journal/x.jsonl",
     "${HOME}/.ssh/id_rsa",
     "${HOME}/.aws/credentials",
     "${HOME}/.config/gh/hosts.yml",
