@@ -44,6 +44,7 @@ const summary = (d) => [
 	d.effects.filter((e) => e.kind === "wake").length,
 	d.entries[0]?.content.length ?? 0,
 	d.effects.some((e) => e.kind === "checkpoint" && e.action === "compact") ? 1 : 0,
+	d.effects.some((e) => e.kind === "checkpoint" && e.action === "cancel") ? 1 : 0,
 ];
 
 const run = (facts) => {

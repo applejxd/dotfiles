@@ -91,6 +91,8 @@ const stay = (by: Proposal["by"], priority: number, reason: string, effects: Pro
 	reason,
 });
 const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+/** 保存中に見送る (圧縮中・利用者の入力) ときは、古い保存周期を後続ターンへ持ち越さないよう取りやめる */
+const staleSaving = (f: Facts): Effect[] => (f.phase === "saving" ? [{ kind: "checkpoint", action: "cancel" }] : []);
 
 /** 文脈使用率の保存 (autocheckpoint.ts の idle / saving 相当)。閾値超えで LLM の指示つき、機械だけなら直接圧縮 */
 export function proposeCheckpoint(f: Facts): Proposal {
@@ -246,8 +248,8 @@ function decide(f: Facts, proposals: Proposal[]): Decision {
 		if (f.goal?.active) fx.push({ kind: "append_event", name: "goal.paused", data: { reason: "aborted" } });
 		return none(1, "中断 (Esc)。継続しない", fx);
 	}
-	if (f.compacting || f.phase === "compacting" || f.phase === "plan") return none(2, "圧縮中・計画中は継続しない");
-	if (f.userInput) return none(3, "利用者の入力を優先する");
+	if (f.compacting || f.phase === "compacting" || f.phase === "plan") return none(2, "圧縮中・計画中は継続しない", staleSaving(f));
+	if (f.userInput) return none(3, "利用者の入力を優先する", staleSaving(f));
 	if (f.outcome === "error") {
 		const fx: Effect[] = [toNotify({ kind: "notify", event: "run.failed", ctx: { needsFix: true }, text: "エラー応答" })];
 		if (f.phase === "saving" && f.trigger === "settle") fx.push({ kind: "checkpoint", action: "compact" });

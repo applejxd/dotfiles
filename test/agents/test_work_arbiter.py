@@ -91,19 +91,24 @@ def kinds(d, kind):
 
 # ── 独立した仕様 (優先順位表) ──
 def spec(f):
-    """(continue, row, wake, compact) を返す。driver の提案者の実装を見ずに表から導く"""
+    """(continue, row, wake, compact, cancel) を返す。driver の提案者の実装を見ずに表から導く。
+
+    cancel (保存周期の取りやめ) は、保存中 (phase == saving) に中断・圧縮中の見送り・利用者の入力優先で止まるとき。
+    古い保存周期を後続のターンへ持ち越さない。
+    """
+    stale = int(f["phase"] == "saving")
     if f["child"] or f["mode"] != "interactive":
-        return (0, 0, 0, 0)
+        return (0, 0, 0, 0, 0)
     if f["outcome"] == "aborted":
-        return (0, 1, 0, 0)
+        return (0, 1, 0, 0, stale)
     if f["compacting"] or f["phase"] in ("compacting", "plan"):
-        return (0, 2, 0, 0)
+        return (0, 2, 0, 0, stale)
     if f["userInput"]:
-        return (0, 3, 0, 0)
+        return (0, 3, 0, 0, stale)
     if f["outcome"] == "error":
-        return (0, 3, 0, int(f["phase"] == "saving" and f["trigger"] == "settle"))
+        return (0, 3, 0, int(f["phase"] == "saving" and f["trigger"] == "settle"), 0)
     if f["streak"] >= f["maxStreak"]:
-        return (0, 3, 0, 0)
+        return (0, 3, 0, 0, 0)
     settle_ = f["trigger"] == "settle"
     c = f["checkpoint"]
     cands = []
@@ -115,7 +120,7 @@ def spec(f):
             and c["percent"] >= c["threshold"]
         )
         if f["phase"] == "saving" or (hit and not c["llmStep"]):
-            return (0, 4, 0, 1)
+            return (0, 4, 0, 1, 0)
         if hit:
             cands.append(4)
     g = f["goal"]
@@ -148,8 +153,8 @@ def spec(f):
     if f["budgetExhausted"]:
         cands = [p for p in cands if p in (4, 5)]
     if not cands:
-        return (0, 9, 0, 0)
-    return (1, min(cands), 0, 0) if settle_ else (0, min(cands), 1, 0)
+        return (0, 9, 0, 0, 0)
+    return (1, min(cands), 0, 0, 0) if settle_ else (0, min(cands), 1, 0, 0)
 
 
 AXES = [
@@ -186,7 +191,7 @@ def _expand(axes):
 
 
 def test_priority_table_exhaustive():
-    """事実の直積 (約 12 万通り) で、driver の (継続・行・wake・直接圧縮) が独立した仕様と全て一致する"""
+    """事実の直積 (約 12 万通り) で、driver の (継続・行・wake・直接圧縮・取りやめ) が独立した仕様と全て一致する"""
     base = copy.deepcopy(BASE)
     base["todo"]["queued"] = ["#3 未着手"]
     rows = drive({"grid": {"base": base, "axes": AXES}})["rows"]
@@ -194,7 +199,7 @@ def test_priority_table_exhaustive():
     assert len(rows) == len(cases) > 100_000
     bad = []
     for f, r in zip(cases, rows, strict=True):
-        got = (r[0], r[1], r[3], r[5])
+        got = (r[0], r[1], r[3], r[5], r[6])
         want = spec(f)
         if got != want:
             bad.append((got, want, f))
@@ -571,3 +576,18 @@ def test_batch_matches_single():
     assert [b["decision"] for b in batch] == [
         drive({"settle": {"facts": c}})["decision"] for c in cases
     ]
+
+
+@pytest.mark.parametrize("stop", [{"userInput": True}, {"compacting": True}])
+def test_stopping_while_saving_cancels_the_stale_cycle(stop):
+    """保存中に利用者の入力・圧縮中の見送りで止まるときは、保存周期を取りやめる (saving を後続ターンへ残さない)"""
+    d = settle(phase="saving", **stop)
+    assert d["continue"] is False and d["entries"] == []
+    assert {"kind": "checkpoint", "action": "cancel"} in d["effects"]
+    assert kinds(d, "wake") == []
+
+
+@pytest.mark.parametrize("stop", [{"userInput": True}, {"compacting": True}])
+def test_stopping_when_idle_has_no_cancel(stop):
+    d = settle(phase="idle", **stop)
+    assert {"kind": "checkpoint", "action": "cancel"} not in d["effects"]

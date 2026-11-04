@@ -10,8 +10,8 @@
 | --- | --- | --- |
 | 0 | 子・print・json | なし |
 | 1 | 中断 (Esc) | なし。保存中なら `checkpoint cancel`、goal 実行中なら `goal.paused` |
-| 2 | 圧縮中・phase が compacting / plan | なし |
-| 3 | 利用者の入力・エラー応答・連続継続の上限 | なし。エラーは `run.failed` を通知 (保存中なら続けて compact) |
+| 2 | 圧縮中・phase が compacting / plan | なし。phase が saving のまま圧縮中として見送るときは `checkpoint cancel` (古い保存周期を持ち越さない) |
+| 3 | 利用者の入力・エラー応答・連続継続の上限 | なし。利用者の入力で保存中なら `checkpoint cancel`。エラーは `run.failed` を通知 (保存中なら続けて compact) |
 | 4 | 保存 (文脈 ≥ 閾値・cooldown 外) | LLM の指示つきで継続 (単独)。機械だけなら継続せず直接 compact。保存中の settle も compact |
 | 5 | 予算超過かつ完了の申告 | 先に評価 (継続)。申告が無ければ継続せず `budget.paused` |
 | 6 | 失敗の判断 (子の失敗・承認の連続失敗) | 継続 (triage) |

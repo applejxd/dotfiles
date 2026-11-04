@@ -49,6 +49,29 @@ const PHASES: readonly string[] = ["idle", "saving", "compacting"];
 const bool = (v: unknown): boolean => v === true;
 const count = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
 const labels = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+const isBool = (v: unknown): v is boolean => typeof v === "boolean";
+const isLabels = (v: unknown): boolean => Array.isArray(v) && v.every((x) => typeof x === "string");
+
+/**
+ * 部品ごとの必須項目の検証。欠け・null・型違い・範囲外が 1 つでもあれば「無効 (提案しない)」に倒す。
+ * 正常な producer (autocheckpoint.ts・todo) は全項目を返すので、欠落を既定値として許す項目は無い。see docs/spec/work/settle.md
+ */
+function checkpointValid(c: CheckpointRaw | undefined): boolean {
+	if (c === undefined || c === null || typeof c !== "object") return false;
+	if (c.disabled !== false || !isBool(c.cooldown) || !isBool(c.llmStep)) return false;
+	if (typeof c.threshold !== "number" || !(c.threshold > 0 && c.threshold <= 100)) return false;
+	if (c.percent !== null && !(typeof c.percent === "number" && Number.isFinite(c.percent) && c.percent >= 0 && c.percent <= 100)) return false;
+	if (typeof c.phase !== "string" || !PHASES.includes(c.phase)) return false;
+	// LLM に保存させるとき、指示文が空では継続しない
+	if (c.llmStep === true && !(typeof c.prompt === "string" && c.prompt.trim() !== "")) return false;
+	return true;
+}
+
+function todoValid(t: TodoRaw | undefined): boolean {
+	if (t === undefined || t === null || typeof t !== "object") return false;
+	if (t.disabled !== false || !isBool(t.nudged) || !isBool(t.nudgedWaiting)) return false;
+	return isLabels(t.doing) && isLabels(t.blocked) && isLabels(t.queued);
+}
 
 /** 各拡張の生の状態から、調停の snapshot を組む */
 export function buildSnapshot(inp: SnapshotInput | undefined): SettleSnapshot {
@@ -73,11 +96,11 @@ export function buildSnapshot(inp: SnapshotInput | undefined): SettleSnapshot {
 			threshold,
 			cooldown: bool(c?.cooldown),
 			llmStep: c?.llmStep === undefined ? true : bool(c.llmStep),
-			disabled: c === undefined ? true : bool(c.disabled), // 拡張が無い・未登録なら提案しない
+			disabled: !checkpointValid(c), // 拡張が無い・未登録・不完全なら提案しない
 			prompt: typeof c?.prompt === "string" ? c.prompt : "",
 		},
 		todo: {
-			disabled: t === undefined ? true : bool(t.disabled),
+			disabled: !todoValid(t), // 不完全なら提案しない
 			doing: labels(t?.doing),
 			blocked: labels(t?.blocked),
 			queued: labels(t?.queued),

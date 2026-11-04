@@ -58,7 +58,7 @@ if (req.mode === "wire") {
 		ui: { notify: (m) => notes.push(m), setStatus: () => {} },
 		sessionManager: { getBranch: () => branch },
 		hasPendingMessages: () => cur.pending === true,
-		isCompacting: () => false,
+		isCompacting: () => cur.isCompacting === true,
 		getContextUsage: () => ({ percent: cur.percent }),
 		compact: (o) => {
 			compacts.push(o);
@@ -96,11 +96,28 @@ if (req.mode === "wire") {
 			handlers: Object.fromEntries(Object.entries(handlers).map(([k, v]) => [k, v.length])),
 			steps: out,
 			resumes,
+			checkpointSnapshot: ac.checkpointSnapshot(),
 			wakes,
 			sent,
 			todoSnapshot: globalThis.__piTodoSnapshot ? JSON.parse(JSON.stringify(globalThis.__piTodoSnapshot())) : null,
 		}),
 	);
+} else if (req.mode === "through") {
+	// buildSnapshot → handleSettle を通し、継続 (cont)・効果 (checkpoint・wake・notify) を返す
+	const st = await imp(resolve(H, "work", "settle.ts"));
+	const sn = await imp(resolve(H, "work", "settle-snapshot.ts"));
+	const results = [];
+	for (const c of req.cases) {
+		const eff = { checkpoint: [], wake: 0, notify: 0 };
+		const deps = {
+			snapshot: () => sn.buildSnapshot(c),
+			exec: { wake: () => eff.wake++, notify: () => eff.notify++, checkpoint: (a) => eff.checkpoint.push(a ?? "compact") },
+		};
+		const ctx = { mode: "tui", hasPendingMessages: () => false, isCompacting: () => false };
+		const r = st.handleSettle({ outcome: "completed", entries: [] }, ctx, deps, { enabled: true, child: false });
+		results.push({ cont: r.continue === true, entries: (r.entries ?? []).length, ...eff });
+	}
+	process.stdout.write(JSON.stringify({ results }));
 } else if (req.mode === "snap") {
 	const sn = await imp(resolve(H, "work", "settle-snapshot.ts"));
 	process.stdout.write(JSON.stringify({ results: req.cases.map((c) => sn.buildSnapshot(c === "__undefined__" ? undefined : c)) }));

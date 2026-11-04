@@ -28,8 +28,9 @@ snapshot の取得などで例外が出たら `{}` (継続しない)。ハンド
 2. autocheckpoint: `checkpointSnapshot()` (`phase`・`percent`・`cooldown`) と `checkpointExec` (`compact`・`cancel`・`markSaving`・`notify`・`wake`) を公開。
    ctx は `session_start`・`before_agent_start`・`turn_end` で控える。保存の指示が勝ったことは journal の tap (`work/settle-snapshot.ts` の `tapJournal`) が `markSaving` で受ける。
 3. todo: `globalThis.__piTodoSnapshot()` (`open`・`doing`・`blocked`・`queued`・`nudged*`・`markNudged`)。リマインドが勝ったことは同じ tap が `markNudged` で受ける。
-4. snapshot の組み立ては `work/settle-snapshot.ts` の `buildSnapshot` (欠け・壊れは継続しない側へ)。`streak` は数えない (0 固定)。
-5. 圧縮完了後の自動再開 (`trigger: resume`) は**従来の経路のまま** (実機で確かめてから調停へ移す)。goal の配線は別 feature。
+4. snapshot の組み立ては `work/settle-snapshot.ts` の `buildSnapshot`。**欠け・壊れは継続しない側へ**: 部品 (checkpoint・todo) ごとに必須項目を検証し、満たさない部品は `disabled:true` (提案しない) にする。必須は、`disabled === false` が明示されていること・`cooldown`／`llmStep` (todo は `nudged`／`nudgedWaiting`) が boolean・`doing`／`blocked`／`queued` が文字列の配列・`threshold` が 0 超 100 以下・`percent` が `null` か 0〜100 の有限数・`phase` が既知の値・LLM に保存させる (`llmStep:true`) ときの `prompt` が空でない文字列。欠落を既定値として許す項目は無い (正常な producer の `checkpointSnapshot()`・`__piTodoSnapshot` は全項目を返す)。`streak` は数えない (0 固定)。
+5. 保存中 (`phase:"saving"`) に利用者の入力・圧縮中の見送りで止まるときは、`checkpoint cancel` を返して保存周期を取りやめる (`saving` を後続のターンへ残さない。代償: その周期の保存と自動再開は取りやめ、cooldown が入る)。
+6. 圧縮完了後の自動再開 (`trigger: resume`) は**従来の経路のまま** (実機で確かめてから調停へ移す)。goal の配線は別 feature。
 
 ## 限界
 

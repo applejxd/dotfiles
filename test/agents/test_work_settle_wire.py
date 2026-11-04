@@ -85,8 +85,17 @@ def test_flag_off_registers_the_legacy_two_handlers_and_no_arbiter(todo_path):
     out = wire(todo_path, False, [])
     assert out["handlers"]["agent_before_settle"] == 2
     assert out["registered"] is None
-    # 調停のための ctx 捕捉のハンドラも増えない (todo の session_start・before_agent_start だけ)
-    assert "turn_end" not in out["handlers"]
+    # 旧コミット (3abfbf6a^) の autocheckpoint (agent_before_settle 1) と todo (session_start・session_tree・
+    # before_agent_start・agent_before_settle) の合成と完全一致。調停のための ctx 捕捉・turn_end は無い
+    assert out["handlers"] == {
+        "agent_before_settle": 2,
+        "session_start": 1,
+        "session_tree": 1,
+        "before_agent_start": 1,
+    }
+    # agent_before_settle の登録順 (autocheckpoint → todo) は結果の順で確かめる
+    on = wire(todo_path, False, [{"percent": 90}], DOING)
+    assert on["steps"][0]["types"] == ["autocheckpoint", "todo-reminder"]
 
 
 def test_flag_off_behaviour_is_the_legacy_chain(todo_path):
@@ -214,6 +223,7 @@ FULL = {
         "threshold": 80,
         "cooldown": False,
         "disabled": False,
+        "llmStep": True,
         "prompt": "P",
     },
     "todo": {
@@ -354,16 +364,178 @@ def test_boolean_fields_are_strict_over_the_product():
     for case, s in zip(cases, snaps(cases), strict=True):
         cp, td = case["checkpoint"], case["todo"]
         assert s["checkpoint"]["cooldown"] is (cp["cooldown"] is True)
-        assert s["checkpoint"]["disabled"] is (cp["disabled"] is True)
+        # disabled === false が明示され、抑止用の旗が有効な boolean のときだけ有効 (不正は無効へ)
+        cp_ok = cp["disabled"] is False and isinstance(cp["cooldown"], bool)
+        assert s["checkpoint"]["disabled"] is (not cp_ok)
         assert s["todo"]["nudged"] is (td["nudged"] is True)
-        assert s["todo"]["disabled"] is (td["disabled"] is True)
+        td_ok = td["disabled"] is False and isinstance(td["nudged"], bool)
+        assert s["todo"]["disabled"] is (not td_ok)
 
 
-def test_llm_step_defaults_to_true_and_prompt_is_kept():
+def test_llm_step_must_be_boolean_and_prompt_is_kept():
     (s,) = snaps([FULL])
     assert s["checkpoint"]["llmStep"] is True and s["checkpoint"]["prompt"] == "P"
+    assert s["checkpoint"]["disabled"] is False
+    # LLM に保存させないなら prompt は要らない
     (s,) = snaps([{**FULL, "checkpoint": {**FULL["checkpoint"], "llmStep": False, "prompt": 5}}])
     assert s["checkpoint"]["llmStep"] is False and s["checkpoint"]["prompt"] == ""
+    assert s["checkpoint"]["disabled"] is False
+    # llmStep の欠落は「保存させる」としては扱わず、部品を無効にする
+    cp = {k: v for k, v in FULL["checkpoint"].items() if k != "llmStep"}
+    (s,) = snaps([{**FULL, "checkpoint": cp}])
+    assert s["checkpoint"]["disabled"] is True
+
+
+# ─── 不完全な snapshot は buildSnapshot → handleSettle まで通しても継続しない ──────────────
+
+CP_OK = {
+    "phase": "idle",
+    "percent": 90,
+    "threshold": 80,
+    "cooldown": False,
+    "disabled": False,
+    "llmStep": True,
+    "prompt": "P",
+}
+TD_OK = {
+    "disabled": False,
+    "doing": ["#1 a"],
+    "blocked": [],
+    "queued": [],
+    "nudged": False,
+    "nudgedWaiting": False,
+}
+
+
+def through(cases):
+    return drive({"mode": "through", "cases": cases})["results"]
+
+
+def _without(d, key):
+    return {k: v for k, v in d.items() if k != key}
+
+
+BAD_CHECKPOINTS = [
+    _without(CP_OK, "disabled"),
+    {**CP_OK, "disabled": None},
+    {**CP_OK, "disabled": "false"},
+    {**CP_OK, "disabled": 0},
+    _without(CP_OK, "cooldown"),
+    {**CP_OK, "cooldown": None},
+    {**CP_OK, "cooldown": "no"},
+    _without(CP_OK, "llmStep"),
+    {**CP_OK, "llmStep": "true"},
+    _without(CP_OK, "prompt"),
+    {**CP_OK, "prompt": ""},
+    {**CP_OK, "prompt": "  "},
+    {**CP_OK, "prompt": None},
+    {**CP_OK, "prompt": 5},
+    _without(CP_OK, "threshold"),
+    {**CP_OK, "threshold": 0},
+    {**CP_OK, "threshold": "80"},
+    _without(CP_OK, "percent"),
+    {**CP_OK, "percent": "90"},
+    {**CP_OK, "percent": 101},
+    {**CP_OK, "percent": -1},
+    {**CP_OK, "percent": True},
+    _without(CP_OK, "phase"),
+    {**CP_OK, "phase": "bogus"},
+    {"percent": 90},  # 事例: レビューの再現入力 (他は全部欠落)
+]
+BAD_TODOS = [
+    _without(TD_OK, "disabled"),
+    {**TD_OK, "disabled": None},
+    {**TD_OK, "disabled": "false"},
+    _without(TD_OK, "nudged"),
+    {**TD_OK, "nudged": None},
+    {**TD_OK, "nudged": "no"},
+    _without(TD_OK, "nudgedWaiting"),
+    {**TD_OK, "nudgedWaiting": 0},
+    _without(TD_OK, "doing"),
+    {**TD_OK, "doing": "x"},
+    {**TD_OK, "doing": ["#1 a", 2]},
+    {**TD_OK, "doing": None},
+    {"doing": ["#1 a"]},
+]
+
+
+def test_the_good_baseline_does_continue():
+    # 対照: 完全な入力は継続する (下の不完全の試験が空打ちでないこと)
+    a, b = through([{"checkpoint": CP_OK}, {"todo": TD_OK}])
+    assert a["cont"] is True and b["cont"] is True
+
+
+def test_incomplete_checkpoint_never_continues_or_compacts():
+    assert len(BAD_CHECKPOINTS) >= 15
+    cases = [{"checkpoint": c} for c in BAD_CHECKPOINTS]
+    for c, r in zip(BAD_CHECKPOINTS, through(cases), strict=True):
+        assert r["cont"] is False and r["entries"] == 0 and r["checkpoint"] == [], c
+        assert r["wake"] == 0, c
+
+
+def test_incomplete_todo_never_continues():
+    assert len(BAD_TODOS) >= 10
+    cases = [{"todo": t} for t in BAD_TODOS]
+    for t, r in zip(BAD_TODOS, through(cases), strict=True):
+        assert r["cont"] is False and r["entries"] == 0, t
+
+
+def test_incomplete_part_does_not_hide_a_complete_one():
+    # 壊れた todo があっても、完全な checkpoint は動く (部品ごとの無効化)
+    (r,) = through([{"checkpoint": CP_OK, "todo": BAD_TODOS[0]}])
+    assert r["cont"] is True
+
+
+def test_real_producers_return_complete_snapshots_that_pass(todo_path):
+    """実物の producer (checkpointSnapshot・__piTodoSnapshot) の返り値は全項目を持ち、無効にされない"""
+    out = wire(todo_path, True, [{"percent": 10}], DOING)
+    todo = out["todoSnapshot"]
+    assert {"disabled", "doing", "blocked", "queued", "nudged", "nudgedWaiting"} <= set(todo)
+    (s,) = snaps([{"todo": todo, "checkpoint": out["checkpointSnapshot"]}])
+    assert s["todo"]["disabled"] is False and s["checkpoint"]["disabled"] is False
+    assert s["todo"]["doing"] == ["#1 作業"]
+    assert s["checkpoint"]["prompt"] != ""
+    # 実際に調停を通しても正常に動く (最初のターン: todo のリマインド、高使用率: 保存)
+    assert out["steps"][0]["types"] == ["todo-reminder"]
+    assert wire(todo_path, True, [{"percent": 90}], DOING)["steps"][0]["types"] == [
+        "autocheckpoint"
+    ]
+
+
+# ─── 保存中に見送ったときは周期を取りやめる (saving を残さない) ──────────────
+
+
+def test_user_input_while_saving_cancels_the_cycle(todo_path):
+    steps = [
+        {"percent": 90},
+        {"percent": 90, "pending": True, "userTurn": False},
+        {"percent": 10},
+    ]
+    out = wire(todo_path, True, steps, [])
+    a, b, c = out["steps"]
+    assert a["types"] == ["autocheckpoint"] and a["phase"] == "saving"
+    assert b["types"] == [] and b["compacts"] == 0 and b["phase"] == "idle"  # saving を残さない
+    # 最後の別ターンは閾値未満なので圧縮しない
+    assert c["types"] == [] and c["compacts"] == 0 and c["phase"] == "idle"
+    assert out["resumes"] == []
+
+
+def test_is_compacting_while_saving_cancels_the_cycle(todo_path):
+    steps = [
+        {"percent": 90},
+        {"percent": 90, "isCompacting": True, "userTurn": False},
+        {"percent": 10},
+    ]
+    out = wire(todo_path, True, steps, [])
+    a, b, c = out["steps"]
+    assert a["phase"] == "saving"
+    assert b["compacts"] == 0 and b["phase"] == "idle"
+    assert c["compacts"] == 0 and c["types"] == []
+
+
+def test_user_input_when_idle_has_no_cancel_side_effect(todo_path):
+    out = wire(todo_path, True, [{"percent": 10, "pending": True}], [])
+    assert out["steps"][0]["phase"] == "idle" and out["steps"][0]["compacts"] == 0
 
 
 # ─── 配線の静的な確認 ────────────────────────────────────────────────
