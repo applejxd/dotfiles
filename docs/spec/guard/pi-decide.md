@@ -322,6 +322,7 @@ Python 版の判定結果を正解として、TS 版との全件一致を確か�
 - **使い方**: `judge_baseline.mjs --write-baseline`（意図した変更のあとに書き出し直す）・`--check`（1 行でも違えば 1）。`judge_diff.mjs` は差を強さ（deny > mustConfirm > ask > allow）で `relax`・`tighten`・`reason` に分け、台帳に無い差があれば終了コード 1。`--emit-ledger` は台帳の雛形を出す。`--corpus <JSON の文字列配列>` は外部コーパス（`.tmp/keep` に置き、リポジトリには入れない）を回し、baseline に無い入力の分布だけを出す（コマンドは出さない）。
 - **台帳の運用**: 1 行 `{kind, input, role, mode, old, new, class, reason, approver}`（`class` は `relax`・`tighten`・`false-positive`・`neutral`）。緩和は 1 件ずつ理由と承認者（`user`・`review`）を記録し、`relax` は台帳なしでは通らない。差が消えた台帳の行は警告（古い台帳）。承認した差は baseline を書き出し直して台帳を空に戻してよい。
 - **限界**: golden とコーパスに無い入力の退行は検知できない。baseline は「現状」で、正しさは保証しない。check は golden に載る（ヒットのある）入力だけで、ヒット無しの入力の新規ヒットは見ない。
+- **公開の突破の回帰試験**: `test_pi_public_bypasses.py` は、公開の突破の入力（引数・ラッパー・パス・展開の 4 型）の判定を bypass あり・役割 `implementer` で固定する。止まるものは `deny`、止まらない既知の穴は `xfail(strict)` で、塞がれると XPASS で失敗し表の更新を促す。結果は [調査](../../research/agents/command-judge-survey.md#公開の突破の回帰試験の結果2026-11-05)。
 
 ### 判定が前の呼び出しに依存していた（修正済み）
 
