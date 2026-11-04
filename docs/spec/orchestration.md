@@ -59,7 +59,7 @@
 調査: `.tmp/keep/wt-research/synthesis.md` の P1（利用者の選択）。他ツールで所有を機械で強制するものはなく、`git worktree lock` を表明に使うのは一部（pid 付きのものがある）。
 
 - **理由欄**は 1 行 `owner=<kind> id=<id> pid=<pid> started=<unix 秒>`。`id` は空白を含まない 1 語。
-- **kind**: `worker`（親が起動した子エージェント）・`job`（PR ビューアのジョブ）・`create`（起票の作成中だけ）・`train`（統合用の枝の組み立て）・`interactive`（人の対話 pi。任意）。
+- **kind**: `worker`（親が起動した子エージェント）・`job`（PR ビューアのジョブ）・`create`（起票の作成中だけ）・`bundle`（統合用の枝の組み立て）・`interactive`（人の対話 pi。任意）。
 - **生死**: `pid` が生きている間だけ「有効」（`kill -0`）。死んでいれば「残骸」。**残骸は `claim` が自動では奪わない**（`unlock`→`lock` は原子的でなく、古い観測で他方の新しい lock を外しうるため。終了コード 3・「`reap` で解除してから」）。解除は明示の回復操作 `reap` だけが、観測した理由欄を再読して一致する場合に限り行う。`owner=` で始まらない lock（人が付けたもの・理由なし）は「不明の lock」として自動では解除しない。
 - **道具**: `scripts/wt_owner.py`（`claim <wt> --kind <k> --id <id> [--pid N]`・`release <wt> [--id <id>]`・`status [<wt>]`・`reap`。他の有効な owner・残骸・不明の lock で終了コード 3）。同じ規則の TS 実装が `apps/pr-viewer/worktree-owner.ts`。`--pid` を省くと、シェルではない最初の祖先（= 呼び出した AI）の pid になる。
 - **排他**: git の `worktree lock` 自体が「lock 済みか確認 → `locked` ファイルを書く」の非原子で、負荷下では 2 件が同時に成功した（実測）。そのため `claim`・`release`・`reap` の臨界区間は、共通 git-dir の `pi-wt-owner.guard`（`O_EXCL` 作成。既定の待ち 10 秒、30 秒より古いガードは残骸として削除）で排他にする（Python・TS 共通。取れなければ fail closed: `claim` は終了コード 3、他は失敗）。`claim` は lock 後に理由欄を再読して自分のものか確かめる。待ち時間は `PI_WT_OWNER_GUARD_WAIT_MS` で変えられる（試験用）。
@@ -141,15 +141,15 @@ CLI の終了コード: 0 = 全て処理、3 = 一部を残した・拒否、2 =
 
 契約の雛形と決定ログの書き方: [plan-contract.md](../../.agents/skills/feature-orchestration/references/plan-contract.md)。
 
-## 統合用の枝（train）
+## 統合用の枝（bundle）
 
-複数の feature を 1 回の全件検査・1 回の「統合する」で取り込むため、統合用の枝 `feature/train-N`（worktree `.tmp/worktrees/train-N`）を `scripts/train.py` で作る。`git flow` は呼ばない（`.gitflow` の接頭辞と基点を読む）。
+複数の feature を 1 回の全件検査・1 回の「統合する」で取り込むため、統合用の枝 `feature/bundle-N`（worktree `.tmp/worktrees/bundle-N`）を `scripts/bundle.py` で作る。旧称は train（merge train の比喩）。旧名の枝 `feature/train-N` は bundle の枝として扱わない。`git flow` は呼ばない（`.gitflow` の接頭辞と基点を読む）。
 
 | コマンド | 内容 |
 | --- | --- |
-| `python3 scripts/train.py start [--name train-N] <feature>...` | develop の最新から枝と worktree を作り、指定順に `git merge` する。`a` でも `feature/a` でもよい。名前を省くと空き番号を選ぶ |
-| `continue [--name train-N]` | 衝突が解消され `git add -A` 済みならコミットし、残りの枝を続ける |
-| `verify [--name train-N]` | その worktree で `mise run verify:all` を回し、件数と終了コードを要約する（`TRAIN_VERIFY_CMD` で差し替え可） |
+| `python3 scripts/bundle.py start [--name bundle-N] <feature>...` | develop の最新から枝と worktree を作り、指定順に `git merge` する。`a` でも `feature/a` でもよい。名前を省くと空き番号を選ぶ |
+| `continue [--name bundle-N]` | 衝突が解消され `git add -A` 済みならコミットし、残りの枝を続ける |
+| `verify [--name bundle-N]` | その worktree で `mise run verify:all` を回し、件数と終了コードを要約する（`BUNDLE_VERIFY_CMD` で差し替え可） |
 | `status` / `summary` | 取り込み済み・未取り込み・衝突中の一覧 / PR 要約の材料（枝ごとのコミット数・変更ファイル数） |
 
 各枝の前に、「存在する」「develop に未統合」「worktree に生きた pid の owner lock（`locked owner=<kind> id=<id> pid=<pid> started=<秒>`）が無い」を確かめ、満たさなければ何も作らず止まる。
@@ -158,7 +158,7 @@ CLI の終了コード: 0 = 全て処理、3 = 一部を残した・拒否、2 =
 
 **衝突の扱い**: 衝突したら、そこで止めて衝突ファイルの一覧を出す（終了コード 3）。**自明に見える衝突でもスクリプトは直さない**。設計上、衝突は worker が直す（取り違えると片方の変更を黙って捨てるため、解消は意味を読める役が責任を持つ）。worker が worktree で解消し、`git add -A` したあと `continue` を呼ぶ。マーカーが残っていると `continue` は拒否する。
 
-AI のガードが `git merge` を直接は通さない場合に備え、`python3 scripts/train.py ...` の形で呼ぶ想定。ガード側で通るかは未確認。Windows は未検証。
+AI のガードが `git merge` を直接は通さない場合に備え、`python3 scripts/bundle.py ...` の形で呼ぶ想定。ガード側で通るかは未確認。Windows は未検証。
 
 ## 9. 未実装・保留（案件）
 

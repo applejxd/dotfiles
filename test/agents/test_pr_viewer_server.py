@@ -1027,10 +1027,10 @@ def incl(tmp_path_factory):
     _git(repo, "branch", "feature/dup2", "feature/dup1")
     # 構成員 a・b・c・dup1 を取り込んだ統合用の枝
     _git(repo, "switch", "-q", "develop")
-    _git(repo, "switch", "-q", "-c", "feature/train-1")
+    _git(repo, "switch", "-q", "-c", "feature/bundle-1")
     for name in ("a", "b", "dup1", "c"):
         _git(repo, "merge", "-q", "--no-ff", "-m", f"merge {name}", f"feature/{name}")
-    # c は train の取り込み後に追加のコミットが載るので、train には含まれない
+    # c は bundle の取り込み後に追加のコミットが載るので、bundle には含まれない
     _git(repo, "switch", "-q", "feature/c")
     _commit(repo, {"c2.txt": "c2\n"}, "feat: c2")
     # gone は develop へ統合済み (0 コミット。一覧に出ない)
@@ -1041,20 +1041,20 @@ def incl(tmp_path_factory):
     w.server.stop()
 
 
-def test_members_of_a_train_are_marked_included_and_the_train_is_not(incl):
-    assert _pr(incl, incl.repo, "feature/a")["includedIn"] == "feature/train-1"
-    assert _pr(incl, incl.repo, "feature/b")["includedIn"] == "feature/train-1"
-    assert "includedIn" not in _pr(incl, incl.repo, "feature/train-1")
+def test_members_of_a_bundle_are_marked_included_and_the_bundle_is_not(incl):
+    assert _pr(incl, incl.repo, "feature/a")["includedIn"] == "feature/bundle-1"
+    assert _pr(incl, incl.repo, "feature/b")["includedIn"] == "feature/bundle-1"
+    assert "includedIn" not in _pr(incl, incl.repo, "feature/bundle-1")
 
 
-def test_a_branch_that_advanced_after_the_train_is_not_included(incl):
+def test_a_branch_that_advanced_after_the_bundle_is_not_included(incl):
     assert "includedIn" not in _pr(incl, incl.repo, "feature/c")
 
 
-def test_same_oid_member_branches_are_both_included_in_the_train(incl):
-    # dup1・dup2 は同じ先頭。互いを「含む枝」とは数えず、train だけが含む枝になる
+def test_same_oid_member_branches_are_both_included_in_the_bundle(incl):
+    # dup1・dup2 は同じ先頭。互いを「含む枝」とは数えず、bundle だけが含む枝になる
     for name in ("dup1", "dup2"):
-        assert _pr(incl, incl.repo, f"feature/{name}")["includedIn"] == "feature/train-1"
+        assert _pr(incl, incl.repo, f"feature/{name}")["includedIn"] == "feature/bundle-1"
 
 
 def test_same_oid_pair_alone_is_not_included(tmp_path):

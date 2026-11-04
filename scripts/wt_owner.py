@@ -6,7 +6,7 @@
     python3 scripts/wt_owner.py status [<worktree>]
     python3 scripts/wt_owner.py reap
 
-理由欄は 1 行 `owner=<kind> id=<id> pid=<pid> started=<unix 秒>`。kind は worker・job・create・train・interactive。
+理由欄は 1 行 `owner=<kind> id=<id> pid=<pid> started=<unix 秒>`。kind は worker・job・create・bundle・interactive。
 pid が生きている間だけ「有効」、死んでいれば「残骸」（claim は拒否して終了コード 3。reap だけが解除する）。
 `owner=` で始まらない lock（人が付けたもの）は「不明の lock」として、自動では解除しない。
 <worktree> は絶対パス、または名前（`.tmp/worktrees/<name>`）。リポジトリ内（どの worktree でもよい）から実行する。
@@ -28,7 +28,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-KINDS = ("worker", "job", "create", "train", "interactive")
+KINDS = ("worker", "job", "create", "bundle", "interactive")
 REASON_RE = re.compile(r"^owner=(\S+) id=(\S+) pid=(\d+) started=(\d+)$")
 EXIT_BUSY = 3
 # claim・release・reap の臨界区間の排他ガード（git の共通ディレクトリ内のファイル。TS 版と同じ名前・規則）。

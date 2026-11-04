@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""複数の feature を 1 本の統合用の枝 (feature/train-N) にまとめて取り込む道具。
+"""複数の feature を 1 本の統合用の枝 (feature/bundle-N) にまとめて取り込む道具。
 
-    python3 scripts/train.py start [--name train-N] <feature>...
-    python3 scripts/train.py continue [--name train-N]
-    python3 scripts/train.py verify [--name train-N]
-    python3 scripts/train.py status [--name train-N]
-    python3 scripts/train.py summary [--name train-N]
+    python3 scripts/bundle.py start [--name bundle-N] <feature>...
+    python3 scripts/bundle.py continue [--name bundle-N]
+    python3 scripts/bundle.py verify [--name bundle-N]
+    python3 scripts/bundle.py status [--name bundle-N]
+    python3 scripts/bundle.py summary [--name bundle-N]
 
 <feature> は `a` でも `feature/a` でもよい。リポジトリ (本体か任意の worktree) の中で実行する。
-衝突は直さず、止めて終了コード 3 を返す (解消は worker の仕事。docs/spec/orchestration.md#統合用の枝train)。
+衝突は直さず、止めて終了コード 3 を返す (解消は worker の仕事。docs/spec/orchestration.md#統合用の枝bundle)。
 終了コード: 0 = 成功、1 = verify の失敗、2 = 使い方・前提違反・git の失敗、3 = 衝突で停止。
-verify のコマンドは環境変数 TRAIN_VERIFY_CMD で差し替えられる (試験用。既定は `mise run verify:all`)。
+verify のコマンドは環境変数 BUNDLE_VERIFY_CMD で差し替えられる (試験用。既定は `mise run verify:all`)。
 Windows は実機で未検証。
 """
 
@@ -27,10 +27,10 @@ from pathlib import Path
 
 EXIT_OK, EXIT_VERIFY, EXIT_ERROR, EXIT_CONFLICT = 0, 1, 2, 3
 LOCK_RE = re.compile(r"owner=(\S+)\s+id=(\S+)\s+pid=(\d+)\s+started=(\d+)")
-STATE_FILE = "train-state.json"
+STATE_FILE = "bundle-state.json"
 
 
-class TrainError(Exception):
+class BundleError(Exception):
     pass
 
 
@@ -39,7 +39,7 @@ def git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProces
         ["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", check=False
     )
     if check and r.returncode != 0:
-        raise TrainError(f"git {' '.join(args)} に失敗: {r.stderr.strip() or r.stdout.strip()}")
+        raise BundleError(f"git {' '.join(args)} に失敗: {r.stderr.strip() or r.stdout.strip()}")
     return r
 
 
@@ -110,20 +110,20 @@ def live_lock(root: Path, branch: str) -> str | None:
 def check_branch(root: Path, branch: str) -> None:
     base = base_branch(root)
     if not branch_exists(root, branch):
-        raise TrainError(f"枝が存在しません: {branch}")
+        raise BundleError(f"枝が存在しません: {branch}")
     if git(root, "merge-base", "--is-ancestor", branch, base, check=False).returncode == 0:
-        raise TrainError(f"{branch} は既に {base} に統合済みです")
+        raise BundleError(f"{branch} は既に {base} に統合済みです")
     lock = live_lock(root, branch)
     if lock:
-        raise TrainError(f"{branch} の worktree は他の owner が使用中です (lock: {lock})")
+        raise BundleError(f"{branch} の worktree は他の owner が使用中です (lock: {lock})")
 
 
 def free_name(root: Path) -> str:
     prefix = feature_prefix(root)
     n = 1
-    while branch_exists(root, f"{prefix}train-{n}") or worktree_path(root, f"train-{n}").exists():
+    while branch_exists(root, f"{prefix}bundle-{n}") or worktree_path(root, f"bundle-{n}").exists():
         n += 1
-    return f"train-{n}"
+    return f"bundle-{n}"
 
 
 def state_path(wt: Path) -> Path:
@@ -134,7 +134,7 @@ def state_path(wt: Path) -> Path:
 def load_state(wt: Path) -> dict:
     p = state_path(wt)
     if not p.is_file():
-        raise TrainError("train の状態がありません (start していない worktree です)")
+        raise BundleError("bundle の状態がありません (start していない worktree です)")
     return json.loads(p.read_text(encoding="utf-8"))
 
 
@@ -146,12 +146,12 @@ def resolve_wt(root: Path, name: str | None, cwd: Path) -> tuple[str, Path]:
     if not name:
         cur = git(cwd, "branch", "--show-current", check=False).stdout.strip()
         prefix = feature_prefix(root)
-        if not cur.startswith(prefix + "train-"):
-            raise TrainError("--name train-N を指定してください")
+        if not cur.startswith(prefix + "bundle-"):
+            raise BundleError("--name bundle-N を指定してください")
         name = cur[len(prefix) :]
     wt = worktree_path(root, name)
     if not wt.is_dir():
-        raise TrainError(f"worktree がありません: {wt}")
+        raise BundleError(f"worktree がありません: {wt}")
     return name, wt
 
 
@@ -168,7 +168,7 @@ def merge_all(wt: Path, state: dict) -> int:
         if r.returncode != 0:
             files = unmerged_files(wt)
             if not files:
-                raise TrainError(f"merge {branch} に失敗: {r.stderr.strip() or r.stdout.strip()}")
+                raise BundleError(f"merge {branch} に失敗: {r.stderr.strip() or r.stdout.strip()}")
             state["conflict"] = branch
             save_state(wt, state)
             print(f"衝突: {branch} の取り込みで止まりました。衝突ファイル:")
@@ -178,7 +178,7 @@ def merge_all(wt: Path, state: dict) -> int:
                 f"この worktree ({wt}) で worker に解消させてください (自明でもスクリプトは直しません)。"
             )
             print(
-                "解消して `git add -A` したあと、`python3 scripts/train.py continue` で続けます。"
+                "解消して `git add -A` したあと、`python3 scripts/bundle.py continue` で続けます。"
             )
             return EXIT_CONFLICT
         state["pending"].pop(0)
@@ -186,7 +186,7 @@ def merge_all(wt: Path, state: dict) -> int:
         state["conflict"] = None
         save_state(wt, state)
         print(f"取り込み: {branch}")
-    print("すべての枝を取り込みました。次は `python3 scripts/train.py verify`。")
+    print("すべての枝を取り込みました。次は `python3 scripts/bundle.py verify`。")
     return EXIT_OK
 
 
@@ -205,7 +205,7 @@ def cmd_start(args: argparse.Namespace, cwd: Path) -> int:
     short = tbranch[len(prefix) :]
     wt = worktree_path(root, short)
     if branch_exists(root, tbranch) or wt.exists():
-        raise TrainError(f"{tbranch} か {wt} が既にあります")
+        raise BundleError(f"{tbranch} か {wt} が既にあります")
     git(root, "worktree", "add", "-b", tbranch, str(wt), base_branch(root))
     print(f"作成: {tbranch} ({wt})")
     state = {"branch": tbranch, "pending": branches, "merged": [], "conflict": None}
@@ -238,13 +238,13 @@ def cmd_continue(args: argparse.Namespace, cwd: Path) -> int:
     ).exists():
         left = unmerged_files(wt)
         if left:
-            raise TrainError("未解決のファイルが残っています: " + ", ".join(left))
+            raise BundleError("未解決のファイルが残っています: " + ", ".join(left))
         dirty = git(wt, "diff", "--name-only").stdout.split()
         if dirty:
-            raise TrainError("`git add -A` が済んでいません: " + ", ".join(dirty))
+            raise BundleError("`git add -A` が済んでいません: " + ", ".join(dirty))
         marked = has_markers(wt, git(wt, "diff", "--cached", "--name-only").stdout.split())
         if marked:
-            raise TrainError("衝突マーカーが残っています: " + ", ".join(marked))
+            raise BundleError("衝突マーカーが残っています: " + ", ".join(marked))
         branch = state["conflict"] or state["pending"][0]
         short = branch.split("/", 1)[-1]
         git(wt, "commit", "--no-edit", "-m", f"merge: {short}を取り込む (衝突解消)")
@@ -269,7 +269,7 @@ def parse_verify(output: str) -> dict[str, int]:
 def cmd_verify(args: argparse.Namespace, cwd: Path) -> int:
     root = repo_root(cwd)
     _, wt = resolve_wt(root, args.name, cwd)
-    cmd = shlex.split(os.environ.get("TRAIN_VERIFY_CMD", "mise run verify:all"))
+    cmd = shlex.split(os.environ.get("BUNDLE_VERIFY_CMD", "mise run verify:all"))
     r = subprocess.run(cmd, cwd=wt, capture_output=True, text=True, encoding="utf-8", check=False)
     out = r.stdout + r.stderr
     c = parse_verify(out)
@@ -329,7 +329,7 @@ def main(argv: list[str] | None = None) -> int:
     }[args.cmd]
     try:
         return fn(args, Path.cwd())
-    except TrainError as e:
+    except BundleError as e:
         print(f"エラー: {e}", file=sys.stderr)
         return EXIT_ERROR
 

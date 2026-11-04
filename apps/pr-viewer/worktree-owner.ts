@@ -60,7 +60,7 @@ async function withGuard<T>(gitDir: string, fn: () => Promise<T>): Promise<T> {
 	}
 }
 
-export const OWNER_KINDS = ["worker", "job", "create", "train", "interactive"] as const;
+export const OWNER_KINDS = ["worker", "job", "create", "bundle", "interactive"] as const;
 export type OwnerKind = (typeof OWNER_KINDS)[number];
 export type Owner = { kind: OwnerKind; id: string; pid: number; started: number };
 export type OwnerState =
