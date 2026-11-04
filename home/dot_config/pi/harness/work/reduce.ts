@@ -429,8 +429,11 @@ const apply = (d: Draft, ev: LedgerEvent): void => {
 			e.attrs.approvedBy = "user";
 			e.state = r.to as never;
 			for (const t of [...d.nodes.values()]) {
-				if (!isTaskLike(t) || t.state !== "proposed" || rootGoalId(d.nodes, t.id) !== id) continue;
-				d.edit(t.id).state = next("task", "proposed", "plan.approved").to as never;
+				if (!isTaskLike(t) || rootGoalId(d.nodes, t.id) !== id) continue;
+				if (t.state === "done" || t.state === "cancelled" || t.state === "skipped") continue; // 終端の task には立てない
+				const te = d.edit(t.id);
+				te.approved = true;
+				if (t.state === "proposed") te.state = next("task", "proposed", "plan.approved").to as never;
 			}
 			return;
 		}

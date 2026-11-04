@@ -64,11 +64,12 @@ async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [],
 	const E = ev.makeEvent;
 	const h = (type, node, data, source = "system") => E(type, node, data, source, { holder: H });
 	const evs = [E("goal.created", "G", { title: "run の試験", budget }, "system"), E("plan.proposed", "G", { hash: "h1" }, "model")];
-	if (approve) evs.push(h("plan.approved", "G", { hash: "h1" }, "user"));
 	for (const t of tasks) {
 		const attrs = { role: t.role, size: t.size, ...(t.kind ? { kind: t.kind } : {}) };
 		evs.push(h("node.added", t.id, { node: { kind: "task", parent: "G", title: `task ${t.id}`, writes: t.writes, after: t.after, attrs } }, "model"));
 	}
+	// 承認の時点の task だけが起動候補になるので、task を足してから承認する
+	if (approve) evs.push(h("plan.approved", "G", { hash: "h1" }, "user"));
 	const first = await runtime.submit(evs);
 	const handlers = new Map();
 	const tools = [];

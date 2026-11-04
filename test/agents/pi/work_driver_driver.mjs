@@ -27,12 +27,13 @@ export function scenario(tasks, budget = BIG) {
 		E("goal.created", "G", { title: "driver の試験", budget }, "system"),
 		E("plan.proposed", "G", { hash: "h1" }, "model"),
 		E("lease.acquired", "G", { holder: H, pid: process.pid }, "system"),
-		h("plan.approved", "G", { hash: "h1" }, "user"),
 	];
 	for (const [id, writes, after, role, size, kind, tbudget] of tasks) {
 		const attrs = { role: role ?? "worker", size: size ?? "S", ...(kind ? { kind } : {}) };
 		evs.push(h("node.added", id, { node: { kind: "task", parent: "G", title: `task ${id}`, writes, after: after ?? [], attrs, ...(tbudget ? { budget: tbudget } : {}) } }, "model"));
 	}
+	// 承認の時点の task だけが起動候補になるので、task を足してから承認する
+	evs.push(h("plan.approved", "G", { hash: "h1" }, "user"));
 	return evs;
 }
 
