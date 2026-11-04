@@ -86,5 +86,6 @@
 | [pi のガード](guard/pi-guard.md) | 起動の形、素の pi との対応、Windows、pi の設定、判定の外で動くもの、置き場・環境変数・しくみ、MCP、試験、実機で確認する項目 |
 | [OpenCode のガードの仕様](guard/opencode-guard.md) | OpenCode の guide plugin が出す誘導・deny の説明・allow したコマンドの書き込み形。保留中のレガシー（撤去予定） |
 | [コマンド・ファイルの判定](guard/agent-command-policy.md) | 照合規則、allow / ask / deny の使い分けと例外、bash 検査ルールの足し方、CLI 差 |
+| [作業の観測ログ（journal）](work/journal.md) | 作業台帳の観測用イベントの置き場・事象・指標（`work_stats.py`）・限界。観測だけで振る舞いは変えない |
 
 [ドキュメント一覧へ戻る](../index.md)
