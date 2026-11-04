@@ -200,6 +200,19 @@ function unwrapCommand(tokens: string[]): { rest: string[]; skipped: string[] } 
 	return { rest: cur, skipped };
 }
 
+/** find の探索起点だけ (先頭の -H/-L/-P/-D…/-O… を読み飛ばし、最初の式 (`-name`・`(`・`!`) の手前まで)。式の値は対象に含めない。 */
+function findStartPoints(args: string[]): string[] {
+	let i = 0;
+	while (i < args.length && /^-(?:[HLP]|D\S*|O\S*)$/u.test(args[i])) i += 1;
+	const out: string[] = [];
+	for (; i < args.length; i++) {
+		const t = args[i];
+		if (t.startsWith("-") || t === "(" || t === "!" || t === ",") break;
+		out.push(t);
+	}
+	return out;
+}
+
 /** common-dir 自身 (台帳を含む `.git` 以外の名前の置き場) と等しい対象か。削除・移動系だけがこれで拒否される。 */
 function commonDirHit(token: string, base: string | null): boolean {
 	if (base === null) return false;
@@ -240,7 +253,7 @@ function checkLedgerWrite(ctx: Ctx, cmd: string): string | null {
 		const head = baseName(tokens[0]);
 		// 削除・移動は、台帳を含む common-dir 自身が対象でも拒否する (配下だけでは見えない)
 		if (LEDGER_REMOVE_MOVE.has(head) || (head === "find" && tokens.includes("-delete"))) {
-			for (const token of tokens.slice(1)) {
+			for (const token of head === "find" ? findStartPoints(tokens.slice(1)) : tokens.slice(1)) {
 				if (commonDirHit(token, workspace)) return deny(token);
 			}
 		}

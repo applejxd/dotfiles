@@ -364,6 +364,8 @@ def test_removing_or_moving_the_common_dir_itself_is_denied(meta_repo, role, byp
         "rmdir git-meta",
         "mv git-meta /tmp/gone",
         "find git-meta -delete",
+        "find -L git-meta -delete",
+        "find git-meta -name HEAD -delete",
         "rm -rf ./git-meta/",
         f"rm -rf {meta}",
         "unlink git-meta",
@@ -382,6 +384,8 @@ def test_common_dir_neighbours_and_reads_are_not_denied(meta_repo):
         "git -C git-meta log",
         "grep x git-meta/HEAD",
         "find git-meta -name HEAD",
+        "find src -name git-meta -delete",
+        "find -L src -path git-meta -delete",
         "rm -rf src",
     ]
     out = _judge([_bash(c, cwd=str(proj), role="implementer") for c in commands])
