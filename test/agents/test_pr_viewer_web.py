@@ -1179,8 +1179,9 @@ def flow_live_guards(br, check) -> None:
         time.sleep(0.25)
 
     page.clock.install(time=int(time.time() * 1000))
-    page.goto(f"{base}/#/{'pr/' + LIVE_ID}")
-    st.caps_mode = "on"  # 統合の確認シートを開けるようにする
+    # 統合の確認シートを開けるようにする。goto の前に切り替える（後だと、先に取得された capabilities が取り直されず、
+    # 負荷が高いときに統合のカードが出ない。ハッシュだけが同じ goto は再読み込みしない）
+    st.caps_mode = "on"
     page.goto(f"{base}/#/{'pr/' + LIVE_ID}")
     page.wait_for_selector(".mergecard button")
     page.clock.pause_at(int(time.time() * 1000) + 5000)
