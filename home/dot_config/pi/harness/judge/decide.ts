@@ -7,8 +7,10 @@
 //
 // node の型除去でそのまま動く書き方だけを使う。
 // see docs/spec/guard/pi-decide.md
-import { realpathSync } from "node:fs";
+import { lstatSync, readlinkSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { isAbsolute, join, normalize, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Common } from "./policy.ts";
 import {
 	expandUser,
@@ -39,6 +41,10 @@ export type Request = {
 	boundary?: boolean;
 	/** サンドボックスが実際に開けた場所 (起動時の許可)。boundary のとき、作業ツリーの外の判定に使う */
 	allowed?: { read: string[]; write: string[] };
+	/** 担当の worktree (cwd つきの子だけ)。edit / write の書込み先がこの外なら、bypass でも deny する (bash は対象外) */
+	writeRoot?: string;
+	/** writeRoot があるときも書ける一時の置き場 (TMPDIR・/tmp・キャッシュ) */
+	tmpRoots?: string[];
 };
 
 const DECISIONS: readonly string[] = ["allow", "ask", "deny"];
@@ -131,6 +137,84 @@ function realpathLoose(path: string): string {
 	}
 }
 
+const PI_UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
+
+/**
+ * pi 本体が edit / write の前に行うパスの正規化 (Unicode 空白 → 先頭の `@` → `~` 展開 → `file://`) の、
+ * 適用する・しないの全組み合わせ。判定器と実行側の解釈の差を fail closed で潰すため、全部を候補にする。
+ */
+function piPathVariants(path: string): string[] {
+	const out = new Set<string>([path]);
+	for (let mask = 0; mask < 16; mask++) {
+		let s = path;
+		if (mask & 1) s = s.replace(PI_UNICODE_SPACES, " ");
+		if (mask & 2 && s.startsWith("@")) s = s.slice(1);
+		if (mask & 4) {
+			const home = homedir();
+			if (s === "~") s = home;
+			else if (s.startsWith("~/")) s = join(home, s.slice(2));
+		}
+		if (mask & 8 && /^file:\/\//.test(s)) {
+			try {
+				s = fileURLToPath(s);
+			} catch {
+				continue;
+			}
+		}
+		out.add(s);
+	}
+	return [...out];
+}
+
+/**
+ * 厳格な解決: 先頭から成分を辿り、存在する symlink は (対象が無くても) 文字列として置き換えて続ける。
+ * 深さの上限 (40) を超える・lstat が ENOENT 以外で失敗するときは例外 (呼び出し側が deny にする)。
+ */
+function strictResolve(path: string): string {
+	let queue = normpath(path).split(sep);
+	let resolved = sep;
+	let hops = 0;
+	while (queue.length > 0) {
+		const comp = queue.shift()!;
+		if (comp === "" || comp === ".") continue;
+		if (comp === "..") {
+			resolved = resolved === sep ? sep : resolved.slice(0, resolved.lastIndexOf(sep)) || sep;
+			continue;
+		}
+		const next = join(resolved, comp);
+		let link: string | null = null;
+		try {
+			if (lstatSync(next).isSymbolicLink()) link = readlinkSync(next);
+		} catch (e: any) {
+			if (e?.code !== "ENOENT") throw e;
+		}
+		if (link === null) {
+			resolved = next;
+			continue;
+		}
+		if (++hops > 40) throw new Error("symlink が深すぎる");
+		if (isAbsolute(link)) resolved = sep;
+		queue = [...link.split(sep), ...queue];
+	}
+	return resolved;
+}
+
+/** write の範囲判定: pi が行いうる解釈のどれか 1 つでも root / tmp の外へ出るなら false。 */
+function writeWithinScope(path: string, cwd: string, root: string, tmpRoots: string[]): boolean {
+	const rootReal = realpathLoose(root);
+	// root を包含する一時領域 (TMPDIR=本体のルート、/tmp 配下の worktree など) は例外にしない
+	const tmps = tmpRoots.filter((t) => t !== "").map((t) => realpathLoose(t)).filter((t) => !inside(rootReal, t));
+	try {
+		for (const v of piPathVariants(path)) {
+			const abs = strictResolve(isAbsolute(v) ? v : join(cwd, v));
+			if (!inside(abs, rootReal) && !tmps.some((t) => inside(abs, t))) return false;
+		}
+	} catch {
+		return false;
+	}
+	return true;
+}
+
 /** 照合に使うパスの形: 渡されたまま・cwd で解いた絶対パス・symlink を解いた実体。 */
 function candidates(path: string, cwd: string): string[] {
 	const expanded = expandUser(path);
@@ -156,6 +240,7 @@ function decideFile(
 	pi: Record<string, any>,
 	common: Common,
 	allowed?: Request["allowed"],
+	writeScope?: { root: string; tmpRoots: string[] },
 ): { commonDeny: Response | null; roleRule: Response | null } {
 	const write = FILE_WRITE_TOOLS.includes(tool);
 	const key = write ? "write_deny_globs" : "read_deny_globs";
@@ -176,6 +261,19 @@ function decideFile(
 	}
 
 	const absolute = candidates(path, cwd).at(-1)!;
+	if (write && writeScope) {
+		const root = realpathLoose(writeScope.root);
+		if (!writeWithinScope(path, cwd, writeScope.root, writeScope.tmpRoots)) {
+			return {
+				commonDeny: response(
+					"deny",
+					`この子は担当の worktree (${root}) の外へ書けない。本体や他の worktree は編集できない (\`${path}\`)`,
+					"rule",
+				),
+				roleRule: null,
+			};
+		}
+	}
 	const insideCwd = inside(absolute, realpathLoose(cwd));
 	if (write) {
 		const askGlobs = loadFileGlobs(common, "write_ask_globs");
@@ -238,6 +336,11 @@ function validate(request: unknown): string | null {
 		const value = request[key];
 		if (value !== undefined && typeof value !== "boolean") return `${key} が真偽値ではありません`;
 	}
+	if (request.writeRoot !== undefined && (typeof request.writeRoot !== "string" || !isAbsolute(request.writeRoot))) {
+		return "writeRoot が絶対パスではありません";
+	}
+	const tr = request.tmpRoots;
+	if (tr !== undefined && !(Array.isArray(tr) && tr.every((x) => typeof x === "string"))) return "tmpRoots が文字列の配列ではありません";
 	const allowed = request.allowed;
 	if (allowed !== undefined) {
 		const strings = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === "string");
@@ -274,7 +377,7 @@ function decideInner(request: unknown, common: Common): Response {
 	} else if (FILE_READ_TOOLS.includes(tool) || FILE_WRITE_TOOLS.includes(tool)) {
 		const path = toolInput.path ?? (["grep", "find", "ls"].includes(tool) ? "." : undefined);
 		if (typeof path !== "string" || !path) return errorResponse(`${tool} の path がありません`);
-		({ commonDeny, roleRule } = decideFile(tool, path, cwd, pi, common, req.boundary ? req.allowed : undefined));
+		({ commonDeny, roleRule } = decideFile(tool, path, cwd, pi, common, req.boundary ? req.allowed : undefined, req.writeRoot ? { root: req.writeRoot, tmpRoots: req.tmpRoots ?? [] } : undefined));
 	} else if (tool === TASK_TOOL) {
 		commonDeny = null;
 		roleRule = response("allow", "子エージェントは同じハーネスと判定器で動く", "rule");

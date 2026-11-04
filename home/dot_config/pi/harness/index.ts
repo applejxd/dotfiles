@@ -58,6 +58,8 @@ const BOUNDARY_ENV = readBoundaryEnv(process.env);
 const NO_SANDBOX = process.env.PI_HARNESS_NO_SANDBOX === "1";
 // 子エージェントとして起動されたか。子では guarded_task を登録しない (入れ子にしない)
 const CHILD = process.env.PI_HARNESS_CHILD === "1";
+// cwd を指定して起動された子の担当 worktree。あれば edit / write の書込みをこの中と一時の置き場に限る (judge/decide.ts)
+const WRITE_ROOT: string | undefined = CHILD && process.env.PI_HARNESS_WRITE_ROOT ? process.env.PI_HARNESS_WRITE_ROOT : undefined;
 // 親が子へ渡す契約 (役割名と文脈のモード)。契約が無い子 (PI_HARNESS_CHILD=1 だけ) では空
 // see docs/change/closed/0059-child-context.md
 const CHILD_AGENT = CHILD ? (process.env.PI_HARNESS_CHILD_AGENT ?? "") : "";
@@ -179,6 +181,8 @@ const callDecider = createCallDecider({
 	bypass: () => bypass,
 	boundary: BOUNDARY,
 	allowed: BOUNDARY_ENV?.allowed,
+	writeRoot: WRITE_ROOT,
+	tmpRoots: [process.env.TMPDIR ?? "", "/tmp", join(homedir(), ".cache")],
 });
 
 const integration = integrationConfig(rules.judge?.common);
@@ -1276,6 +1280,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			PI_HARNESS_CHILD_CONTEXT: contextMode,
 			PI_HARNESS_ROLE: agent.profile,
 			PI_HARNESS_BYPASS: bypass && agent.inherit_bypass ? "1" : "",
+			PI_HARNESS_WRITE_ROOT: WRITE_ROOT ?? "",
 		};
 		if (cwdArg && isolation) return { error: "cwd refused: isolation と併用できない" };
 		let childCwd: string = ctx.cwd;
@@ -1284,6 +1289,9 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 			const v = resolveChildCwd(ctx.cwd, cwdArg);
 			if ("error" in v) return { error: v.error };
 			childCwd = v.cwd;
+			// 親自身が担当の外へ書けない子なら、担当の外を指す cwd で範囲を広げさせない
+			if (WRITE_ROOT && v.cwd !== WRITE_ROOT && !v.cwd.startsWith(WRITE_ROOT + sep)) return { error: "cwd refused: 自分の担当の外" };
+			env.PI_HARNESS_WRITE_ROOT = v.cwd;
 			// 本体そのものを指定したときは、本体が変わるのは当然なので警告の対象外
 			const status = v.cwd === v.main ? null : mainStatus(v.main);
 			if (status !== null) baseline = { main: v.main, status };

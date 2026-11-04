@@ -23,7 +23,7 @@
 
 | 機能 | 状態 | 内容 | 正本 |
 | --- | --- | --- | --- |
-| 単発の起動 | 実装済 | `{agent, task}`。完了まで待つ。新しい子（`explore`・`review`・`worker`）は ToDo の項目 ID（`todo`）が必須。`cwd` で実行場所（登録済みの worktree）を指定でき、worker は担当の worktree を `cwd` に指定して起動する | [pi の子エージェント](guard/pi-subagents.md#子エージェント) |
+| 単発の起動 | 実装済 | `{agent, task}`。完了まで待つ。新しい子（`explore`・`review`・`worker`）は ToDo の項目 ID（`todo`）が必須。`cwd` で実行場所（登録済みの worktree）を指定でき、worker は担当の worktree を `cwd` に指定して起動する（edit / write は担当 worktree と明示した一時領域の外を書けない。shell・試験・hook は未強制） | [pi の子エージェント](guard/pi-subagents.md#子エージェント) |
 | バックグラウンド | 実装済 | `background: true`。ID をすぐ返し、完了は通知で届いてターンが再開する | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
 | 並列 | 実装済 | `tasks: [...]`（最大 12 件）。同時に生かす子は 4 まで。超えた分は空きを待つ | 同上 |
 | 保持と追加依頼（job） | 実装済 | `keep: true` で残し、`{jobId, task}` で履歴を保って続ける。`close` で止める | [job](guard/pi-subagents.md#子を保持して追加依頼するjob) |
