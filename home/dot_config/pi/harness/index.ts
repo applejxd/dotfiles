@@ -32,6 +32,7 @@ import { previewBlocked, profileDefaults } from "./freezone.ts";
 import { appendOperations, appendResult, decorateEditResult, guideHint, readParameters, runRead, toolText, writeParameters } from "./tools-ext.ts";
 import { ACTION_TOOL, actionDescription, actionLine, executeAction, loadActions } from "./actions.ts";
 import { registerPr } from "./pr-review.ts";
+import { foldActionResult, lineComponent, registerQuietNotices } from "./quiet-notices.ts";
 import { auditConditions, auditFormat, summarizeCalls } from "./audit.ts";
 import { unguardedMessage, unguardedSources } from "./unguarded.ts";
 import { SessionTmp } from "./session-tmp.ts";
@@ -760,6 +761,17 @@ export default async function (pi: ExtensionAPI) {
 				...actionSpecs.map((a) => `${PREFIX}${ACTION_TOOL}: ${actionLine(a)}`),
 			],
 			description: actionDescription(actionSpecs),
+			// チャットの表示だけを畳む (モデルへ返す content はそのまま)。PI_QUIET_NOTICES=0 で登録しない。see docs/spec/guard/pi-extensions.md#自動の通知を畳む表示
+			...(process.env.PI_QUIET_NOTICES === "0"
+				? {}
+				: {
+						renderResult(result: any, options: any, _theme: any) {
+							const first = result?.content?.[0];
+							const body = first?.type === "text" ? String(first.text) : "";
+							const r = foldActionResult(body, result?.details, { expanded: options?.expanded === true });
+							return lineComponent(r.lines);
+						},
+					}),
 			parameters: Type.Object(
 				{
 					action: Type.String({ description: "the id of the operation" }),
@@ -812,6 +824,8 @@ export default async function (pi: ExtensionAPI) {
 	registerPr(pi, { Type, prefix: PREFIX, child: CHILD, hasTool: (name) => roleTools.includes(name) });
 	// 文脈の使用率による自動の保存と圧縮 (親のみ。PI_AUTOCHECKPOINT=0 で無効)
 	registerAutoCheckpoint(pi, { child: CHILD, compactInstructions: COMPACT_INSTRUCTIONS });
+	// 自動で出る通知 (子・ジョブの完了・todo の続き・保存と再開) の表示を畳む (表示だけ。PI_QUIET_NOTICES=0 で無効)
+	if (!CHILD) registerQuietNotices(pi);
 
 	const agents: Record<string, any> = rules.agents ?? {};
 	if (!CHILD && supportsChildTasks() && roleTools.includes("task") && Object.keys(agents).length > 0) registerTask(pi, agents);
@@ -1410,6 +1424,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		jobId: alive ? job.id : undefined,
 	});
 
+	const titleOf = (t: unknown) => String(t ?? "").trim().split("\n")[0].slice(0, 80);
 	// 完了した job の結果 (redact 済みの全文)。close した job の分は消す
 	type Finished = { at: number; owner: { cwd: string; role: string }; agent: string; status: string; text: string };
 	const finished = new Map<string, Finished>();
@@ -1514,7 +1529,7 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 								customType: "child-finished",
 								content: `バックグラウンドの子 ${job.id} (${job.agent}) が終わりました (${stamp})\n${body}`,
 								display: true,
-								details: detailsOf(job, r, alive),
+								details: { ...detailsOf(job, r, alive), id: job.id, title: titleOf(job.lastTask) },
 							},
 							{ triggerTurn: wake, ...(wake ? { deliverAs: "followUp" as const } : {}) },
 						);

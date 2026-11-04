@@ -142,6 +142,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
   - 「⚠ bypass でも確認が要る操作 (外部への送信・公開、元に戻せない git 操作)」
   - 「⚠ 保護ブランチへの統合 (bypass でも確認が要る)」
 - 必須確認の期限は 5 分（`[pi.confirm] timeout_seconds = 300`）。無反応は deny。
+- 自動で出る通知（子・背景ジョブの完了、todo の続き、自動の保存と再開、`guarded_action` の成功）は既定で 1 行に畳まれる。失敗・承認待ち・警告は必ず 1 行に出る。展開は pi 本体のツール出力の展開（`app.tools.expand`）に従う（自動の再開の指示は展開できない）。`PI_QUIET_NOTICES=0` で従来の全文表示。モデルに渡す本文は変わらない（[仕様](guard/pi-extensions.md#自動の通知を畳む表示)）。
 - 確認できない実行（print・子）では、確認が要る操作は拒否する。
 
 ### 3.3 キー操作

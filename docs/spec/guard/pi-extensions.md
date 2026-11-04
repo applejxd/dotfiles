@@ -331,6 +331,24 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 | 限界 | 保存の質は**エージェント次第**で保証しない（指示を守らない・docs の反映が不完全なことがある）。組み込みの自動圧縮（窓 − `reserveTokens` 付近）は**予備として残る**ので、保存より先にそちらが走ることもある。使用率は settle の時点でしか見ないので、1 回の長い実行の途中では働かない。再開の指示は、判断待ち・完了待ちだけのときも 1 ターン走る（「待機」と答えるだけ） |
 | 試験 | `test/agents/test_pi_autocheckpoint.py`（`test/agents/pi/autocheckpoint_driver.mjs` が偽のイベントとコンテキストを handler へ渡す）。実機の確認は未実施 |
 
+### 自動の通知を畳む表示
+
+方針: チャットには**会話と判断の要求だけ**が目に入るようにし、自動で出る通知は既定で 1 行に畳む。**表示だけ**で、モデルに渡す本文（`content`）は変えない（`harness/quiet-notices.ts` の純関数。`registerMessageRenderer`・`registerMarkdownTransformer`・ツールの `renderResult` で表示だけを差し替える）。
+
+| 通知 | 出所 | 畳んだ表示（展開で全文） |
+| --- | --- | --- |
+| 子の完了（`child-finished`） | `index.ts`（`sendMessage`） | `✓ worker goal-eval 3:31 $0.58 · 完了 j7`（記号・役割・題名・所要・費用・状態・job id。幅 46 桁に収める。全角は 2 桁） |
+| 背景ジョブの完了（`bg-job-finished`） | `activity/index.ts` | `✓ job make test · 完了 bg-3` / `✗ job … · 失敗 exit 2` |
+| todo のリマインド（`todo-reminder`） | `todo/index.ts` | `📌 続き: 未完了 N 件` |
+| 自動の保存（`autocheckpoint`） | `autocheckpoint.ts` | `💾 保存を指示（使用率 82%）` |
+| 自動の再開（user メッセージ） | `autocheckpoint.ts`（`sendUserMessage`） | `▶ 再開を指示（自動）`（Markdown の変換。展開は不可） |
+| `guarded_action` の結果 | `actions.ts`（ツール結果） | 成功は `✓ <repo> <branch> <ID> <件名>`・`pre-commit: 全 N 項目 Passed`・確認省略の注記。hook は**失敗したものだけ**全文 |
+
+- **畳まない**: 失敗（`✗` 失敗・時間切れ・中断）・承認待ち（`⚠`）・警告（ツールエラー・形式検査・条件検査・本体の dirty）は、畳んでも 1 行に必ず出す（`⚠N件`）。確認画面・`ask`・`/btw`・エラー通知・`guarded_action` の失敗（`details` が無い結果）・`guarded_pr_summary` は今までどおり。
+- **kill スイッチ**: `PI_QUIET_NOTICES=0` で従来の全文表示（renderer を登録しない）。既定は畳む。
+- **モデルへの本文は不変**: `content`・`sendMessage` / `sendUserMessage` の引数は変えない（`details` に `id`・`title`・`percent`・`open`・`repo` を足しただけ。`details` はモデルへ渡らない）。試験は `test/agents/test_pi_quiet_notices.py`（失敗・警告が畳まれない・46 桁・全角・展開と kill スイッチで全文・配線）。
+- 実 TUI・スマホ・Orca/Zed での見え方は未確認。
+
 ### セッションごとの一時置き場（`.tmp/s/<ID>/`）
 
 [CHG-0042](../../change/0042-tmp-lifecycle.md)。作業ツリーの `.tmp/` に残骸が溜まる（実測で 31 GB）のを防ぐため、

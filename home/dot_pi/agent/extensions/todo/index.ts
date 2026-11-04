@@ -237,7 +237,7 @@ export default function (pi: ExtensionAPI) {
 		}
 		return {
 			// pi は後のハンドラの entries で前を置き換えるので、event.entries を引き継ぐ
-			entries: [...(event?.entries ?? []), { type: "custom_message" as const, customType: "todo-reminder", content, display: true }],
+			entries: [...(event?.entries ?? []), { type: "custom_message" as const, customType: "todo-reminder", content, display: true, details: { open: todos.filter((t) => t.status !== "done" && t.status !== "cancelled").length } }],
 			continue: true,
 		};
 	});

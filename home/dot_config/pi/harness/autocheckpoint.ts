@@ -134,7 +134,7 @@ export function createAutoCheckpoint(opts: AutoCheckpointOptions) {
 		notify(ctx, `文脈の使用率 ${Math.round(percent)}% なので、保存を指示する`);
 		return {
 			// pi は後のハンドラの entries で前を置き換えるので、event.entries を引き継ぐ (todo 拡張と同じ settle で失われない)
-			entries: [...(event?.entries ?? []), { type: "custom_message", customType: CUSTOM_TYPE, content: CHECKPOINT_PROMPT, display: true }],
+			entries: [...(event?.entries ?? []), { type: "custom_message", customType: CUSTOM_TYPE, content: CHECKPOINT_PROMPT, display: true, details: { percent } }],
 			continue: true,
 		};
 	};

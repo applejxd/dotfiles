@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { basename, isAbsolute, join, relative, sep } from "node:path";
 import { MAX_DISPLAY_CHARS, cellWidth, clipCells, confirmTimeoutSeconds, outcomeReason, sanitizeForDisplay } from "./confirm-view.ts";
 import { VIEW_FULL, presentConfirm } from "./confirm-present.ts";
 import { classifyFreeZone, freeZoneSettings, type FreeZone } from "./freezone.ts";
@@ -649,7 +649,7 @@ export async function executeAction(deps: ActionDeps, params: any, signal: Abort
 		// 確認省略が有効なときは、省略しなかった理由 (自由区でない) を添える。無効の間は観測として判定を添える
 		const shadow = zone && !skipConfirm ? (zoneSettings.skip ? `自由区の判定: not free (${where})。確認を省略せず、承認を取って実行した` : `自由区の判定 (観測中。確認は省略していない): ${zone.free ? "free" : "not free"} (${where})`) : "";
 		const text = [out || "(標準出力なし)", err && `stderr:\n${err}`, closing, shadow].filter(Boolean).join("\n\n");
-		const details: Record<string, unknown> = { action: action.id };
+		const details: Record<string, unknown> = { action: action.id, repo: basename(cwd) };
 		if (zone) details.freeZone = { free: zone.free, reason: zone.reason, branch: zone.branch, skipped: skipConfirm, ...(zone.profile ? { profile: zone.profile } : {}) };
 		return { content: [{ type: "text", text }], details };
 	} finally {
