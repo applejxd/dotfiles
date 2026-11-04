@@ -276,6 +276,28 @@ def test_list_lines_have_numbers_marks_hit_and_disclaimer(table):
     assert "← 確認の理由に当たった箇所" not in v["lines_hit"].split("\n")[1]
 
 
+def test_long_list_folds_around_the_hit_and_never_hides_without_a_hit(table):
+    v = table["view"]
+    # 当たりの 5 番の前後 1 手順 (4・6) を残し、ほかを省略する。手順番号は元のまま
+    hit = v["fold_hit"].split("\n")
+    assert any("← 確認の理由に当たった箇所" in x and re.search(r"\b5\. ", x) for x in hit)
+    assert any(re.search(r"\b4\. ", x) for x in hit) and any(re.search(r"\b6\. ", x) for x in hit)
+    assert not any(re.search(r"\b(1|2|3|7|8|9|10)\. ", x) for x in hit)
+    assert "  … 3 手順を省略 (原文で確認)" in hit and "  … 4 手順を省略 (原文で確認)" in hit
+    # 当たりが無いときは隠さずに全部出す
+    assert "省略" not in v["fold_nohit"] and len(v["fold_nohit"].split("\n")) >= 12
+    # 短いとき (6 手順以下) は折りたたまない
+    assert "省略" not in v["fold_few"] and "1. " in v["fold_few"]
+
+
+def test_fold_keeps_steps_with_side_effect_marks(table):
+    lines = table["view"]["fold_marks"].split("\n")
+    # 2 番 (git push) は当たりではないが、副作用の候補つきなので残る
+    assert any(re.search(r"\b2\. .*副作用の候補", x) for x in lines)
+    assert any("← 確認の理由に当たった箇所" in x and re.search(r"\b9\. ", x) for x in lines)
+    assert "  … 1 手順を省略 (原文で確認)" in lines and "  … 5 手順を省略 (原文で確認)" in lines
+
+
 def test_must_confirm_body_places_list_below_the_raw_command(table):
     body = table["view"]["must_multi"]["body"]
     assert (

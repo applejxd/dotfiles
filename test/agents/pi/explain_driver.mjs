@@ -88,6 +88,14 @@ out.view.lines_simple = view.explainSection("ls -la");
 out.view.lines_pipe = view.explainSection("cd /x && git log | head -3");
 out.view.lines_bad = view.explainSection("diff <(ls a) <(ls b)");
 out.view.lines_hit = view.explainSection("git status && git push", ["git push"]);
+const TEN = "echo 1 && echo 2 && echo 3 && echo 4 && git push && echo 6 && echo 7 && echo 8 && echo 9 && echo 10";
+out.view.fold_hit = view.explainSection(TEN, ["git push"]);
+out.view.fold_nohit = view.explainSection(TEN);
+out.view.fold_marks = view.explainSection(
+	"echo 1 && git push && echo 3 && echo 4 && echo 5 && echo 6 && echo 7 && echo 8 && git status",
+	["git status"],
+);
+out.view.fold_few = view.explainSection("echo 1 && echo 2 && git push && echo 4", ["git push"]);
 out.view.must_simple = view.buildMustConfirmView("git push", "公開", () => ({ ok: false, why: "x" }), undefined, { explain: true });
 out.view.must_multi = view.buildMustConfirmView("cd /x && git push", "公開", () => ({ ok: false, why: "x" }), undefined, { explain: true });
 out.view.must_noexplain = view.buildMustConfirmView("cd /x && git push", "公開", () => ({ ok: false, why: "x" }));

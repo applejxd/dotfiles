@@ -624,16 +624,40 @@ export function explainCommand(cmd: string, hit?: string[]): { steps: Step[]; co
 	}
 }
 
+/** 手順がこの数を超え、確認の理由に当たった手順があるときだけ、折りたたむ */
+export const FOLD_OVER = 6;
+
+/**
+ * 表示する手順の印。折りたたむとき、当たった手順・その前後 1 手順・副作用の候補つきの手順・「ほか N 手順」は残し、
+ * ほかを省略する (原文は確認画面に全文がある)。当たりが無いときは全部出す (隠さない)
+ */
+export function foldMask(steps: Step[]): boolean[] {
+	if (steps.length <= FOLD_OVER || !steps.some((s) => s.hit)) return steps.map(() => true);
+	return steps.map((s, i) => s.hit || s.marks.length > 0 || s.raw === "" || !!steps[i - 1]?.hit || !!steps[i + 1]?.hit);
+}
+
 /** 確認画面に添える「手順:」の行。出さないとき (単純なコマンド・空) は空配列 */
 export function explainLines(cmd: string, hit?: string[]): string[] {
 	const { steps, complete } = explainCommand(cmd, hit);
 	if (steps.length === 0) return [];
 	if (steps.length === 1 && complete && steps[0].marks.length === 0 && !steps[0].hit) return [];
 	const lines = ["手順:"];
-	for (const s of steps) {
+	const show = foldMask(steps);
+	let hidden = 0;
+	const flush = (): void => {
+		if (hidden > 0) lines.push(`  … ${hidden} 手順を省略 (原文で確認)`);
+		hidden = 0;
+	};
+	steps.forEach((s, i) => {
+		if (!show[i]) {
+			hidden++;
+			return;
+		}
+		flush();
 		const marks = s.marks.length > 0 ? `  [副作用の候補: ${s.marks.join("・")}]` : "";
 		lines.push(`  ${"  ".repeat(s.level)}${s.no}. ${s.text}${marks}${s.hit ? "  ← 確認の理由に当たった箇所" : ""}`);
-	}
+	});
+	flush();
 	if (!complete) lines.push("  ⚠ 解析できない部分があります。原文を確認してください");
 	lines.push("  (手順は理解を助ける補助です。判定には使っていません。常に原文を確認してください)");
 	return lines;
