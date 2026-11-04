@@ -17,7 +17,7 @@
 
 ## 遷移の要約
 
-- goal: draft → planned（`plan.proposed`）→ active（利用者の `plan.approved`）⇄ paused → done（verdict done が先）| cancelled
+- goal: draft → planned（`plan.proposed`）→ active（利用者の `plan.approved`）⇄ paused → done（verdict done が先）| cancelled。active・paused の `plan.approved` は状態を変えない再承認（下記）
 - task（check・integrate も同じ）: proposed → ready → running ⇄ waiting → checking → done。failed は retry で ready、block で blocked
 - run: reserved → started → done | blocked | failed | limit | aborted | lost。task は run の終了状態で checking・blocked・failed へ
 - 取り消し・skip・retry・block は `verdict` イベントの `verdict` 値で表す。取り消された task へ遅れて届く `run.ended` は許す
@@ -51,7 +51,9 @@
 - `Money` に任意の `rounds`（goal の予算の往復数）を足した。reducer は budget を丸ごと写し、予約・使用量の合算（`MONEY_KEYS`）には使わない。負の値は拒否
 - 承認の時点の task だけが自動起動の対象: `Node.approved`（任意）を `plan.approved`（利用者専用）の reducer が、その goal 配下の非終端の task へ立てる。承認の後に `work add` で足した task は持たない（遷移表の初期状態は従来どおり ready）
 - `approved` の有無を見るのはスケジューラの選別（`adapt.ts` の `schedStateOf`・`readyOf`）だけ。表示用の `project.ready` と、モデルが `work set` で自分で進める操作は変えない
-- active の goal は `plan.approved`・`plan.proposed` を受けない（遷移表）ので、追加分を後から承認する経路は今は無い。承認前に計画へ入れるか、モデル自身が `set` で進める
+- 再承認: active・paused の goal も利用者の `plan.approved` を受ける（goal の状態は変わらない自己遷移）。reducer が、その時点の非終端の task すべてに `approved` を立てる。承認の対象（`approved` の無い非終端の task）が 0 件なら拒否する（空の承認を作らない）。モデル出所は従来どおり拒否（I10）
+- 経路は `/goal approve`（利用者の確認画面が、承認の対象の title〔最大 10 件〕と総件数を出す）。承認の前なら計画へ入れるか、モデル自身が `set` で進めるのも従来どおり
+- 再承認の hash は goal の `planHash`（承認の時点の計画）を使う。`plan.proposed` は active では受けないまま
 
 ## 接続と統合試験
 
@@ -59,4 +61,4 @@
 - 端から端の試験は `test_work_e2e.py`（store で永続 → 読み直して fold → メモリの fold と一致、kill -9 後の再生、sched・digest への接続、利用者専用イベントの偽装）
 - `globsMayOverlap` の実装は `globs.ts` に一本化した。`overlap.ts` も `globs.ts` の既定（保守的・gitignore 流）で呼ぶ（`strict` は撤去）
 - 食い違い 2 件は解消した（`xfail` を外した）: ①スラッシュ無しの glob（`*.py`）は sched も台帳の門と同じ判定で「重なる」とし、台帳が拒否するものを start しない ②`ready` は任意の `estimateMs` 見積りを受け、`adapt.readyOf` が sched と同じ見積り（`attrs.estimateMs`、無ければ役割×大きさの p50）を渡す。順序の一致は `test_work_e2e.py` が固定する
-- `adapt` は run の `attrs.est`（起動時の見積り）を `SchedRun.reserve` に使い、`attrs.lastOutputAt`・`attrs.steeredAt` も読む（超過後も 1.5 倍の steer・2 倍の abort が出る）。`wake_parent` の理由は `all_done`（失敗なしの全終端）・`failed`（失敗を含む全終端）・`stuck` に分けた。arbiter など理由を読む側は無い（`proposeChildren` は理由を見ない）。
+- `adapt` は run の `attrs.est`（起動時の見積り）を `SchedRun.reserve` に使い、`attrs.lastOutputAt`・`attrs.steeredAt` も読む（超過後も 1.5 倍の steer・2 倍の abort が出る）。`wake_parent` の理由は `all_done`（失敗なしの全終端）・`failed`（失敗を含む全終端）・`awaiting_approval`（未承認の task が残る）・`stuck` に分けた。arbiter など理由を読む側は無い（`proposeChildren` は理由を見ない）。

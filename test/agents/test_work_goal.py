@@ -486,3 +486,78 @@ def test_user_goal_cancel_derives_null():
     )
     assert out["steps"][-1]["ok"] is True
     assert out["goal"] is None
+
+
+# ── /goal approve (active / paused の再承認) ──
+APPROVE = {"kind": "approve"}
+
+
+def late(title="後から"):
+    return {"task": title}
+
+
+def test_approve_active_with_late_task_emits_user_plan_approved():
+    s = run("作業", late(), APPROVE)[2]
+    assert s["ok"] and types(s) == ["plan.approved"]
+    assert {e["source"] for e in s["events"]} == {"user"}
+    assert s["approval"] == {"total": 1, "titles": ["後から"]}
+
+
+def test_approve_active_keeps_goal_active():
+    s = run("作業", late(), APPROVE)[2]
+    assert s["goal"]["status"] == "active"
+
+
+def test_approve_paused_with_late_task_ok():
+    s = run("作業", "pause", late(), APPROVE)[3]
+    assert s["ok"] and types(s) == ["plan.approved"]
+    assert s["goal"]["status"] == "paused"
+
+
+def test_approve_active_without_task_fails():
+    s = run("作業", APPROVE)[1]
+    assert not s["ok"] and s["events"] == []
+    assert "承認待ちの計画はありません" in s["error"]
+
+
+def test_approve_paused_without_task_fails():
+    s = run("作業", "pause", APPROVE)[2]
+    assert not s["ok"] and s["events"] == []
+
+
+def test_approve_without_goal_fails():
+    s = run(APPROVE)[0]
+    assert not s["ok"] and s["events"] == []
+
+
+def test_approve_after_clear_fails():
+    s = run("作業", late(), "clear", APPROVE)[3]
+    assert not s["ok"]
+
+
+def test_approve_twice_second_fails():
+    s = run("作業", late(), APPROVE, APPROVE)[3]
+    assert not s["ok"] and s["events"] == []
+
+
+def test_approve_late_task_after_approve_needs_new_approval():
+    steps = run("作業", late("一つ目"), APPROVE, late("二つ目"), APPROVE)
+    assert steps[4]["ok"] and steps[4]["approval"] == {"total": 1, "titles": ["二つ目"]}
+
+
+def test_approve_lists_at_most_ten_titles_and_total():
+    steps = run("作業", *[{"task": f"t{i:02d}", "id": f"x{i}"} for i in range(12)], APPROVE)
+    a = steps[-1]["approval"]
+    assert a["total"] == 12 and len(a["titles"]) == 10
+    assert a["titles"][0] == "t00"
+
+
+def test_approve_lists_all_titles_when_few():
+    steps = run("作業", late("A"), {"task": "B", "id": "xb"}, APPROVE)
+    assert steps[-1]["approval"] == {"total": 2, "titles": ["A", "B"]}
+
+
+def test_approve_does_not_change_other_commands():
+    # 既存コマンドの変換は変わらない (approve の追加で status の出力が崩れない)
+    s = run("作業", "status")[1]
+    assert s["ok"] and s["events"] == []

@@ -119,6 +119,12 @@ const evalCell = (cell) => {
 		T.evidence = ["check:1"];
 		R.state = "done";
 		s.nodes.get("T2").state = "done";
+		// 再承認 (active / paused の plan.approved) は承認の対象 (未承認の非終端 task) が要る
+		if (on === "plan.approved" && (from === "active" || from === "paused")) {
+			const T2 = s.nodes.get("T2");
+			T2.state = "ready";
+			delete T2.approved;
+		}
 		if (on === "lease.released" || on === "lease.expired") G.owner = { holder: "A", pid: 1, startedAt: 0, heartbeat: 0 };
 		if (on === "wait.resolved") G.waits = variant === "remain" ? [wait("w1"), wait("w2")] : [wait("w1")];
 	} else if (kind === "task") {
@@ -129,6 +135,11 @@ const evalCell = (cell) => {
 		if (on === "wait.resolved") T.waits = variant === "remain" ? [wait("w1"), wait("w2")] : [wait("w1")];
 	} else {
 		R.state = from;
+		// run への plan.approved は、再承認の対象が無い状態にして「拒否」を保つ (対象があると goal 宛てのイベントが通ってしまう)
+		if (on === "plan.approved") {
+			T.state = "done";
+			s.nodes.get("T2").state = "done";
+		}
 	}
 	const full = mkEvent(cellEvent(kind, on, variant), s.seq + 1);
 	let actual;
@@ -176,7 +187,7 @@ const gen = (state, R, c) => {
 			return g.length ? { type: "plan.proposed", node: pick(g).id, data: { hash: pick(["h1", "h2"]) } } : null;
 		}
 		case "A": {
-			const g = goals.filter((n) => n.state === "planned");
+			const g = goals.filter((n) => n.state === "planned" || n.state === "active" || n.state === "paused"); // active / paused は再承認
 			if (!g.length) return null;
 			const n = pick(g);
 			return { type: "plan.approved", node: n.id, data: { hash: R() < 0.9 ? n.attrs.planHash : "zz" }, source: src() };

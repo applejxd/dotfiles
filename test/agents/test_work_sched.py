@@ -1065,7 +1065,7 @@ scen(
     ),
 )
 scen("invalid_writes", state([task("a", writes=["**"])]))
-scen("stuck", state([task("a", state="failed"), task("b", state="proposed", after=["a"])]))
+scen("stuck", state([task("a", state="failed"), task("b", state="ready", after=["a"])]))
 scen("wake_failed", state([task("a", state="failed")]))
 scen(
     "wake_failed_mixed",
@@ -1403,3 +1403,67 @@ def test_property_runs_exercise_every_property():
         "stats",
     ):
         assert need in keys, need
+
+
+# ── 承認待ちの起床 (awaiting_approval) ──
+# 未承認の task は台帳の投影 (adapt.ts) で proposed に落ちる。起動候補が無く run も無く、proposed が残るときの理由
+scen("aw_basic", state([task("a", state="done"), task("b", state="proposed")]))
+scen("aw_only", state([task("b", state="proposed")]))
+scen("aw_failed", state([task("a", state="failed"), task("b", state="proposed")]))
+scen("aw_blocked", state([task("a", state="blocked"), task("b", state="proposed")]))
+scen(
+    "aw_running", state([task("a", state="running"), task("b", state="proposed")], [run("ra", "a")])
+)
+scen("aw_ready", state([task("a"), task("b", state="proposed")]))
+scen("aw_dep", state([task("a", state="proposed"), task("b", after=["a"])]))
+
+_WK_STATES = ["done", "failed", "cancelled", "skipped", "proposed", "blocked", "waiting"]
+_WK_TERMINAL = {"done", "failed", "cancelled", "skipped"}
+for _x, _y in itertools.product(_WK_STATES, repeat=2):
+    scen(f"wk_{_x}_{_y}", state([task("a", state=_x), task("b", state=_y)]))
+
+
+def _wk_expected(x, y):
+    """独立した仕様: 全部が終端なら failed / all_done、waiting があれば起こさない、proposed があれば awaiting_approval、残りは stuck"""
+    xs = {x, y}
+    if xs <= _WK_TERMINAL:
+        return ["failed"] if "failed" in xs else ["all_done"]
+    if "waiting" in xs:
+        return []
+    return ["awaiting_approval"] if "proposed" in xs else ["stuck"]
+
+
+def test_wake_awaiting_approval_basic():
+    assert _wakes("aw_basic") == ["awaiting_approval"]
+
+
+def test_wake_awaiting_approval_when_only_unapproved():
+    assert _wakes("aw_only") == ["awaiting_approval"]
+
+
+def test_wake_awaiting_approval_beats_failed_when_unapproved_remains():
+    assert _wakes("aw_failed") == ["awaiting_approval"]
+
+
+def test_wake_awaiting_approval_beats_stuck():
+    assert _wakes("aw_blocked") == ["awaiting_approval"]
+
+
+def test_wake_awaiting_approval_not_while_run_is_live():
+    assert _wakes("aw_running") == []
+
+
+def test_wake_awaiting_approval_not_while_ready_task_starts():
+    r = S("aw_ready")
+    assert len(starts(r)) == 1 and _wakes("aw_ready") == []
+
+
+def test_wake_awaiting_approval_for_task_waiting_on_unapproved_dependency():
+    assert _wakes("aw_dep") == ["awaiting_approval"]
+
+
+@pytest.mark.parametrize("x,y", list(itertools.product(_WK_STATES, repeat=2)))
+def test_wake_reasons_are_exclusive_and_match_spec(x, y):
+    got = _wakes(f"wk_{x}_{y}")
+    assert got == _wk_expected(x, y)
+    assert len(got) <= 1  # 理由は排他

@@ -499,3 +499,105 @@ def test_goal_run_default_off_and_child_excluded():
 def test_goal_run_has_no_user_only_event_from_model():
     src = GOAL_RUN.read_text(encoding="utf-8")
     assert '"model"' not in src
+
+
+# ── 承認後に足した task の再承認 (/goal approve) ──
+def add_task(title):
+    return {"tool": {"op": "add", "title": title}}
+
+
+def task_states(out, i=-1):
+    return {t["title"]: (t["state"], t["approved"]) for t in out["results"][i]["snap"]["tasks"]}
+
+
+def test_reapprove_active_goal_stamps_late_task(tmp_path):
+    out = run(tmp_path, [START, goal("作業"), add_task("後から"), goal("approve")], env=BOTH)
+    assert last(out)["state"] == "active"
+    assert task_states(out)["後から"][1] is True
+    assert any("承認しました" in m for m in msgs(out))
+
+
+def test_late_task_is_unapproved_before_reapprove(tmp_path):
+    out = run(tmp_path, [START, goal("作業"), add_task("後から")], env=BOTH)
+    assert task_states(out)["後から"][1] is False
+
+
+def test_reapprove_confirm_shows_titles_and_total(tmp_path):
+    out = run(
+        tmp_path,
+        [START, goal("作業"), add_task("一つ目"), add_task("二つ目"), goal("approve")],
+        env=BOTH,
+    )
+    (c,) = out["confirms"]
+    assert "一つ目" in c["body"] and "二つ目" in c["body"]
+    assert "2 件" in c["body"]
+
+
+def test_reapprove_confirm_limits_to_ten_titles(tmp_path):
+    steps = [START, goal("作業"), *[add_task(f"タスク{i:02d}") for i in range(12)], goal("approve")]
+    out = run(tmp_path, steps, env=BOTH)
+    (c,) = out["confirms"]
+    assert "12 件" in c["body"]
+    assert "タスク09" in c["body"] and "タスク10" not in c["body"]
+    assert "ほか 2 件" in c["body"]
+
+
+def test_reapprove_declined_keeps_task_unapproved(tmp_path):
+    out = run(
+        tmp_path,
+        [START, goal("作業"), add_task("後から"), goal("approve", confirm=False)],
+        env=BOTH,
+    )
+    assert task_states(out)["後から"][1] is False
+    assert any("取りやめ" in m for m in msgs(out))
+
+
+def test_reapprove_without_task_is_rejected(tmp_path):
+    out = run(tmp_path, [START, goal("作業"), goal("approve")], env=BOTH)
+    assert "承認待ちの計画はありません" in msgs(out)[-1]
+    assert out["confirms"] == []
+
+
+def test_reapprove_paused_goal(tmp_path):
+    out = run(
+        tmp_path,
+        [START, goal("作業"), add_task("後から"), goal("pause"), goal("approve")],
+        env=BOTH,
+    )
+    assert last(out)["state"] == "paused"
+    assert task_states(out)["後から"][1] is True
+
+
+def test_reapprove_twice_second_is_rejected(tmp_path):
+    out = run(
+        tmp_path,
+        [START, goal("作業"), add_task("後から"), goal("approve"), goal("approve")],
+        env=BOTH,
+    )
+    assert "承認待ちの計画はありません" in msgs(out)[-1]
+    assert len(out["confirms"]) == 1
+
+
+def test_reapprove_without_ui_proceeds(tmp_path):
+    out = run(
+        tmp_path, [START, goal("作業"), add_task("後から"), goal("approve", ui=False)], env=BOTH
+    )
+    assert task_states(out)["後から"][1] is True
+    assert out["confirms"] == []
+
+
+def test_first_approval_confirm_text_is_unchanged(tmp_path):
+    out = run(tmp_path, [START, PLAN, goal("approve")], env=BOTH)
+    (c,) = out["confirms"]
+    assert c["title"] == "計画の承認" and "の計画を承認しますか" in c["body"]
+
+
+def test_reapprove_confirm_title_differs(tmp_path):
+    out = run(tmp_path, [START, goal("作業"), add_task("後から"), goal("approve")], env=BOTH)
+    assert out["confirms"][0]["title"] == "task の再承認"
+
+
+def test_reapprove_confirm_clips_wide_title(tmp_path):
+    out = run(tmp_path, [START, goal("作業"), add_task("あ" * 100), goal("approve")], env=BOTH)
+    line = next(x for x in out["confirms"][0]["body"].split("\n") if x.startswith("- "))
+    assert len(line) < 70

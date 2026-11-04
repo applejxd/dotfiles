@@ -39,6 +39,11 @@ const startsOf = (m) => {
 };
 const schedStates = (m) => Object.fromEntries(ad.schedStateOf(m.st, { now: 1_000_000, resources: RES }).tasks.map((t) => [t.id, t.state]));
 const viol = (m) => inv.check(m.st).map((v) => `${v.inv}:${v.message}`);
+const wakesOf = (m) =>
+	sc
+		.next(ad.schedStateOf(m.st, { now: 1_000_000, resources: RES }), RES, 1_000_000)
+		.filter((a) => a.kind === "wake_parent")
+		.map((a) => a.reason);
 const appr = (m, id) => m.st.nodes.get(id)?.approved ?? null;
 const ser = (s) => JSON.stringify(rd.serialize(s));
 const tryReduce = (m, type, node, data, source) => {
@@ -92,12 +97,59 @@ const out = {};
 	const s1 = call(m, { op: "set", id, status: "in_progress" });
 	const s2 = call(m, { op: "set", id, status: "done" });
 	out.lateSet = { s1: s1.ok, s2: s2.ok, state: m.st.nodes.get(id).state, approved: appr(m, id), viol: viol(m) };
-	// d) active な goal への再承認は遷移表が拒否する (追加分を後から承認する経路は今は無い)
+	// d) active な goal への plan.proposed は拒否。承認の対象 (未承認の task) が無い plan.approved も拒否
 	const e1 = tryReduce(m, "plan.proposed", "G", { hash: "h2" }, "model");
 	const e2 = tryReduce(m, "plan.approved", "G", { hash: "h1" }, "user");
 	const r2 = call(m, { op: "add", title: "もう一つ", writes: ["d/**"] });
 	const id2 = r2.details.id;
 	out.reapprove = { id2, e1, e2, approved: appr(m, id2), starts: startsOf(m), readyIds: ids(ad.readyOf(m.st)), viol: viol(m) };
+	// d2) 再承認: 足した task に approved が立ち、起動候補になる (goal の状態は変わらない)
+	const wakeBefore = wakesOf(m);
+	const e3 = tryReduce(m, "plan.approved", "G", { hash: "h1" }, "user");
+	const again = tryReduce(m, "plan.approved", "G", { hash: "h1" }, "user");
+	out.reapproveOk = {
+		err: e3,
+		again,
+		approved: appr(m, id2),
+		gState: m.st.nodes.get("G").state,
+		starts: startsOf(m),
+		readyIds: ids(ad.readyOf(m.st)),
+		sched: schedStates(m),
+		wakeBefore,
+		viol: viol(m),
+		approvedBy: m.st.nodes.get("G").attrs.approvedBy,
+	};
+}
+
+// d3) paused でも再承認でき、モデル出所は拒否 (I10)
+{
+	const m = mk();
+	planned(m);
+	addTask(m, "T1", "G", ["a/**"]);
+	approve(m);
+	const r = call(m, { op: "add", title: "後から", writes: ["c/**"] });
+	const id = r.details.id;
+	push(m, "goal.paused", "G", { reason: "x" }, "system");
+	const byModel = tryReduce(m, "plan.approved", "G", { hash: "h1" }, "model");
+	const bySystem = tryReduce(m, "plan.approved", "G", { hash: "h1" }, "system");
+	const beforeOk = appr(m, id);
+	const byUser = tryReduce(m, "plan.approved", "G", { hash: "h1" }, "user");
+	out.reapprovePaused = { byModel, bySystem, beforeOk, byUser, approved: appr(m, id), gState: m.st.nodes.get("G").state, viol: viol(m) };
+}
+
+// d4) 承認待ちの task だけが残ったときは awaiting_approval。再承認で起動候補になる
+{
+	const m = mk();
+	planned(m);
+	addTask(m, "T1", "G", ["a/**"]);
+	approve(m);
+	call(m, { op: "set", id: "T1", status: "in_progress" });
+	call(m, { op: "set", id: "T1", status: "done" });
+	const allDone = wakesOf(m);
+	const r = call(m, { op: "add", title: "後から", writes: ["c/**"] });
+	const awaiting = wakesOf(m);
+	tryReduce(m, "plan.approved", "G", { hash: "h1" }, "user");
+	out.wake = { allDone, awaiting, starts: startsOf(m), id: r.details.id, viol: viol(m) };
 }
 
 // e) 承認前の task は候補にならない

@@ -12,6 +12,7 @@ import type { Journal } from "./journal.ts";
 import type { LedgerState } from "./reduce.ts";
 import { workEnabled } from "./register.ts";
 import { createRuntime } from "./runtime.ts";
+import { clipCells } from "./text-width.ts";
 import type { Runtime, RuntimeOptions } from "./runtime.ts";
 import type { EventType } from "./types.ts";
 
@@ -39,6 +40,14 @@ export const goalEnabled = (env: Record<string, string | undefined>, child: bool
 	!child && !env.PI_HARNESS_CHILD && env.PI_WORK !== "0" && env.PI_WORK_GOAL === "1";
 
 const LIVE = ["draft", "planned", "active", "paused"];
+
+/** 確認画面の本文。再承認は未承認の task の title (最大 10 件) と総件数を出す */
+export const approveBody = (goalTitle: string, a?: { total: number; titles: string[] }): string => {
+	if (!a) return `目標「${goalTitle}」の計画を承認しますか`;
+	const lines = a.titles.map((t) => `- ${clipCells(t.replace(/\s+/g, " "), 60)}`);
+	const more = a.total > a.titles.length ? `\n… ほか ${a.total - a.titles.length} 件` : "";
+	return `目標「${clipCells(goalTitle, 60)}」に、承認後に足された task が ${a.total} 件あります。承認しますか\n${lines.join("\n")}${more}`;
+};
 const currentGoal = (s: LedgerState) => {
 	const id = s.goals[s.goals.length - 1];
 	const n = id === undefined ? undefined : s.nodes.get(id);
@@ -135,15 +144,15 @@ export function registerGoal(pi: any, opts: RegisterGoalOptions): GoalHandle | n
 		if (!r) return "拒否: 台帳が開いていない";
 		if (r.mode !== "driver") return `拒否: 読み取り専用 (${r.readonlyReason ?? r.mode})`;
 		const g = currentGoal(r.state());
-		if (!g || (g.state !== "draft" && g.state !== "planned")) return "承認待ちの計画はありません";
-		const hash = g.attrs.planHash;
-		if (typeof hash !== "string") return "計画がまだ提案されていません";
+		if (!g) return "承認待ちの計画はありません";
+		const res = goalCommandToEvents({ kind: "approve" }, r.state(), Date.now());
+		if (!res.ok) return res.error ?? "承認待ちの計画はありません";
 		if (ctx?.hasUI && typeof ctx.ui.confirm === "function") {
-			const ok = await ctx.ui.confirm("計画の承認", `目標「${g.title}」の計画を承認しますか`);
+			const ok = await ctx.ui.confirm(res.approval ? "task の再承認" : "計画の承認", approveBody(g.title, res.approval));
 			if (!ok) return "承認を取りやめました";
 		}
-		const s = await r.submit([makeEvent("plan.approved", g.id, { hash }, "user")]);
-		return s.ok ? "計画を承認しました" : `拒否: ${s.error ?? "不明"}`;
+		const s = await r.submit(res.events);
+		return s.ok ? (res.approval ? `計画を承認しました (再承認: task ${res.approval.total} 件)` : "計画を承認しました") : `拒否: ${s.error ?? "不明"}`;
 	};
 
 	pi.registerCommand("goal", {
