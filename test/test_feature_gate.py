@@ -196,6 +196,16 @@ def test_register_tests_unselected_fails(repo, wt):
     assert c["ok"] is False and "test_zz_never_registered_xyz.py" in c["detail"]
 
 
+def test_register_tests_unselected_fails_from_subdir_cwd(repo, wt):
+    # 根の決め方: 本体の根と、その下のディレクトリのどちらで実行しても同じ結果になる
+    _write(wt / "test" / "test_zz_never_registered_xyz.py", "def test_a():\n    pass\n")
+    (repo / "base_sub").mkdir()
+    r1, d1 = _run(repo)
+    r2, d2 = _run(repo / "base_sub")
+    assert (r1.returncode, d1) == (r2.returncode, d2)
+    assert r2.returncode == 1
+
+
 def test_register_tests_selected_ok(repo, wt):
     _write(wt / "test" / "test_pi_audit.py", "def test_a():\n    pass\n")
     # 規則に当たる stem (_PI_TESTS)。HEAD に無いので新規扱い
