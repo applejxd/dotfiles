@@ -236,7 +236,8 @@ export default function (pi: ExtensionAPI) {
 				"進められる作業が無ければ、その理由 (要る方針決定) を書いて終えて構いません。";
 		}
 		return {
-			entries: [{ type: "custom_message" as const, customType: "todo-reminder", content, display: true }],
+			// pi は後のハンドラの entries で前を置き換えるので、event.entries を引き継ぐ
+			entries: [...(event?.entries ?? []), { type: "custom_message" as const, customType: "todo-reminder", content, display: true }],
 			continue: true,
 		};
 	});
