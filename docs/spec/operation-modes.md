@@ -52,6 +52,7 @@ TUI を使わず端末で統合するときは `apps/pr-viewer/merge-cli.ts`。�
 - 対象は `feature/`・`bugfix/` の枝 → `develop`。Git 2.43 以上が要る。
 - **実行中のジョブ・他の git 操作・エディタの自動保存・生成処理を止めてから**実行する（別プロセスの CLI はビューアのジョブを知らない。[ジョブの制限](pr-viewer.md#止められるもの止められないものジョブ正直に)）。
 - `plan` で見た OID を `--expect-source`・`--expect-target` に渡すと、計画後に動いた枝を拒否できる。
+- **画面の統合にあって CLI に無いもの**: リスクのあるパス（`risk_paths`）の警告と追加の確認、ジョブ実行中の検査、レビュー記録への統合結果の書き込み（PR の状態は git から決まるので、画面は「統合済み」と表示する）、2 段の確認。CLI は `merge` を実行した時点で統合するので、`plan` の変更ファイル一覧を自分で見てから実行する（統合器本体、つまり衝突の事前検査・排他・取り消し手順は同じ）。
 
 ```sh
 node apps/pr-viewer/merge-cli.ts plan <repo> --source <枝>
@@ -126,7 +127,7 @@ node apps/pr-viewer/merge-cli.ts recover <repo>
 - **ビューアを外す**: 層 0・1 は動く。失うのは、画面・新しいコメントを画面から入力する入口・ジョブ・画面の統合ボタン（既存の `refs/pi/review` の記録・未受領のレビューは残り、pi は読める）。統合は §3 に戻る。
 - **併用で増えるもの**: `refs/pi/review/*`（レビューの記録）と、`--state-dir` のジョブの記録。
 - **同じ worktree を複数の主体（worker・ジョブ・人）で触らない**。`wt_owner` の lock とジョブの起動前検査（`worktree_busy`）が止める。lock を忘れた経路は検出できない。[worktree の所有の表明](orchestration.md#worktree-の所有の表明)。
-- **ビューアが落ちた**: 統合の途中なら、他の git が動いていないことを確かめてから `merge-cli.ts recover <repo>`。ジョブは `interrupted` になり、自動では再開しない（画面の「再送」）。
+- **ビューアが落ちた**: 状態は git の ref にあるので、まずビューアを再起動する（多くはこれで戻る）。統合の途中だったなら、他の git が動いていないことを確かめてから `merge-cli.ts recover <repo>`。ジョブは `interrupted` になり、自動では再開しない（画面の「再送」）。ジョブが残した lock は `python3 scripts/wt_owner.py reap`（pid が死んでいるものだけ）。どうしても急ぐときだけ `merge-cli`（上の「画面の統合にあって CLI に無いもの」に注意）。
 
 ## 6. よくある疑問
 
