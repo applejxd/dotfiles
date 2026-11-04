@@ -7114,6 +7114,10 @@
 {"kind":"decide","input":"req:{\"cwd\":\"${ROOT}\",\"input\":{\"action\":\"list\"},\"tool\":\"todo\"}","role":"reader","mode":"ask","decision":"deny","reason":"役割 'reader' は todo を使えない","source":"rule"}
 {"kind":"decide","input":"req:{\"cwd\":\"${ROOT}\",\"input\":{\"action\":\"list\"},\"tool\":\"todo\"}","role":"committer","mode":"ask","decision":"deny","reason":"役割 'committer' は todo を使えない","source":"rule"}
 {"kind":"decide","input":"req:{\"cwd\":\"${ROOT}\",\"input\":{\"action\":\"list\"},\"tool\":\"todo\"}","role":"worker","mode":"ask","decision":"deny","reason":"役割 'worker' は todo を使えない","source":"rule"}
+{"kind":"decide","input":"req:{\"cwd\":\"${ROOT}\",\"input\":{\"op\":\"list\"},\"tool\":\"work\"}","role":"implementer","mode":"ask","decision":"allow","reason":"作業台帳の操作は引数が id・題名だけで、台帳への書き込みはハーネスが行う","source":"rule"}
+{"kind":"decide","input":"req:{\"cwd\":\"${ROOT}\",\"input\":{\"op\":\"list\"},\"tool\":\"work\"}","role":"reader","mode":"ask","decision":"deny","reason":"役割 'reader' は work を使えない","source":"rule"}
+{"kind":"decide","input":"req:{\"cwd\":\"${ROOT}\",\"input\":{\"op\":\"list\"},\"tool\":\"work\"}","role":"committer","mode":"ask","decision":"deny","reason":"役割 'committer' は work を使えない","source":"rule"}
+{"kind":"decide","input":"req:{\"cwd\":\"${ROOT}\",\"input\":{\"op\":\"list\"},\"tool\":\"work\"}","role":"worker","mode":"ask","decision":"deny","reason":"役割 'worker' は work を使えない","source":"rule"}
 {"kind":"decide","input":"req:{\"cwd\":\"${ROOT}\",\"input\":{\"questions\":[]},\"tool\":\"ask\"}","role":"implementer","mode":"ask","decision":"allow","reason":"利用者への質問は UI だけを使う (ファイルも外部も触らない)","source":"rule"}
 {"kind":"decide","input":"req:{\"cwd\":\"${ROOT}\",\"input\":{\"questions\":[]},\"tool\":\"ask\"}","role":"reader","mode":"ask","decision":"deny","reason":"役割 'reader' は ask を使えない","source":"rule"}
 {"kind":"decide","input":"req:{\"cwd\":\"${ROOT}\",\"input\":{\"questions\":[]},\"tool\":\"ask\"}","role":"committer","mode":"ask","decision":"deny","reason":"役割 'committer' は ask を使えない","source":"rule"}

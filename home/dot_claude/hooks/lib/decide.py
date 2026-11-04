@@ -28,6 +28,8 @@ FILE_WRITE_TOOLS = ("edit", "write")
 TASK_TOOL = "task"
 # 拡張 (extensions/todo) のタスクリスト。状態をメモリに持つだけで、ファイルも外部も触らない
 TODO_TOOL = "todo"
+# 作業台帳 (work)。引数は id・題名などで、台帳への書き込みはハーネスが fs で行う
+WORK_TOOL = "work"
 # 拡張 (extensions/ask) の利用者への質問。UI だけを使い、ファイルも外部も触らない
 ASK_TOOL = "ask"
 # guarded_action (承認つきの操作)。確認はツール自身が 1 回だけ取るので、判定器は役割にあれば allow
@@ -38,6 +40,7 @@ KNOWN_TOOLS = (
     *FILE_WRITE_TOOLS,
     TASK_TOOL,
     TODO_TOOL,
+    WORK_TOOL,
     ASK_TOOL,
     ACTION_TOOL,
 )
@@ -617,6 +620,9 @@ def _decide(request: Any) -> dict[str, Any]:
         common_deny, role_rule = None, _response("allow", reason, "rule")
     elif tool == TODO_TOOL:
         reason = "タスクリストはメモリの状態だけを変える"
+        common_deny, role_rule = None, _response("allow", reason, "rule")
+    elif tool == WORK_TOOL:
+        reason = "作業台帳の操作は引数が id・題名だけで、台帳への書き込みはハーネスが行う"
         common_deny, role_rule = None, _response("allow", reason, "rule")
     elif tool == ASK_TOOL:
         reason = "利用者への質問は UI だけを使う (ファイルも外部も触らない)"

@@ -34,4 +34,10 @@
 
 - 承認前の計画（proposed）の task は開始できない。`add` は生きた goal（active を優先）へ入り、無ければ draft の goal を作る（承認は利用者）。
 - `holder` は、台帳の lease の保持者と一致するときだけイベントへ記す（それ以外は store が付ける）。
-- 配線（`index.ts`・役割ごとのツール一覧・判定器・golden）は未実装。
+- 配線（`index.ts`）は未実装（役割ごとのツール一覧・判定器・golden は下の「権限の表」で実装済み）。
+
+## 権限の表
+
+- `work` は親の役割（`implementer`・`orchestrator`）の `tools` にだけ足す。子の役割（`explorer`・`reader`・`committer`・`worker`・`plan` など）には足さない（子は台帳に書かない）。`todo` は残す。
+- 判定器（`judge/decide.ts`・`hooks/lib/decide.py`）は `todo` と同じく、役割に `work` があれば確認なしで allow する。引数（`WORK_TOOL_SCHEMA`）はパス・URL・コマンドを持たない（`writes` は衝突検出用の宣言で、書き込みは起こさない）。台帳への書き込みはハーネスが fs で直接行い、判定器を通らない。
+- 試験: `test_decide.py::test_work_is_allowed_only_for_parent_roles`。

@@ -612,6 +612,14 @@ def test_todo_is_allowed_only_for_roles_that_have_it():
     assert decide(req("todo", role="worker"))["decision"] == "deny"
 
 
+def test_work_is_allowed_only_for_parent_roles():
+    # 親 (implementer・orchestrator) だけ。子の役割には無い (台帳に書かせない)
+    assert decide(req("work", op="list"))["decision"] == "allow"
+    assert decide(req("work", role="orchestrator", op="list"))["decision"] == "allow"
+    for role in ("worker", "explorer", "reader", "committer"):
+        assert decide(req("work", role=role, op="list"))["decision"] == "deny", role
+
+
 def test_ask_is_allowed_only_for_roles_that_have_it():
     assert decide(req("ask"))["decision"] == "allow"
     assert decide(req("ask", role="worker"))["decision"] == "deny"

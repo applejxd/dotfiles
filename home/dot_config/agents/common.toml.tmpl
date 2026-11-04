@@ -1518,7 +1518,7 @@ $ARGUMENTS
 # 末尾が * の項目は前方一致。mcp__* は MCP のツール全部 (規則が無いので既定の扱いになる)。
 [pi.profiles.implementer]
 # pr_summary: ローカル PR ビューアの道具 (see docs/spec/pr-viewer.md)
-tools = ["bash", "read", "edit", "write", "grep", "find", "ls", "task", "todo", "ask", "action", "pr_summary", "mcp__*"]
+tools = ["bash", "read", "edit", "write", "grep", "find", "ls", "task", "todo", "work", "ask", "action", "pr_summary", "mcp__*"]
 default = "ask"
 # [bash] deny の例外 (許す語は判定器が固定。see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外)
 # `git restore --staged` は index だけを戻す厳密な 1 形式だけ (see docs/spec/guard/pi-decide.md#git-restore---staged-の例外)
@@ -1600,7 +1600,7 @@ shell_deny = [
 # 親が失う操作の代替: 作業・検証は worker、調査は explore、コミットは guarded_action。
 # see docs/spec/guard/pi-subagents.md#親の絞り込みorchestrate
 [pi.profiles.orchestrator]
-tools = ["read", "grep", "find", "ls", "task", "todo", "ask", "action"]
+tools = ["read", "grep", "find", "ls", "task", "todo", "work", "ask", "action"]
 default = "deny"
 
 # 親の絞り込み (orchestrator)。default は起動時の状態 (off / on)。実行中は /orchestrate on|off (利用者専用)
