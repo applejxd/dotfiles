@@ -384,6 +384,9 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule("away-shift", ("home/dot_claude/skills/away-shift/**",), ("test_away_guard",)),
     Rule(
+        "experiment-loop", ("home/dot_claude/skills/experiment-loop/scripts/*.py",), ("test_exp",)
+    ),
+    Rule(
         "models の道具",
         ("scripts/models.py",),
         ("test_models_tool", "test_pi_model_catalog"),
