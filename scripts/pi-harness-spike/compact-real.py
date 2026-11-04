@@ -39,6 +39,8 @@ try:
         "audit.ts",
         "tools-ext.ts",
         "confirm-view.ts",
+        "explain.ts",
+        "autocheckpoint.ts",
         "actions.ts",
         "text-viewer.ts",
         "confirm-present.ts",
