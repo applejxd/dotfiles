@@ -78,7 +78,7 @@ def play(setup, *steps, now=5000, holder="h1"):
         assert s["applyError"] is None, s["applyError"]
         assert s["violations"] == [], s["violations"]
         assert all(e["type"] not in USER_ONLY for e in s["result"]["events"])
-        assert all(e["data"]["source"] == "model" for e in s["result"]["events"])
+        assert all(e["source"] == "model" for e in s["result"]["events"])
         if not s["result"]["ok"]:
             assert s["result"]["events"] == []
         assert len(s["result"]["text"]) <= 1500

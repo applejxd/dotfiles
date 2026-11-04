@@ -18,7 +18,7 @@ const [tool, rd, inv] = await Promise.all(["tool.ts", "reduce.ts", "invariants.t
 const USER_ONLY = new Set(["plan.approved", "budget.adjusted", "goal.resumed"]);
 const mkEvent = (e, seq) => {
 	const source = e.source ?? (USER_ONLY.has(e.type) ? "user" : "system");
-	return { ts: seq * 1000, seq, type: e.type, ...(e.node !== undefined ? { node: e.node } : {}), data: { ...(e.data ?? {}), source } };
+	return { ts: seq * 1000, seq, type: e.type, ...(e.node !== undefined ? { node: e.node } : {}), data: { ...(e.data ?? {}) }, source, ...(e.holder !== undefined ? { holder: e.holder } : {}) };
 };
 const ser = (s) => JSON.stringify(rd.serialize(s));
 
