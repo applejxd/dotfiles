@@ -390,6 +390,8 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。
 
 ## 既知の制約
 
+- シェルが値をコードとして実行する入口の環境変数（`PS4`・`PROMPT_COMMAND`・`BASH_ENV`・`ENV`・`LD_PRELOAD`・`LD_AUDIT`・`DYLD_INSERT_LIBRARIES`・`BASH_FUNC_*`）の設定と `compgen -C` / `complete -C` は、`rules_guard.ts` の `codeEntryEnv`（Python 版は `rules_guard.py` の `code_entry_env`）が役割・bypass によらず deny にする。名前は完全一致で、単なる言及・`PATH` などは拒否しない。名前を実行時に組み立てる形と `eval` は対象外（[詳細](pi-guard.md#コードの入口になる環境変数)）。試験は `test_pi_control_files_bash.py`・`test_decide.py`・golden。
+
 - 作業台帳の置き場は、名前の正規表現 (`.git/pi-work`・`.tmp/work`) に加え、`judge/ledger_root.ts` の `ledgerRoots(cwd, env)` が fs だけで解いた実体（`--separate-git-dir`・`GIT_DIR`・worktree の common-dir）とも照合する。bash の `ledgerHit` とファイルツールの `decideFile`（`@` などの pi のパス解釈の各形も照合）が使う。結果は 2 秒の TTL でキャッシュする。common-dir 自身の削除・移動（`.git` 名以外）も拒否する。既知の制約: 広い祖先（`~`・作業ツリー全体）の再帰削除は既存の rm の判定に任せる。TTL の間に作られた `.git` は最大 2 秒拾えない。
 - 結果は cwd ごとに最大 64 件キャッシュする（同じプロセスの中で `.git` を作り直すと古いまま）。読めない・不正な `.git` は例外にせず、名前の照合だけに戻る。試験は `test_pi_ledger_root.py`。
 - gitflow-lite のリポジトリで develop / main を直接編集・コミットさせない制限は、判定器の外側の層（[CHG-0049](../../change/0049-gitflow-convention-guard.md)）に置いていたが、2026-10-31 に撤去した（[CHG-0050](../../change/0050-slim-guarded-action.md)）。今は機械では止めず、指示で運用する。`decide` は変えていない

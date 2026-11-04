@@ -194,6 +194,15 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 `defaultTools = []` は境界ではなく、`pi --tools …` で戻せる（利用者が意図して選ぶ経路）。
 **フルガードの読み込みに失敗した起動で、判定なしの実行が残らないようにする**: フルガードは起動時に印 `globalThis.__PI_FULL_GUARD__` を立てる。実行を伴う自作の拡張の `bg_run`（`activity`）と `task`（`subagents`）は、印が無いと実行しない。ガードのパスが無いとき、`defaultTools = []` は組み込みツールだけを無効にするので、自作の拡張の `bg_run`（shell）が残るためである（独立レビューで見つかった）。`rules.json` が壊れている・無いときは pi が起動に失敗する（終了コード 1。`pi -ne` で拡張無しに起動できる）。
 
+### コードの入口になる環境変数
+
+シェルが変数の値をコードとして実行する入口は、構文木に現れないまま実行に使える（公開の突破の型。[調査](../../research/agents/command-judge-survey.md)）。判定器（TS の `codeEntryEnv`・Python の `code_entry_env`。同じ規則を二重に持つ）は、次の名前を**設定する形**を、役割・bypass・cwd によらず deny にする。追加の厳格化だけで、既存の判定は変えない。
+
+- **名簿**（完全一致）: `PS4`・`PROMPT_COMMAND`・`BASH_ENV`・`ENV`・`LD_PRELOAD`・`LD_AUDIT`・`DYLD_INSERT_LIBRARIES`、`BASH_FUNC_` で始まる名前。
+- **検出する形**: 代入（`X=v`・`X+=v`。前置・`export`・`declare -x`・`typeset`・`local`・`readonly`・`env [-i] X=v`）、`printf -v X`・`read [-r] X`、`compgen -C`・`complete -C`（指定のコマンドを実行する）。引用符とバックスラッシュを外してから照合する（`"PS4"=x`・`P''S4=x`・`PS\4=x`）。
+- **入れないもの**: `PATH`・`NODE_OPTIONS`・`LD_LIBRARY_PATH`・`IFS`・`ENVIRONMENT`・`MY_ENV` など。通常の運用で使うため。引用符の外の `# コメント` の中の言及も見ない。`grep PS4 file`・`echo PS4`・`man bash` は拒否しない。
+- **限界**: 名前を実行時に組み立てる形（`${x}S4=…`）と `eval` の中身は静的に見えない。`trap`・`alias` は既存の規則（`normalize` の `TRAP_BINS` など）の範囲のままで、この規則では足していない。`echo PS4=x` のような引数中の `NAME=` は代入に見えて拒否しうる（安全側）。
+
 ## 置き場
 
 | 実体 | 配置先 | 役割 |

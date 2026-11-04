@@ -450,7 +450,6 @@ _ENV_PREFIX_COMMANDS = [
     "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status",
     "GIT_DIR=/tmp/x git log",
     "GIT_CONFIG_GLOBAL=/tmp/x git log",
-    "LD_PRELOAD=/tmp/x.so git log",
     "PATH=/tmp:$PATH git log",
     "FOO=1 git log",
     "env GIT_PAGER=id git log",
@@ -546,6 +545,9 @@ _DASH_CASES = [
         "deny",
         "check",
     ),
+    # コードの入口になる環境変数は役割を問わず deny (check)
+    ("explorer", "LD_PRELOAD=/tmp/x.so git log", "deny", "check"),
+    ("implementer", "LD_PRELOAD=/tmp/x.so git log", "deny", "check"),
     *[
         (role, cmd, decision, "default")
         for cmd in _ENV_PREFIX_COMMANDS
@@ -769,3 +771,48 @@ def test_decision_does_not_depend_on_earlier_calls():
     bash(quoted)
     after = bash(unquoted)
     assert after == alone
+
+
+_ENTRY_DENY = [
+    "PS4='$(touch /tmp/x)' bash -x -c true",
+    "export PS4='$(id)'",
+    "BASH_ENV=/tmp/x.sh bash -c true",
+    "env BASH_ENV=/tmp/x sh -c true",
+    "LD_PRELOAD=/tmp/x.so ls",
+    "export LD_AUDIT=/tmp/x",
+    "DYLD_INSERT_LIBRARIES=/tmp/x ls",
+    "export BASH_FUNC_foo%%='() { id; }'",
+    "ENV=/tmp/x sh -c true",
+    "PROMPT_COMMAND='id' bash -i",
+    "declare -x PS4=x",
+    "PS4+=x cmd",
+    "printf -v PS4 x",
+    '"PS4"=x cmd',
+    "P''S4=x cmd",
+    "env -i PS4=x cmd",
+    "compgen -C id",
+]
+_ENTRY_OK = [
+    "grep PS4 file.sh",
+    "echo PS4",
+    "ENVIRONMENT=prod ./run",
+    "MY_ENV=x ./run",
+    "BASH_ENVX_NOT=1 ./run",
+    "man bash",
+    "echo hi  # PS4=x",
+    "LD_LIBRARY_PATH=/opt/lib ./prog",
+]
+
+
+@pytest.mark.parametrize("command", _ENTRY_DENY)
+@pytest.mark.parametrize("role", ["implementer", "worker", "explorer"])
+@pytest.mark.parametrize("bypass", [False, True])
+def test_code_entry_env_is_denied(command, role, bypass):
+    response = decide(req("bash", role=role, bypass=bypass, command=command))
+    assert response["decision"] == "deny", command
+    assert "入口の環境変数" in response["reason"], command
+
+
+@pytest.mark.parametrize("command", _ENTRY_OK)
+def test_code_entry_env_mentions_are_not_denied_by_this_rule(command):
+    assert "入口の環境変数" not in bash(command).get("reason", "")

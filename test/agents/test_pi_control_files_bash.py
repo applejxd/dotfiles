@@ -420,3 +420,78 @@ def test_glued_values_through_a_symlink_do_not_overmatch(tmp_path):
     ]
     for (cmd, flags), decision in _decide(cmds, cwd=str(tmp_path)):
         assert decision != "deny", f"{cmd!r} {flags} -> {decision}"
+
+
+# ─── シェルが値をコードとして実行する入口の環境変数 (PS4 など) ─────────────────────────────────
+# see docs/spec/guard/pi-guard.md#コードの入口になる環境変数
+ENTRY_DENY = [
+    "PS4='$(touch /tmp/x)' bash -x -c true",
+    "export PS4='$(id)'",
+    "BASH_ENV=/tmp/x.sh bash -c true",
+    "env BASH_ENV=/tmp/x sh -c true",
+    "LD_PRELOAD=/tmp/x.so ls",
+    "export LD_AUDIT=/tmp/x",
+    "DYLD_INSERT_LIBRARIES=/tmp/x ls",
+    "export BASH_FUNC_foo%%='() { id; }'",
+    "ENV=/tmp/x sh -c true",
+    "PROMPT_COMMAND='id' bash -i",
+    "declare -x PS4=x",
+    "typeset -x PS4=x",
+    "local PS4=x",
+    "readonly PS4=x",
+    "PS4+=x cmd",
+    "printf -v PS4 x",
+    "read -r PS4",
+    "read PROMPT_COMMAND",
+    '"PS4"=x cmd',
+    "P''S4=x cmd",
+    "PS\\4=x cmd",
+    "env -i PS4=x cmd",
+    "echo a; PS4=x cmd",
+    "true && LD_PRELOAD=/x.so ls",
+    "(BASH_ENV=/x sh -c true)",
+    "compgen -C id",
+    "complete -C id foo",
+    "echo hi # c\nPS4=x cmd",
+]
+ENTRY_OK = [
+    "grep PS4 file.sh",
+    "echo PS4",
+    "PATH=/tmp/bin:$PATH ls",
+    "NODE_OPTIONS=--max-old-space-size=4096 npm test",
+    "LD_LIBRARY_PATH=/opt/lib ./prog",
+    "IFS= read -r line",
+    "man bash",
+    "ENVIRONMENT=prod ./run",
+    "MY_ENV=x ./run",
+    "BASH_ENVX_NOT=1 ./run",
+    "echo hi  # PS4=x",
+    "compgen -c",
+    "ls PS4.txt",
+]
+
+
+@pytest.mark.parametrize("role", ["implementer", "worker", "explorer"])
+def test_entry_env_assignments_are_denied_for_every_role_and_bypass(role):
+    for (cmd, flags), decision in _decide(ENTRY_DENY, role=role):
+        assert decision == "deny", f"{cmd!r} {flags} -> {decision}"
+        assert "入口の環境変数" in decision.reason, f"{cmd!r}: {decision.reason}"
+
+
+@pytest.mark.parametrize("role", ["implementer", "worker", "explorer"])
+def test_entry_env_mentions_and_ordinary_variables_are_not_denied_by_this_rule(role):
+    for (cmd, flags), decision in _decide(ENTRY_OK, role=role):
+        assert "入口の環境変数" not in decision.reason, f"{cmd!r} {flags} -> {decision}"
+
+
+def test_entry_env_is_denied_regardless_of_cwd(tmp_path):
+    for cwd in (str(tmp_path), "/tmp", REPO):
+        for (cmd, flags), decision in _decide(["PS4=x cmd", "export BASH_ENV=/x"], cwd=cwd):
+            assert decision == "deny", f"{cwd} {cmd!r} {flags} -> {decision}"
+
+
+def test_existing_hook_env_rule_is_unchanged():
+    cmds = ["AGENTS_CONFIG_DIR=/tmp/x ls", "PYTHONPATH=/tmp/x ls", "CLAUDE_PRE_HOOK=x ls"]
+    for (cmd, flags), decision in _decide(cmds):
+        assert decision == "deny", f"{cmd!r} {flags} -> {decision}"
+        assert "入口の環境変数" not in decision.reason

@@ -287,6 +287,25 @@ function checkLedgerWrite(ctx: Ctx, cmd: string): string | null {
 const INLINE_PATH_RE = pyRegex(`['"]([^'"]*(?:\\.claude|\\.copilot|/agents|\\.git/|\\.pi/agent|config/pi/harness|\\.tmp/work/)[^'"]*)['"]`, "g");
 const HOOK_ENV_RE = pyRegex("\\b(AGENTS_CONFIG_DIR|PYTHONPATH|CLAUDE_[A-Z_]*HOOK[A-Z_]*)=(\\S*)", "g");
 
+// シェルが値をコードとして実行する入口の環境変数 (名前は完全一致。BASH_FUNC_ だけ前方一致)。
+// 検出する形・入れないもの・限界は docs/spec/guard/pi-guard.md#コードの入口になる環境変数
+const ENTRY_NAME = "(?:PS4|PROMPT_COMMAND|BASH_ENV|ENV|LD_PRELOAD|LD_AUDIT|DYLD_INSERT_LIBRARIES|BASH_FUNC_[^\\s=]*)";
+const ENTRY_HEAD = "(?:^|[\\s;&|(){`])";
+const ENTRY_COMMENT_RE = pyRegex("^((?:[^'\"\\\\#\\n]*\\s)?)#[^\\n]*", "gm");
+const ENTRY_ASSIGN_RE = pyRegex(`${ENTRY_HEAD}(${ENTRY_NAME})\\+?=`, "m");
+const ENTRY_ARG_RE = pyRegex(`${ENTRY_HEAD}(?:printf\\s+-v|read(?:\\s+-\\S+)*)\\s+(${ENTRY_NAME})(?![\\w])`, "m");
+const ENTRY_COMPLETE_RE = pyRegex(`${ENTRY_HEAD}(?:compgen|complete)\\s(?:[^;&|\\n]*\\s)?-[A-Za-z]*C(?![\\w])`, "m");
+
+/** コードの入口になる環境変数の設定・`compgen -C` を見つける。見つからなければ null。 */
+export function codeEntryEnv(cmd: string): string | null {
+	// 引用符の外のコメントだけ落としてから、引用符とバックスラッシュを外す (`"PS4"=x`・`P''S4=x`・`PS\\4=x`)
+	const text = cmd.replace(ENTRY_COMMENT_RE, (_all, head: string) => head).replace(/['"\\]/gu, "");
+	const m = ENTRY_ASSIGN_RE.exec(text) ?? ENTRY_ARG_RE.exec(text);
+	if (m !== null) return m[1];
+	if (ENTRY_COMPLETE_RE.test(text)) return "compgen -C";
+	return null;
+}
+
 const MUTATING = new Set([
 	"rm",
 	"rmdir",
@@ -357,6 +376,15 @@ export function checkGuardTampering(ctx: Ctx, cmd: string): string | null {
 		return (
 			`\`${name}\` を差し替えて hook の設定読み込み先を変えようとしています。\n` +
 			"hook や permission の無効化に繋がるため許可されていません。"
+		);
+	}
+
+	const entry = codeEntryEnv(cmd);
+	if (entry !== null) {
+		return (
+			`シェルが値をコードとして実行する入口の環境変数 (\`PS4\` など。今回は \`${entry}\`) の設定は許可されていません。\n` +
+			"PS4・PROMPT_COMMAND・BASH_ENV・ENV・LD_PRELOAD・LD_AUDIT・" +
+			"DYLD_INSERT_LIBRARIES・BASH_FUNC_* と `compgen -C` / `complete -C` が対象です。"
 		);
 	}
 

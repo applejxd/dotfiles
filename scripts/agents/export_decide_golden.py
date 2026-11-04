@@ -122,6 +122,42 @@ DASH_COMMANDS = (
 )
 HOME = str(Path.home())
 
+# シェルが値をコードとして実行する入口の環境変数 (deny と誤拒否の確認)。期待値は test_pi_control_files_bash.py
+ENTRY_ENV_COMMANDS = (
+    "PS4='$(touch /tmp/x)' bash -x -c true",
+    "export PS4='$(id)'",
+    "BASH_ENV=/tmp/x.sh bash -c true",
+    "env BASH_ENV=/tmp/x sh -c true",
+    "LD_PRELOAD=/tmp/x.so ls",
+    "export LD_AUDIT=/tmp/x",
+    "DYLD_INSERT_LIBRARIES=/tmp/x ls",
+    "export BASH_FUNC_foo%%='() { id; }'",
+    "ENV=/tmp/x sh -c true",
+    "PROMPT_COMMAND='id' bash -i",
+    "declare -x PS4=x",
+    "PS4+=x cmd",
+    "printf -v PS4 x",
+    "read -r PS4",
+    '"PS4"=x cmd',
+    "P''S4=x cmd",
+    "PS\\4=x cmd",
+    "env -i PS4=x cmd",
+    "compgen -C id",
+    "complete -C id foo",
+    "grep PS4 file.sh",
+    "echo PS4",
+    "echo hi  # PS4=x",
+    "PATH=/tmp/bin:$PATH ls",
+    "NODE_OPTIONS=--max-old-space-size=4096 npm test",
+    "LD_LIBRARY_PATH=/opt/lib ./prog",
+    "IFS= read -r line",
+    "man bash",
+    "ENVIRONMENT=prod ./run",
+    "MY_ENV=x ./run",
+    "BASH_ENVX_NOT=1 ./run",
+    "compgen -c",
+)
+
 # guarded_action (承認つきの操作)。action を持つ役割 (implementer) でだけ deny + 呼び出し例になる
 # 期待値は test_pi_actions.py
 ACTION_ROLES = ("implementer", "explorer", "committer", "worker")
@@ -293,6 +329,10 @@ def requests() -> list[Any]:
     for other in OTHER_TOOLS:
         for role in ROLES:
             out.append({**other, "cwd": "${ROOT}", "role": role, "bypass": False})
+    for command in ENTRY_ENV_COMMANDS:
+        for role in ROLES:
+            out.append(_request("bash", role, "${ROOT}", command=command))
+        out.append(_request("bash", "implementer", "${ROOT}", bypass=True, command=command))
     out.extend(INVALID)
     return out
 

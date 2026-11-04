@@ -24,6 +24,33 @@ from ._shared import (
 )
 from .rules_exec import _is_inline_code_segment
 
+# シェルが値をコードとして実行する入口の環境変数 (名前は完全一致。BASH_FUNC_ だけ前方一致)。
+# 検出する形・入れないもの・限界は docs/spec/guard/pi-guard.md#コードの入口になる環境変数
+# (pi 側 judge/rules_guard.ts の codeEntryEnv と同じ規則。片方だけ直さない)
+_ENTRY_NAME = r"(?:PS4|PROMPT_COMMAND|BASH_ENV|ENV|LD_PRELOAD|LD_AUDIT|DYLD_INSERT_LIBRARIES|BASH_FUNC_[^\s=]*)"
+_ENTRY_HEAD = r"(?:^|[\s;&|(){`])"
+_ENTRY_COMMENT_RE = re.compile(r"^((?:[^'\"\\#\n]*\s)?)#[^\n]*", re.M)
+_ENTRY_ASSIGN_RE = re.compile(_ENTRY_HEAD + "(" + _ENTRY_NAME + r")\+?=", re.M)
+_ENTRY_ARG_RE = re.compile(
+    _ENTRY_HEAD + r"(?:printf\s+-v|read(?:\s+-\S+)*)\s+(" + _ENTRY_NAME + r")(?![\w])", re.M
+)
+_ENTRY_COMPLETE_RE = re.compile(
+    _ENTRY_HEAD + r"(?:compgen|complete)\s(?:[^;&|\n]*\s)?-[A-Za-z]*C(?![\w])", re.M
+)
+
+
+def code_entry_env(cmd: str) -> str | None:
+    """コードの入口になる環境変数の設定・`compgen -C` を見つける。見つからなければ None。"""
+    # 引用符の外のコメントだけ落としてから、引用符とバックスラッシュを外す
+    text = _ENTRY_COMMENT_RE.sub(lambda m: m.group(1), cmd)
+    text = text.replace("'", "").replace('"', "").replace("\\", "")
+    m = _ENTRY_ASSIGN_RE.search(text) or _ENTRY_ARG_RE.search(text)
+    if m:
+        return m.group(1)
+    if _ENTRY_COMPLETE_RE.search(text):
+        return "compgen -C"
+    return None
+
 
 def check_guard_tampering(cmd: str) -> str | None:
     """hook や permission 設定そのものを無効化しようとしていないか。
@@ -95,6 +122,14 @@ def check_guard_tampering(cmd: str) -> str | None:
         return (
             f"`{name}` を差し替えて hook の設定読み込み先を変えようとしています。\n"
             "hook や permission の無効化に繋がるため許可されていません。"
+        )
+
+    entry = code_entry_env(cmd)
+    if entry is not None:
+        return (
+            f"シェルが値をコードとして実行する入口の環境変数 (`PS4` など。今回は `{entry}`) の設定は許可されていません。\n"
+            "PS4・PROMPT_COMMAND・BASH_ENV・ENV・LD_PRELOAD・LD_AUDIT・"
+            "DYLD_INSERT_LIBRARIES・BASH_FUNC_* と `compgen -C` / `complete -C` が対象です。"
         )
 
     mutating = {
