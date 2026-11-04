@@ -47,7 +47,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | pi / pis の機能・設定の変え方・独自コマンドを見直す（忘れたときの早見） | [pi / pis マニュアル](spec/pi-manual.md) |
 | pi 単独と PR ビューア併用の、運用の違い・手順・旗の使い分けを知る | [運用モード](spec/operation-modes.md) |
 | pi のガード（`pis`）を起動する・変える | [pi のガード](spec/guard/pi-guard.md) |
-| gitflow-lite の運用（起票は利用者、AI は feature の worktree から `git_commit`）を知る | [開発ガイドのブランチモデル](spec/development.md#ブランチモデルgitflow-lite) |
+| gitflow-lite の運用（起票は親、AI は feature の worktree から `git_commit`、統合は利用者がビューアで押す）を知る | [開発ガイドのブランチモデル](spec/development.md#ブランチモデルgitflow-lite) |
 | `common.toml` の書き方と生成先の所有権を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
 | コマンド・ファイルの allow / ask / deny を変える | [コマンド・ファイルの判定](spec/guard/agent-command-policy.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/mcp-servers.md#mcp-サーバ) |
@@ -73,7 +73,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 確認が取れない操作の保留と、利用者が後から承認して実行する仕組み（非同期の承認。**撤去済み**。統合は PR ビューアの押下へ）を知る | [ADR-0024](adr/0024-human-press-merges-in-app.md)、[ADR-0023](adr/0023-pending-approval.md)（Superseded）、[CHG-0055](change/closed/0055-async-approval.md) |
 | 並列実装の配車・関門・承認パケット・標的レビュー（利用者が本質的な承認に集中する自動化）を知る・変える | [CHG-0056](change/0056-orchestrator.md) |
 | 保留の承認を、巡回・一括で少ない操作にする設計（見送り・撤去済み）を知る | [CHG-0058](change/closed/0058-batch-approval.md) |
-| GitHub をリモートに持たない開発向けの、PR 風のローカルのレビュー画面（ref のスキーマ・配送・アプリの安全規則・承認の指示）を知る・変える | [ローカル PR ビューアの設計](spec/pr-viewer.md)、[CHG-0060](change/0060-local-pr-viewer.md) |
+| GitHub をリモートに持たない開発向けの、PR 風のローカルのレビュー画面（ref のスキーマ・配送・アプリの安全規則・統合）を知る・変える | [ローカル PR ビューアの設計](spec/pr-viewer.md)、[CHG-0060](change/0060-local-pr-viewer.md) |
 | PR ビューアと pi の非同期のメッセージ・キュー（受信箱。見送り・撤去済み）の経緯を知る | [CHG-0061](change/closed/0061-pr-inbox.md) |
 | PR の管理・統合を、人が操作するアプリへ移す（保留・受信箱の撤去、merge commit、押下契機の `pis -p`、pi を通常のコーディングへ戻す）を知る・変える | [CHG-0062](change/0062-pr-hub-simplify.md) |
 | 親と子で文脈（AGENTS.md）を分ける（子に必要な規則だけを渡す） | [CHG-0059](change/closed/0059-child-context.md) |
@@ -88,36 +88,10 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 技術調査の結果を確認する | [調査記録一覧](research/index.md) |
 | 文書で使う用語を確かめる | [用語集](spec/glossary.md) |
 
-## 現在有効な状態
+## 現在の状態と最近の変更
 
-「適用」「実機で確かめた」の区別は [用語集](spec/glossary.md#適用と検証の段階) のとおり。
-現行仕様の一覧は [仕様・運用](spec/index.md)。
-
-| 対象 | 状態 | 確認日 | 根拠 |
-| --- | --- | --- | --- |
-| source state 全体 | 全 OS ぶん更新済み。適用して実機で確かめたのは Linux / WSL と Windows 11（個別は下の行） | 2026-09-19（最終レビュー） | [仕様・運用](spec/index.md) |
-| Raspberry Pi（64bit / ヘッドレス） | 実機で `apply` が完走。判定は `apply` のたびに評価する | 2026-09-26 | [CHG-0008](change/closed/0008-raspi-branching.md) |
-| Windows native の dotfiles | Windows 11 の実機で `apply` して使用中（管理者権限の集約、設定の見直し） | 2026-10-12 | [CHG-0021](change/0021-windows-admin-consolidation.md)、[CHG-0022](change/0022-windows11-settings-review.md) |
-| Windows native の AI CLI の権限・sandbox | source state のみ更新。Windows 11 の実機では未確認 | 2026-09-27 | [Windows での扱い](spec/agent-permissions.md#windows-での扱い) |
-| 権限 / hook / MCP の生成 | `common.toml` から各 AI CLI へ生成して利用している | 2026-09-19（最終レビュー） | [エージェント権限仕様](spec/agent-permissions.md) |
-| 秘密情報の管理 | sops + age と Bitwarden で利用している | 2026-09-19（最終レビュー） | [セキュリティ](spec/security.md) |
-| 圧縮を跨ぐ引き継ぎ | OpenCode V2 のみ。実機の自動圧縮で確かめた。Claude / Copilot 向けの圧縮 hook は撤去 | 2026-09-25 | [CHG-0001](change/closed/0001-compaction-context-handover.md) |
-| OpenCode の隔離起動（`ocs`） | Ubuntu / WSL で通常起動と併用。境界の道具を Fence に替え、履歴を通常起動と共有する。境界チェックは `ocs --check` で手動 | 2026-09-29 | [CHG-0009](change/closed/0009-ocs-simplify-for-accidents.md) |
-| `pis`（pi のサンドボックス標準の起動） | Ubuntu / WSL で、標準でサンドボックス（Fence）の中。緩和はカナリアで証明できたときだけ。実機の試験で確かめた（段 3c・3f の反映後は未確認） | 2026-10-15 | [記録 S1](research/agents/pis-sandbox-field-test.md)・[ADR-0018](adr/0018-pis-sandbox-default-relax-only-when-proven.md) |
-| Claude Code | 使えない（OAuth 期限切れ）。棚上げ中 | 2026-09-25 | [判断待ち・障害](#判断待ち障害) |
-
-## 活動中
-
-次の一手の詳細は [案件の索引](change/index.md#活動中) にある。
-
-| 案件 | 状態 | 現在の見立て・最大の未解決点 |
-| --- | --- | --- |
-| [CHG-0006](change/closed/0006-pi-harness-trial.md) | In progress | Pi / oh-my-pi を**利便性の軸**で試す。段 2（常用）に着手。使って決まった設定の回収は段 2.5 |
-| [CHG-0007](change/0007-harness-profiles.md) | In progress | 境界をハーネス非依存にする。プロバイダ層を切り出し済み。次は段 2（共有ランタイムとハーネスの節分け） |
-| [CHG-0011](change/0011-agent-first-shell.md) | In progress | シェルの主な利用者を AI エージェントとして残課題を整える。波 1〜3 は実装済み。通常版 pip の誘導文は前段停止で解決。前段停止を deny 全項目へ拡張（`[bash.deny_guide]`）。bypass を ask→allow に再定義（ADR-0014）。残りは Claude / Copilot への git 環境変数、Windows 実機での検証 |
-| [CHG-0021](change/0021-windows-admin-consolidation.md) | In progress | Windows の chezmoi セットアップを整え、管理者権限の作業を 1 回の UAC に集約する。実装・docs は済み。UAC 承認を含む通し実行（クリーンな Windows 実機）が未検証 |
-| [CHG-0022](change/0022-windows11-settings-review.md) | In progress | Windows 11 の設定を見直し、古い設定の修正と体験の改善を入れる。大半は完了。`gow` と WSL・WSL 3 は保留 |
-| [CHG-0023](change/0023-guard-terminology.md) | In progress | 「ハーネス」の呼び方を整理し（ガード・フルガード・サンドボックス）、`pis` をサンドボックス標準にした（ADR-0018）。簡易ガードは廃止。実機の試験を済ませ、3c・3f の反映後の実機が未確認。認証プロキシ・Orca の状態表示が未決 |
+活動中の案件・状態・終了した案件は [案件の索引](change/index.md) が正本（ここには複写しない。古くなるため）。
+「適用」「実機で確かめた」の区別は [用語集](spec/glossary.md#適用と検証の段階)、現行仕様の一覧は [仕様・運用](spec/index.md)。
 
 ## 判断待ち・障害
 
@@ -132,36 +106,6 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
   OpenCode 節の撤去。
   なお CHG-0002 は終了済み（段階 5 は CHG-0020 へ移管）
   — [案件の索引](change/index.md)
-
-## 最近の重要な変更
-
-終了した案件の一覧は [案件の索引「終了」](change/index.md#終了) にある。
-
-- 2026-10-14 — `pis` をサンドボックス標準にし、緩和はサンドボックスが証明されたときだけ効かせる
-  （「ハーネス」はガード・フルガード・サンドボックスに呼び分け、簡易ガードを廃止）
-  — [ADR-0018](adr/0018-pis-sandbox-default-relax-only-when-proven.md)
-- 2026-09-26 — Raspberry Pi（64bit / ヘッドレス）を導入対象に追加。
-  **`chezmoi init` を前提にした設計にしない**という規約を得た
-  — [CHG-0008](change/closed/0008-raspi-branching.md)
-- 2026-09-25 — スキルを役割で分離。`checkpoint` は復帰記録（A1）、`sdd-docs` は
-  案件の更新（A2）と恒久的な文書化（B）
-  — [checkpoint 仕様](spec/checkpoint.md)
-- 2026-09-25 — `context: fork` は OpenCode に**読み捨てられる**と実測
-  — [スキル frontmatter の解釈範囲](research/opencode/skill-frontmatter.md)
-- 2026-09-25 — 圧縮要約そのものを checkpoint にした
-  — [CHG-0001](change/closed/0001-compaction-context-handover.md)
-- 2026-09-21 — OpenCode V2 の permission / MCP を `common.toml` から生成
-  — [CHG-0002](change/closed/0002-opencode-ask-by-default.md)
-- 2026-09-20 — Copilot でも圧縮直後に checkpoint を自動注入
-  — [記録 E7](research/agents/compaction-hooks.md)
-- 2026-09-19 — `adr` スキルを `checkpoint` へ統合（役割の重複を解消）
-  — [CHG-0001](change/closed/0001-compaction-context-handover.md)
-- 2026-09-19 — docs を「情報の役割」で分け、案件を中心に置く運用へ
-  — [ADR-0010](adr/0010-exploratory-spec-driven-docs.md)
-- 2026-09-19 — `checkpoint` スキルを追加（compaction を跨ぐ復帰記録）
-  — [ADR-0009](adr/0009-save-before-documenting.md)
-- 2026-09-14 — Copilot の開発ツール自動許可を切り、必要な範囲を明示
-  — [ADR-0008](adr/0008-explicit-dev-tool-grants.md)
 
 ## 運用ポリシー
 
@@ -192,7 +136,8 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 - 後で理由を失うと困る重要な選択をした → `adr/`
 - 今の動き方・使い方が変わった → `spec/`
 - **このセッション限りの実行状態** → docs に書かない。
-  `checkpoint` スキルが解決するセッション別ファイルへ（固定パスを書かない）
+  復帰記録は、圧縮を跨ぐ仕組み（[文脈の引き継ぎ](spec/checkpoint.md)）が扱う
+  （OpenCode の checkpoint プラグイン。pi では使わない）。固定パスを docs に書かない
 - 文書を増減したら、対応するカテゴリの `index.md` も更新する
 - **全ての作業が 4 種類を生産するわけではない。** 誤字修正や単純な設定変更に
   案件や比較表を要求しない
