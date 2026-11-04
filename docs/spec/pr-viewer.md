@@ -272,7 +272,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 他サイトからの CSRF・DNS rebinding・Funnel 経由 | 止まる（Funnel は統合と同じく二次情報に基づく） | 統合と同じ入口の検査（上の表。根拠は「統合」の表） |
 | コメント・ファイルに仕込んだ**プロンプト注入** | **止まらない** | 引用データの囲みと案内は、モデルが従う保証ではない。被害を狭めるのは、`pis --allowlist`（通信先を固定）・Fence・Q4・Q5（commit に入る変更の形・範囲の検査）・commit 後の人の確認と統合の承認。注入された pi が、worktree 内の通常のファイルを書き換えることは防げない（検査を通れば commit される） |
 | 共通 `.git` の ref・`worktrees/<n>/`・worktree の `.git` ポインタの改ざん（Fence 内の pi が書ける） | **検出であって防止ではない** | P6 と Q2 の照合（commit の前に 2 回）。1 つでも違えば commit せず `failed`（`tampered`）。OS で書き込みを止めているわけではない（検査と更新の間の窓は狭めるだけ）。検出できるのはアプリが記録した項目だけ。後続の `pis` を人が手で起動する場合は対象外 |
-| 検査をすり抜ける変更 | 一部だけ止まる | `risk_paths`・`.gitattributes`・`.opencode/**`・symlink・巨大・バイナリは `needs_review`。通常のコードに紛れた悪意は検出できない。**commit に pre-commit は走らない**ので、秘密の検出（gitleaks）などが効かない（push の前の hook・人の確認で拾う） |
+| 検査をすり抜ける変更 | 一部だけ止まる | `risk_paths`・`.gitattributes`・`.opencode/**`・symlink・巨大・バイナリは `needs_review`。通常のコードに紛れた悪意は検出できない。**ジョブの commit（commit-tree）や統合の merge commit に pre-commit は走らない**ので、commit 段の gitleaks は効かない。公開前の最後の網は pre-push 段の `gitleaks-prepush`（push する範囲の全コミットを検査。途中コミットで入れて消した秘密も拾う）と人の確認。ジョブの成功表示を「公開可能」と読まない |
 | tailnet 内の他の機器・同一端末の他プロセス（偽造クライアント） | **止まらない** | Origin と `X-PRV` は、ヘッダーを偽造できるクライアントを止めない。認証は入れない方針。`--allow-jobs` を付けると、到達できるクライアントは依頼を起動できる |
 | 費用の暴走 | 上限まで | 1 回 10 分・同時 1・日 30 回・出力 8 MiB。上限内の費用は使われる。日次の数えは、state dir を消すと戻る |
 | 秘密の漏れ | 一部だけ止まる | pi へ渡す環境は許可リスト。ログはパスを `<path>` に置き換え、1 回 16 KB。だが、worktree 内の秘密（追跡外のファイルなど）は pi から読め、ログ・commit に出うる。`--allowlist` の通信先へ送ることは防げない |
