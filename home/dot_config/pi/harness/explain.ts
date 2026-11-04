@@ -6,10 +6,10 @@
 //
 // node の型除去でそのまま動く書き方だけを使う (enum・namespace は使わない)。
 
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
 import { sanitizeForDisplay } from "./confirm-view.ts";
 import { patternMatches } from "./judge/normalize.ts";
+import type { Src } from "./judge/syntax.ts";
+import { arr, currentSyntax, cut, end, parseSource as parseChecked, pos, typeOf } from "./judge/syntax.ts";
 
 export type Step = { no: number; text: string; raw: string; marks: string[]; hit: boolean; level: number; quiet?: boolean };
 
@@ -26,47 +26,15 @@ type W = { raw: string; value: string };
 type R = { fd: string; op: string; target: W | null; dup: boolean; doc?: Doc };
 type Call = { assigns: string[]; words: W[]; redirs: R[]; subs: any[]; conn: string; after: string; raw: string };
 type Ctx = { hits: string[]; complete: boolean };
-// 構文木の 1 回分の入力 (原文のバイト列。Offset() は UTF-8 のバイト位置なので、切り出しは Buffer 経由)
-type Src = { buf: Buffer; file: any };
-
-// ─── mvdan-sh の読み込み (遅延・1 回だけ。失敗したら null) ───────────────
-
-let SYN: any = undefined;
-
-/** 構文木の道具 (syntax)。読み込めなければ null。試験用に PI_EXPLAIN_VENDOR で読み込み先を変えられる */
-function loadSyntax(): any {
-	if (SYN !== undefined) return SYN;
-	try {
-		const override = process.env.PI_EXPLAIN_VENDOR;
-		const path = override ? override : fileURLToPath(new URL("./vendor/mvdan-sh/index.js", import.meta.url));
-		const req = createRequire(import.meta.url);
-		const s = req(path)?.syntax;
-		SYN = s && typeof s.NewParser === "function" ? s : null;
-	} catch {
-		SYN = null;
-	}
-	return SYN;
-}
-
+// 構文木の読み込み (sha256 の照合つき) と小さな道具は judge/syntax.ts。ここでは、失敗を例外にして全体を原文の 1 手順に倒す
 function parseSource(text: string): Src {
-	const S = loadSyntax();
-	if (S === null) throw new Error("mvdan-sh が読み込めない");
-	const parser = S.NewParser(S.Variant(S.LangBash));
-	return { buf: Buffer.from(text, "utf8"), file: parser.Parse(text, "") };
+	const r = parseChecked(text);
+	if (!r.ok) throw new Error(r.why);
+	return r.src;
 }
 
 // ─── 構文木の小さな道具 ─────────────────────────────────────────
 
-const arr = (x: any): any[] => {
-	if (!x) return [];
-	if (Array.isArray(x)) return x;
-	if (typeof x.$length === "number") return Array.from({ length: x.$length }, (_, i) => x.$array[x.$offset + i]);
-	return [];
-};
-const typeOf = (n: any): string => (n ? String(loadSyntax().NodeType(n)) : "");
-const pos = (n: any): number => Number(n.Pos().Offset());
-const end = (n: any): number => Number(n.End().Offset());
-const cut = (src: Src, a: number, b: number): string => src.buf.subarray(a, Math.max(a, b)).toString("utf8");
 const rawOf = (src: Src, n: any): string => cut(src, pos(n), end(n));
 
 /** 単語の値 (引用・エスケープを外した値)。展開 ($x や $(…)) は原文のまま */
@@ -91,7 +59,7 @@ function toW(src: Src, n: any): W {
 
 /** 文の中のコマンド置換 (入れ子の中は含めない) とプロセス置換の有無 */
 function scanNodes(nodes: any[]): { subs: any[]; proc: boolean } {
-	const S = loadSyntax();
+	const S = currentSyntax();
 	const subs: any[] = [];
 	let proc = false;
 	for (const nd of nodes) {
