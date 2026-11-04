@@ -25,7 +25,8 @@ const flush = async () => {
 /** 偽の子。run() の約束は finish() / close() で解く */
 function fakeJob(id) {
 	let resolve_;
-	const p = new Promise((r) => (resolve_ = r));
+	let reject_;
+	const p = new Promise((r, e) => ((resolve_ = r), (reject_ = e)));
 	const j = {
 		id,
 		pid: 4000,
@@ -46,16 +47,21 @@ function fakeJob(id) {
 		},
 		close(force) {
 			j.closed.push(!!force);
+			j.log.push("close");
 			resolve_({ status: "closed", answer: "", errors: [], note: "closed while running", blocked: [] });
 		},
 		finish(r = {}) {
 			resolve_({ status: "done", answer: "## 結論\n完了", errors: [], blocked: [], ...r });
 		},
+		reject(e) {
+			reject_(e);
+		},
+		log: [],
 	};
 	return j;
 }
 
-async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [], approve = true, budget = BIG, jobsMax = 6, others = 0, mode, check = true, spawnError, canSpawn, submitHook, realJobs } = {}) {
+async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [], approve = true, budget = BIG, jobsMax = 6, others = 0, mode, check = true, spawnError, canSpawn, noCan, lateAck, isoFinal, submitHook, realJobs } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), "driver-run-"));
 	let clock = 1_700_000_000_000;
 	const now = () => (clock += 1);
@@ -89,21 +95,23 @@ async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [],
 		calls.push({ agent, cwd: ctx?.cwd, owner, model: model ?? null, isolation: isolation ?? null, effort: effort ?? null, cwdArg: cwd ?? null, extra: args.length });
 		if (spawnError) return { error: spawnError };
 		const j = fakeJob(`job-${jobs.length + 1}`);
+		if (isolation && isoFinal) j.finalized = new Promise((r) => (j.fin = () => (j.log.push("finalized"), r())));
 		jobs.push(j);
 		live.add(j);
 		return { job: j, model: "m" };
 	};
 	const timers = { fns: [], cleared: 0, setInterval: (fn) => (timers.fns.push(fn), timers.fns.length), clearInterval: () => timers.cleared++ };
-	const wrapped = { get mode() { return runtime.mode; }, state: () => runtime.state(), submit: async (e) => (submitHook && (await submitHook(e)), runtime.submit(e)) };
+	const wrapped = { get mode() { return runtime.mode; }, state: () => runtime.state(), submit: async (e) => (submitHook && (await submitHook(e)), lateAck ? (async () => { const r = await runtime.submit(e); await lateAck(e); return r; })() : runtime.submit(e)) };
 	const swapped = { get mode() { return runtime.mode; }, state: () => runtime.state(), submit: (e) => runtime.submit(e) };
-	const sel = { src: null };
-	const source = () => (sel.src ? { runtime: sel.src, holder: H } : submitHook ? { runtime: wrapped, holder: H } : mode ? { runtime: { mode, state: () => runtime.state(), submit: async (e) => (calls.push({ submit: e.length }), { ok: false, applied: [] }) }, holder: H } : { runtime, holder: H });
+	const sel = { src: null, fn: null };
+	const modeRt = mode ? { mode, state: () => runtime.state(), submit: async (e) => (calls.push({ submit: e.length }), { ok: false, applied: [] }) } : null;
+	const source = () => (sel.fn ? sel.fn() : sel.src ? { runtime: sel.src, holder: H } : submitHook || lateAck ? { runtime: wrapped, holder: H } : mode ? { runtime: modeRt, holder: H } : { runtime, holder: H });
 	const run = dr.registerDriverRun(pi, {
 		child,
 		env,
 		runtime: source,
 		spawnChild,
-		...(canSpawn ? { canSpawn } : {}),
+		...(noCan === undefined ? { canSpawn: canSpawn ?? (() => ({ ok: true, reason: "" })) } : noCan === true ? {} : { canSpawn: noCan }),
 		jobs: jobsLike,
 		now,
 		timers,
@@ -127,6 +135,12 @@ async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [],
 		ctx,
 		now,
 		swap: () => (sel.src = swapped),
+		setSource: (fn) => (sel.fn = fn),
+		reopen: async () => {
+			const rt2 = rt.createRuntime({ cwd: dir, sessionId: "s2", holder: H, pid: process.pid, root: join(dir, ".tmp", "work"), now, timers: { setInterval: () => 0, clearInterval: () => {} }, env: {} });
+			await rt2.start();
+			return rt2;
+		},
 		start: async () => handlers.get("session_start")?.({}, ctx),
 		stop: async () => handlers.get("session_shutdown")?.({}),
 		st: (id) => runtime.state().nodes.get(id)?.state,
@@ -333,7 +347,7 @@ const cases = {
 	async noruntime() {
 		const pi = { on: () => {}, registerTool: () => {} };
 		let spawned = 0;
-		const run = dr.registerDriverRun(pi, { child: false, env: { PI_WORK_SCHEDULER: "1" }, runtime: () => null, spawnChild: () => (spawned++, { error: "x" }), jobs: { max: 6, size: 0 } });
+		const run = dr.registerDriverRun(pi, { child: false, env: { PI_WORK_SCHEDULER: "1" }, runtime: () => null, canSpawn: () => ({ ok: true, reason: "" }), spawnChild: () => (spawned++, { error: "x" }), jobs: { max: 6, size: 0 } });
 		await run.kick();
 		globalThis.__piWork = undefined;
 		return { spawned, registry: dr.registryRuntime() };
@@ -515,6 +529,316 @@ const cases = {
 			await s.cleanup();
 		}
 		return out;
+	},
+	// B1: canSpawn を必須にする (無い・関数でないなら登録せず、何も起動しない)
+	async nocanspawn() {
+		const out = {};
+		for (const [name, noCan] of Object.entries({ missing: true, string: "allow", object: { ok: true }, nul: null })) {
+			globalThis.__piPlanMode = true;
+			const s = await mk({ noCan, tasks: [T("E1", ["src/**"]), T("R1", [])] });
+			await s.start();
+			if (s.run) await s.run.kick();
+			await flush();
+			out[name] = { registered: s.run !== null, handlers: s.handlers.size, spawns: s.calls.length, runs: [...s.runtime.state().nodes.values()].filter((n) => n.kind === "run").length };
+			await s.cleanup();
+		}
+		return out;
+	},
+	// 応答が ok === true でないとき (undefined・例外・不正な形・hold・deny) は起動しない。事前の判定だけ正常で起動直前だけ不正も同じ
+	async badgate() {
+		const out = {};
+		const bad = {
+			undef: () => undefined,
+			throws: () => {
+				throw new Error("boom");
+			},
+			empty: () => ({}),
+			nul: () => null,
+			str: () => "ok",
+			notbool: () => ({ ok: "yes" }),
+			one: () => ({ ok: 1 }),
+			hold: () => ({ ok: false, hold: true, reason: "ask" }),
+			deny: () => ({ ok: false, reason: "deny" }),
+		};
+		for (const [name, f] of Object.entries(bad)) {
+			const s = await mk({ canSpawn: f, tasks: [T("E1", ["a/**"]), T("R1", [])] });
+			await s.start();
+			await s.run.kick();
+			await flush();
+			out[name] = { spawns: s.calls.length, live: s.run.live().length };
+			await s.cleanup();
+		}
+		// 事前判定では正常、起動直前だけ不正
+		for (const [name, late] of Object.entries({ lateUndef: () => undefined, lateThrow: () => { throw new Error("late"); }, lateEmpty: () => ({}) })) {
+			let n = 0;
+			const s = await mk({ canSpawn: () => (++n <= 1 ? { ok: true, reason: "" } : late()), tasks: [T("R1", [])] });
+			await s.start();
+			await s.run.kick();
+			await flush();
+			out[name] = { spawns: s.calls.length, live: s.run.live().length, calls: n };
+			await s.cleanup();
+		}
+		const ok = await mk({ tasks: [T("R1", [])] });
+		await ok.start();
+		await ok.run.kick();
+		await flush();
+		out.allow = { spawns: ok.calls.length };
+		await ok.cleanup();
+		return out;
+	},
+	// M1: 取得口が null の間に子が終わっても、所有する子は close() される
+	async rtnull() {
+		const out = {};
+		for (const how of ["done", "reject", "abort", "limit429"]) {
+			const s = await mk({ realJobs: true, tasks: [T("R1", [])] });
+			await s.start();
+			await s.run.kick();
+			await flush();
+			const j = s.jobs[0];
+			s.setSource(() => null);
+			if (how === "done") s.done(j);
+			if (how === "reject") j.reject(new Error("boom"));
+			if (how === "abort") j.close(true);
+			if (how === "limit429") s.done(j, { status: "failed", errors: ["429 Too Many Requests"], answer: "" });
+			await flush();
+			out[how] = { closed: j.closed, live: s.run.live().length, run: s.runsOf("R1")[0]?.state };
+			await s.cleanup();
+		}
+		// 隔離の job は finalized を待ってから閉じる (台帳が無いときも)
+		const s = await mk({ isoFinal: true, tasks: [T("E1", ["a/**"])] });
+		await s.start();
+		await s.run.kick();
+		await flush();
+		const j = s.jobs[0];
+		s.setSource(() => null);
+		s.done(j);
+		await flush();
+		const before = [...j.log];
+		j.fin();
+		await flush();
+		out.isolated = { before, after: [...j.log] };
+		await s.cleanup();
+		return out;
+	},
+	// M2: 取得口が本当に null になる shutdown (register.ts と同じ順: 取得口を null → 旧 runtime を閉じる)。取消の submit が失敗しても、再開後の reconcile が孤立した reserved を回収する
+	async shutdownNull() {
+		let release;
+		const gate = new Promise((r) => (release = r));
+		let armed = false;
+		const s = await mk({
+			lateAck: async (e) => {
+				if (!armed || !e.some((x) => x.type === "run.reserved")) return;
+				armed = false;
+				await gate;
+			},
+			tasks: [T("R1", [])],
+		});
+		await s.start();
+		armed = true;
+		const k = s.run.kick();
+		await flush();
+		const reservedBefore = [...s.runtime.state().nodes.values()].filter((n) => n.kind === "run" && n.state === "reserved").length;
+		s.setSource(() => null);
+		await s.stop();
+		await s.runtime.close();
+		release();
+		await k;
+		await flush();
+		const spawnsDuring = s.calls.filter((c) => c.agent).length;
+		// 再開: 新しい runtime・新しい世代
+		const rt2 = await s.reopen();
+		const rtStates = () => [...rt2.state().nodes.values()].filter((n) => n.kind === "run");
+		const r1Before = rtStates().map((n) => [n.id, n.state]);
+		s.setSource(() => ({ runtime: rt2, holder: H }));
+		await s.start();
+		await s.run.kick();
+		await flush();
+		const live = s.run.live();
+		const out = {
+			reservedBefore,
+			spawnsDuring,
+			r1Before,
+			orphans: rtStates().filter((n) => n.state === "reserved" && !live.includes(n.id)).map((n) => n.id),
+			states: rtStates().map((n) => [n.id, n.state]),
+		};
+		await rt2.close().catch(() => {});
+		rmSync(s.dir, { recursive: true, force: true });
+		return out;
+	},
+	// M2: 別々の台帳へ切り替えても、別台帳への更新はゼロ (終了・使用量は起動した台帳へ固定)
+	async swapLedgers() {
+		const a = await mk({ tasks: [T("TA1", [])] });
+		const b = await mk({ tasks: [] });
+		await a.start();
+		await a.run.kick();
+		await flush();
+		const j = a.jobs[0];
+		const seqB = b.runtime.state().seq;
+		const seqA = a.runtime.state().seq;
+		a.setSource(() => ({ runtime: b.runtime, holder: H }));
+		j.calls = 3;
+		j.cost = 5;
+		j.tokens = 1000;
+		await a.run.kick();
+		await flush();
+		const afterPoll = { seqB: b.runtime.state().seq, seqA: a.runtime.state().seq };
+		a.done(j);
+		await flush();
+		const r = {
+			seqB0: seqB,
+			seqB1: b.runtime.state().seq,
+			seqA0: seqA,
+			seqA1: a.runtime.state().seq,
+			afterPoll,
+			runA: a.runsOf("TA1")[0]?.state,
+			closed: j.closed.length > 0,
+			bRuns: [...b.runtime.state().nodes.values()].filter((n) => n.kind === "run").length,
+		};
+		await a.cleanup();
+		await b.cleanup();
+		return r;
+	},
+	// hold は起動候補だけから外す: 実行中の子の予算超過は abort され、許可済みの他 task は進む
+	async holdMonitor() {
+		const hold = new Set();
+		const canSpawn = (spec) => (hold.has(spec.task) ? { ok: false, hold: true, reason: "ask" } : { ok: true, reason: "" });
+		const s = await mk({ canSpawn, jobsMax: 1, tasks: [T("R1", [], [], "worker", "M", "ro"), T("R2", [], [], "worker", "M", "ro")], budget: { usd: 50, tokens: 1e9, ms: 1e12 } });
+		await s.start();
+		await s.run.kick();
+		await flush();
+		const j = s.jobs[0];
+		const est = s.runsOf("R1")[0].attrs.est;
+		hold.add("R2");
+		j.cost = est.usd * 2.5;
+		j.tokens = Math.round(est.tokens * 2.5);
+		j.calls = 3;
+		await s.run.kick();
+		await flush();
+		const r = { aborted: j.closed.includes(true), r2Runs: s.runsOf("R2").length, spawns: s.calls.length, r2: s.st("R2") };
+		await s.cleanup();
+		return r;
+	},
+	async holdStarve() {
+		const s = await mk({ canSpawn: (spec) => (spec.task === "R1" ? { ok: false, hold: true, reason: "ask" } : { ok: true, reason: "" }), tasks: [T("R1", []), T("R2", []), T("R3", [])] });
+		await s.start();
+		for (let i = 0; i < 3; i++) {
+			await s.run.kick();
+			await flush();
+		}
+		const r = { spawned: spawnedTasks(s), r1: s.st("R1"), r1runs: s.runsOf("R1").length, failed: [...s.runtime.state().nodes.values()].filter((n) => n.state === "failed").length };
+		await s.cleanup();
+		return r;
+	},
+	// 遅延 submit 中の allow → hold: 失敗に記録せず、予約を解放して ready へ戻る。許可されればあとで起動する
+	async lateHold() {
+		let holdNow = false;
+		let armed = true;
+		const s = await mk({
+			canSpawn: () => (holdNow ? { ok: false, hold: true, reason: "ask" } : { ok: true, reason: "" }),
+			submitHook: async (e) => {
+				if (armed && e.some((x) => x.type === "run.reserved")) holdNow = true;
+				armed = false;
+			},
+			tasks: [T("R1", [])],
+		});
+		await s.start();
+		await s.run.kick();
+		await flush();
+		const first = { spawns: s.calls.length, runs: s.runsOf("R1").map((n) => n.state), task: s.st("R1"), failures: s.runtime.state().nodes.get("R1")?.attrs?.failures ?? null };
+		holdNow = false;
+		await s.run.kick();
+		await flush();
+		const second = { spawns: s.calls.length };
+		await s.cleanup();
+		return { first, second };
+	},
+	// B2: node.kind と attrs.kind の矛盾は拒否 (仕様: check は常に拒否)
+	async contradiction() {
+		const P = (node, iso = "none") => dr.planSpawn(node, iso);
+		return {
+			checkEdit: P({ kind: "check", writes: ["a/**"], attrs: { kind: "edit" } }),
+			checkRo: P({ kind: "check", writes: [], attrs: { kind: "ro" } }),
+			checkBare: P({ kind: "check", writes: ["a/**"], attrs: {} }),
+			taskCheck: P({ kind: "task", writes: ["a/**"], attrs: { kind: "check" } }),
+			weirdNode: P({ kind: "run", writes: ["a/**"], attrs: { kind: "edit" } }),
+			taskEdit: P({ kind: "task", writes: ["a/**"], attrs: { kind: "edit" } }),
+			taskRo: P({ kind: "task", writes: [], attrs: { kind: "ro" } }),
+		};
+	},
+	// 世代の確認: await reconcile の後に shutdown しても、新しい予約を作らない
+	async afterReconcile() {
+		let release;
+		const gate = new Promise((r) => (release = r));
+		let armed = true;
+		const s = await mk({
+			submitHook: async (e) => {
+				if (!armed || !e.some((x) => x.type === "run.ended")) return;
+				armed = false;
+				await gate;
+			},
+			tasks: [T("R1", [])],
+		});
+		const E = ev.makeEvent;
+		const h = (type, node, data, source = "system") => E(type, node, data, source, { holder: H });
+		await s.runtime.submit([h("run.reserved", "rX", { task: "R1", est: { usd: 0.1, tokens: 1, ms: 1 }, attrs: {} }), h("run.started", "rX", { pid: 1 })]);
+		await s.start();
+		const k = s.run.kick();
+		await flush();
+		await s.stop();
+		release();
+		await k;
+		await flush();
+		const r = { spawns: s.calls.length, runs: [...s.runtime.state().nodes.values()].filter((n) => n.kind === "run").map((n) => n.id).sort() };
+		await s.cleanup();
+		return r;
+	},
+	// 世代の確認: await poll の後に shutdown しても、新しい予約を作らない
+	async afterPoll() {
+		let release;
+		const gate = new Promise((r) => (release = r));
+		let armed = false;
+		const hold = new Set(["R2"]);
+		const s = await mk({
+			canSpawn: (spec) => (hold.has(spec.task) ? { ok: false, hold: true, reason: "ask" } : { ok: true, reason: "" }),
+			submitHook: async (e) => {
+				if (!armed || !e.some((x) => x.type === "run.usage")) return;
+				armed = false;
+				await gate;
+			},
+			tasks: [T("R1", []), T("R2", [])],
+		});
+		await s.start();
+		await s.run.kick();
+		await flush();
+		const j = s.jobs[0];
+		hold.clear();
+		armed = true;
+		j.cost = 0.01;
+		j.tokens = 10;
+		j.calls = 1;
+		const k = s.run.kick();
+		await flush();
+		await s.stop();
+		release();
+		await k;
+		await flush();
+		const r = { spawns: s.calls.length, runs: s.runsOf("R2").length };
+		await s.cleanup();
+		return r;
+	},
+	// reconcile は起動されなかった所有の reserved も回収する (aborted)
+	async reconcileReserved() {
+		const s = await mk({ tasks: [T("R1", [])] });
+		const E = ev.makeEvent;
+		const h = (type, node, data, source = "system") => E(type, node, data, source, { holder: H });
+		const sub = await s.runtime.submit([h("run.reserved", "rY", { task: "R1", est: { usd: 0.1, tokens: 1, ms: 1 }, attrs: {} })]);
+		const before = s.runtime.state().nodes.get("rY")?.state;
+		await s.start();
+		await s.run.kick();
+		await flush();
+		const r = { sub: sub.ok, before, rY: s.runtime.state().nodes.get("rY")?.state, spawns: s.calls.length, violations: inv.check(s.runtime.state()).map((v) => v.inv) };
+		await s.cleanup();
+		return r;
 	},
 };
 

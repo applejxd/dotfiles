@@ -327,13 +327,10 @@ def _expected(row: dict) -> dict:
     if row["iso"] not in _ISO_OK or row["kind"] == "bogus":
         return {"ok": False}
     k = row["kind"]
-    eff = (
-        k
-        if k in ("ro", "edit", "check")
-        else ("check" if row["nk"] == "check" else ("edit" if row["writes"] else "ro"))
-    )
-    if eff == "check":
+    # 仕様: node.kind が check なら attrs.kind が何でも拒否。attrs.kind が check も拒否 (矛盾)
+    if row["nk"] == "check" or row["kind"] == "check":
         return {"ok": False}
+    eff = k if k in ("ro", "edit") else ("edit" if row["writes"] else "ro")
     if eff == "ro":
         return (
             {"ok": not row["writes"], "role": "explore", "isolation": False}
