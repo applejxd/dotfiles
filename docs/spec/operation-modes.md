@@ -38,8 +38,9 @@ pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結�
 6. コミット前に `mise run verify:all` を 1 回。
 7. `git_commit`（`dir` に worktree）。
 8. 所有の解除: `python3 scripts/wt_owner.py release <worktree> --id <id>`。
-9. 統合（下）。複数をまとめるなら先に `python3 scripts/bundle.py start <feature>...`（`continue`・`verify`・`status`・`summary`。衝突は止めて終了コード 3。詳細は [統合用の枝](orchestration.md#統合用の枝bundle)）。
-10. 掃除: `git flow feature finish` を使った場合は不要（finish が消す。下の統合の節）。ビューア/`merge-cli` で統合した場合は `python3 scripts/wt_clean.py <名前>`（`--dry-run` あり）。
+9. 統合待ちの一覧: `mise run prs`（`python3 scripts/prs.py`。枝名・先行コミット数・最新の件名だけ。bundle に含まれる枝は既定で隠し、`-- --all` で全部出す。詳細・統合・掃除はエージェントに指示する）。
+10. 統合（下）。複数をまとめるなら先に `python3 scripts/bundle.py start <feature>...`（`continue`・`verify`・`status`・`summary`。衝突は止めて終了コード 3。詳細は [統合用の枝](orchestration.md#統合用の枝bundle)）。
+11. 掃除: `git flow feature finish` を使った場合は不要（finish が消す。下の統合の節）。ビューア/`merge-cli` で統合した場合は `python3 scripts/wt_clean.py <名前>`（`--dry-run` あり）。
 
 ### 統合
 
