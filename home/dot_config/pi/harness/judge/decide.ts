@@ -53,6 +53,7 @@ const FILE_READ_TOOLS = ["read", "grep", "find", "ls"];
 const FILE_WRITE_TOOLS = ["edit", "write"];
 const TASK_TOOL = "task";
 const TODO_TOOL = "todo";
+const WORK_TOOL = "work";
 const ASK_TOOL = "ask";
 const ACTION_TOOL = "action";
 // profile の deny_except に書いてよい語 (bash.ts の例外処理が知っているものだけ)
@@ -401,6 +402,9 @@ function decideInner(request: unknown, common: Common): Response {
 	} else if (tool === TODO_TOOL) {
 		commonDeny = null;
 		roleRule = response("allow", "タスクリストはメモリの状態だけを変える", "rule");
+	} else if (tool === WORK_TOOL) {
+		commonDeny = null;
+		roleRule = response("allow", "作業台帳の操作は引数が id・題名だけで、台帳への書き込みはハーネスが行う", "rule");
 	} else if (tool === ASK_TOOL) {
 		commonDeny = null;
 		roleRule = response("allow", "利用者への質問は UI だけを使う (ファイルも外部も触らない)", "rule");
