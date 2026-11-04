@@ -23,7 +23,7 @@
 
 | 機能 | 状態 | 内容 | 正本 |
 | --- | --- | --- | --- |
-| 単発の起動 | 実装済 | `{agent, task}`。完了まで待つ。新しい子（`explore`・`review`・`worker`）は ToDo の項目 ID（`todo`）が必須 | [pi の子エージェント](guard/pi-subagents.md#子エージェント) |
+| 単発の起動 | 実装済 | `{agent, task}`。完了まで待つ。新しい子（`explore`・`review`・`worker`）は ToDo の項目 ID（`todo`）が必須。`cwd` で実行場所（登録済みの worktree）を指定でき、worker は担当の worktree を `cwd` に指定して起動する | [pi の子エージェント](guard/pi-subagents.md#子エージェント) |
 | バックグラウンド | 実装済 | `background: true`。ID をすぐ返し、完了は通知で届いてターンが再開する | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
 | 並列 | 実装済 | `tasks: [...]`（最大 12 件）。同時に生かす子は 4 まで。超えた分は空きを待つ | 同上 |
 | 保持と追加依頼（job） | 実装済 | `keep: true` で残し、`{jobId, task}` で履歴を保って続ける。`close` で止める | [job](guard/pi-subagents.md#子を保持して追加依頼するjob) |
@@ -62,6 +62,7 @@
 - **kind**: `worker`（親が起動した子エージェント）・`job`（PR ビューアのジョブ）・`create`（起票の作成中だけ）・`train`（統合用の枝の組み立て）・`interactive`（人の対話 pi。任意）。
 - **生死**: `pid` が生きている間だけ「有効」（`kill -0`）。死んでいれば「残骸」。**残骸は `claim` が自動では奪わない**（`unlock`→`lock` は原子的でなく、古い観測で他方の新しい lock を外しうるため。終了コード 3・「`reap` で解除してから」）。解除は明示の回復操作 `reap` だけが、観測した理由欄を再読して一致する場合に限り行う。`owner=` で始まらない lock（人が付けたもの・理由なし）は「不明の lock」として自動では解除しない。
 - **道具**: `scripts/wt_owner.py`（`claim <wt> --kind <k> --id <id> [--pid N]`・`release <wt> [--id <id>]`・`status [<wt>]`・`reap`。他の有効な owner・残骸・不明の lock で終了コード 3）。同じ規則の TS 実装が `apps/pr-viewer/worktree-owner.ts`。`--pid` を省くと、シェルではない最初の祖先（= 呼び出した AI）の pid になる。
+- **排他**: git の `worktree lock` 自体が「lock 済みか確認 → `locked` ファイルを書く」の非原子で、負荷下では 2 件が同時に成功した（実測）。そのため `claim`・`release`・`reap` の臨界区間は、共通 git-dir の `pi-wt-owner.guard`（`O_EXCL` 作成。既定の待ち 10 秒、30 秒より古いガードは残骸として削除）で排他にする（Python・TS 共通。取れなければ fail closed: `claim` は終了コード 3、他は失敗）。`claim` は lock 後に理由欄を再読して自分のものか確かめる。待ち時間は `PI_WT_OWNER_GUARD_WAIT_MS` で変えられる（試験用）。
 - **4 経路**: (1) 子エージェント = 親が起動の直前に手で `claim`、commit 後に `release`（ハーネスは改造しない）。(2) ジョブ = 起動前検査（`preflight`）が他の有効な owner・残骸・不明の lock・cwd が worktree の中のプロセスを `worktree_busy`（HTTP 409）で拒否し、開始で `claim(kind=job, id=<jobId>)`（起動前検査の後に残骸が現れて拒否されたときは、ジョブは `failed`・理由 `worktree_busy`＋`stale_lock`。`reap` で解除してからやり直す）、終了・失敗・キャンセル・回復で `release`（**停止を確認できなかったジョブ（`stop_unconfirmed`）は lock を残す**）。(3) 起票 = `worktree add --lock` で作成中だけ `kind=create`、終われば解除（巻き戻しより先）。(4) 人の対話 pi = 任意。
 - **限界**: lock を忘れた経路は検出できない。cwd 走査は、cwd が別の場所の子エージェントを見つけられない。pid の再利用は見分けない（`kill -0` だけ）。全件検査の前に `status` で worker の lock が無いことを確かめる（検査中の編集による誤失敗の防止）。
 

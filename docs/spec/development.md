@@ -361,6 +361,7 @@ chezmoi apply --exclude=scripts
 - 置き場: `$PK_ROOT` → カレントから上へ探した `.tmp/keep` → `~/.local/share/chezmoi/.tmp/keep`
 - 守り: 置き場の外を指すシンボリックリンクの入口・`..` や `/` を含む話題名を拒否する。**スクリプトの中身を信頃してよいという保証ではない**（AI が書いたものを利用者が実行する、という信頼の前提は従来の `sh <パス>` と同じ。不安なときは `-n` で先頭のコメントを読む）
 - 対象: Linux・macOS・WSL（`sh` と `python3` が要る）。Windows の PowerShell は対象外。試験は `test/test_pk.py`
+- `pk pr-app` は repo 管理の `scripts/pr_app.py` の薄い別名（正本は [pr-viewer.md §6](pr-viewer.md#6-アプリ)）。`pk` 本体の仕組みは変わらない
 
 ## 子エージェントのモデルのカタログの道具
 

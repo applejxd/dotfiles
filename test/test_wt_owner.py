@@ -129,13 +129,21 @@ def test_claim_refuses_a_stale_lock_and_only_reap_then_claim_succeeds(repo):
 
 
 def test_concurrent_claims_never_both_succeed(repo):
-    # 残骸を reap した直後に、複数の主体が同時に取りに行く。成功は 1 つだけ
+    # 残骸を reap した直後に、複数の主体が同時に取りに行く。成功は 1 つだけ（負荷下でも安定するよう 30 ラウンド繰り返す）
+    wt = _wt(repo)
     dead = str(_dead_pid())
     assert _run(repo, "claim", "x", "--kind", "job", "--id", "j0", "--pid", dead).returncode == 0
     assert _run(repo, "reap").returncode == 0
+    for rnd in range(30):
+        codes = _race(repo, 6, rnd)
+        assert codes.count(0) == 1 and all(c in (0, 3) for c in codes), (rnd, codes)
+        _git(repo, "worktree", "unlock", str(wt))
+
+
+def _race(repo: Path, n: int, rnd: int) -> list[int]:
     procs = []
-    for i in range(6):
-        args = ["claim", "x", "--kind", "worker", "--id", f"w{i}", "--pid", str(os.getpid())]
+    for i in range(n):
+        args = ["claim", "x", "--kind", "worker", "--id", f"w{rnd}-{i}", "--pid", str(os.getpid())]
         procs.append(
             subprocess.Popen(
                 [sys.executable, str(SCRIPT), *args],
@@ -151,7 +159,46 @@ def test_concurrent_claims_never_both_succeed(repo):
     for p in procs:
         p.communicate()
         codes.append(p.returncode)
-    assert codes.count(0) == 1 and all(c in (0, 3) for c in codes), codes
+    return codes
+
+
+GUARD = "pi-wt-owner.guard"
+
+
+def test_claim_proceeds_over_a_stale_guard_and_removes_it(repo):
+    guard = repo / ".git" / GUARD
+    guard.write_text("pid=1 t=1 n=dead\n", encoding="utf-8")
+    old = time.time() - 120
+    os.utime(guard, (old, old))
+    r = _run(repo, "claim", "x", "--kind", "worker", "--id", "w1", "--pid", str(os.getpid()))
+    assert r.returncode == 0, r.stderr
+    assert not guard.exists()  # 自分のガードを解放した
+
+
+def test_fresh_guard_makes_claim_busy_and_release_reap_fail_closed(repo):
+    guard = repo / ".git" / GUARD
+    guard.write_text("pid=1 t=1 n=live\n", encoding="utf-8")  # 生きている保持者（mtime が新しい）
+    env = {**os.environ, **ENV, "PI_WT_OWNER_GUARD_WAIT_MS": "300"}
+
+    def run(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), *args],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
+            check=False,
+        )
+
+    t0 = time.time()
+    r = run("claim", "x", "--kind", "worker", "--id", "w1", "--pid", str(os.getpid()))
+    assert r.returncode == 3 and "busy" in r.stderr, (r.returncode, r.stderr)
+    assert time.time() - t0 >= 0.25  # 待ち時間まで待ってから諸める
+    assert _reason(repo, _wt(repo)) is None  # 黙って進めていない
+    assert run("release", "x").returncode == 2
+    assert run("reap").returncode == 2
+    assert guard.read_text(encoding="utf-8") == "pid=1 t=1 n=live\n"  # 他人のガードは消さない
 
 
 def test_concurrent_claims_on_a_stale_lock_all_refuse(repo):

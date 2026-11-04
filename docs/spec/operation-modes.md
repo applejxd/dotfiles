@@ -91,7 +91,7 @@ node apps/pr-viewer/merge-cli.ts recover <repo>
 
 ## 4. ビューア併用の運用
 
-起動: `node apps/pr-viewer/server.ts --repo <repo>`（既定のポートは 8780）。常駐させる `pk pr-app` は私用の補助。起動と安全規則は [pr-viewer.md §6](pr-viewer.md#6-アプリ)。
+起動: `node apps/pr-viewer/server.ts --repo <repo>`（既定のポートは 8780）。常駐・公開の道具は `scripts/pr_app.py` が正本（`pk pr-app` はその薄い別名）。起動と安全規則は [pr-viewer.md §6](pr-viewer.md#6-アプリ)。
 
 | 旗 | 有効になるもの | 目安 |
 | --- | --- | --- |
