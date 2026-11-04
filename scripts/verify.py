@@ -402,6 +402,7 @@ RULES: tuple[Rule, ...] = (
         "並列実装の関門", ("scripts/feature_gate.py",), ("test_feature_gate", "test_parallel_check")
     ),
     Rule("worktree の所有表明", ("scripts/wt_owner.py",), ("test_wt_owner",)),
+    Rule("PR ビューアの起動・常駐", ("scripts/pr_app.py",), ("test_pr_app",)),
     Rule("統合用の枝 (train)", ("scripts/train.py",), ("test_train",)),
     Rule("worktree の掃除", ("scripts/wt_clean.py",), ("test_wt_clean",)),
     Rule("skill-lab のスキル同期", ("scripts/sync_skill_lab.py",), ("test_sync_skill_lab",)),
