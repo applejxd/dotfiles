@@ -7,7 +7,7 @@
 // see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { tableSet } from "./context.ts";
-import { expandUser, isAbsolute, join, normpath, sep } from "./pathutil.ts";
+import { expandUser, isAbsolute, join, normpath, realpathLoose, sep } from "./pathutil.ts";
 import { basename, pyRegex, shlexSplit, ShlexError, split, stripChars } from "./pystr.ts";
 import { argv } from "./shellparse.ts";
 import { splitCommandSegments } from "./normalize.ts";
@@ -61,6 +61,95 @@ const guardHits = (token: string): boolean => {
 	return GUARD_TARGETS.some((t) => expanded.includes(t));
 };
 
+// 作業台帳の置き場を、成分境界つきで照合する (`.tmp/worktrees` には当たらず、置き場そのもの `.tmp/work` には当たる)
+const LEDGER_RE = /(?:^|\/)\.tmp\/work(?:\/|$)|(?:^|\/)\.git\/pi-work(?:\/|$)/u;
+
+// 台帳のパスが引数に現れても書き込まない、既知の読み取り専用コマンド (これ以外は fail-closed で拒否する)
+const LEDGER_READ_ONLY = new Set([
+	"cat", "ls", "head", "tail", "grep", "egrep", "fgrep", "rg", "wc", "stat", "file", "jq", "find", "diff", "less", "more",
+	"du", "realpath", "readlink", "basename", "dirname", "echo", "printf", "test", "[", "pwd", "sha256sum", "md5sum",
+	"cut", "sort", "tac", "nl", "column",
+]);
+const LEDGER_GIT_READ = new Set(["log", "show", "diff", "status", "rev-parse", "ls-files", "blame", "grep", "cat-file", "rev-list"]);
+const FIND_WRITE_FLAGS = new Set(["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"]);
+
+/** `token` (または `--opt=値` の値) が、cwd 基点の絶対パス・symlink の実体のどちらかで台帳に当たるか。動的な展開は字面だけ見る。 */
+function ledgerHit(token: string, base: string | null): boolean {
+	const raw = stripChars(token, "'\"");
+	const forms = [raw];
+	const eq = raw.indexOf("=");
+	if (eq > 0) forms.push(raw.slice(eq + 1));
+	for (const form of forms) {
+		if (!form) continue;
+		if (LEDGER_RE.test(normalizeGuardPath(form))) return true;
+		if (base === null || Array.from("$`").some((ch) => form.includes(ch))) continue;
+		const expanded = expandUser(form);
+		const abs = normpath(isAbsolute(expanded) ? expanded : join(base, expanded));
+		if (LEDGER_RE.test(abs.replaceAll(sep, "/"))) return true;
+		if (LEDGER_RE.test(realpathLoose(abs).replaceAll(sep, "/"))) return true;
+	}
+	return false;
+}
+
+/** git の読み取り専用のサブコマンドで、`--output` / `-o` を持たないか。`-C` の基点は `bases` へ積む。 */
+function gitReadOnly(tokens: string[], base: string | null): { readOnly: boolean; base: string | null } {
+	let cur = base;
+	let i = 1;
+	while (i < tokens.length && tokens[i].startsWith("-")) {
+		const t = tokens[i];
+		if (t === "-C" && i + 1 < tokens.length) {
+			const d = expandUser(tokens[i + 1]);
+			cur = cur === null && !isAbsolute(d) ? null : normpath(isAbsolute(d) ? d : join(cur ?? "", d));
+			i += 2;
+		} else if (t === "-c" && i + 1 < tokens.length) {
+			i += 2;
+		} else {
+			i += 1;
+		}
+	}
+	const sub = tokens[i];
+	const outputFlag = tokens.some((t) => t === "-o" || t.startsWith("--output") || (/^-o./u.test(t) && !t.startsWith("--")));
+	return { readOnly: sub !== undefined && LEDGER_GIT_READ.has(sub) && !outputFlag, base: cur };
+}
+
+/** 台帳への書き込み・削除 (リダイレクト・書き込みオプション・symlink の別名・置き場そのものの削除) を、追加の判定として拒否する。 */
+function checkLedgerWrite(ctx: Ctx, cmd: string): string | null {
+	const workspace = workspaceRoot(ctx);
+	const deny = (target: string): string =>
+		`作業台帳の置き場 (\`${target}\`) への書き込み・削除は許可されていません。\n` +
+		"台帳はハーネスだけが書きます (`.tmp/work`・`.git/pi-work`)。読み取りは cat / grep / ls などを使ってください。";
+	for (const target of redirectWriteTargets(ctx, cmd)) {
+		if (ledgerHit(target, workspace)) return deny(target);
+	}
+	for (const command of commands(ctx, cmd)) {
+		const tokens = argv(command);
+		if (tokens.length === 0) continue;
+		const head = baseName(tokens[0]);
+		let base = workspace;
+		let readOnly = LEDGER_READ_ONLY.has(head);
+		if (head === "git") {
+			const g = gitReadOnly(tokens, workspace);
+			readOnly = g.readOnly;
+			base = g.base;
+		} else if (head === "find") {
+			readOnly = !tokens.some((t) => FIND_WRITE_FLAGS.has(t));
+		} else if (head === "less") {
+			readOnly = !tokens.some((t) => /^-[oO]/u.test(t) || t.startsWith("--log-file") || t.startsWith("--LOG-FILE"));
+		} else if (head === "sort") {
+			readOnly = !tokens.some((t) => /^-[A-Za-z]*o/u.test(t) || t.startsWith("--output"));
+		} else if (/^python3?(?:\.\d+)?$/u.test(head)) {
+			readOnly = !tokens.includes("-c") && tokens.some((t) => t.endsWith("scripts/work_stats.py"));
+		}
+		// ledger の中へ入ると、以後の相対パスの書き込みを字面で見られない
+		const enters = head === "cd" || head === "pushd" || head === "chdir";
+		if (readOnly && !enters) continue;
+		for (const token of tokens.slice(1)) {
+			if (ledgerHit(token, base)) return deny(token);
+		}
+	}
+	return null;
+}
+
 const INLINE_PATH_RE = pyRegex(`['"]([^'"]*(?:\\.claude|\\.copilot|/agents|\\.git/|\\.pi/agent|config/pi/harness|\\.tmp/work/)[^'"]*)['"]`, "g");
 const HOOK_ENV_RE = pyRegex("\\b(AGENTS_CONFIG_DIR|PYTHONPATH|CLAUDE_[A-Z_]*HOOK[A-Z_]*)=(\\S*)", "g");
 
@@ -85,6 +174,8 @@ const CHEZMOI_MUTATING = new Set(["forget", "destroy", "remove", "unmanage"]);
 
 /** hook や permission 設定そのものを無効化しようとしていないか。 */
 export function checkGuardTampering(ctx: Ctx, cmd: string): string | null {
+	const ledger = checkLedgerWrite(ctx, cmd);
+	if (ledger !== null) return ledger;
 	// リダイレクト先がガード設定なら、どのコマンドでも上書きになる
 	for (const target of redirectWriteTargets(ctx, cmd)) {
 		if (guardHits(target)) {
