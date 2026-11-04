@@ -168,7 +168,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `/agent <agent> <依頼>` | 子を直接起動する | `agent` は `explore` / `review` / `plan` / `commit` / `worker`。結果はチャットに出る（モデルのターンは起こさない） |
 | `/worktrees [show\|collect\|discard <jobId>\|unlock]` | 隔離 worktree の一覧・回収のやり直し・破棄 | `collect` と `discard` は確認あり。`unlock` は古いロックの解除 |
 | `/pending [list\|show\|drop]` | 退避したコミット（旧形式）の扱い | 引数なしは `list`。後述 |
-| `/todos [tidy\|clear]` | タスクリストの表示 | `tidy` は完了・中止を消す。`clear` は全部消す |
+| `/todos [tidy\|clear]` | タスクリストの表示 | 引数なしは overlay（↑↓ jk・PgUp/PgDn・g/G・a で完了表示・Esc/q。[詳細](guard/pi-extensions.md#todo-の別表示)）。`tidy` は完了・中止を消す。`clear` は全部消す |
 | `/btw [--plain] <質問>` | いまの会話を踏まえた、ついでの質問（履歴に残さない） | 既定は読み取り専用の子 `explore` が調べる（上限 3 分）。`--plain` はツールなしで現在のモデルが答える（上限 2 分） |
 | `/delegate-stats` | 直近 10 発言分の読み取り量と委譲の件数 | 記録のみ。`PI_DELEGATE_NUDGE=0` で止まる |
 
