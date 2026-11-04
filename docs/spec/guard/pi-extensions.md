@@ -326,7 +326,8 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 | 何もしない場合 | 子・print / json モード・`PI_AUTOCHECKPOINT=0`・`percent` が null（圧縮直後など）・直前の実行が中断 / エラー |
 | 中断・失敗 | 保存の実行が中断（Esc）されたら、その周期の圧縮は起動しない。保存の実行がエラーで終わっても圧縮は進める。`compact` が例外でも状態は戻る |
 | 調整 | 環境変数 `PI_AUTOCHECKPOINT_PERCENT`（0 超 100 以下。不正値は 80）。無効化は `PI_AUTOCHECKPOINT=0`。設定ファイルには出していない |
-| 限界 | 保存の質は**エージェント次第**で保証しない（指示を守らない・docs の反映が不完全なことがある）。組み込みの自動圧縮（窓 − `reserveTokens` 付近）は**予備として残る**ので、保存より先にそちらが走ることもある。使用率は settle の時点でしか見ないので、1 回の長い実行の途中では働かない |
+| 再開 | 圧縮が**成功**（`onComplete`）したら、200ms 待ってから `pi.sendUserMessage(RESUME_PROMPT, { deliverAs: "followUp" })` で短い再開の指示を 1 回だけ送る（アイドルなら新しいターンが始まり、streaming 中なら followUp で待つ）。200ms は、pi が圧縮の状態を解く前に完了通知が届くため（`index.ts` の `session_compact` と同じ扱い）。待つ間に別の周期が始まった・無効化された場合は送らない。失敗・中断では送らない。1 周期に 1 回で、冷却（10 分）の間は新しい周期が始まらないので、再開で使用率が閾値を超えてもループしない。指示は `NEXT.md` の先頭と todo を読んで続け、判断待ちだけなら「待機」と答えて止まる。`PI_AUTOCHECKPOINT_RESUME=0` で再開だけを無効にする（全体は `PI_AUTOCHECKPOINT=0`） |
+| 限界 | 保存の質は**エージェント次第**で保証しない（指示を守らない・docs の反映が不完全なことがある）。組み込みの自動圧縮（窓 − `reserveTokens` 付近）は**予備として残る**ので、保存より先にそちらが走ることもある。使用率は settle の時点でしか見ないので、1 回の長い実行の途中では働かない。再開の指示は、判断待ち・完了待ちだけのときも 1 ターン走る（「待機」と答えるだけ） |
 | 試験 | `test/agents/test_pi_autocheckpoint.py`（`test/agents/pi/autocheckpoint_driver.mjs` が偽のイベントとコンテキストを handler へ渡す）。実機の確認は未実施 |
 
 ### セッションごとの一時置き場（`.tmp/s/<ID>/`）
@@ -472,9 +473,18 @@ cd /abs && git log --oneline | head -3 > /tmp/o
 - **保証の言い過ぎを避ける**: 一覧は**理解を助ける補助**で、判定ではない。解析が不完全なことがある。**常に原文（全文）を確認する**。
   mvdan-sh は 2021 年版で、新しい bash の構文に追随していない可能性がある（その場合は構文エラーとして原文に倒れる）。
   手順の切り出しは Offset（UTF-8 のバイト位置）に依存するので、日本語を含む原文の試験を持つ
-- **更新**: 版を固定して取り込み、`vendor/mvdan-sh/README.md` の版・バイト数・sha256 を書き換える（試験が一致を確かめる）。
-  `index.js` は minified なので、pre-commit の整形の対象から外す（書き換わると sha256 が変わる）
-- 試験: `test/agents/test_pi_explain.py`（`explain_driver.mjs`。反例・日本語・読み込み失敗・代表 30 件の原文倒れ 3 件以下）
+- **更新**: 版を固定して取り込み、`vendor/mvdan-sh/README.md` の版・バイト数・sha256 と、`judge/syntax.ts` の期待値（`MVDAN_SHA256`・`MVDAN_BYTES`）を書き換える（試験が三者の一致を確かめる）。
+  `index.js` は minified なので、pre-commit の整形（`end-of-file-fixer`・`trailing-whitespace`）と git の改行変換（`.gitattributes` の `vendor/** -text`）の対象から外す（書き換わると sha256 が変わる）
+- **読み込み（`judge/syntax.ts`。判定にはまだ接続しない）**: 構文木の読み込みと小さな道具（`arr`・`typeOf`・`pos`・`end`・`cut`）を `explain.ts` から `judge/syntax.ts` へ移した。
+  `index.js` のバイト列を読んで **sha256 を期待値と照合し、照合したのと同じバイトを `new Function` で評価する**（読み直さない。`createRequire` はパスから読み直すので使わない。
+  `node:vm` でなく `new Function` なのは node・bun〔JavaScriptCore〕で同じに動くため）。GopherJS の初期化が書く `global.require`・`Error.stackTraceLimit` は評価の後で戻す。
+  失敗（欠損・sha 不一致・評価の失敗・解析の失敗）は例外にせず `{ ok: false, why }`。判定に接続するときは、これらをすべて deny にする（決定済み）。
+  vendor のディレクトリは引数で注入する（試験用の `PI_EXPLAIN_VENDOR` 環境変数は廃止。差し替えは `setDefaultVendorDir`）
+- **自己診断**: `selfDiagnose()` が既知の 3 コマンド（`git push origin main`・`cd /x && git log | head -3`・`echo "確認"`）の文の数・語の位置（UTF-8 のバイト位置）を確かめる。
+  `node judge/doctor.mjs`（型除去に対応した node か bun で実行）が、実行環境・sha・自己診断・読み込みと解析の時間・メモリの増分を出し、OK / NG を終了コード 0 / 1 で返す。
+  NG の理由には「対処: `pis` の外のシェルで `chezmoi apply`」を添える
+- 試験: `test/agents/test_pi_explain.py`（`explain_driver.mjs`。反例・日本語・読み込み失敗・代表 30 件の原文倒れ 3 件以下）、
+  `test/agents/test_pi_syntax_runtime.py`（`syntax_driver.mjs`・`syntax_probe.ts`。vendor を壊したときの失敗・doctor・bun・**実際の pi の中での読み込み**。pi・bun が無い環境では skip＝未実測）
 
 ### 整形
 

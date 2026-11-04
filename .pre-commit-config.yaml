@@ -141,9 +141,9 @@ repos:
       - id: end-of-file-fixer
         name: Fix end of files
         stages: [pre-commit]
-        # 模範解答のパッチは空の文脈行が要る
-        exclude: ^scripts/model-eval/worker/solutions/.*\.patch$
+        # 模範解答のパッチは空の文脈行が要る。同梱の vendor は書き換えると sha256 が変わる
+        exclude: ^(scripts/model-eval/worker/solutions/.*\.patch|home/dot_config/pi/harness/vendor/.*)$
       - id: trailing-whitespace
         name: Trim trailing whitespace
         stages: [pre-commit]
-        exclude: ^scripts/model-eval/worker/solutions/.*\.patch$
+        exclude: ^(scripts/model-eval/worker/solutions/.*\.patch|home/dot_config/pi/harness/vendor/.*)$
