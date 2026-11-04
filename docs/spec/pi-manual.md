@@ -272,11 +272,11 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 
 | 役割 | ツール | 既定 | 補足 |
 | --- | --- | --- | --- |
-| `implementer`（親の既定） | bash・read・edit・write・grep・find・ls・task・todo・ask・action・`mcp__*` | ask | `shell_deny` に git の状態変更などがある |
+| `implementer`（親の既定） | bash・read・edit・write・grep・find・ls・task・todo・ask・action・`mcp__*` | ask | `shell_deny` に git の状態変更などがある。`git restore --staged <パス>...`（index だけを戻す厳密な 1 形式）は例外で許可（[仕様](guard/pi-decide.md#git-restore---staged-の例外)） |
 | `reader` | read・grep・find・ls | deny | 読み取り専用 |
 | `explorer` | bash・read・grep・find・ls | deny | bash は `wc` と読み取り専用の git（`status` `diff` `log` `show` `ls-files`）だけ |
 | `committer` | bash・read・grep・find・ls | deny | `git status` `git diff` `git log` などだけ |
-| `worker` | bash・read・edit・write・grep・find・ls | ask | `git add` `commit` `stash` `checkout` `switch` `restore` `reset` は deny |
+| `worker` | bash・read・edit・write・grep・find・ls | ask | `git add` `commit` `stash` `checkout` `switch` `restore` `reset` は deny（`git restore --staged <パス>...` の 1 形式だけ例外で許可） |
 | `orchestrator` | read・grep・find・ls・task・todo・ask・action | deny | `/orchestrate on` の間だけ親の役割になる |
 
 ### 6.3 子エージェント（`[pi.agents.*]`）

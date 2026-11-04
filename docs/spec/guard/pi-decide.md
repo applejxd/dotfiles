@@ -67,7 +67,7 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 
 1. **共通の禁止**。どの役割・bypass でも外れない
    - `bash`: `check_bash.py` の deny 側と同じ検査（`[bash] deny` の照合と意味解析。`cd` を挟んだ形も見る）。
-     **例外**: 役割の `deny_except` に載る語は、条件つきで `[bash] deny` から外す（[`git worktree remove` の例外](#git-worktree-remove-の例外)）
+     **例外**: 役割の `deny_except` に載る語は、条件つきで `[bash] deny` から外す（[`git worktree remove` の例外](#git-worktree-remove-の例外)・[`git restore --staged` の例外](#git-restore---staged-の例外)）
    - ファイル: `[file] read_deny_globs`（`read` / `grep` / `find` / `ls`）と `write_deny_globs`（`edit` / `write`）。
      例外（`[[file.deny_exceptions]]`）は対の deny にだけ効く。パスは渡された形・`cwd` で解いた絶対パス・
      symlink を解いた実体の 3 つで照合する。ディレクトリを渡す `grep` / `find` / `ls` は、中のファイルの形でも照合する
@@ -148,7 +148,7 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 `[bash] deny` の `git worktree remove` は、**pi の `implementer`（親）と `worker` だけ**、単純な 1 行の force なしだけを許可する
 （[CHG-0062](../../change-history/0062.md)）。force 付きは deny のまま（確認つきで通す案は、解析の取りこぼしが続いたので採らなかった）。`explorer`・`reader`・`committer`・`orchestrator` は deny のまま。
 
-- **設定**: `[pi.profiles.implementer]` と `[pi.profiles.worker]` の `deny_except = ["git worktree remove"]`。許す語は判定器（`decide.ts` の
+- **設定**: `[pi.profiles.implementer]` と `[pi.profiles.worker]` の `deny_except = ["git worktree remove", "git restore --staged"]`（後者は[次の節](#git-restore---staged-の例外)）。許す語は判定器（`decide.ts` の
   `DENY_EXCEPT_WORDS`）が「`git worktree remove`」に固定し、未知の語・配列でない値は `source: error` の deny。`[bash] deny` と `[bash.deny_guide]` は変えない
   （Claude Code・Copilot・OpenCode の生成物は同じ。pi だけの変更）
 - **deny を外す条件**（`judge/bash.ts` の `worktreeRemoveExcepted`、共通の deny を引く前）: `[pi.confirm] local_git` が真で、役割が例外に載っていること。
@@ -173,6 +173,25 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
   - bypass を継ぐ worker は、claim のない clean な他の worktree を plain で消せる
   - 保証は「うっかり防止」。git の alias・外部スクリプト・動的に組み立てた文字列は見ない。反映には `chezmoi apply` と pi の再起動が要る
 - **試験**: `test_pi_worktree_remove.py`
+
+## git restore --staged の例外
+
+`[bash] deny` の `git restore` は、**pi の `implementer`（親）と `worker` だけ**、**index だけを戻す厳密な 1 形式**を許可する
+（[CHG-0062](../../change-history/0062.md)）。作業ツリーを変える形は、従来どおり deny のまま。`explorer`・`reader`・`committer`・`orchestrator` は deny のまま。
+
+- **設定**: 上の節と同じ `deny_except` に語 `git restore --staged` を足す（判定器の `DENY_EXCEPT_WORDS` が許す語を固定）。`[bash] deny`・`[bash.deny_guide]` は変えない。
+  worker は `shell_deny` にも `git restore` があるので、例外に当たったときは `shell_deny` の `git restore` も外す（他の語は残る）
+- **許可する形**（`judge/bash.ts` の `restoreStagedExcepted`、`[pi.confirm] local_git` が真のときだけ）: **元のコマンド全体**が正規表現
+  `^git restore (?:--staged|-S)(?: --)?((?: [A-Za-z0-9_./@%+=:,][A-Za-z0-9_./@%+=:,-]*)+)$` に一致し、パスが 1〜50 件で、どのパスも `..` を含まないこと。
+  `.` 単独は許す（index 全体を戻すだけで、作業ツリーは変わらない）。解析器の解釈は見ない（fail closed）
+- **許可しない形（従来の判定のまま）**: `--worktree`/`-W`（`-SW` を含む）・`--source`/`-s`・`-p`/`--patch`・`--overlay`/`--no-overlay`・`--ours`/`--theirs`・`--merge`・
+  `--ignore-unmerged`・`--pathspec-from-file`・`--pathspec-file-nul`・`--staged` の省略形・フラグを後ろに置く形・`--` を 2 回・パス無し・`git restore .` と `git restore a`（作業ツリーを変える）・
+  `..` を含むパス・空白/クォート/展開/グロブ/リダイレクト/`~`・前置き（`env`・`sudo`・`cd … &&`・`git -C`）・複合（`;` `&&` `|`）・ssh 経由・前後や連続の空白・51 件以上。
+  大文字小文字違い（`GIT RESTORE`）は、従来から deny に当たらず役割の既定（ask）。例外でも変わらない
+- **緩めたあとの判定**: 他の規則に当たらない許可形は `source: default`（親・worker は ask、bypass で allow、`pis` の境界の中で allow）。bypass でも、通るのは許可形だけ
+- **限界**: 保証は「うっかり防止」。index に積んだ内容（ステージ）は失うが、作業ツリーのファイルは残る。`git reset`・`git checkout --`・`git stash` は変えない。
+  git の alias・外部スクリプト・動的に組み立てた文字列は見ない。pi だけの変更（Claude Code・OpenCode の生成物は同じ）。反映には `chezmoi apply` と pi の再起動が要る
+- **試験**: `test_pi_git_restore_staged.py`
 
 ## ssh / scp の許可
 

@@ -1493,7 +1493,8 @@
    "implementer": {
     "default": "ask",
     "deny_except": [
-     "git worktree remove"
+     "git worktree remove",
+     "git restore --staged"
     ],
     "tools": [
      "bash",
@@ -1537,7 +1538,8 @@
    "worker": {
     "default": "ask",
     "deny_except": [
-     "git worktree remove"
+     "git worktree remove",
+     "git restore --staged"
     ],
     "shell_deny": [
      "git add",

@@ -169,6 +169,7 @@ deny = [
   # see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外
   "git worktree remove",
   # 追跡ファイルの変更を破棄する (git でも復旧できない)
+  # ★pi の implementer / worker だけ、`git restore --staged <パス>...` の厳密な 1 形式を許可する (deny_except)
   "git checkout --",
   "git restore",
   # スケジュール実行で監視外に逃がす
@@ -1520,7 +1521,8 @@ $ARGUMENTS
 tools = ["bash", "read", "edit", "write", "grep", "find", "ls", "task", "todo", "ask", "action", "pr_summary", "pr_comments", "mcp__*"]
 default = "ask"
 # [bash] deny の例外 (許す語は判定器が固定。see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外)
-deny_except = ["git worktree remove"]
+# `git restore --staged` は index だけを戻す厳密な 1 形式だけ (see docs/spec/guard/pi-decide.md#git-restore---staged-の例外)
+deny_except = ["git worktree remove", "git restore --staged"]
 
 [pi.profiles.reader]
 tools = ["read", "grep", "find", "ls"]
@@ -1581,8 +1583,8 @@ shell_deny = [
 [pi.profiles.worker]
 tools = ["bash", "read", "edit", "write", "grep", "find", "ls"]
 default = "ask"
-# see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外
-deny_except = ["git worktree remove"]
+# see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外 / #git-restore---staged-の例外
+deny_except = ["git worktree remove", "git restore --staged"]
 shell_deny = [
   "git add",
   "git commit",
