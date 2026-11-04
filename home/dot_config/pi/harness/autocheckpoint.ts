@@ -24,6 +24,16 @@ export const CHECKPOINT_PROMPT = [
 	"サブエージェントは起動しない (文脈の節約)。",
 ].join("\n");
 
+// 圧縮の完了後に 1 回だけ送る再開の指示 (user メッセージ)。判断待ちだけなら 1 行で止まらせる
+export const RESUME_PROMPT = [
+	"【自動の再開】圧縮が完了した。`.tmp/keep/checkpoint/NEXT.md` の先頭と todo を読み、進められる作業があれば続ける。",
+	"判断待ち・承認待ち・子や背景ジョブの完了待ちだけなら、「待機」と 1 行だけ答えて止まる。",
+	"新しく大きな作業は始めない。",
+].join("\n");
+
+// 圧縮の完了通知は pi が圧縮の状態を解く前に届くので、解かれた後まで待ってから送る (index.ts の session_compact と同じ理由)
+export const DEFAULT_RESUME_DELAY_MS = 200;
+
 export interface AutoCheckpointOptions {
 	/** 子エージェントなら何もしない */
 	child: boolean;
@@ -33,6 +43,10 @@ export interface AutoCheckpointOptions {
 	/** 時計 (試験で差し替える) */
 	now?: () => number;
 	cooldownMs?: number;
+	/** 再開の指示を送る (registerAutoCheckpoint が pi.sendUserMessage を渡す。試験で差し替える) */
+	resume?: (text: string) => void;
+	/** 圧縮の完了から再開を送るまでの待ち (ms) */
+	resumeDelayMs?: number;
 }
 
 type Phase = "idle" | "saving" | "compacting";
@@ -49,6 +63,7 @@ export function createAutoCheckpoint(opts: AutoCheckpointOptions) {
 	const cooldownMs = opts.cooldownMs ?? DEFAULT_COOLDOWN_MS;
 	let phase: Phase = "idle";
 	let coolUntil = 0;
+	let cycle = 0; // 保存の周期の通し番号 (待つ間に周期が進んだかを見る)
 
 	const notify = (ctx: any, text: string) => {
 		try {
@@ -62,6 +77,21 @@ export function createAutoCheckpoint(opts: AutoCheckpointOptions) {
 		coolUntil = now() + cooldownMs;
 	};
 	const disabled = (ctx: any) => opts.child || env.PI_AUTOCHECKPOINT === "0" || ctx.mode === "print" || ctx.mode === "json";
+
+	// 圧縮の成功後に 1 回だけ再開を送る。待つ間に状態が変わった (別の周期・無効化) ら送らない
+	const scheduleResume = (ctx: any) => {
+		if (!opts.resume || env.PI_AUTOCHECKPOINT_RESUME === "0") return;
+		const myCycle = cycle;
+		setTimeout(() => {
+			if (phase !== "idle" || cycle !== myCycle || disabled(ctx) || env.PI_AUTOCHECKPOINT_RESUME === "0") return;
+			try {
+				notify(ctx, "圧縮が完了したので再開を指示する");
+				opts.resume?.(RESUME_PROMPT);
+			} catch {
+				/* 再開の失敗で本体を止めない */
+			}
+		}, opts.resumeDelayMs ?? DEFAULT_RESUME_DELAY_MS);
+	};
 
 	return (event: any, ctx: any): { entries?: any[]; continue?: boolean } | undefined => {
 		if (disabled(ctx)) return undefined;
@@ -81,6 +111,7 @@ export function createAutoCheckpoint(opts: AutoCheckpointOptions) {
 					onComplete: () => {
 						finish();
 						notify(ctx, "圧縮が完了");
+						scheduleResume(ctx);
 					},
 					onError: (e: Error) => {
 						finish();
@@ -99,6 +130,7 @@ export function createAutoCheckpoint(opts: AutoCheckpointOptions) {
 		const percent = ctx.getContextUsage?.()?.percent;
 		if (typeof percent !== "number" || percent < thresholdPercent(env)) return undefined;
 		phase = "saving";
+		cycle++;
 		notify(ctx, `文脈の使用率 ${Math.round(percent)}% なので、保存を指示する`);
 		return {
 			entries: [{ type: "custom_message", customType: CUSTOM_TYPE, content: CHECKPOINT_PROMPT, display: true }],
@@ -109,6 +141,12 @@ export function createAutoCheckpoint(opts: AutoCheckpointOptions) {
 
 export function registerAutoCheckpoint(pi: ExtensionAPI, opts: AutoCheckpointOptions): void {
 	if (opts.child) return;
-	const handler = createAutoCheckpoint(opts);
+	// アイドル中は新しいターンが始まる。streaming 中は followUp で待たせる (指定が無いと pi.prompt が例外にする)
+	const resume =
+		opts.resume ??
+		((text: string) => {
+			Promise.resolve(pi.sendUserMessage(text, { deliverAs: "followUp" })).catch(() => {});
+		});
+	const handler = createAutoCheckpoint({ ...opts, resume });
 	pi.on("agent_before_settle", handler as any);
 }

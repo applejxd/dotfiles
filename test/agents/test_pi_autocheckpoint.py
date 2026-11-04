@@ -184,3 +184,109 @@ def test_index_wires_it_with_the_compact_instructions():
         "registerAutoCheckpoint(pi, { child: CHILD, compactInstructions: COMPACT_INSTRUCTIONS })"
         in src
     )
+
+
+# --- 圧縮の完了後の再開 ---
+
+COMPLETE = [
+    {"at": 0, "percent": 90},
+    {"at": 1, "percent": 90, "finish": "complete", "wait": 40},
+]
+
+
+def test_resume_is_sent_once_after_a_successful_compaction():
+    out = run(COMPLETE)
+    assert len(out["resumes"]) == 1
+    assert any("再開を指示" in n for n in out["notes"])
+
+
+def test_resume_text_is_japanese_and_mentions_next_md():
+    text = run(COMPLETE)["resumes"][0]
+    for word in ("自動の再開", "NEXT.md", "待機", "todo"):
+        assert word in text
+
+
+def test_resume_is_not_sent_on_error():
+    out = run([{"at": 0, "percent": 90}, {"at": 1, "percent": 90, "finish": "error", "wait": 40}])
+    assert out["resumes"] == []
+
+
+def test_resume_is_not_sent_when_compact_throws():
+    out = run(
+        [{"at": 0, "percent": 90}, {"at": 1, "percent": 90, "compactThrows": True, "wait": 40}]
+    )
+    assert out["resumes"] == []
+
+
+def test_resume_is_not_sent_when_aborted_during_save():
+    out = run(
+        [{"at": 0, "percent": 90}, {"at": 1, "percent": 90, "outcome": "aborted", "wait": 40}]
+    )
+    assert out["resumes"] == []
+
+
+def test_resume_env_zero_disables_only_the_resume():
+    out = run(COMPLETE, env={"PI_AUTOCHECKPOINT_RESUME": "0"})
+    assert out["resumes"] == [] and out["steps"][1]["compacts"] == 1
+
+
+def test_resume_is_skipped_when_disabled_during_the_wait():
+    steps = [
+        {"at": 0, "percent": 90},
+        {"at": 1, "percent": 90, "finish": "complete"},
+        {"at": 2, "percent": None, "setEnv": {"PI_AUTOCHECKPOINT": "0"}, "wait": 40},
+    ]
+    assert run(steps, resumeDelayMs=20)["resumes"] == []
+
+
+def test_resume_is_skipped_when_a_new_cycle_starts_during_the_wait():
+    # 冷却 0 で、完了の直後に次の周期が始まる (phase が idle でなくなる)
+    steps = [
+        {"at": 0, "percent": 90},
+        {"at": 1, "percent": 90, "finish": "complete"},
+        {"at": 2, "percent": 90, "wait": 40},
+    ]
+    out = run(steps, cooldownMs=0, resumeDelayMs=20)
+    assert out["resumes"] == []
+
+
+def test_cooldown_prevents_a_second_resume_even_if_usage_stays_high():
+    steps = [
+        {"at": 0, "percent": 90},
+        {"at": 1, "percent": 95, "finish": "complete", "wait": 40},
+        {"at": 2 * MIN, "percent": 95, "wait": 40},  # 冷却中: 保存も再開も起きない
+        {"at": 5 * MIN, "percent": 95, "wait": 40},
+    ]
+    out = run(steps)
+    assert len(out["resumes"]) == 1
+    assert [x["result"] for x in out["steps"][2:]] == [None, None]
+
+
+def test_resume_runs_again_in_the_next_cycle_after_the_cooldown():
+    steps = [
+        {"at": 0, "percent": 90},
+        {"at": 1, "percent": 90, "finish": "complete", "wait": 40},
+        {"at": 11 * MIN, "percent": 90},
+        {"at": 11 * MIN + 1, "percent": 90, "finish": "complete", "wait": 40},
+    ]
+    assert len(run(steps)["resumes"]) == 2
+
+
+@pytest.mark.parametrize(
+    ("scenario", "mode"),
+    [({"child": True}, "tui"), ({}, "print"), ({}, "json")],
+    ids=["child", "print", "json"],
+)
+def test_resume_is_not_sent_in_child_or_print_modes(scenario, mode):
+    steps = [
+        {"at": 0, "percent": 90, "mode": mode},
+        {"at": 1, "percent": 90, "mode": mode, "finish": "complete", "wait": 40},
+    ]
+    assert run(steps, **scenario)["resumes"] == []
+
+
+def test_register_sends_a_follow_up_user_message():
+    src = (ROOT / "home" / "dot_config" / "pi" / "harness" / "autocheckpoint.ts").read_text(
+        encoding="utf-8"
+    )
+    assert 'pi.sendUserMessage(text, { deliverAs: "followUp" })' in src
