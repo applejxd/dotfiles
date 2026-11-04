@@ -353,6 +353,18 @@ def test_merge_fixtures_follow_contract() -> None:
         assert oid.fullmatch(m["commit"]) and m["recorded"] is recorded, name
 
 
+def test_merge_sheet_shows_refusal_detail_paths() -> None:
+    """拒否の原因のパス（details）を api.js が運び、merge.js が textContent で表示する（静的な配線）。"""
+    api = (WEB / "api.js").read_text(encoding="utf-8")
+    merge = (WEB / "merge.js").read_text(encoding="utf-8")
+    assert "body.error.details" in api and "details: dt" in api
+    assert "原因のファイル" in merge and "detailNodes(res.refusal.details)" in merge
+    assert "detailNodes(e && e.details)" in merge
+    assert "innerHTML" not in merge
+    for c in ("operation_in_progress", "index_locked"):
+        assert c in merge, c
+
+
 def test_fake_server_merge_routes() -> None:
     """偽物サーバ自身の確認: merge-plan・merge・版違い・枝の削除。"""
     st = ReviewState()
@@ -486,7 +498,9 @@ def test_list_hides_included_branches_with_a_toggle() -> None:
     assert "incN > 0" in lst and "件）" in lst  # 0 件のときは切り替えを出さない
     assert re.search(r'text: "→ " \+ pr\.includedIn \+ " に含まれる"', lst)
     pr = (WEB / "view-pr.js").read_text(encoding="utf-8")
-    assert "inc.textContent = " in pr and "me2.includedIn" in pr
+    assert "inc.textContent = " in pr and "pr.includedIn" in pr
+    assert "api.prs()" not in pr  # 概要の表示のために全件の一覧を計算しない
+    assert "errorsNote" in lst and "件の PR を読めませんでした" in lst
     for text in (lst, pr):
         assert "innerHTML" not in text
 
@@ -2073,6 +2087,21 @@ MERGE_ERRORS: list[tuple[str, int, tuple[str, ...], bool, dict]] = [
     ("not_ff", 409, ("最新の版を読み込む",), False, {}),
     ("already_merged", 409, (CHECK_TREE,), False, {}),
     ("dirty", 409, (CHECK_TREE,), True, {}),
+    (
+        "dirty",
+        409,
+        ("原因のファイル", "a.md", HOSTILE + ".ts", "ほか 3 件"),
+        True,
+        {"details": {"paths": ["a.md", HOSTILE + ".ts"], "pathCount": 5}},
+    ),
+    (
+        "operation_in_progress",
+        409,
+        (CHECK_TREE, "進行中の操作", "CHERRY_PICK_HEAD"),
+        True,
+        {"details": {"op": "CHERRY_PICK_HEAD"}},
+    ),
+    ("index_locked", 409, (CHECK_TREE,), True, {}),
     ("head_mismatch", 409, (CHECK_TREE,), True, {}),
     ("no_identity", 409, (CHECK_TREE,), True, {}),
     (

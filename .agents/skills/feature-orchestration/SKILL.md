@@ -24,7 +24,7 @@ description: "feature を起票して worker に実装を切り出し、成果�
 ## 工程
 
 1. **分ける**: 1 worktree = 1 feature = 1 worker。担当ファイルが重ならない単位にする。書き込む worker は 3〜5 体まで
-   （読み取り専用の子とは別枠。生きている子は最大 4）。**共有されやすいファイルは 1 人か親だけが触る**:
+   （読み取り専用の子とは別枠。生きている子は同時 6 まで）。**共有されやすいファイルは 1 人か親だけが触る**:
    `common.toml.tmpl`・golden・docs の索引・`index.ts`・`actions.ts`・`scripts/verify.py`・試験用のコピー一覧。
    依存があるときは、案件の「実施計画」表の「前提」列（計画）と todo の note（状態）に置く。
 2. **起票**: `git flow feature start <名前> --worktree --no-fetch`（名前は小文字・数字・`.`・`_`・`-`）。

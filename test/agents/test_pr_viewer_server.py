@@ -660,6 +660,10 @@ def test_git_output_limit_is_a_500_error(world):
     )
     try:
         status, body = srv.get("/api/prs")
+        # 一覧は 1 本の git 失敗で全滅させず、errors で報告する
+        assert status == 200 and body["errors"]
+        pid = next(i for i, p in _prs(world).items() if p["repoId"] == _repo_id(world.repo))
+        status, body = srv.get(f"/api/prs/{pid}")
         assert status == 500 and body["error"]["code"] == "git_too_large"
     finally:
         srv.stop()
@@ -680,6 +684,9 @@ def test_git_time_limit_is_a_500_error(world):
     )
     try:
         status, body = srv.get("/api/prs")
+        assert status == 200 and body["errors"]
+        pid = next(i for i, p in _prs(world).items() if p["repoId"] == _repo_id(world.repo))
+        status, body = srv.get(f"/api/prs/{pid}")
         assert status == 500 and body["error"]["code"] == "git_timeout"
     finally:
         srv.stop()
@@ -1084,3 +1091,61 @@ def test_included_pr_is_still_readable_by_id(incl):
     a = _pr(incl, incl.repo, "feature/a")
     status, body = incl.server.get(f"/api/prs/{a['id']}")
     assert status == 200 and body["pr"]["branch"] == "feature/a"
+
+
+def test_detail_has_included_in_for_a_member_and_not_for_the_bundle(incl):
+    a = _pr(incl, incl.repo, "feature/a")
+    _, body = incl.server.get(f"/api/prs/{a['id']}")
+    assert body["pr"]["includedIn"] == "feature/bundle-1"
+    bundle = _pr(incl, incl.repo, "feature/bundle-1")
+    _, body = incl.server.get(f"/api/prs/{bundle['id']}")
+    assert "includedIn" not in body["pr"]
+
+
+# ---------------------------------------------------------------- 一覧は 1 本の git 失敗で全滅しない
+
+
+def test_one_failing_pr_is_reported_in_errors_and_others_are_listed(tmp_path):
+    repo_a = _init(tmp_path / "list-a")
+    _commit(repo_a, {"README.md": "x\n"}, "init")
+    for name in ("ok1", "big"):
+        _git(repo_a, "switch", "-q", "develop")
+        _git(repo_a, "switch", "-q", "-c", f"feature/{name}")
+        files = (
+            {f"d{i}/{'long-name-' * 6}{i}.txt": "x\n" for i in range(400)}
+            if name == "big"
+            else {f"{name}.txt": "x\n"}
+        )
+        _commit(repo_a, files, f"feat: {name}")
+    repo_b = _init(tmp_path / "list-b")
+    _commit(repo_b, {"README.md": "x\n"}, "init")
+    _git(repo_b, "switch", "-q", "-c", "feature/other")
+    _commit(repo_b, {"o.txt": "o\n"}, "feat: o")
+    srv = Server(
+        [
+            "--repo",
+            str(repo_a),
+            "--repo",
+            str(repo_b),
+            "--port",
+            "0",
+            "--web-dir",
+            str(_web_dir(tmp_path)),
+            "--git-max-bytes",
+            "20000",
+        ]
+    )
+    try:
+        status, body = srv.get("/api/prs")
+        assert status == 200
+        assert {p["branch"] for p in body["prs"]} == {"feature/ok1", "feature/other"}
+        assert [(e["repoName"], e["branch"]) for e in body["errors"]] == [("list-a", "feature/big")]
+        reason = body["errors"][0]["reason"]
+        assert 0 < len(reason) <= 120 and "/" not in reason and str(tmp_path) not in reason
+    finally:
+        srv.stop()
+
+
+def test_errors_is_an_empty_list_when_everything_is_readable(incl):
+    _, body = incl.server.get("/api/prs")
+    assert body["errors"] == []

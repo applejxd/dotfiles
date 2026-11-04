@@ -84,6 +84,8 @@ const REASONS: Record<string, string> = {
 	unsupported_repo: "この統合器が扱わないリポジトリの設定（sparse checkout）があるため、統合しません。",
 	unsupported_change: "サブモジュール、または filter 属性を持つファイルを含む変更は、統合しません。",
 	busy: "別の統合が実行中です。",
+	index_locked: "git の index.lock があります（エディターの git 操作など）。統合は実行されていません。",
+	operation_in_progress: "統合先の作業ツリーで、別の git 操作（merge・rebase・cherry-pick など）が進行中です。統合は実行されていません。",
 	recover_needed: "前回の統合が異常終了した可能性があります。他の git が動いていないことを確かめて、復旧（recover）を実行してください。",
 	not_ff: "統合先が先に進んでいます。",
 	failed: "統合に失敗しました。",
@@ -91,8 +93,25 @@ const REASONS: Record<string, string> = {
 	no_identity: "コミットの作者（user.name・user.email）が設定されていません。",
 };
 
-function refuse(code: string, reason?: string): Refusal {
-	return { ok: false, code, reason: reason ?? REASONS[code] ?? REASONS.failed };
+function refuse(code: string, reason?: string, details?: Record<string, unknown>): Refusal {
+	return { ok: false, code, reason: reason ?? REASONS[code] ?? REASONS.failed, ...(details ? { details } : {}) };
+}
+
+const DETAIL_PATHS = 20;
+const DETAIL_PATH_LEN = 300;
+
+/** 拒否の原因のパス一覧（最大 20 件。長すぎる・制御文字（改行を含む）のあるパスは載せず、件数だけに数える）。 */
+function pathDetails(paths: string[], extra: Record<string, unknown> = {}): Record<string, unknown> {
+	const uniq = [...new Set(paths)];
+	const shown = uniq.filter((p) => p.length <= DETAIL_PATH_LEN && !/[\u0000-\u001F\u007F]/.test(p)).slice(0, DETAIL_PATHS);
+	return { ...extra, paths: shown, pathCount: uniq.length };
+}
+
+/** head_mismatch の文言。今の枝（symbolic-ref の出力。detached なら空）を入れる。 */
+function headMismatchText(headRef: string): string {
+	const name = headRef.replace(/^refs\/heads\//, "");
+	const shown = name === "" ? "（どの枝でもない detached HEAD）" : /^[^\u0000-\u001F\u007F]{1,100}$/.test(name) ? name : "（表示できない名前）";
+	return `${REASONS.head_mismatch}今の枝は ${shown} です。`;
 }
 
 const OID_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
@@ -242,7 +261,7 @@ function overlaps(touched: string[], other: string[]): boolean {
 	return false;
 }
 
-const IN_PROGRESS = ["MERGE_HEAD", "rebase-merge", "rebase-apply", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_LOG"];
+const IN_PROGRESS = ["MERGE_HEAD", "rebase-merge", "rebase-apply", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_LOG", "sequencer"];
 
 /** target が checkout されている worktree。無ければ null。一覧が取れなければ undefined。 */
 async function findWorktree(gitDir: string, ref: string): Promise<Wt | null | undefined> {
@@ -273,7 +292,8 @@ async function checkAttributes(w: Wt, sourceRef: string): Promise<Refusal | null
 	const dirtyMsg = "統合先の作業ツリーに、未コミットの .gitattributes の変更があります。コミットか退避をしてください。";
 	const isAttr = (p: string) => p.split("/").pop() === ".gitattributes";
 	// 追跡中の .gitattributes の変更・削除・stage は常に拒否する
-	if (st.some((e) => isAttr(e.path) && e.code !== "??" && e.code !== "!!")) return refuse("dirty", dirtyMsg);
+	const attrDirty = st.filter((e) => isAttr(e.path) && e.code !== "??" && e.code !== "!!").map((e) => e.path);
+	if (attrDirty.length > 0) return refuse("dirty", dirtyMsg, pathDetails(attrDirty));
 	// 未追跡・無視の .gitattributes は、そのディレクトリの配下に追跡パス（統合先の index/HEAD か統合元の tree）が
 	// 1 つでもあるときだけ拒否する（git は属性をそのディレクトリの配下にだけ適用する。.tmp/ の奥などは影響しない）
 	const dirs = new Set<string>();
@@ -282,8 +302,9 @@ async function checkAttributes(w: Wt, sourceRef: string): Promise<Refusal | null
 		const i = e.path.lastIndexOf("/");
 		dirs.add(i < 0 ? "" : e.path.slice(0, i));
 	}
+	const attrPaths = (d: string) => [d === "" ? ".gitattributes" : `${d}/.gitattributes`];
 	for (const d of dirs) {
-		if (d === "") return refuse("dirty", dirtyMsg);
+		if (d === "") return refuse("dirty", dirtyMsg, pathDetails(attrPaths(d)));
 		const probes = [
 			["ls-files", "--", `:(literal)${d}/`],
 			["ls-tree", "-r", "--name-only", "HEAD", "--", `${d}/`],
@@ -292,7 +313,7 @@ async function checkAttributes(w: Wt, sourceRef: string): Promise<Refusal | null
 		for (const a of probes) {
 			const r = await runGit(a, { cwd: w.path });
 			if (r.code !== 0) return refuse("failed");
-			if (r.out.length > 0) return refuse("dirty", dirtyMsg);
+			if (r.out.length > 0) return refuse("dirty", dirtyMsg, pathDetails(attrPaths(d)));
 		}
 	}
 	const cfg = await runGit(["config", "-z", "--list"], { cwd: w.path });
@@ -311,15 +332,18 @@ async function checkWorktree(ctx: Ctx, w: Wt, touched: string[], attrsChecked = 
 	}
 	if (await configHasExternalCode(join(w.gitDir, "config.worktree"))) return refuse("external_code");
 	const head = await runGit(["symbolic-ref", "-q", "HEAD"], { cwd: w.path });
-	if (head.code !== 0 || head.out.trim() !== ctx.target.ref) return refuse("head_mismatch");
-	if (IN_PROGRESS.some((n) => existsSync(join(w.gitDir, n)))) return refuse("dirty");
-	if (existsSync(join(w.gitDir, "index.lock"))) return refuse("busy");
+	if (head.code !== 0 || head.out.trim() !== ctx.target.ref) return refuse("head_mismatch", headMismatchText(head.out.trim()));
+	const op = IN_PROGRESS.find((n) => existsSync(join(w.gitDir, n)));
+	if (op !== undefined) return refuse("operation_in_progress", undefined, { op });
+	if (existsSync(join(w.gitDir, "index.lock"))) return refuse("index_locked");
 	const st = await statusPaths(w, false);
 	if (st === null) return refuse("failed");
-	if (overlaps(touched, st.map((e) => e.path))) return refuse("dirty");
+	const dirty = overlapping(touched, st);
+	if (dirty.length > 0) return refuse("dirty", undefined, pathDetails(dirty));
 	const ig = await statusPaths(w, true);
 	if (ig === null) return refuse("failed");
-	if (overlaps(touched, ig.filter((e) => e.code === "!!").map((e) => e.path))) return refuse("ignored");
+	const ignored = overlapping(touched, ig.filter((e) => e.code === "!!"));
+	if (ignored.length > 0) return refuse("ignored", undefined, pathDetails(ignored));
 	return null;
 }
 
@@ -616,7 +640,7 @@ async function executeMergeInner(
 			const head = await runGit(["symbolic-ref", "-q", "HEAD"], { cwd: p.wt.path });
 			if (head.code !== 0 || head.out.trim() !== ctx.target.ref) {
 				removeState(ctx.gitDir);
-				return refuse("head_mismatch");
+				return refuse("head_mismatch", headMismatchText(head.out.trim()));
 			}
 		}
 		const advanced = await advanceTarget(ctx, plan.target.oid, commit, p.wt);

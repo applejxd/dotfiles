@@ -12,4 +12,4 @@
    "branch": "feature/<img src=x onerror=\"window.__pwned=1\">", "target": "develop", "state": "open", "commits": 1, "files": 1, "additions": 1, "deletions": 0,
    "lastCommit": {"oid": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "subject": "<img src=x onerror=\"window.__pwned=1\">", "author": "<b>you</b>", "at": "2019-01-01T00:00:00+00:00"},
    "sourceOid": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "targetOid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "baseOid": "cccccccccccccccccccccccccccccccccccccccc"}
-]}
+], "errors": []}

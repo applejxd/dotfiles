@@ -158,8 +158,17 @@ function sendJson(res: ServerResponse, status: number, value: unknown, extra: Re
 	send(res, status, "application/json; charset=utf-8", JSON.stringify(value), extra);
 }
 
-function sendError(res: ServerResponse, status: number, code: string, message: string, extra: Record<string, string> = {}, conflicts?: string[]): void {
-	sendJson(res, status, { error: { code, message, ...(conflicts !== undefined ? { conflicts } : {}) } }, extra);
+function sendError(
+	res: ServerResponse,
+	status: number,
+	code: string,
+	message: string,
+	extra: Record<string, string> = {},
+	conflicts?: string[],
+	details?: Record<string, unknown>,
+): void {
+	const error = { code, message, ...(conflicts !== undefined ? { conflicts } : {}), ...(details !== undefined ? { details } : {}) };
+	sendJson(res, status, { error }, extra);
 }
 
 // 許可リスト: ディレクトリを走査しない。名前は index.html・app.css・*.js だけ
@@ -368,7 +377,7 @@ function makeInnerHandler(repos: Repo[], opts: Options) {
 			if (p.startsWith("/api/")) return sendJson(res, 200, await handleApi(repos, p, url.searchParams, jobsOf(opts)));
 			return sendError(res, 404, "not_found", "見つかりません。");
 		} catch (e) {
-			if (e instanceof ApiError) return sendError(res, e.status, e.code, e.message, {}, e.conflicts);
+			if (e instanceof ApiError) return sendError(res, e.status, e.code, e.message, {}, e.conflicts, e.details);
 			return sendError(res, 500, "internal", "内部エラーです。"); // 例外の中身は返さない
 		}
 	};

@@ -49,7 +49,7 @@
 | 症状 | 対処（→ §8, §9） |
 | --- | --- |
 | 事前検査に落ちる / 読めない | `pis --check` で確認 / `PIS_EXTRA_READ` や `[pi.sandbox] read` で追加 |
-| 子が起動できない | 同時上限 4 件・役割の `task` 有無・`/plan` 制限・ToDo ID 指定を確認 |
+| 子が起動できない | 同時上限（6 件。[並列](orchestration.md)）・役割の `task` 有無・`/plan` 制限・ToDo ID 指定を確認 |
 | 退避したコミットが増えた | `/pending list` と `drop` で整理 |
 | `chezmoi diff` が全部 new file | サンドボックス外で実行する（内側ではホームが不可視 → §8） |
 | ガード自体が故障した | 復旧専用で `pi -ne --tools read,bash,edit,write`（保護なし → §9） |

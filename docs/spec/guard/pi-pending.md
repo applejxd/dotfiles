@@ -30,10 +30,12 @@
 
 ## 残骸の ref の掃除
 
-新形式の分の ref（`refs/pi/{pending,running,done,key,lock}/*`）は、撤去後は使われない。利用者が一度だけ、補助スクリプトで掃除する。**先に dry-run で対象を確かめる**。
+新形式の分の ref（`refs/pi/{pending,running,done,key,lock}/*`）は、撤去後は使われない。残骸は一回きりの整理で、継続して要る手順ではない（整理の補助スクリプトは利用者の私用でリポジトリ外。実行済みの手順は履歴 [CHG-0062](../../change/0062-pr-hub-simplify.md) へ）。残っているときは、**先に一覧で対象を確かめて**から消す。
 
 ```sh
-pk pending-clean
+git for-each-ref 'refs/pi/pending' 'refs/pi/running' 'refs/pi/done' 'refs/pi/key' 'refs/pi/lock'
 ```
+
+消すのは、上の一覧の ref を `git update-ref -d <ref>` で 1 本ずつ。
 
 旧形式の退避の ref（`/pending list` に出るもの）は対象にしない。

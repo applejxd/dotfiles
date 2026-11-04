@@ -19,6 +19,7 @@ export type PostResult = { status: number; body: unknown };
 
 const MAX_RISKS = 50;
 const MAX_CONFLICTS = 100;
+const MAX_DETAIL_PATHS = 20;
 const MAX_RULES_BYTES = 1024 * 1024;
 const MAX_RISK_PATTERNS = 200;
 const MAX_PATTERN_CHARS = 200;
@@ -196,6 +197,8 @@ const REFUSAL_STATUS: Record<string, number> = {
 	ignored: 409,
 	external_code: 409,
 	busy: 409,
+	index_locked: 409,
+	operation_in_progress: 409,
 	recover_needed: 409,
 	not_ff: 409,
 	no_identity: 409,
@@ -208,10 +211,24 @@ const REFUSAL_STATUS: Record<string, number> = {
 	failed: 500,
 };
 
+/** 拒否の details から、必要なものだけを安全な形で取り出す（paths 最大 20 件・長さと制御文字の検査・pathCount・op）。 */
+function safeDetails(r: Refusal): Record<string, unknown> | undefined {
+	const d = r.details;
+	if (!d || typeof d !== "object" || r.code === "failed") return undefined;
+	const out: Record<string, unknown> = {};
+	if (Array.isArray(d.paths)) {
+		const ok = d.paths.filter((p): p is string => typeof p === "string" && p.length <= 300 && !/[\u0000-\u001F\u007F]/.test(p));
+		out.paths = ok.slice(0, MAX_DETAIL_PATHS);
+		out.pathCount = typeof d.pathCount === "number" && Number.isFinite(d.pathCount) ? d.pathCount : ok.length;
+	}
+	if (typeof d.op === "string" && /^[A-Za-z_-]{1,40}$/.test(d.op)) out.op = d.op;
+	return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function refusalToError(r: Refusal): ApiError {
 	const code = r.code === "stale" ? "stale_view" : r.code === "failed" ? "merge_failed" : r.code;
 	const conflicts = r.code === "conflict" && Array.isArray(r.conflicts) ? r.conflicts.slice(0, MAX_CONFLICTS).map(String) : undefined;
-	return new ApiError(REFUSAL_STATUS[r.code] ?? 500, code, r.reason, conflicts);
+	return new ApiError(REFUSAL_STATUS[r.code] ?? 500, code, r.reason, conflicts, safeDetails(r));
 }
 
 /** 診断ログ（標準エラーに 1 行の JSON）。本文・ヘッダー・パスは出さない。共有 ref と同じく、改ざんされうる記録ではなく、運用の手がかり。 */
@@ -249,10 +266,12 @@ export async function mergePlan(ctx: PrCtx, pr: MergePr, body: Record<string, un
 		} else {
 			defaults = { message: generated as string, messageSource: "generated", summaryStale: false, cleanup: "none" };
 		}
-		let refusal: { code: string; message: string; conflicts?: string[] } | null = null;
+		let refusal: { code: string; message: string; conflicts?: string[]; details?: Record<string, unknown> } | null = null;
 		let plan: Record<string, unknown> | null = null;
 		if (!r.ok) {
 			refusal = { code: r.code, message: r.reason };
+			const det = safeDetails(r);
+			if (det !== undefined) refusal.details = det;
 			if (r.code === "conflict" && Array.isArray(r.conflicts)) refusal.conflicts = r.conflicts.slice(0, MAX_CONFLICTS).map(String);
 		} else {
 			const p = r.plan;

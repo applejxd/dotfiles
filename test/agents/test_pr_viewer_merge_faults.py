@@ -691,14 +691,14 @@ def test_unwritable_worktree_dir_never_leaves_a_half_written_tree(tmp_path):
 
 
 def test_existing_index_lock_is_refused_and_kept(tmp_path):
-    """(c) index.lock が既にある → 分かりやすい拒否（busy）で、そのファイルを消さない。"""
+    """(c) index.lock が既にある → 分かりやすい拒否(index_locked)で、そのファイルを消さない。"""
     w = _build(tmp_path, "wt")
     lock = w.git_dir() / "index.lock"
     lock.write_text("他の git の書き込み中\n", encoding="utf-8")
     before = _obs(w)
     for cmd in ("merge", "plan"):
         rc, out, _ = w.merge("feature/a") if cmd == "merge" else w.plan("feature/a")
-        assert rc == 2 and out["code"] == "busy", (cmd, rc, out)
+        assert rc == 2 and out["code"] == "index_locked", (cmd, rc, out)
         assert lock.read_text(encoding="utf-8") == "他の git の書き込み中\n"
     assert _obs(w) == before
     assert not _leftovers(w)["pr-viewer-merge.lock"] and not _leftovers(w)["pr-viewer-merge.state"]

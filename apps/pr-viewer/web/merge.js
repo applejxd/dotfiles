@@ -12,8 +12,10 @@
   /* 制御文字（\n と \t 以外）と双方向制御文字 */
   var BAD_CHARS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/;
   var UNKNOWN = "結果を確認できません。再読み込みして PR の状態を確認してください。";
-  var TREE = { already_merged: 1, dirty: 1, ignored: 1, head_mismatch: 1, external_code: 1, no_identity: 1 };
-  var RETRY = { busy: 1, too_large: 1, dirty: 1, ignored: 1, head_mismatch: 1, external_code: 1, no_identity: 1 };
+  var TREE = { already_merged: 1, dirty: 1, ignored: 1, head_mismatch: 1, external_code: 1, no_identity: 1, operation_in_progress: 1, index_locked: 1 };
+  var RETRY = {
+    busy: 1, too_large: 1, dirty: 1, ignored: 1, head_mismatch: 1, external_code: 1, no_identity: 1, operation_in_progress: 1, index_locked: 1,
+  };
   var RECOVER = [
     "他の git・エディターの自動保存・ビルドが動いていないことを確かめる",
     "リポジトリで node apps/pr-viewer/merge-cli.ts recover <リポジトリのパス> を実行する",
@@ -22,6 +24,25 @@
 
   function code(t) {
     return h("code", { text: t });
+  }
+
+  /* 拒否の原因（details: paths・pathCount・op）の表示。DOM は textContent だけで作る */
+  function detailNodes(det) {
+    var out = [];
+    if (!det || typeof det !== "object") return out;
+    if (typeof det.op === "string" && det.op) out.push(h("p", null, "進行中の操作: ", code(det.op)));
+    var paths = Array.isArray(det.paths) ? det.paths.slice(0, 20).map(String) : [];
+    if (paths.length) {
+      var total = typeof det.pathCount === "number" ? det.pathCount : paths.length;
+      var kids = ["原因のファイル: "];
+      paths.forEach(function (t, i) {
+        if (i) kids.push(", ");
+        kids.push(code(t));
+      });
+      if (total > paths.length) kids.push("（ほか " + (total - paths.length) + " 件）");
+      out.push(h.apply(null, ["p", null].concat(kids)));
+    }
+    return out;
   }
 
   function messageError(v) {
@@ -114,6 +135,9 @@
     else if (c === "too_large") p("本文が大きすぎます。");
     else if (!TREE[c] && !/^legacy_/.test(c)) p("統合できませんでした。");
     if (msg) p(msg);
+    detailNodes(e && e.details).forEach(function (n) {
+      d.nodes.push(n);
+    });
     if (TREE[c]) p("統合先の作業ツリーを確認してください。");
     d.retry = !!RETRY[c] || /^bad_/.test(c);
     return d;
@@ -271,6 +295,9 @@
       if (res.refusal) {
         var cf = Array.isArray(res.refusal.conflicts) ? res.refusal.conflicts : [];
         kids.push(h("div", { class: "alertbox bad", role: "alert" }, h("div", null, h("p", { text: String(res.refusal.message || "統合できません。") }))));
+        detailNodes(res.refusal.details).forEach(function (n) {
+          kids.push(n);
+        });
         if (cf.length) {
           kids.push(
             h(
