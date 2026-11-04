@@ -12,6 +12,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Common } from "./policy.ts";
+import { finish } from "./verdict.ts";
 import {
 	expandUser,
 	loadFileGlobs,
@@ -75,7 +76,7 @@ export const response = (decision: Decision, reason: string, source: string, ext
 export const errorResponse = (reason: string): Response => response("deny", reason, "error");
 
 /** Python の repr(str) に近い表記 (応答の理由の一致のため)。 */
-const pyRepr = (s: string): string => {
+export const pyRepr = (s: string): string => {
 	const quote = s.includes("'") && !s.includes('"') ? '"' : "'";
 	const body = s.replaceAll("\\", "\\\\").replaceAll("\n", "\\n").replaceAll("\r", "\\r").replaceAll("\t", "\\t");
 	return quote + (quote === "'" ? body.replaceAll("'", "\\'") : body) + quote;
@@ -123,7 +124,7 @@ function profileOf(pi: Record<string, any>, role: string): Record<string, any> {
 }
 
 /** 役割の tools に入っているか。末尾が `*` の項目は前方一致 (`mcp__*` など)。 */
-const toolIn = (tool: string, tools: string[]): boolean =>
+export const toolIn = (tool: string, tools: string[]): boolean =>
 	tools.some((t) => (t.endsWith("*") ? tool.startsWith(t.slice(0, -1)) : tool === t));
 
 // ─── ファイル ──────────────────────────────────────────────
@@ -411,26 +412,10 @@ function decideInner(request: unknown, common: Common): Response {
 		commonDeny = null;
 		roleRule = null;
 	}
-	if (commonDeny) return commonDeny;
-
-	// 2. 役割のツール
-	if (!toolIn(tool, profile.tools)) {
-		return response("deny", `役割 ${pyRepr(req.role)} は ${tool} を使えない`, "rule");
-	}
-
-	// 3. 役割の確認と許可、4. 既定
-	const result =
-		roleRule ?? response(profile.default, `どの規則にも当たらない (役割 ${pyRepr(req.role)} の既定)`, "default");
-
-	// 4'. サンドボックスの内側 (証明済み) では、日常の shell の確認だけを外す。
-	//     [bash] ask・意味解析の ask・誘導・deny はそのまま (どの規則にも当たらず、役割の既定の ask になったものだけ)
-	if (req.boundary && tool === "bash" && result.source === "default" && result.decision === "ask") {
-		return response("allow", "サンドボックスの内側の日常の shell (どの規則にも当たらない)", "rule", { sandboxed: true });
-	}
-
-	// 5. bypass は ask だけを allow にする (deny はそのまま)。mustConfirm の ask は bypass でも ask のまま
-	if (req.bypass && result.decision === "ask" && !result.mustConfirm) return { ...result, decision: "allow", bypassed: true };
-	return result;
+	// 2. 役割のツール、3. 役割の確認と許可、4. 既定、4'. サンドボックスの内側の緩和、5. bypass (judge/verdict.ts の finish)
+	//    4' は日常の shell の確認だけを外す。[bash] ask・意味解析の ask・誘導・deny はそのまま (役割の既定の ask になったものだけ)。
+	//    5 は ask だけを allow にする (deny はそのまま)。mustConfirm の ask は bypass でも ask のまま
+	return finish({ tool, role: req.role, profile: profile as { tools: string[]; default: string }, boundary: req.boundary, bypass: req.bypass }, commonDeny, roleRule);
 }
 
 /** 判定する。例外は投げず、異常はすべて `source: error` の deny にする。 */

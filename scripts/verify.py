@@ -186,6 +186,7 @@ _PI_TESTS = (
     "test_pi_plan_literal",
     "test_pi_plan_failclosed",
     "test_pi_plan_sites",
+    "test_pi_stage_table",
 )
 _OC_TESTS = (
     "test_generate_opencode*",
