@@ -65,6 +65,17 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 - `btw` は、`--plain` では `ctx.modelRegistry.complete()` を 1 回呼び、既定では `explore` の子を 1 つ起動する。どちらもトークンを消費する（セッションの合計には入らない）
 - **子の入口 `__piAskReadChild`**: 利用者のコマンドが起こす操作なので、`/agent` と同じく判定器は通さない。そのかわり、起動できる役割を**読み取り専用（`reader` / `explorer`）に限る**（`worker` / `commit` は拒否）。答えには伏字化を掛ける（Windows の `subagents` 拡張の入口は、子がフルガード付きで起動するので判定と伏字化が効く想定。実機は未確認。子の出力の貯め込みは 8 MB で止める）。試験は `test_ask_read_child_entry_runs_only_read_only_agents`・`test_btw_asks_an_explore_child_by_default_and_plain_does_not`、表示の部品（上限・窓・スクロールのキー）は `test_btw_view.py`。（実測は上の記録）
 
+### todo の別表示
+
+チャットの履歴が todo の一覧で流れないよう、表示をチャットから分けた（`extensions/todo/view.ts` の純関数 + `index.ts` の配線。試験は `test_pi_todo_view.py`）。
+
+- **チャット**: `renderCall` / `renderResult` は既定で 1 行に畳む（例: `📌 todo update #101 → blocked`、結果は「未完了 18 件・完了 83 件」）。展開（pi の expanded）すると、モデルへ返す本文を行頭の印で色づけして出す。**モデルへ返す `content` の text・`details` は変えない**
+- **`/todos`（引数なし）**: overlay で全件を見る。状態ごとの見出し（進行中・待ち・未着手・完了・中止。件数つき）で区切り、各項目は 1 行目「アイコン `#id` 題名」（進行中は accent の太字、待ちは warning、未着手は通常、完了は success、中止は dim の取り消し線）、2 行目以降に note を dim で 2 行まで（超えたら `…`）
+- **操作**: ↑↓ / j k で 1 行、PgUp / PgDn でページ、g / G で先頭・末尾、`a` で完了・中止の表示を切り替え（既定は未完了だけ）、Esc / q で閉じる
+- **大きさ**: 高さは「内容」と「端末の行数 − 4」の小さい方（描画のたびに `tui.terminal.rows` を読むのでサイズ変更に追従）。桁は表示幅（全角 2）で切る・折り返す。pi-tui に依存しない自前の幅関数を使う（node の試験で単体に動かすため）
+- **TUI 以外**（`ctx.hasUI` が false、または `ctx.mode` が tui 以外）: 従来どおり `ctx.ui.notify` のテキスト。`/todos tidy`・`/todos clear`・ステータス行は変えない
+- **未確認**: 実機の TUI での見た目（色・overlay の位置と大きさ・端末のリサイズ）と Windows。反映には `chezmoi apply` と pi の再起動が要る
+
 ### guarded_action（承認つきの外部操作）
 
 `git commit`・`gh issue comment`・`gh issue edit`（本文とタイトル）を、**1 回の承認で、ハーネスが組み立てた argv を、シェルを通さずに実行する**ツール（[CHG-0038 段 G11](../../change/0038-guard-reclassification.md)）。通常の ask（コマンドを見せて判断）と違い、内容を見せて承認を取り、承認した内容がそのまま使われる。

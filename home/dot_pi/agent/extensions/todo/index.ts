@@ -5,8 +5,9 @@
 // see docs/spec/guard/pi-extensions.md#自作の拡張-todo--plan--btw
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { callLabel, keyFromChar, paintContentLine, renderOverlay, resultLabel, step, type Key, type Paint, type ViewState } from "./view.ts";
 
 type Status = "pending" | "in_progress" | "blocked" | "done" | "cancelled";
 type Todo = { id: number; text: string; status: Status; note?: string };
@@ -111,6 +112,13 @@ function applyOp(w: Work, op: Op): { message?: string; error?: string } {
 			return { error: `未対応の操作: ${op.action}` };
 	}
 }
+
+// pi のテーマを、view.ts の Paint (色づけの注入) に包む
+const themePaint = (theme: any): Paint => ({
+	fg: (c, s) => theme.fg(c, s),
+	bold: (s) => theme.bold(s),
+	strike: (s) => theme.strikethrough(s),
+});
 
 export default function (pi: ExtensionAPI) {
 	let todos: Todo[] = [];
@@ -253,6 +261,19 @@ export default function (pi: ExtensionAPI) {
 			"同じ目標のための新しい手順は、新しいリストを作らず同じリストへ add する。やめた・置き換わったものは cancelled にする。" +
 			"全部 done になってもリストは消さない (片付けは利用者の /todos tidy・clear)。変更の結果は、未完了の先頭数件と件数だけ返す (全件は list)。",
 		parameters: Params,
+		// チャットの表示は畳む (本文はモデルへ返す text のまま。展開すると色つきで全文)。overlay は /todos
+		renderCall(args, theme, _context) {
+			return new Text(theme.fg("toolTitle", theme.bold(callLabel(args))), 0, 0);
+		},
+		renderResult(result, { expanded }, theme, _context) {
+			const d = result.details as Details | undefined;
+			const first = result.content?.[0];
+			const body = first?.type === "text" ? first.text : "";
+			if (!d) return new Text(body, 0, 0);
+			if (d.error) return new Text(theme.fg("error", resultLabel(d)), 0, 0);
+			if (!expanded) return new Text(theme.fg("dim", resultLabel(d)), 0, 0);
+			return new Text(body.split("\n").map((l) => paintContentLine(l, themePaint(theme))).join("\n"), 0, 0);
+		},
 		async execute(_id, params, _signal, _onUpdate, ctx) {
 			let error: string | undefined;
 			let messages: string[] = [];
@@ -340,6 +361,33 @@ export default function (pi: ExtensionAPI) {
 		if (lastCtx) status(lastCtx);
 		return true;
 	};
+	// 全件の別表示 (overlay)。高さは内容と端末の行数の小さい方。端末のサイズ変更には、描画のたびに rows を読んで追従する
+	const showOverlay = async (ctx: ExtensionContext) => {
+		await ctx.ui.custom<void>(
+			(tui, theme, _kb, done) => {
+				let state: ViewState = { top: 0, showClosed: false };
+				let frame = renderOverlay(todos, state, 80, tui.terminal.rows);
+				return {
+					render: (width: number) => {
+						frame = renderOverlay(todos, state, width, tui.terminal.rows, themePaint(theme));
+						state = { ...state, top: frame.top };
+						return frame.lines;
+					},
+					invalidate: () => {},
+					handleInput: (data: string) => {
+						const special: Key[] = ["up", "down", "pageUp", "pageDown", "home", "end"];
+						const key: Key | null = matchesKey(data, "escape") ? "close" : (special.find((k) => matchesKey(data, k)) ?? keyFromChar(data));
+						if (!key) return;
+						const next = step(state, key, frame.total, frame.bodyHeight);
+						if (next.closed) return done(undefined);
+						state = { top: next.top, showClosed: next.showClosed };
+						tui.requestRender();
+					},
+				};
+			},
+			{ overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "90%", margin: 1 } },
+		);
+	};
 	pi.registerCommand("todos", {
 		description: "タスクリストの表示。/todos tidy (完了・中止を片付ける)・/todos clear (全部消す)",
 		handler: async (args, ctx) => {
@@ -357,6 +405,10 @@ export default function (pi: ExtensionAPI) {
 			}
 			if (arg !== "") {
 				ctx.ui.notify("使い方: /todos [tidy|clear]", "warning");
+				return;
+			}
+			if (ctx.hasUI && ctx.mode === "tui") {
+				await showOverlay(ctx);
 				return;
 			}
 			const done = todos.filter((t) => t.status === "done").length;
