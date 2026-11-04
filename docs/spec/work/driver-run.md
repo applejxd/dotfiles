@@ -26,7 +26,8 @@
 
 ## runtime の共有
 
-`globalThis.__piWork = {runtime, holder}` を `registryRuntime` が読む。`register.ts` は未対応のため、置かれるまで何も起動しない。
+`register.ts` が公開する `globalThis.__piWorkRuntime()`（runtime）と `__piWorkHolder()`（holder）を `registryRuntime` が読む（旧の登録簿 `__piWork = {runtime, holder}` も読む）。
+台帳の runtime は `register.ts` が持つので、**スケジューラを使うには `PI_WORK_TOOL=1` も要る**（無ければ runtime が取れず何も起動しない）。
 
 ## 限界
 

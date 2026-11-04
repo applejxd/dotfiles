@@ -74,7 +74,8 @@ export function registerWork(pi: any, opts: RegisterWorkOptions): void {
 	let key = "";
 	let opening: Promise<void> | null = null;
 	let holder = "";
-	(globalThis as any).__piWorkRuntime = () => rt; // /goal (goal-run.ts) が同じ台帳を共有する口
+	(globalThis as any).__piWorkRuntime = () => rt; // /goal (goal-run.ts) と driver-run.ts が同じ台帳を共有する口
+	(globalThis as any).__piWorkHolder = () => holder;
 	let curCtx: any = null;
 	let journal: Pick<Journal, "emit"> | undefined = opts.journal;
 	const emit = (type: EventType, data: Record<string, unknown>) => {

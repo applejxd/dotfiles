@@ -40,10 +40,14 @@ export interface JobsLike {
 /** runtime と holder の取得 (まだ開いていなければ null。null の間は何もしない) */
 export type RuntimeSource = () => { runtime: Runtime; holder: string } | null;
 
-/** 台帳の runtime を共有する最小の登録簿 (register.ts が将来ここへ置く。無ければ driver-run は何もしない) */
+/** 台帳の runtime を共有する登録簿。register.ts が公開する `__piWorkRuntime()`・`__piWorkHolder()` を読む。無ければ driver-run は何もしない */
 export const WORK_REGISTRY_KEY = "__piWork";
 export const registryRuntime: RuntimeSource = () => {
-	const r = (globalThis as any)[WORK_REGISTRY_KEY];
+	const g = globalThis as any;
+	const rt = typeof g.__piWorkRuntime === "function" ? g.__piWorkRuntime() : null;
+	const holder = typeof g.__piWorkHolder === "function" ? g.__piWorkHolder() : "";
+	if (rt && typeof holder === "string" && holder) return { runtime: rt, holder };
+	const r = g[WORK_REGISTRY_KEY];
 	return r && r.runtime && typeof r.holder === "string" ? r : null;
 };
 
