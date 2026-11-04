@@ -7,7 +7,9 @@ import { aimdInit, DEFAULT_AIMD } from "./aimd.ts";
 import type { ProviderState } from "./aimd.ts";
 import { emptyMemo, onFinished, onOutput, onSpawned, onUsage, reconcile, tick } from "./driver.ts";
 import type { Memo, RunResult, SpawnSpec, Spawner } from "./driver.ts";
+import { makeEvent } from "./events.ts";
 import type { Journal } from "./journal.ts";
+import type { LedgerState } from "./reduce.ts";
 import type { Runtime, RuntimeTimers } from "./runtime.ts";
 import type { EventType, NewEvent } from "./types.ts";
 
@@ -25,10 +27,13 @@ export function planSpawn(node: { kind?: string; writes?: string[]; attrs?: Reco
 	if (!node) return { ok: false, reason: "task が台帳に無い" };
 	if (isolation !== "none" && isolation !== "shared" && isolation !== "worktree") return { ok: false, reason: `未知の隔離: ${String(isolation)}` };
 	const writes = Array.isArray(node.writes) ? node.writes : [];
+	// node.kind が check なら attrs.kind が何であれ起動しない。attrs.kind が check なのに node.kind が違う組も、矛盾として起動しない
+	if (node.kind === "check") return { ok: false, reason: "検査 (check) は子を起動しない (harness が実行する)" };
+	if (node.kind !== undefined && node.kind !== "task") return { ok: false, reason: `未知の node.kind: ${String(node.kind)}` };
 	const k = node.attrs?.kind;
 	if (k !== undefined && k !== "ro" && k !== "edit" && k !== "check" && k !== "task") return { ok: false, reason: `未知の kind: ${String(k)}` };
-	const kind = k === "ro" || k === "edit" || k === "check" ? k : node.kind === "check" ? "check" : writes.length > 0 ? "edit" : "ro";
-	if (kind === "check") return { ok: false, reason: "検査 (check) は子を起動しない (harness が実行する)" };
+	if (k === "check") return { ok: false, reason: "検査 (check) は子を起動しない (属性 kind と node.kind の矛盾を含む)" };
+	const kind = k === "ro" || k === "edit" ? k : writes.length > 0 ? "edit" : "ro";
 	if (kind === "ro") {
 		if (writes.length > 0) return { ok: false, reason: "読み取り task に書き込み集合がある (属性の不整合)" };
 		return { ok: true, role: READ_ROLE, isolation: false, kind };
@@ -88,8 +93,8 @@ export interface DriverRunOptions {
 	env?: Record<string, string | undefined>;
 	runtime: RuntimeSource;
 	spawnChild: SpawnChildFn;
-	/** 起動前の判定 (/plan・判定器)。省略時は判定しない (index.ts は必ず渡す) */
-	canSpawn?: CanSpawn;
+	/** 起動前の判定 (/plan・判定器)。必須: 関数でなければ登録せず (null)、応答が ok === true でなければ起動しない (fail-closed) */
+	canSpawn: CanSpawn;
 	jobs: JobsLike;
 	journal?: Pick<Journal, "emit">;
 	now?: () => number;
@@ -118,6 +123,8 @@ export const driverRunEnabled = (env: Record<string, string | undefined>, child:
 
 interface Handle {
 	job: JobLike;
+	/** この子を起動した runtime。終了・使用量の書き込みはここへ固定する (別の台帳へは書かない) */
+	rt: Runtime;
 	startedAt: number;
 	sent: { usd: number; tokens: number; ms: number };
 	activity: number;
@@ -130,6 +137,7 @@ const TIMEOUT_MS = 30 * 60_000;
 export function registerDriverRun(pi: any, opts: DriverRunOptions): DriverRun | null {
 	const env = opts.env ?? process.env;
 	if (!driverRunEnabled(env, opts.child)) return null;
+	if (typeof opts.canSpawn !== "function") return null;
 	const now = opts.now ?? (() => Date.now());
 	const timers: RuntimeTimers = opts.timers ?? {
 		setInterval: (fn, ms) => {
@@ -144,7 +152,8 @@ export function registerDriverRun(pi: any, opts: DriverRunOptions): DriverRun | 
 	let timer: unknown = null;
 	let stopped = false;
 	let gen = 0;
-	let reconciled = false;
+	// reconcile 済みの (runtime, 世代)。新しい runtime・新しい世代では、もう一度 reconcile する
+	let rec: { rt: Runtime; gen: number } | null = null;
 	let aimd: ProviderState = aimdInit(DEFAULT_AIMD);
 	let memo: Memo = emptyMemo();
 	let busy: Promise<void> | null = null;
@@ -158,31 +167,51 @@ export function registerDriverRun(pi: any, opts: DriverRunOptions): DriverRun | 
 		}
 	};
 
-	// Spawner: 子の起動は spawnChild の 1 本。steer・abort は既存の Job の操作
-	const spawner: Spawner = {
-		spawn(spec: SpawnSpec) {
-			// 役割・隔離は信頼した対応表で決める (spec.role・strategy の隔離は使わない。編集の子は必ず worktree 隔離)
-			const cur = opts.runtime();
-			if (!cur) throw new Error("台帳が開いていない");
-			const plan = planSpawn(cur.runtime.state().nodes.get(spec.task), spec.isolation);
-			if (!plan.ok) {
-				emit("notice", { kind: "driver-run.rejected", task: spec.task, reason: plan.reason.slice(0, 100) });
-				throw new Error(`起動しない: ${plan.reason}`);
+	/** hold (確認が要る判定) で起動しない: 失敗に数えず、予約を解放して ready へ戻す */
+	class HoldError extends Error {}
+
+	/** canSpawn の応答を検証する。ok === true 以外 (undefined・例外・不正な形・hold) は起動しない (fail-closed) */
+	const gateOf = (spec: { role: string; task: string; prompt: string }): { ok: boolean; hold: boolean; reason: string } => {
+		try {
+			const g = opts.canSpawn(spec, ctx) as unknown;
+			if (g && typeof g === "object" && typeof (g as any).ok === "boolean") {
+				const o = g as { ok: boolean; hold?: boolean; reason?: unknown };
+				return { ok: o.ok === true, hold: o.ok !== true && o.hold === true, reason: String(o.reason ?? "") };
 			}
-			const gate = opts.canSpawn?.({ role: plan.role, task: spec.task, prompt: spec.prompt }, ctx);
-			if (gate && !gate.ok) throw new Error(`${gate.hold ? "保留" : "起動しない"}: ${gate.reason}`);
-			const sp = opts.spawnChild(plan.role, ctx, { cwd: ctx.cwd, role: opts.ownerRole ?? "worker" }, undefined, plan.isolation);
-			if ("error" in sp) throw new Error(sp.error);
-			const h: Handle = { job: sp.job, startedAt: now(), sent: { usd: 0, tokens: 0, ms: 0 }, activity: 0, aborted: false };
-			handles.set(spec.runId, h);
-			void sp.job
-				.run(spec.prompt, { timeoutMs: opts.timeoutMs ?? TIMEOUT_MS })
-				.then(
-					(r) => finished(spec.runId, h, r),
-					(e) => finished(spec.runId, h, { status: "failed", answer: "", errors: [String(e?.message ?? e)], blocked: [] }),
-				);
-			return { runId: spec.runId, pid: sp.job.pid ?? 0 };
-		},
+			return { ok: false, hold: false, reason: "起動前の判定の応答が不正" };
+		} catch (e) {
+			return { ok: false, hold: false, reason: `起動前の判定が例外: ${String((e as Error)?.message ?? e).slice(0, 80)}` };
+		}
+	};
+
+	/** 子を起動する (宛先の runtime は呼び出し元が渡す。引き直さない)。子の起動は spawnChild の 1 本だけ */
+	const spawnOn = (rt: { runtime: Runtime; holder: string }, spec: SpawnSpec): { runId: string; pid: number } => {
+		// 役割・隔離は信頼した対応表で決める (spec.role・strategy の隔離は使わない。編集の子は必ず worktree 隔離)
+		const plan = planSpawn(rt.runtime.state().nodes.get(spec.task), spec.isolation);
+		if (!plan.ok) {
+			emit("notice", { kind: "driver-run.rejected", task: spec.task, reason: plan.reason.slice(0, 100) });
+			throw new Error(`起動しない: ${plan.reason}`);
+		}
+		const gate = gateOf({ role: plan.role, task: spec.task, prompt: spec.prompt });
+		if (!gate.ok) {
+			if (gate.hold) throw new HoldError(`保留: ${gate.reason}`);
+			throw new Error(`起動しない: ${gate.reason}`);
+		}
+		const sp = opts.spawnChild(plan.role, ctx, { cwd: ctx.cwd, role: opts.ownerRole ?? "worker" }, undefined, plan.isolation);
+		if ("error" in sp) throw new Error(sp.error);
+		const h: Handle = { job: sp.job, rt: rt.runtime, startedAt: now(), sent: { usd: 0, tokens: 0, ms: 0 }, activity: 0, aborted: false };
+		handles.set(spec.runId, h);
+		void sp.job
+			.run(spec.prompt, { timeoutMs: opts.timeoutMs ?? TIMEOUT_MS })
+			.then(
+				(r) => finished(spec.runId, h, r),
+				(e) => finished(spec.runId, h, { status: "failed", answer: "", errors: [String(e?.message ?? e)], blocked: [] }),
+			);
+		return { runId: spec.runId, pid: sp.job.pid ?? 0 };
+	};
+
+	// steer・abort は既存の Job の操作
+	const spawner: Pick<Spawner, "steer" | "abort"> = {
 		steer(runId, text) {
 			handles.get(runId)?.job.steer(text);
 		},
@@ -195,11 +224,30 @@ export function registerDriverRun(pi: any, opts: DriverRunOptions): DriverRun | 
 		},
 	};
 
-	const submit = async (events: NewEvent[]): Promise<boolean> => {
-		const rt = opts.runtime();
+	/** この runtime (処理が属する台帳) へ書く。現在の取得口は引かない。閉じていて失敗しても例外にしない */
+	const submit = async (rt: { runtime: Runtime }, events: NewEvent[]): Promise<boolean> => {
 		if (events.length === 0) return true;
-		if (!rt) return false;
-		return (await rt.runtime.submit(events)).ok;
+		try {
+			return (await rt.runtime.submit(events)).ok;
+		} catch {
+			return false;
+		}
+	};
+
+	/** 起動しなかった予約を解放する (run.ended aborted)。task が failed になれば retry で ready へ戻す。書けなければ次の reconcile が回収 */
+	const release = async (rt: { runtime: Runtime; holder: string }, runId: string, error: string): Promise<void> => {
+		try {
+			const st = rt.runtime.state();
+			const f = onFinished(st, runId, { status: "aborted", usage: { usd: 0, tokens: 0, ms: 0 }, error }, { now: now(), aimd, holder: rt.holder });
+			const events = [...f.events];
+			const task = st.nodes.get(runId)?.parent;
+			if (task && f.state.nodes.get(task)?.state === "failed") {
+				events.push(makeEvent("verdict", task, { verdict: "retry", reason: "起動しなかった予約の解放 (失敗に数えない)" } as never, "system", { holder: rt.holder }));
+			}
+			await submit(rt, events);
+		} catch {
+			/* 書けなければ次の起動時の reconcile が回収する */
+		}
 	};
 
 	const toResult = (h: Handle, r: { status: string; answer: string; errors: string[]; note?: string; blocked: string[] }): RunResult => {
@@ -213,18 +261,22 @@ export function registerDriverRun(pi: any, opts: DriverRunOptions): DriverRun | 
 	};
 
 	const finished = async (runId: string, h: Handle, r: Parameters<typeof toResult>[1]): Promise<void> => {
-		const rt = opts.runtime();
 		handles.delete(runId);
-		if (!rt) return;
+		// runtime の取得と、台帳が無い場合の return も try の中に置く: 台帳に書けなくても、所有する子は必ず閉じる
 		try {
+			let rt = opts.runtime();
+			// 台帳が無い・別の台帳へ切り替わったときは書かない (残った run は次の reconcile が lost で閉じる)
+			if (!rt || rt.runtime !== h.rt) return;
 			const res = toResult(h, r);
 			if (res.status === "done" && opts.check) {
 				const taskId = rt.runtime.state().nodes.get(runId)?.parent;
 				if (taskId) res.check = await opts.check(taskId, r.answer);
+				rt = opts.runtime();
+				if (!rt || rt.runtime !== h.rt) return;
 			}
 			const f = onFinished(rt.runtime.state(), runId, res, { now: now(), aimd, rand: (opts.rand ?? Math.random)(), holder: rt.holder });
 			aimd = f.aimd;
-			await submit(f.events);
+			await submit(rt, f.events);
 			emit("run.ended", { run: runId, status: r.status, rateLimited: f.rateLimited });
 		} catch {
 			/* 終了後 (shutdown など) の書き込み失敗は握る。次の起動時の reconcile が lost で閉じる */
@@ -240,22 +292,36 @@ export function registerDriverRun(pi: any, opts: DriverRunOptions): DriverRun | 
 		await kick();
 	};
 
-	/** 生きた子の使用量の増分と出力の有無を台帳へ (予算の steer / abort のもと) */
-	const poll = async (rt: { runtime: Runtime; holder: string }): Promise<void> => {
+	/** 生きた子の使用量の増分と出力の有無を台帳へ (予算の steer / abort のもと)。この runtime で起動した子だけ。await の後は世代を確かめる */
+	const poll = async (rt: { runtime: Runtime; holder: string }, same: () => boolean): Promise<void> => {
 		for (const [id, h] of [...handles]) {
+			if (h.rt !== rt.runtime) continue;
 			const st = rt.runtime.state();
 			const u = { usd: h.job.cost, tokens: h.job.tokens, ms: Math.max(0, now() - h.startedAt) };
 			const d = { usd: u.usd - h.sent.usd, tokens: u.tokens - h.sent.tokens, ms: u.ms - h.sent.ms };
 			const ev = onUsage(st, id, d, rt.holder);
-			if (ev.length > 0 && (await submit(ev))) h.sent = u;
+			if (ev.length > 0 && (await submit(rt, ev))) h.sent = u;
+			if (!same()) return;
 			const act = h.job.calls + h.job.tokens;
 			if (act !== h.activity) {
 				h.activity = act;
 				const o = onOutput(rt.runtime.state(), id, now(), memo);
 				memo = o.memo;
-				await submit(o.events);
+				await submit(rt, o.events);
+				if (!same()) return;
 			}
 		}
+	};
+
+	/** hold の task を起動候補から外した台帳の見え方 (approved を外すと sched が proposed 扱いにする)。実行中の run の監視は残る */
+	const withoutHeld = (st: LedgerState, held: Set<string>): LedgerState => {
+		if (held.size === 0) return st;
+		const nodes = new Map(st.nodes);
+		for (const id of held) {
+			const n = nodes.get(id);
+			if (n) nodes.set(id, { ...n, approved: false });
+		}
+		return { ...st, nodes };
 	};
 
 	const loop = async (): Promise<void> => {
@@ -263,27 +329,30 @@ export function registerDriverRun(pi: any, opts: DriverRunOptions): DriverRun | 
 		if (stopped || !rt || !ctx || rt.runtime.mode !== "driver") return;
 		const g = gen;
 		const same = (): boolean => !stopped && g === gen && opts.runtime()?.runtime === rt.runtime;
-		if (!reconciled) {
-			reconciled = true;
-			await submit(reconcile(rt.runtime.state(), { live: [...handles.keys()] }, rt.holder));
+		// runtime・世代ごとに 1 回: 前の世代・前の台帳が残した started と、起動できなかった reserved を閉じる
+		if (!(rec && rec.rt === rt.runtime && rec.gen === g)) {
+			rec = { rt: rt.runtime, gen: g };
+			const ok = await submit(rt, reconcile(rt.runtime.state(), { live: [...handles.keys()] }, rt.holder));
+			if (!ok) rec = null;
+			if (!same()) return;
 		}
-		await poll(rt);
+		await poll(rt, same);
+		if (!same()) return;
 		// 同時数: aimd の上限と、index.ts の子の同時数の上限 (他の子を含む枠の残り) の小さい方
-		// 確認が要る (hold) 判定の task が ready にあれば、予約を作らず (失敗に数えず) この回は何もしない。次の tick で再評価
-		if (opts.canSpawn) {
-			for (const n of readyOf(rt.runtime.state())) {
-				const p = planSpawn(n, "none");
-				if (!p.ok) continue;
-				const gate = opts.canSpawn({ role: p.role, task: n.id, prompt: n.title }, ctx);
-				if (!gate.ok && gate.hold) {
-					emit("notice", { kind: "driver-run.hold", task: n.id, reason: gate.reason.slice(0, 100) });
-					return;
-				}
+		// 確認が要る (hold) 判定の task は起動候補から外す。実行中の子の監視 (tick) は止めない。他の許可済みの task は進む
+		const held = new Set<string>();
+		for (const n of readyOf(rt.runtime.state())) {
+			const p = planSpawn(n, "none");
+			if (!p.ok) continue;
+			const gate = gateOf({ role: p.role, task: n.id, prompt: n.title });
+			if (!gate.ok && gate.hold) {
+				held.add(n.id);
+				emit("notice", { kind: "driver-run.hold", task: n.id, reason: gate.reason.slice(0, 100) });
 			}
 		}
 		const others = Math.max(0, opts.jobs.size - handles.size);
 		const slots = Math.max(0, Math.min(DEFAULT_AIMD.max, opts.jobs.max - others));
-		const r = tick(rt.runtime.state(), {
+		const r = tick(withoutHeld(rt.runtime.state(), held), {
 			now: now(),
 			res: { slots, hot: opts.hot ?? [] },
 			spawner: { live: [...handles.keys()] },
@@ -293,33 +362,34 @@ export function registerDriverRun(pi: any, opts: DriverRunOptions): DriverRun | 
 		});
 		memo = r.memo;
 		// 台帳の予約が通らなければ子は起動しない (台帳に無い子を作らない)
-		if (!(await submit(r.events))) return;
+		if (!(await submit(rt, r.events))) return;
 		for (const e of r.effects) {
 			if (e.kind === "steer") spawner.steer(e.run, e.text);
 			else if (e.kind === "abort") spawner.abort(e.run, e.reason);
 			else if (e.kind === "spawn") {
-				// submit の待ちの間に shutdown・世代交代・runtime の差し替えがあれば起動せず、予約を取り消す (run.ended)
+				// submit の待ちの間に shutdown・世代交代・runtime の差し替えがあれば起動せず、予約を取り消す (宛先はこの処理の runtime に固定)
 				if (!same()) {
-					try {
-						const f = onFinished(rt.runtime.state(), e.runId, { status: "aborted", usage: { usd: 0, tokens: 0, ms: 0 }, error: "shutdown のため起動しない" }, { now: now(), aimd, holder: rt.holder });
-						await submit(f.events);
-					} catch {
-						/* 書けなければ次の起動時の reconcile が閉じる */
-					}
+					await release(rt, e.runId, "shutdown のため起動しない");
 					continue;
 				}
 				emit("strategy", { run: e.runId, task: e.task, strategy: e.strategy, isolation: e.isolation });
 				try {
-					const s = await spawner.spawn(e);
+					const s = spawnOn(rt, e);
 					emit("run.started", { run: e.runId, role: e.role });
-					await submit(onSpawned(rt.runtime.state(), e.runId, s.pid, rt.holder));
+					await submit(rt, onSpawned(rt.runtime.state(), e.runId, s.pid, rt.holder));
 				} catch (err) {
+					if (err instanceof HoldError) {
+						// 起動直前に hold へ変わった: 失敗に数えず、予約を解放して ready へ戻す
+						emit("notice", { kind: "driver-run.hold", task: e.task, reason: err.message.slice(0, 100) });
+						await release(rt, e.runId, err.message);
+						continue;
+					}
 					const f = onFinished(rt.runtime.state(), e.runId, { status: "failed", usage: { usd: 0, tokens: 0, ms: 0 }, error: String((err as Error)?.message ?? err) }, {
 						now: now(),
 						aimd,
 						holder: rt.holder,
 					});
-					await submit(f.events);
+					await submit(rt, f.events);
 				}
 			}
 		}

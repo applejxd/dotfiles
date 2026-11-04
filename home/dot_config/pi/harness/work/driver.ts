@@ -361,13 +361,31 @@ export function onFinished(state: LedgerState, runId: string, result: RunResult,
 	return { events, state: s, aimd, rateLimited, error, digestInput: digestInputOf(s, runId) };
 }
 
-/** 台帳の全 run を調べ、このドライバが知らない生きた run (プロセスが消えた等) を lost で閉じるイベント。live は spawner の現況 */
+/**
+ * 台帳の全 run を調べ、このドライバが知らない生きた run を閉じるイベント。live は spawner の現況。
+ * started (プロセスが消えた等) は lost で、起動されないまま残った reserved は aborted で閉じる (予約を解放。task が failed になれば retry で戻す)
+ */
 export function reconcile(state: LedgerState, view: SpawnerView, holder?: string): NewEvent[] {
 	const live = new Set(view.live);
 	const out: NewEvent[] = [];
+	let s = state;
 	for (const n of [...state.nodes.values()].sort((a, b) => cmpStr(a.id, b.id))) {
-		if (n.kind !== "run" || n.state !== "started" || live.has(n.id)) continue;
+		if (n.kind !== "run" || (n.state !== "started" && n.state !== "reserved") || live.has(n.id)) continue;
 		if (rootGoalId(state.nodes, n.id) === undefined) continue;
+		if (n.state === "reserved") {
+			const evs = [
+				mk("note.appended", n.id, { by: `run:${n.id}`, text: "起動されなかった予約 (回収)" }, holder),
+				mk("run.ended", n.id, { status: "aborted" }, holder),
+			];
+			s = applyEvents(s, evs, 0);
+			out.push(...evs);
+			if (n.parent && s.nodes.get(n.parent)?.state === "failed") {
+				const v = mk("verdict", n.parent, { verdict: "retry", reason: "起動されなかった予約の回収 (失敗に数えない)" }, holder);
+				s = applyEvents(s, [v], 0);
+				out.push(v);
+			}
+			continue;
+		}
 		out.push(mk("note.appended", n.id, { by: `run:${n.id}`, text: "失敗: プロセスが消えた (lost)" }, holder));
 		out.push(mk("run.ended", n.id, { status: "lost" }, holder));
 	}

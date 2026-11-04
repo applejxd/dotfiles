@@ -11,9 +11,18 @@
 | `onUsage(state, runId, usage)` | `run.usage`。子と評価役の使用量を run → task → goal へ合算（予算に効く） |
 | `onFinished(state, runId, result, ctx)` | `note`（結論か「失敗: 理由」）→ `run.ended` → 検査。`{events, state, aimd, rateLimited, error, digestInput}` |
 | `onChecked(state, taskId, check)` | `check.result`（checking の task のみ） |
-| `reconcile(state, {live})` | spawner が知らない started の run を `lost` で閉じる |
+| `reconcile(state, {live})` | spawner が知らない started の run を `lost` で、起動されないまま残った reserved の run を `aborted` で閉じる（[詳細](#reconcile)） |
 
 効果: `spawn`（`workTool:false` 固定・`runId`・`prompt`・`worktree?`）・`steer`・`abort`・`pause_provider`・`resume_provider`・`wake`。実行は注入する `Spawner {spawn, steer, abort}` が行う（型だけ定義）。
+
+### reconcile
+
+`live`（spawner が知っている run）に無い、目的の goal 配下の生きた run を閉じる。
+
+- `started`: プロセスが消えたとみなし、note「失敗: プロセスが消えた (lost)」と `run.ended lost`。
+- `reserved`: 予約だけで起動されなかった run（shutdown で取消の書き込みが通らなかった等）。note と `run.ended aborted` で予約を解放する。task が `failed` になれば `verdict retry` で ready へ戻す（失敗に数えない）。
+
+呼び出し側（`driver-run.ts`）は、runtime・世代ごとに 1 回呼ぶ（新しい世代・新しい runtime で再度）。
 
 ## 429 と予算
 

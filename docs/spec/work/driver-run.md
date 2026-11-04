@@ -13,10 +13,10 @@
 3. 判定器の確認・拒否は子の中で従来どおり効く（この層は判定の経路を変えない）。
 4. 同時数は `min(aimd の上限, jobs.max - 他の子の数)`。
 5. 予算: 使用量の増分を台帳へ入れ、見積りの 1.5 倍で steer、2 倍で abort（driver.ts）。
-6. **起動前の判定（`canSpawn`）**: index.ts が `guarded_task` の `execute` と同じ条件（`decide("task")` が deny なら起動しない、ask なら**起動せず保留**＝自動承認しない、`/plan` が有効なら書き込みのある役割を拒否）で渡す。保留の task は ready のまま残り（予約を作らず失敗にも数えない）、次の tick で再評価する。保留があると、その回の tick 全体を見送る。
-7. **役割・隔離は信頼した対応表で決める**（`planSpawn`。モデルの `attrs.role`・strategy の隔離は使わない。fail-closed）。
-8. **セッション世代**: `session_start`・`session_shutdown` で世代を進め、`submit` の待ちの後・spawn の直前に停止・世代・runtime の一致を再確認する。外れていれば子を起動せず、予約を `aborted` の `run.ended` で取り消す。
-9. scheduler 所有の子は一往復専用。終了時に必ず `close()` して枠を返す（隔離の job は `finalized` を待ってから）。
+6. **起動前の判定（`canSpawn`）は必須・fail-closed**: 関数でなければ `registerDriverRun` は `null` を返し何も起動しない。index.ts が `guarded_task` の `execute` と同じ条件（`decide("task")` が deny なら起動しない、ask なら**起動せず保留**＝自動承認しない、`/plan` が有効なら書き込みのある役割を拒否）で渡す。起動直前にも呼び、応答が `ok === true` でなければ（`undefined`・例外・不正な形・hold・deny）起動しない。**hold は起動候補だけから外す**: 保留の task は ready のまま残り（予約を作らず失敗にも数えない）、実行中の子の監視（使用量・stall・steer / abort）は止めず、他の許可済みの task は進む。起動直前に hold へ変わった予約は失敗に記録せず、`aborted` の `run.ended` で解放して ready へ戻す（`verdict retry`）。
+7. **役割・隔離は信頼した対応表で決める**（`planSpawn`。モデルの `attrs.role`・strategy の隔離は使わない。fail-closed）。`node.kind` が `check` なら `attrs.kind` に関わらず拒否し、`attrs.kind` と `node.kind` が矛盾する組も拒否する。
+8. **セッション世代**: `session_start`・`session_shutdown` で世代を進め、`submit`・`reconcile`・`poll` の待ちの後と spawn の直前に、停止・世代・runtime の一致を再確認する。外れていれば子を起動せず、予約を `aborted` の `run.ended` で取り消す。`submit` の宛先は、その処理が属する runtime に固定する（呼ぶたびに現在の取得口を引かない。別の台帳へは書かない）。取り消せなかった `reserved` は、次の（runtime・世代）の最初の `reconcile` が回収する（[driver](driver.md#reconcile)）。
+9. scheduler 所有の子は一往復専用。終了時に必ず `close()` して枠を返す（隔離の job は `finalized` を待ってから）。runtime が取れない・別の台帳へ切り替わった場合も、台帳へは書かず `close()` だけは行う。
 10. 起動するのは、利用者が承認した時点の task だけ（`Node.approved`）。承認の後にモデルが `work add` で足した task は起動しない（[台帳](ledger.md#設計上の判断)）。
 
 ### 起動制約
