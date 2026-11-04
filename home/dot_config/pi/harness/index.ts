@@ -801,7 +801,7 @@ export default async function (pi: ExtensionAPI) {
 		});
 	}
 
-	// ローカル PR ビューアの道具 (pr_summary・pr_comments) と、次の入力の前の注入。役割に道具があり、子でないときだけ登録する
+	// ローカル PR ビューアの道具 (pr_summary)。役割に道具があり、子でないときだけ登録する
 	// see docs/spec/pr-viewer.md
 	registerPr(pi, { Type, prefix: PREFIX, child: CHILD, hasTool: (name) => roleTools.includes(name) });
 

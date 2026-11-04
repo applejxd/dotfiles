@@ -105,7 +105,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 
 > **2026-11-05 の独立 review の結論**: 段 B・C は「当然の次工程」ではなく、**実運用の結果で再判断する**。当面は親 pi → worker を標準とし、ジョブ・起票の追加開発は止める（[記録](../research/agents/arch-review-2026-11.md)）。
 
-エージェントは git の書き込み（add・commit・merge）をしない。アプリが、範囲を検査してから機械的に行う。pi 側に残るのは、ガード（判定器・Fence・確認画面）と普通のツール、対話用の最小の `git_commit` だけ。`pr_summary`・`pr_comments`・注入・`guarded_task`・盤面・`guarded_action` の統合系は、アプリがジョブの最終出力をサマリーとして保存するようになってから撤去する。
+エージェントは git の書き込み（add・commit・merge）をしない。アプリが、範囲を検査してから機械的に行う。pi 側に残るのは、ガード（判定器・Fence・確認画面）と普通のツール、対話用の最小の `git_commit` だけ。`pr_summary`・`pr_comments`・注入（`pr_comments`・注入は撤去済み、`pr_summary` は残した）2026-11-05）・`guarded_task`・盤面・`guarded_action` の統合系は、アプリがジョブの最終出力をサマリーとして保存するようになってから撤去する。
 
 ## 4. 決定（2026-11-03）
 
@@ -139,7 +139,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | 残す | PR ビューア本体、`review-log.ts`・`review-git.ts`、`git_commit`（自由区。対話用）、`integration-gate.ts`（案内以外）・`[pi.integrate]` の保護（`protected_refs`・`risk_paths`・`skip_confirm_in_free_zone`。素の pi の必須確認）、`pending-store.ts`・`integrate-profile-load.ts`・`freezone.ts`・`review-*`・`pr-review.ts`・`judge/**` |
 | 縮小 | `/pending`（旧 `git_commit` 退避の list・show・drop だけ）、`/board` |
 | 撤去（段 A5。実装済み） | `integrate-plan.ts`・`integrate-exec.ts`（統合器 `merge.ts` が別に実装したので全削除。当初案の「残す・縮小」を訂正）、設定 `[pi.pending]`・`[pi.integrate] enabled`、`pending-ops`・`pending-approve`・`pending-command`（巡回・approve）・`pending-pick`・`pending-owner`・`pending-adapters`・`pending-request`・`native-action`・`integrate-action`・`exclusive-lock`・`pr-inbox`、`git_integrate` 操作 |
-| 撤去（段 C。実運用の結果で再判断。当然の次工程ではない） | `guarded_task`（`children.ts` など）・`/fleet`・`/orchestrate`・`worktree.ts` の隔離など。`pr_summary`・`pr_comments`・注入（アプリが最終出力を保存するようになってから） |
+| 撤去（段 C。実運用の結果で再判断。当然の次工程ではない） | `guarded_task`（`children.ts` など）・`/fleet`・`/orchestrate`・`worktree.ts` の隔離など。`pr_summary` は残し、`pr_comments`・注入は撤去した（2026-11-05。[pr-viewer.md §5](../spec/pr-viewer.md)） |
 
 ## 7. 実験（段 0。使い捨て）
 

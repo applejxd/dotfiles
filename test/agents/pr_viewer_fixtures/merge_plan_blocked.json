@@ -19,6 +19,5 @@
     "riskConfig": "loaded",
     "touchesApp": false
   },
-  "defaults": {"message": "feat: 例", "messageSource": "generated", "summaryStale": false, "cleanup": "none"},
-  "warnings": []
+  "defaults": {"message": "feat: 例", "messageSource": "generated", "summaryStale": false, "cleanup": "none"}
 }

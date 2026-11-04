@@ -311,9 +311,8 @@ def test_fake_review_events_never_merge(w):
         "/api/capabilities",
     ):
         assert w.server.get(path)[0] == 200, path
-    assert (
-        w.server.get(f"/api/prs/{w.pr['id']}/review")[1]["review"] == "approve"
-    )  # アプリもこの偽造を「承認」と読む
+    rv = w.server.get(f"/api/prs/{w.pr['id']}/review")[1]
+    assert rv["bad"] is None and rv["merged"] is False  # 工作した記録でも、統合済みにはならない
     assert (
         rev(w) == before["head"].strip() and snapshot(w) == fake
     )  # 偽造した記録以外に、何も動かない
@@ -767,7 +766,7 @@ def test_merge_plan_shape(w):
     status, p = plan(w)
     assert status == 200
     pl = p["plan"]
-    assert set(p) == {"mergeable", "refusal", "blockers", "plan", "defaults", "warnings"}
+    assert set(p) == {"mergeable", "refusal", "blockers", "plan", "defaults"}
     assert set(pl) == {
         "source", "target", "mergeBase", "commits", "files", "fileCount", "additions", "deletions",
         "risks", "risksTruncated", "riskConfig", "touchesApp",
@@ -955,7 +954,8 @@ def test_unreadable_risk_config_is_reported_not_treated_as_no_risk(make, rules):
     assert p["plan"]["touchesApp"] is True
 
 
-def test_review_warnings_are_shown_but_do_not_block(w):
+def test_old_review_events_add_no_warnings_and_do_not_block(w):
+    """撤去前に書かれた変更依頼・古いレビュー・未送信のコメントは、警告にも拒否にもならない（警告の欄ごと撤去した）。"""
     vs = {"source": w.pr["sourceOid"], "target": w.pr["targetOid"], "base": w.pr["baseOid"]}
     run_js(
         w,
@@ -974,14 +974,9 @@ def test_review_warnings_are_shown_but_do_not_block(w):
         vs,
     )
     status, p = plan(w)
-    codes = {x["code"] for x in p["warnings"]}
-    assert (
-        status == 200
-        and p["mergeable"] is True
-        and {"review_changes", "review_stale", "unsent_comments"} <= codes
-    ), p
-    assert all(set(x) == {"code", "message"} for x in p["warnings"])
-    assert merge(w)[0] == 200  # 警告は拒否の根拠にしない
+    assert status == 200 and p["mergeable"] is True, p
+    assert "warnings" not in p
+    assert merge(w)[0] == 200  # 古い記録は拒否の根拠にしない
 
 
 # ---------------------------------------------------------------- 13 成功の記録（C6）
@@ -1005,9 +1000,9 @@ def test_success_is_recorded_as_request_and_result_and_the_pr_is_merged(w):
         and req["d"]["message"].startswith("feat: a を統合する")
     )
     assert (req["d"]["sourceOid"], req["d"]["targetOid"]) == (w.pr["sourceOid"], w.pr["targetOid"])
-    # 統合済みの PR にはコメントを書けない（既存の挙動）
+    # 統合済みの PR へのコメント送信は撤去した（POST の入口が無い）
     status, resp = post(w, f"/api/prs/{w.pr['id']}/comments", {"body": "x"})
-    assert status == 409 and resp["error"]["code"] == "merged"
+    assert status == 405 and resp["error"]["code"] == "method_not_allowed"
 
 
 def test_recording_failure_still_reports_the_merge_as_a_success(w):
@@ -1292,10 +1287,10 @@ def test_diagnostic_log_has_one_json_line_per_merge_without_message_or_paths(mak
 # ---------------------------------------------------------------- 18 既存の経路への影響・静的な規則
 
 
-def test_existing_review_posts_do_not_need_allow_merge(make):
+def test_removed_review_posts_are_not_routes_even_without_allow_merge(make):
     w = make(allow=False)
     status, resp = post(w, f"/api/prs/{w.pr['id']}/comments", {"body": "x"}, origin=None)
-    assert status == 201, resp  # 既存の経路は Origin 無しを許す（変えない）
+    assert status == 405 and resp["error"]["code"] == "method_not_allowed"
 
 
 def _sources() -> dict[str, str]:

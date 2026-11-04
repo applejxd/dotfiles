@@ -24,6 +24,5 @@
     "messageSource": "summary",
     "summaryStale": false,
     "cleanup": "none"
-  },
-  "warnings": [{"code": "review_changes", "message": "変更依頼のままです。"}]
+  }
 }

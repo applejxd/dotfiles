@@ -282,7 +282,7 @@ export async function mergePlan(ctx: PrCtx, pr: MergePr, body: Record<string, un
 		}
 		return {
 			status: 200,
-			body: { mergeable: refusal === null && blockers.length === 0, refusal, blockers, plan, defaults, warnings: hints.warnings },
+			body: { mergeable: refusal === null && blockers.length === 0, refusal, blockers, plan, defaults },
 		};
 	});
 }

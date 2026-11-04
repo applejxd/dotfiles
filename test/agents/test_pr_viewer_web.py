@@ -261,7 +261,6 @@ def test_web_dir_has_files() -> None:
         "api.js",
         "core.js",
         "review.js",
-        "send.js",
         "live.js",
         "merge.js",
     } <= names
@@ -290,45 +289,38 @@ def test_api_posts_with_x_prv() -> None:
     assert '"X-PRV": "1"' in text
 
 
-def test_api_sends_expect_and_handles_stale_view() -> None:
-    """書き込みは表示していた版 (expect) を付け、409 stale_view のあとは詳細のキャッシュを捨てる。"""
+def test_api_handles_stale_view() -> None:
+    """409 stale_view のあとは、詳細のキャッシュを捨てる。"""
     api = (WEB / "api.js").read_text(encoding="utf-8")
-    assert re.search(r"/comments\"[^;]*expect\s*:\s*c\.expect", api)
-    assert re.search(r"/submit\"[^;]*expect\s*:\s*s\.expect", api)
     assert "stale_view" in api and re.search(r"PRV\.cache\s*=\s*\{\}", api)
-    # 呼び出し側 (コメント・送信) がすべて expect を渡している
-    for name in ("review.js", "view-pr.js", "view-diff.js", "send.js"):
-        text = (WEB / name).read_text(encoding="utf-8")
-        for m in re.finditer(r"PRV\.api\.(comment|submit)\(([^\n]*)", text):
-            assert "expect" in m.group(2), f"{name}: {m.group(0)}"
 
 
-def test_fake_server_checks_expect() -> None:
-    """偽物サーバ自身の確認: 版が違えば 409 stale_view、省略は missing_expect に記録される。"""
-    st = ReviewState()
-    path = "/api/prs/r1a2b3c4d/paaaaaaaaaaaaaaa1/comments"
-    pr = find_pr(["api", "prs", "r1a2b3c4d", "paaaaaaaaaaaaaaa1"])
-    exp = {"source": pr["sourceOid"], "target": pr["targetOid"], "base": pr["baseOid"]}
-    assert post_response(path, {"body": "x", "expect": exp}, st)[0] == 201
-    assert st.missing_expect == []
-    st.bumped.add("paaaaaaaaaaaaaaa1")
-    code, res = post_response(path, {"body": "x", "expect": exp}, st)
-    assert code == 409 and res["error"]["code"] == "stale_view"
-    assert post_response(path, {"body": "x"}, st)[0] == 201 and st.missing_expect == ["comments"]
+def test_comment_sending_is_gone_from_the_screen() -> None:
+    """レビューコメントの送信は撤去した: 画面のコードに、コメント・送信の API 呼び出しも送信バーも残っていない。"""
+    assert not (WEB / "send.js").exists()
+    api = (WEB / "api.js").read_text(encoding="utf-8")
+    assert "/comments" not in api and "/submit" not in api
+    for p in WEB.glob("*.js"):
+        text = p.read_text(encoding="utf-8")
+        assert not re.search(
+            r"PRV\.(commentForm|threadView|reviewBar|batchList|paintQueue)\b", text
+        ), p.name
+        assert not re.search(r"PRV\.api\.(comment|submit)\(", text), p.name
+    assert "send.js" not in (WEB / "index.html").read_text(encoding="utf-8")
 
 
 def test_merge_api_and_screen_are_wired() -> None:
-    """統合 (CHG-0062 段 A2): API の 3 本と、画面の統合・既存の「承認して送る」の分離。"""
+    """統合 (CHG-0062 段 A2): API の 3 本と、画面の統合。シートの基盤は core.js にある。"""
     api = (WEB / "api.js").read_text(encoding="utf-8")
     assert "/api/capabilities" in api and "/merge-plan" in api and '"/merge"' in api
     assert re.search(r"/merge\"[^;]*expect\s*:\s*m\.expect[^;]*cleanup\s*:\s*m\.cleanup", api)
     merge = (WEB / "merge.js").read_text(encoding="utf-8")
-    send = (WEB / "send.js").read_text(encoding="utf-8")
-    assert "PRV.api.submit" not in merge  # レビューの承認を再利用しない
-    assert "PRV.openSheet" in merge and "PRV.openSheet" in send
+    core = (WEB / "core.js").read_text(encoding="utf-8")
+    assert "PRV.openSheet" in merge
+    for name in ("openSheet", "closeSheet", "sheetOpen"):
+        assert f"PRV.{name} = function" in core, name
     html = (WEB / "index.html").read_text(encoding="utf-8")
-    assert "/web/merge.js" in html and html.index("/web/send.js") < html.index("/web/merge.js")
-    assert "承認して送る" in send
+    assert "/web/merge.js" in html and html.index("/web/core.js") < html.index("/web/merge.js")
 
 
 def test_merge_fixtures_follow_contract() -> None:
@@ -336,7 +328,8 @@ def test_merge_fixtures_follow_contract() -> None:
     assert load_fixture("capabilities.json")["targets"] == ["develop"]
     for name in ("ok", "conflict", "blocked", "riskcfg", "hostile"):
         p = load_fixture(f"merge_plan_{name}.json")
-        assert {"mergeable", "refusal", "blockers", "plan", "defaults", "warnings"} <= set(p), name
+        assert {"mergeable", "refusal", "blockers", "plan", "defaults"} <= set(p), name
+        assert "warnings" not in p, name
         assert (p["plan"] is None) == (not p["mergeable"]), name
         if p["plan"]:
             assert oid.fullmatch(p["plan"]["source"]["oid"])
@@ -458,19 +451,14 @@ def err_body(code: str, message: str) -> dict:
 
 
 class ReviewState:
-    """POST で変わる review の状態（サーバごと。fixture を初期値にする）。"""
+    """試験で変わる review の状態（サーバごと。fixture を初期値にする）。"""
 
     def __init__(self) -> None:
         self.rv: dict[str, dict] = {}
-        self.pending: dict[str, list[str]] = {}
         self.seq = 0
         self.bumped: set[str] = set()  # PR が更新された (source が変わった) ことにする key
-        self.missing_expect: list[str] = []  # expect を付けずに届いた書き込み
         self.review_gets: dict[str, int] = {}  # GET …/review の回数 (自動更新の試験用)
         self.fail_review = False  # True の間、GET …/review は 500 を返す
-        self.last_expect: dict | None = None
-        self.last_submit: dict | None = None
-        self.submit_log: list[dict] = []  # 受け付けた submit の全件
         # --- 統合 (CHG-0062 段 A2) ---
         self.caps_mode = "off"  # off: merge=false / on: merge=true / 404: 古いサーバ
         self.plan_name = "merge_plan_ok.json"
@@ -487,119 +475,22 @@ class ReviewState:
 
     def get(self, key: str) -> dict:
         if key not in self.rv:
-            rv = load_fixture(f"review_{key}.json")
-            self.rv[key] = rv
-            self.pending[key] = [
-                c["id"] for t in rv["threads"] if t["status"] == "unsent" for c in t["comments"]
-            ]
+            self.rv[key] = load_fixture(f"review_{key}.json")
         return self.rv[key]
 
-    def view(self, key: str) -> dict:
-        rv = self.get(key)
-        return {**rv, "unsent": len(self.pending[key])}
-
-    def pi_reply(self, key: str, thread_id: str, body: str) -> None:
-        """pi がスレッドへ返信した (新しい comment と replied)。"""
-        t = next(t for t in self.get(key)["threads"] if t["id"] == thread_id)
+    def set_summary(self, key: str, done: str) -> None:
+        """pi がサマリーを書き直した。"""
+        s = self.get(key)["summary"]
         self.seq += 1
-        t["comments"].append(
-            {
-                "id": f"pi{self.seq}",
-                "by": "pi",
-                "at": "2099-02-02T00:00:00+00:00",
-                "body": body,
-                "anchor": None,
-            }
-        )
-        t["status"] = "replied"
-
-    def mark_received(self, key: str) -> None:
-        """pi が送信を受け取った (batch が受領済み)。"""
-        for b in self.get(key)["batches"]:
-            b["received"] = True
-
-    def mark_stale(self, key: str) -> None:
-        """レビューの後に PR が進んだ (変更依頼 + 古いレビュー)。"""
-        rv = self.get(key)
-        rv["review"], rv["reviewStale"] = "changes", True
+        self.get(key)["summary"] = {
+            **s,
+            "done": done,
+            "at": f"2099-03-0{self.seq % 9 + 1}T00:00:00+00:00",
+        }
 
     def mark_merged(self, key: str) -> None:
-        """PR が統合済みになった (書き込めなくなる)。"""
+        """PR が統合済みになった (統合の入口が消える)。"""
         self.get(key)["merged"] = True
-
-    def add_comment(self, key: str, payload: dict) -> tuple[int, dict]:
-        rv = self.get(key)
-        body = payload.get("body")
-        if not isinstance(body, str) or not body.strip():
-            return 400, err_body("bad_body", "コメントが空です。")
-        self.seq += 1
-        cid = f"n{self.seq}"
-        anchor = payload.get("anchor")
-        thread = None
-        if payload.get("thread"):
-            thread = next((t for t in rv["threads"] if t["id"] == payload["thread"]), None)
-            if thread is None:
-                return 400, err_body("bad_thread", "スレッドが見つかりません。")
-            anchor = None
-        elif anchor is not None:
-            blob = anchor.get("blob") if isinstance(anchor, dict) else None
-            if not isinstance(blob, str) or not re.fullmatch(r"[0-9a-f]{40}", blob):
-                return 400, err_body("bad_anchor", "コメントの位置が正しくありません。")
-        comment = {
-            "id": cid,
-            "by": "app",
-            "at": "2099-02-01T00:00:00+00:00",
-            "body": body,
-            "anchor": anchor,
-        }
-        if thread is None:
-            rv["threads"].append(
-                {"id": cid, "status": "unsent", "stale": False, "comments": [comment]}
-            )
-        else:
-            thread["comments"].append(comment)
-        self.pending[key].append(cid)
-        return 201, {"comment": {**comment, "thread": thread["id"] if thread else cid}}
-
-    def submit(self, key: str, payload: dict) -> tuple[int, dict]:
-        rv = self.get(key)
-        kind = payload.get("kind")
-        if kind not in ("comment", "changes", "approve"):
-            return 400, err_body("bad_kind", "種別が正しくありません。")
-        self.last_submit = payload
-        self.submit_log.append(payload)
-        resend = payload.get("resendOf")
-        if resend:
-            old = next((b for b in rv["batches"] if b["batchId"] == resend), None)
-            if old is None:
-                return 400, err_body("bad_resend", "再送する送信が見つかりません。")
-            self.seq += 1
-            batch = {**old, "batchId": f"nb{self.seq}", "received": False, "resendOf": resend}
-            rv["batches"].append(batch)
-            return 201, {k: batch[k] for k in ("batchId", "kind", "items", "dest")}
-        items = list(self.pending[key])
-        if kind == "comment" and not items:
-            return 400, err_body("nothing_to_send", "送るコメントがありません。")
-        dest = payload.get("dest") or rv["defaultDest"]
-        if dest["worktreeId"] not in {w["worktreeId"] for w in rv["worktrees"]}:
-            return 400, err_body("bad_dest", "宛先が正しくありません。")
-        for t in rv["threads"]:
-            if any(c["id"] in items for c in t["comments"]) and t["status"] == "unsent":
-                t["status"] = "sent"
-        self.seq += 1
-        batch = {
-            "batchId": f"nb{self.seq}",
-            "kind": kind,
-            "items": items,
-            "dest": dest,
-            "received": False,
-        }
-        rv["batches"].append(batch)
-        self.pending[key] = []
-        if kind != "comment":
-            rv["review"] = kind
-            rv["reviewStale"] = False
-        return 201, {k: batch[k] for k in ("batchId", "kind", "items", "dest")}
 
 
 def find_pr(parts: list[str], state: ReviewState | None = None) -> dict | None:
@@ -647,7 +538,7 @@ def api_response(path: str, state: ReviewState | None = None) -> tuple[int, dict
             state.review_gets[parts[3]] = state.review_gets.get(parts[3], 0) + 1
             if state.fail_review:
                 return 500, err_body("internal", "内部エラー（試験）")
-            return 200, state.view(parts[3])
+            return 200, state.get(parts[3])
         if parts[4] == "diff":
             q = urllib.parse.parse_qs(u.query)
             if "path" not in q:
@@ -704,23 +595,10 @@ def post_response(path: str, payload: dict, state: ReviewState) -> tuple[int, di
         if pr is None:
             return 404, err_body("not_found", "見つかりません。")
         return merge_post(parts, payload, state, pr)
-    if len(parts) == 5 and parts[:2] == ["api", "prs"] and find_pr(parts, state) is not None:
-        pr = find_pr(parts, state)
-        exp = payload.get("expect")
-        if exp is None:
-            state.missing_expect.append(parts[4])
-        else:
-            cur = {"source": pr["sourceOid"], "target": pr["targetOid"], "base": pr["baseOid"]}
-            if exp != cur:
-                return 409, err_body(
-                    "stale_view",
-                    "表示中の版から PR が更新されています。再読み込みしてから送ってください。",
-                )
-            state.last_expect = exp
-        if parts[4] == "comments":
-            return state.add_comment(parts[3], payload)
-        if parts[4] == "submit":
-            return state.submit(parts[3], payload)
+    if len(parts) == 5 and parts[:2] == ["api", "prs"] and parts[4] in ("comments", "submit"):
+        return 405, err_body(
+            "method_not_allowed", "この操作は使えません。"
+        )  # コメント送信は撤去済み
     return 404, err_body("not_found", "見つかりません。")
 
 
@@ -833,57 +711,40 @@ def test_fixtures_follow_contract() -> None:
         assert status == 200 and {"pr", "commits", "files", "filesTruncated"} <= set(body)
         status, body = api_response(f"/api/prs/{p['id']}/diff?path=x")
         assert status == 200 and {"path", "binary", "truncated", "hunks"} <= set(body)
-        assert {"oldBlob", "newBlob"} <= set(body)  # コメントの anchor.blob に使う
-        for b in (body["oldBlob"], body["newBlob"]):
-            assert b is None or re.fullmatch(r"[0-9a-f]{40}", b)
+        assert not {"oldBlob", "newBlob"} & set(body)  # コメントの位置指定用だった。撤去済み
         status, rv = api_response(f"/api/prs/{p['id']}/review")
-        assert status == 200 and set(rv) >= REVIEW_KEYS, p["id"]
-        for t in rv["threads"]:
-            assert t["status"] in ("unsent", "sent", "read", "replied")
-            assert {"id", "stale", "comments"} <= set(t)
+        assert status == 200 and set(rv) == REVIEW_KEYS, p["id"]
 
 
 REVIEW_KEYS = {
     "schema",
     "readonly",
     "bad",
-    "review",
-    "reviewStale",
     "stale",
     "staleParts",
     "merged",
-    "threads",
-    "batches",
     "summary",
-    "worktrees",
-    "defaultDest",
-    "unsent",
 }
 
 
 def test_fixture_review_covers_states() -> None:
-    """fixture が 4 状態・stale・サマリー・宛先候補を含むこと。"""
+    """fixture がサマリー・統合済み・stale を含むこと。"""
     rv = load_fixture("review_paaaaaaaaaaaaaaa1.json")
-    assert {t["status"] for t in rv["threads"]} == {"unsent", "sent", "read", "replied"}
-    assert any(t["stale"] for t in rv["threads"])
-    assert rv["summary"] and len(rv["worktrees"]) >= 2 and any(w["isMain"] for w in rv["worktrees"])
+    assert rv["summary"] and rv["summary"]["findings"] and rv["merged"] is False
+    assert load_fixture("review_p1111111111111111.json")["merged"] is True
+    assert load_fixture("review_p2222222222222222.json")["stale"] is True
 
 
 def test_fake_server_state_machine() -> None:
-    """偵物の POST サーバ自身の確認: コメント → 未送信が増える → 送信 → 送信済み。"""
+    """偵物のサーバ自身の確認: サマリーの書き換え・統合済み。コメント送信の POST は 405。"""
     st = ReviewState()
     key = "paaaaaaaaaaaaaaa1"
-    assert st.view(key)["unsent"] == 1
-    assert st.add_comment(key, {"body": "  "})[0] == 400
-    code, res = st.add_comment(key, {"body": "x"})
-    assert code == 201 and res["comment"]["thread"] == res["comment"]["id"]
-    assert st.view(key)["unsent"] == 2
-    code, res = st.submit(key, {"kind": "changes"})
-    assert code == 201 and len(res["items"]) == 2
-    rv = st.view(key)
-    assert rv["unsent"] == 0 and rv["review"] == "changes"
-    assert {t["status"] for t in rv["threads"]} == {"sent", "read", "replied"}
-    assert st.submit(key, {"kind": "comment"})[0] == 400  # 空の送信
+    st.set_summary(key, "書き換え")
+    assert st.get(key)["summary"]["done"] == "書き換え"
+    st.mark_merged(key)
+    assert st.get(key)["merged"] is True
+    for leaf in ("comments", "submit"):
+        assert post_response(f"/api/prs/r1a2b3c4d/{key}/{leaf}", {}, st)[0] == 405
 
 
 def test_fixture_server_serves_web_and_csp() -> None:
@@ -921,20 +782,20 @@ def shot(page, shots: pathlib.Path | None, name: str) -> None:
 
 
 def flow_overview(page, kind: str, check, shots) -> None:
-    """概要: サマリー・全体スレッド・送信バー。統合のボタンが無いこと。"""
+    """概要: サマリー。コメントや送信の入口が無いこと。統合のボタンも無い（caps が off）。"""
     t = page.inner_text("#app")
     for s in (
         "pi のまとめ",
         "やったこと",
         "確認してほしい点",
         "db.find の例外処理",
-        "全体として、テストを足して",
-        "➤ 送信済み",
+        "旧定数を削除",
     ):
         check(s in t, f"{kind} 概要に {s!r} が無い")
-    bar = page.inner_text(".revbar")
-    check("未送信 1 件" in bar, f"{kind} 送信バーに未送信の件数が無い: {bar!r}")
-    check("次に pi へ入力したときに届く" in bar, f"{kind} 送信バーに届くタイミングの説明が無い")
+    check(
+        page.locator(".revbar, .thread, .cform, #app textarea").count() == 0,
+        f"{kind} 概要にコメント・送信の部品が残っている",
+    )
     check(page.locator("button", has_text="統合").count() == 0, f"{kind} 統合のボタンがある")
     ws = page.evaluate("getComputedStyle(document.querySelector('.summary .cbody')).whiteSpace")
     check(
@@ -944,228 +805,30 @@ def flow_overview(page, kind: str, check, shots) -> None:
     shot(page, shots, f"{kind}-overview-review")
 
 
-def flow_diff_comment(page, kind: str, check, shots) -> None:
-    """差分: 4 状態・stale の表示、行クリック → 入力 → 未送信スレッド、返信。"""
-    t = page.inner_text(".file")
-    for s in (
-        "◐ pi が読んだ",
-        "● pi が返信済み",
-        "⚠ 古い版",
-        "確認します。",
-        "ここは null を返さない?",
-    ):
-        check(s in t, f"{kind} 差分のスレッドに {s!r} が無い")
-    ws = page.evaluate("getComputedStyle(document.querySelector('.thread .cbody')).whiteSpace")
-    check(
-        ws == "normal" and page.locator(".thread .cbody.md").count() >= 1,
-        f"{kind} コメント本文が markdown 描画でない: {ws}",
-    )
-    # 同じ path・同じ行番号でも別の blob のスレッドは行の下に出さず、表の上の「対応しない」箱にまとめる
-    other = "別の版の同じ行番号のコメント"
-    check(
-        page.locator("table.diff", has_text=other).count() == 0,
-        f"{kind} 別の blob のコメントが行の下に出ている",
-    )
-    check(
-        page.locator(".orphans", has_text=other).count() == 1,
-        f"{kind} 別の blob のコメントが「対応しない」箱に無い",
-    )
-    row = page.locator("tr.a", has_text="return db.find(q);")
-    row.locator("td.code").click()
-    page.wait_for_selector("tr.editor textarea")
-    page.locator("tr.editor button", has_text="保存").click()  # 空の保存は日本語で断る
-    check(
-        "コメントを入力してください" in page.inner_text("tr.editor"), f"{kind} 空の保存を断らない"
-    )
-    shot(page, shots, f"{kind}-comment-editor")
-    page.locator("tr.editor textarea").fill("新しいコメント\n2 行目")
-    page.locator("tr.editor button", has_text="保存").click()
-    page.wait_for_selector(".thread:has-text('新しいコメント')")
-    thread = page.locator(".thread", has_text="新しいコメント")
-    check("○ 未送信" in thread.inner_text(), f"{kind} 保存したスレッドが「未送信」でない")
-    check(page.locator("tr.editor").count() == 0, f"{kind} 保存後も入力欄が残っている")
-    below = row.evaluate("e => e.nextElementSibling.className")
-    check(below == "thr", f"{kind} スレッドが行の下に無い: {below}")
-    # 返信
-    old = page.locator(".thread", has_text="確認します。")
-    old.locator("button", has_text="返信").click()
-    old.locator("textarea").fill("返信です")
-    old.locator("button", has_text="返信を保存").click()
-    page.wait_for_selector(".thread:has-text('返信です')")
-    shot(page, shots, f"{kind}-threads")
-    if kind == "pc":  # 左右並びでも、右（新）のセルで入力欄が開き、キャンセルで閉じる
-        page.locator("button", has_text="左右並び").click()
-        page.locator("table.diff.split td.code.a").first.click()
-        page.wait_for_selector("tr.editor textarea")
-        page.locator("tr.editor button", has_text="キャンセル").click()
-        check(page.locator("tr.editor").count() == 0, "pc 左右並びでキャンセルしても入力欄が残る")
-        page.locator("button", has_text="1 列").first.click()
-
-
-def flow_send(page, kind: str, base: str, check, shots) -> None:
-    """概要に戻って、全体コメント → レビューを送るシート → 送信済み。一覧のチップ。"""
-    page.locator(".tabs a", has_text="概要").click()
-    page.wait_for_selector(".revbar")
-    check(
-        "未送信 3 件" in page.inner_text(".revbar"),
-        f"{kind} 未送信が 3 件にならない: {page.inner_text('.revbar')!r}",
-    )
-    card = page.locator(".card", has_text="PR 全体のコメント")
-    card.locator("textarea").fill("全体への追記")
-    card.locator("button", has_text="コメントを保存").click()
-    page.wait_for_selector(".thread:has-text('全体への追記')")
-    check(
-        "未送信 4 件" in page.inner_text(".revbar"),
-        f"{kind} 全体コメント後に未送信が 4 件にならない",
-    )
-    page.locator(".revbar button", has_text="レビューを送る").click()
-    page.wait_for_selector(".sheet")
-    st = page.inner_text(".sheet")
-    for s in (
-        "次に pi へ入力したときに届く",
-        "未送信のコメント: 4 件",
-        "コメントのみ",
-        "変更を依頼",
-        "承認",
-    ):
-        check(s in st, f"{kind} 送信シートに {s!r} が無い")
-    opts = page.locator("#dest-sel option").all_inner_texts()
-    check("example-app（親）" in opts and len(opts) == 2, f"{kind} 宛先の候補がおかしい: {opts}")
-    page.locator(".sheet button", has_text="変更を依頼").click()
-    check(
-        page.locator(".sheet button[aria-pressed='true']").inner_text().endswith("変更を依頼"),
-        f"{kind} 種別が選ばれない",
-    )
-    shot(page, shots, f"{kind}-send-sheet")
-    page.locator(".sheet button", has_text="送る").click()
-    page.wait_for_selector(".sheet", state="detached")
-    page.wait_for_selector(".revnotice")
-    check("届きます" in page.inner_text(".revnotice"), f"{kind} 送信後の案内が無い")
-    check("変更依頼" in page.inner_text(".prhead h1"), f"{kind} 変更依頼のチップが無い")
-    check("未送信 0 件" in page.inner_text(".revbar"), f"{kind} 送信後も未送信が残る")
-    check("送信したレビュー (2)" in page.inner_text("#app"), f"{kind} 送信履歴が無い")
-    check(
-        page.locator(".thread .chip", has_text="○ 未送信").count() == 0,
-        f"{kind} 送信後も未送信のスレッドが残る",
-    )
-    check(
-        page.locator(".thread .chip", has_text="➤ 送信済み").count() >= 2,
-        f"{kind} 「送信済み」のスレッドが無い",
-    )
-    shot(page, shots, f"{kind}-after-send")
-    page.goto(f"{base}/#/")
-    page.wait_for_selector(".prrow:has-text('feature/add-search') .chip")
-    check(
-        "変更依頼" in page.locator(".prrow", has_text="feature/add-search").inner_text(),
-        f"{kind} 一覧に変更依頼のチップが無い",
-    )
-
-
-def flow_approve_only(page, kind: str, base: str, state, check) -> None:
-    """未送信 0 件でも「承認して送る…」から承認だけを 1 回で送れる。「レビューを送る…」の既定は変わらない。"""
-    page.goto(f"{base}/#/pr/r1a2b3c4d/paaaaaaaaaaaaaaa1")
-    page.wait_for_function(
-        "() => document.querySelector('.revbar')?.innerText.includes('未送信 0 件')"
-    )
-    # 反例: 通常の入口は、これまでどおり「コメントのみ」で「送る」が無効
-    page.locator(".revbar button", has_text="レビューを送る").click()
-    page.wait_for_selector(".sheet")
-    check(
-        page.locator(".sheet button", has_text="送る").is_disabled(), f"{kind} 既定で「送る」が有効"
-    )
-    pressed = page.locator(".sheet .seg button[aria-pressed='true']").inner_text()
-    check(pressed == "コメントのみ", f"{kind} 既定の種別が変わった: {pressed}")
-    page.locator(".sheet button", has_text="閉じる").click()
-    page.wait_for_selector(".sheet", state="detached")
-    # 承認の入口
-    btn = page.locator(".revbar button", has_text="承認して送る")
-    check(btn.count() == 1, f"{kind} 「承認して送る…」が 1 つでない")
-    w = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
-    check(w[0] <= w[1], f"{kind} 概要の固定バーで横にはみ出している {w}")
-    btn.click()
-    page.wait_for_selector(".sheet")
-    pressed = page.locator(".sheet .seg button[aria-pressed='true']")
-    check(pressed.count() == 1 and pressed.inner_text() == "承認", f"{kind} 承認が選ばれていない")
-    send = page.locator(".sheet .cact button", has_text="送る")
-    check(send.is_enabled(), f"{kind} 承認なのに「送る」が無効")
-    before = len(state.submit_log)
-    send.click()
-    page.wait_for_selector(".sheet", state="detached")
-    page.wait_for_selector(".revnotice")
-    sent = state.submit_log[before:]
-    check(len(sent) == 1, f"{kind} submit が 1 回でない: {len(sent)}")
-    if sent:
-        check(sent[0].get("kind") == "approve", f"{kind} kind が approve でない: {sent[0]}")
-        check(bool(sent[0].get("expect")), f"{kind} expect が付いていない: {sent[0]}")
-
-
-def flow_stale_and_resend(page, kind: str, base: str, state, check) -> None:
-    """表示中に PR が更新されたときは 409 を日本語で示し、取り直してから送れる。送信履歴の再送。"""
-    key = "paaaaaaaaaaaaaaa1"
-    page.goto(f"{base}/#/pr/r1a2b3c4d/{key}")
-    page.wait_for_selector(".revbar button")
-    state.bumped.add(key)  # 画面が古い版を表示している間に、PR を更新する
-    card = page.locator(".card", has_text="PR 全体のコメント")
-    card.locator("textarea").fill("版がずれた後のコメント")
-    card.locator("button", has_text="コメントを保存").click()
-    page.wait_for_selector(".formerr:has-text('更新されています')")
-    check(
-        page.locator(".thread", has_text="版がずれた後のコメント").count() == 0,
-        f"{kind} 版がずれたコメントが保存された",
-    )
-    reload = page.locator(".cform button", has_text="最新の版を読み込む")
-    check(reload.count() == 1, f"{kind} 409 のあとに取り直しのボタンが無い")
-    reload.click()
-    page.wait_for_selector(f"text={BUMPED_OID[:7]}")  # 取り直した詳細の先頭 (source) が出る
-    card = page.locator(".card", has_text="PR 全体のコメント")
-    card.locator("textarea").fill("取り直した後のコメント")
-    card.locator("button", has_text="コメントを保存").click()
-    page.wait_for_selector(".thread:has-text('取り直した後のコメント')")
-    check(
-        (state.last_expect or {}).get("source") == BUMPED_OID,
-        f"{kind} 取り直した版を expect に付けていない: {state.last_expect}",
-    )
-    # 送信履歴の再送
-    before = page.locator(".card", has_text="送信したレビュー").locator("li").count()
-    page.locator(".card", has_text="送信したレビュー").locator(
-        "button", has_text="再送"
-    ).first.click()
-    page.wait_for_selector(".revnotice")
-    after = page.locator(".card", has_text="送信したレビュー").locator("li").count()
-    check(after == before + 1, f"{kind} 再送しても履歴が増えない: {before} -> {after}")
-    sent = state.last_submit or {}
-    check(bool(sent.get("resendOf")), f"{kind} 再送の要求に resendOf が無い: {sent}")
-    check(
-        state.missing_expect == [],
-        f"{kind} expect を付けない書き込みがある: {state.missing_expect}",
-    )
-
-
 def flow_hostile_review(page, kind: str, check) -> None:
-    """敵対的な review（本文・サマリー・作業ツリー名）が文字として出る。古いレビューの印。"""
-    check(
-        "✓ 承認" in page.inner_text("h1") and "古いレビュー" in page.inner_text("h1"),
-        f"{kind} 承認・古いレビューの印が無い",
-    )
+    """敵対的な review（サマリー）が文字として出る。"""
     check(
         EVIL in page.inner_text(".summary"),
         f"{kind} サマリーの敵対的な文字列が文字として出ていない",
     )
     check(
-        EVIL in page.inner_text(".thread"), f"{kind} スレッドの敵対的な本文が文字として出ていない"
+        page.locator(".summary img, .summary script").count() == 0,
+        f"{kind} サマリーに img/script ができた",
     )
-    page.locator(".revbar button", has_text="レビューを送る").click()
-    page.wait_for_selector(".sheet")
+
+
+def flow_diff_view(page, kind: str, check, shots) -> None:
+    """差分: 閲覧専用（コメントの入力・スレッド・行クリックの入力欄が無い）。"""
     check(
-        any(EVIL in o for o in page.locator("#dest-sel option").all_inner_texts()),
-        f"{kind} 作業ツリー名が文字として出ていない",
+        page.locator(".thread, .orphans, tr.thr, tr.editor").count() == 0,
+        f"{kind} 差分にスレッドが残っている",
     )
+    page.locator("tr.a", has_text="return db.find(q);").locator("td.code").click()
     check(
-        page.locator(".backdrop img, .backdrop script").count() == 0,
-        f"{kind} シートに img/script ができた",
+        page.locator("tr.editor, textarea").count() == 0,
+        f"{kind} 行をクリックすると入力欄が開く",
     )
-    page.locator(".sheet button", has_text="閉じる").click()
-    page.wait_for_selector(".sheet", state="detached")
+    shot(page, shots, f"{kind}-diff-readonly")
 
 
 def md_html(page, src: str) -> str:
@@ -1173,7 +836,7 @@ def md_html(page, src: str) -> str:
 
 
 def flow_markdown(br, check) -> None:
-    """markdown 描画: 対応記法、XSS の反例（生 HTML・javascript: ・data: ・画像）、上限、送信バーのキュー表示。"""
+    """markdown 描画: 対応記法、XSS の反例（生 HTML・javascript: ・data: ・画像）、上限。"""
     srv, base = serve()
     ctx = br.new_context(viewport={"width": 390, "height": 844})
     page = ctx.new_page()
@@ -1257,31 +920,6 @@ def flow_markdown(br, check) -> None:
     )
     check(deep == 0, f"md: 引用の入れ子が上限を超えた {deep}")
     check(not page.evaluate("window.__pwned"), "md: 敵対的な入力が実行された")
-    # --- 送信バーのキュー表示（3 状態） ---
-    js = (
-        "b => { const rv = { unsent: 2, batches: b, worktrees: [] };"
-        " return PRV.reviewBar({ pr: { state: 'open' }, review: rv, error: null }, null).innerText; }"
-    )
-    t = page.evaluate(js, [])
-    check(
-        "下書き 未送信 2 件" in t and "受け取り待ち 0 件" in t and "受領済み 0 件" in t,
-        f"queue: 空の表示: {t!r}",
-    )
-    check("キューに積まれ" not in t, f"queue: 待ち 0 件でキューの案内が出ている: {t!r}")
-    t = page.evaluate(js, [{"batchId": "b1", "received": False, "items": []}])
-    check(
-        "受け取り待ち 1 件" in t and "キューに積まれ" in t and "次に pi へ入力したときに届く" in t,
-        f"queue: 待ちあり: {t!r}",
-    )
-    t = page.evaluate(
-        js,
-        [
-            {"batchId": "b1", "received": True},
-            {"batchId": "b2", "received": True},
-            {"batchId": "b3", "received": False},
-        ],
-    )
-    check("受け取り待ち 1 件" in t and "受領済み 2 件" in t, f"queue: 受領済みの内訳: {t!r}")
     ctx.close()
     srv.shutdown()
 
@@ -1402,73 +1040,34 @@ def flow_live(br, check) -> None:
 
     page.clock.install(time=int(time.time() * 1000))
     page.goto(f"{base}/#/{'pr/' + LIVE_ID}")
-    page.wait_for_selector(".revbar button")
+    page.wait_for_selector(".summary")
     page.clock.pause_at(int(time.time() * 1000) + 5000)
     time.sleep(0.4)
     anchor()
-    sel_general = ".card:has(h2:text-is('PR 全体のコメント (1)')) textarea"
 
     # 1. 状態が変わらないとき: 3 秒ごとに取り直すが、DOM は作り直されない
     js(
-        "for (const s of ['#app textarea', '.prhead', '.revbar', '.thread', '.summary', '.live-batches li'])"
+        "for (const s of ['.prhead', '.summary', '.live-summary'])"
         " document.querySelector(s).setAttribute('data-mark', '1');"
     )
     step(POLL_MS - 1, 0, "3 秒の前は取り直さない")
     step(1, 1, "3 秒で 1 回")
     step(POLL_MS, 1, "続けて 3 秒で 1 回")
     check(
-        js("document.querySelectorAll('[data-mark]').length") == 6,
+        js("document.querySelectorAll('[data-mark]').length") == 3,
         "live: 状態が同じのに DOM が作り直された",
     )
 
-    # 2. 受領済みになる: 入力中の文字・フォーカス・カーソル位置が残る (反例)
-    page.locator(sel_general).fill("入力中の文字です")
-    js(
-        "(() => { const t = document.querySelector('#app textarea'); t.focus(); t.setSelectionRange(2, 4); })()"
-    )
-    check("受け取り待ち" in page.inner_text(".live-batches"), "live: 前提: 最初は受け取り待ち")
-    st.mark_received(LIVE_KEY)
-    step(POLL_MS, 1, "受領済みを取り直す")
-    until(lambda: "pi が受領済み" in page.inner_text(".live-batches"), "受領済みの表示")
-    got = js(
-        "(() => { const t = document.querySelector('#app textarea'); return [t.value, document.activeElement === t,"
-        " t.selectionStart, t.selectionEnd, t.hasAttribute('data-mark')]; })()"
-    )
-    check(
-        got == ["入力中の文字です", True, 2, 4, True],
-        f"live: 受領済みの反映で入力欄が壊れた: {got}",
-    )
-    check(
-        js(
-            "!!document.querySelector('.revbar[data-mark]') && !!document.querySelector('.thread[data-mark]')"
-        ),
-        "live: 受領済みで固定バー・スレッドが作り直された",
-    )
-
-    # 3. pi の返信: 入力がある間はバナーだけ。押すと反映。入力が空なら自動で反映
-    st.pi_reply(LIVE_KEY, "c3", "pi の返信です")
-    step(POLL_MS, 1, "pi の返信を取り直す")
+    # 2. pi がサマリーを書き直す: 入力欄が無いのでバナー無しで自動で反映され、ヘッダーは作り直されない
     banner = page.locator(".livebar button")
-    until(banner.is_visible, "バナーが出る")
+    st.set_summary(LIVE_KEY, "書き直した要約です")
+    step(POLL_MS, 1, "サマリーの書き直しを取り直す")
+    until(lambda: "書き直した要約です" in page.inner_text(".summary"), "サマリーが自動で反映される")
+    check(not banner.is_visible(), "live: サマリーの更新でバナーが出た")
     check(
-        "pi の返信です" not in page.inner_text(".threads"), "live: 入力中なのにスレッドが変わった"
+        js("!!document.querySelector('.prhead[data-mark]')"),
+        "live: サマリーの更新でヘッダーが作り直された",
     )
-    check(
-        js("document.querySelector('#app textarea').value") == "入力中の文字です",
-        "live: バナーを出したとき入力が消えた",
-    )
-    banner.click()
-    check("pi の返信です" in page.inner_text(".threads"), "live: バナーを押しても反映されない")
-    check(not banner.is_visible(), "live: 反映後もバナーが残る")
-    check(
-        js("document.querySelector('#app textarea').value") == "入力中の文字です",
-        "live: 反映したとき入力が消えた",
-    )
-    page.locator("#app textarea").first.fill("")
-    st.pi_reply(LIVE_KEY, "c3", "空のときの返信")
-    step(POLL_MS, 1, "入力が空のときの返信を取り直す")
-    until(lambda: "空のときの返信" in page.inner_text(".threads"), "入力が空なら自動で反映")
-    check(not banner.is_visible(), "live: 自動で反映したのにバナーが出ている")
 
     # 4. タブが見えない間は止まり、見える状態に戻るとすぐ 1 回
     vis("hidden")
@@ -1479,23 +1078,6 @@ def flow_live(br, check) -> None:
     time.sleep(0.25)
     check(gets() == n + 1, "live: 見える状態に戻った直後に 2 回以上取り直した")
     step(POLL_MS, 1, "戻った後は 3 秒間隔に戻る")
-
-    # 7. 取り直しで PR が「進んだ (stale)」と分かっても、表示している版 (expect) は変えない
-    st.mark_stale(LIVE_KEY)
-    step(POLL_MS, 1, "stale の状態を取り直す")
-    until(lambda: "古いレビュー" in page.inner_text(".prhead h1"), "stale のチップ")
-    check("変更依頼" in page.inner_text(".revbar"), "live: 固定バーのチップが更新されない")
-    pr = find_pr(["api", "prs", "r1a2b3c4d", LIVE_KEY]) or {}
-    page.locator(".revbar button", has_text="レビューを送る").click()
-    page.wait_for_selector(".sheet")
-    page.locator(".sheet button", has_text="変更を依頼").click()
-    page.locator(".sheet button", has_text="送る").click()
-    page.wait_for_selector(".sheet", state="detached")
-    until(lambda: st.last_expect is not None, "送信の expect")
-    want = {"source": pr.get("sourceOid"), "target": pr.get("targetOid"), "base": pr.get("baseOid")}
-    check(st.last_expect == want, f"live: 送信の expect が開いた版でない: {st.last_expect}")
-    until(lambda: page.locator(".revnotice").count() == 1, "送信後の案内")
-    time.sleep(0.25)
 
     # 6. 失敗: 間隔が 3 → 6 → 12 → 24 → 30 秒で頑打ち。成功で 3 秒に戻り、表示も消える
     note = page.locator(".livebar span")
@@ -1524,7 +1106,7 @@ def flow_live(br, check) -> None:
     step(POLL_MS, 0, "一覧で見える状態に戻っても取り直さない")
     other = "p1111111111111111"
     js(f"location.hash = '#/pr/r1a2b3c4d/{other}'")
-    page.wait_for_selector(".revbar")
+    page.wait_for_selector(".prhead")
     time.sleep(0.25)
     anchor_n = gets(other)
     step(POLL_MS, 1, "別の PR では、その PR を取り直す", other)
@@ -1598,92 +1180,56 @@ def flow_live_guards(br, check) -> None:
 
     page.clock.install(time=int(time.time() * 1000))
     page.goto(f"{base}/#/{'pr/' + LIVE_ID}")
-    page.wait_for_selector(".revbar button")
+    st.caps_mode = "on"  # 統合の確認シートを開けるようにする
+    page.goto(f"{base}/#/{'pr/' + LIVE_ID}")
+    page.wait_for_selector(".mergecard button")
     page.clock.pause_at(int(time.time() * 1000) + 5000)
     time.sleep(0.4)
     anchor()
-    sel_general = ".card:has(h2:text-is('PR 全体のコメント (1)')) textarea"
     banner = page.locator(".livebar button")
 
-    # A. 状態が変わらないときは、チップを含めて DOM を作り直さない (チップはレビューがあるときだけ出るので、先に変更依頼にする)
-    st.mark_stale(LIVE_KEY)
-    poll("変更依頼の状態を取り直す")
-    until(
-        lambda: (
-            page.locator(".revchips > *").count() >= 1 and page.locator(".hchips > *").count() >= 1
-        ),
-        "チップが出る",
-    )
+    # A. 状態が変わらないときは、ヘッダーと統合の入口を作り直さない
     js(
-        "document.querySelector('.revchips > *').setAttribute('data-mark', '1');"
-        "document.querySelector('.hchips > *').setAttribute('data-mark', '1');"
+        "for (const s of ['.prhead', '.mergecard', '.summary'])"
+        " document.querySelector(s).setAttribute('data-mark', '1');"
     )
     poll("変化なしの取り直し 1")
     poll("変化なしの取り直し 2")
     check(
-        js("document.querySelectorAll('[data-mark]').length") == 2,
-        "live-guards: 状態が同じのにチップが作り直された",
+        js("document.querySelectorAll('[data-mark]').length") == 3,
+        "live-guards: 状態が同じのに画面が作り直された",
     )
 
-    # B. 送信シートが開いている間は、pi の返信でスレッドを差し替えない。閉じてバナーを押すと反映する
-    page.locator(".revbar button", has_text="レビューを送る").click()
-    page.wait_for_selector(".sheet")
-    st.pi_reply(LIVE_KEY, "c3", "シート中の返信です")
-    poll("シート中の返信を取り直す")
-    until(banner.is_visible, "シート中はバナー")
-    check(
-        "シート中の返信です" not in page.inner_text(".threads"),
-        "live-guards: 送信シートが開いているのにスレッドが変わった",
-    )
-    check(page.locator(".sheet").count() == 1, "live-guards: 取り直しで送信シートが閉じた")
-    page.locator(".sheet button", has_text="閉じる").click()
-    page.wait_for_selector(".sheet", state="detached")
-    banner.click()
-    check(
-        "シート中の返信です" in page.inner_text(".threads"),
-        "live-guards: バナーを押しても反映されない (シート)",
-    )
-    check(not banner.is_visible(), "live-guards: 反映後もバナーが残る (シート)")
-
-    # C. 開いた返信欄がある間は、中身が空でもスレッドを差し替えない
-    page.locator(".thread .reply button", has_text="返信").first.click()
-    page.wait_for_selector(".thread textarea")
-    st.pi_reply(LIVE_KEY, "c3", "返信欄中の返信です")
-    poll("返信欄が開いている間の返信を取り直す")
-    until(banner.is_visible, "返信欄が開いている間はバナー")
-    check(
-        "返信欄中の返信です" not in page.inner_text(".threads"),
-        "live-guards: 返信欄が開いているのにスレッドが変わった",
-    )
-    check(
-        page.locator(".thread textarea").count() == 1, "live-guards: 取り直しで開いた返信欄が消えた"
-    )
-    page.locator(".thread button", has_text="キャンセル").first.click()
-    banner.click()
-    check(
-        "返信欄中の返信です" in page.inner_text(".threads"),
-        "live-guards: バナーを押しても反映されない (返信欄)",
-    )
-
-    # D. 書き込めるかが変わっても (統合済みになる)、書きかけの欄がある間は全体を描き直さない
-    page.locator(sel_general).fill("書きかけの文です")
+    # B. 統合の確認シートが開いている間は、統合済みの切り替わりで画面を描き直さない。
+    #    シートを閉じてバナーを押すと反映する
+    page.locator(".mergecard button").click()
+    page.wait_for_selector(".mergesheet .mergenext")
     st.mark_merged(LIVE_KEY)
-    poll("統合済みの状態を取り直す")
-    until(banner.is_visible, "書き込み可否が変わるとバナー")
-    kept = js("(document.querySelector('#app textarea') || {}).value")
+    poll("シート中の統合済みを取り直す")
+    until(banner.is_visible, "シート中はバナー")
+    check(page.locator(".mergesheet").count() == 1, "live-guards: 取り直しで統合のシートが閉じた")
     check(
-        kept == "書きかけの文です", f"live-guards: 書き込み可否の変化で書きかけが消えた: {kept!r}"
+        js("!!document.querySelector('.prhead[data-mark]')"),
+        "live-guards: シートが開いているのに画面全体が作り直された",
     )
-    page.locator(sel_general).fill("")
+    page.locator(".mergesheet .mergeclose").click()
+    page.wait_for_selector(".mergesheet", state="detached")
     banner.click()
-    until(
-        lambda: page.locator("#app textarea").count() == 0,
-        "バナーを押すと書き込めない画面に描き直される",
-    )
+    until(lambda: not banner.is_visible(), "反映後はバナーが消える")
     check(
-        "統合済みの PR には書き込めません" in page.inner_text(".revbar"),
-        "live-guards: 統合済みの表示にならない",
+        js("!document.querySelector('.prhead[data-mark]')"),
+        "live-guards: バナーを押しても画面が描き直されない",
     )
+
+    # C. シートが無いときは、統合済みの切り替わりでバナー無しに自動で描き直す (別の PR で)
+    other = "p2222222222222222"
+    js(f"location.hash = '#/pr/r1a2b3c4d/{other}'")
+    page.wait_for_selector(".summary")
+    js("document.querySelector('.prhead').setAttribute('data-mark', '2')")
+    st.mark_merged(other)
+    page.clock.run_for(POLL_MS)
+    until(lambda: js("!document.querySelector('.prhead[data-mark]')"), "シート無しで自動に描き直す")
+    check(not banner.is_visible(), "live-guards: シート無しなのにバナーが出た")
     check(errs == [], f"live-guards: ページのエラー: {errs}")
     ctx.close()
     srv.shutdown()
@@ -1768,7 +1314,7 @@ def merge_page(br, kind: str = "pc"):
 def merge_open(page, base: str, key: str = KEY_A, bar: bool = False) -> None:
     """PR の概要を開き、「統合する…」でシートを開いて計画の表示を待つ。"""
     page.goto(f"{base}/#/pr/r1a2b3c4d/{key}")
-    page.wait_for_selector(".revbar")
+    page.wait_for_selector(".prhead")
     page.locator(".mergebar button" if bar else ".mergecard button").click()
     page.wait_for_selector(".mergesheet .mergenext")
 
@@ -1803,22 +1349,14 @@ def flow_merge_caps(br, check) -> None:
         st.caps_mode = mode
         page.goto(f"{base}/#/pr/r1a2b3c4d/{KEY_A}")
         page.reload()
-        page.wait_for_selector(".revbar")
+        page.wait_for_selector(".prhead")
         check(page.locator(both).count() == 0, f"merge-caps: caps={mode} でボタンがある")
-        check(
-            page.locator(".revbar button", has_text="承認して送る").count() == 1,
-            f"merge-caps: caps={mode} で既存のボタンが無い",
-        )
     st.caps_mode = "on"
     page.reload()
-    page.wait_for_selector(".revbar")
+    page.wait_for_selector(".prhead")
     check(
         page.locator(".mergecard button").count() == 1,
         "merge-caps: caps=on でカードのボタンが 1 つでない",
-    )
-    check(
-        page.locator(".revbar button", has_text="承認して送る").count() == 1,
-        "merge-caps: 「承認して送る…」が消えた",
     )
     page.goto(f"{base}/#/pr/r1a2b3c4d/p1111111111111111")  # 統合済み
     page.wait_for_selector("text=変更ファイル (1)")
@@ -1848,7 +1386,6 @@ def flow_merge_steps(br, check) -> None:
         "+120",
         "−8",
         "AGENTS.md",
-        "変更依頼のままです。",
         "レビュー記録の下書き",
         "残す",
         "枝を削除",
@@ -2031,13 +1568,13 @@ def flow_merge_running(br, check) -> None:
     page.mouse.click(5, 5)
     page.mouse.click(5, 5)
     check(page.locator(".mergesheet").count() == 1, "merge: 実行中に Esc / 背景のタップで閉じた")
-    # 自動更新 (3 秒間隔) で pi の返信を取りなおしても、シートを消さず、スレッドを差し替えない
-    st.pi_reply(KEY_A, "c3", "実行中の返信です")
+    # 自動更新 (3 秒間隔) で統合済みと分かっても、シートを消さず、画面を再描画しない
+    st.mark_merged(KEY_A)
     waitfor(lambda: page.locator(".livebar button").is_visible(), "バナー", check, timeout=9.0)
     check(page.locator(".mergesheet").count() == 1, "merge: 自動更新でシートが消えた")
     check(
-        "実行中の返信です" not in page.locator(".threads").inner_text(),
-        "merge: 実行中に画面が再描画された",
+        page.locator(".livebar button").is_visible(),
+        "merge: 実行中に画面が再描画された (バナーが消えた)",
     )
     check(
         "統合中" in page.locator(".mergesheet").inner_text(),
@@ -2259,7 +1796,7 @@ def flow_merge_slow_plan(br, check) -> None:
     gate_a = threading.Event()
     st.plan_gate[KEY_A] = gate_a
     page.goto(f"{base}/#/pr/r1a2b3c4d/{KEY_A}")
-    page.wait_for_selector(".revbar")
+    page.wait_for_selector(".prhead")
     page.locator(".mergecard button").click()
     waitfor(lambda: KEY_A in st.plan_calls, "A の計画", check)
     check("確認中" in page.locator(".mergesheet").inner_text(), "merge-slow: 計画の待ち表示が無い")
@@ -2326,7 +1863,7 @@ def flow_merge_sp(br, check) -> None:
     """スマホ: 固定バーから開き、タップ領域は 44px 以上。横にはみ出さない。"""
     srv, base, _st, ctx, page, errs = merge_page(br, "sp")
     page.goto(f"{base}/#/pr/r1a2b3c4d/{KEY_A}")
-    page.wait_for_selector(".revbar")
+    page.wait_for_selector(".prhead")
     check(page.locator(".mergebar").is_visible(), "merge-sp: 固定バーが見えない")
     check(page.locator(".mergecard").is_visible(), "merge-sp: カードが見えない")
     page.locator(".mergebar button").click()
@@ -2562,7 +2099,7 @@ def browser_main(shots: pathlib.Path | None) -> int:
                 check(page.locator("table.diff.unified").count() == 1, "pc で 1 列表示に戻らない")
             if shots:
                 page.screenshot(path=str(shots / f"{kind}-files.png"), full_page=True)
-            flow_diff_comment(page, kind, check, shots)
+            flow_diff_view(page, kind, check, shots)
             if sp:
                 page.locator(".filetree summary").click()
             page.locator(".tree a", has_text="src/app.ts").click()
@@ -2578,12 +2115,9 @@ def browser_main(shots: pathlib.Path | None) -> int:
             w = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
             check(w[0] <= w[1], f"{kind} 横にはみ出している {w}")
             check(
-                "○ 未送信" in page.locator(".thread", has_text="app.ts の 1 行目").inner_text(),
-                f"{kind} app.ts の未送信スレッドが表示されない",
+                page.locator(".thread, .revbar, #app textarea").count() == 0,
+                f"{kind} app.ts の差分にコメントの部品が残っている",
             )
-            flow_send(page, kind, base, check, shots)
-            flow_approve_only(page, kind, base, srv.state, check)
-            flow_stale_and_resend(page, kind, base, srv.state, check)
 
             # 統合済みの PR
             page.goto(f"{base}/#/pr/{merged_id}")
@@ -2592,13 +2126,9 @@ def browser_main(shots: pathlib.Path | None) -> int:
                 "✓ 統合済み" in page.inner_text(".prhead"), f"{kind} 統合済みの概要にチップが無い"
             )
             check(
-                "統合済み" in page.inner_text(".revbar")
-                and page.locator(".revbar button, #app textarea").count() == 0,
-                f"{kind} 統合済みの PR で入力や送信ができてしまう",
-            )
-            check(
-                "承認して送る" not in page.inner_text(".revbar"),
-                f"{kind} 統合済みの PR に「承認して送る…」が出ている",
+                page.locator(".revbar, #app textarea, .mergecard button, .mergebar button").count()
+                == 0,
+                f"{kind} 統合済みの PR で入力や統合ができてしまう",
             )
 
             # 敵対的な PR: 概要・差分
@@ -2613,8 +2143,8 @@ def browser_main(shots: pathlib.Path | None) -> int:
             page.locator(".tabs a", has_text="差分").click()
             page.wait_for_selector("table.diff")
             check(
-                EVIL in page.inner_text("tr.thr"),
-                f"{kind} 差分のスレッドの敵対的な本文が出ていない",
+                page.locator("tr.thr").count() == 0,
+                f"{kind} 差分にスレッドの行がある",
             )
             check(
                 "<script>window.__pwned=1</script>" in page.inner_text("table.diff"),

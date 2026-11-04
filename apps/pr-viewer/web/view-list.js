@@ -17,14 +17,14 @@
     try { window.localStorage.setItem(SHOW_KEY, v ? "1" : "0"); } catch (e) {}
   }
 
-  function row(pr, rv) {
+  function row(pr) {
     return h(
       "li",
       { class: "prrow" },
       h(
         "a",
         { class: "rowlink", href: PRV.prHref(pr) },
-        h("div", { class: "rt" }, h("span", { class: "ttl", text: pr.branch }), PRV.mainChip(pr, rv), PRV.staleReviewChip(rv)),
+        h("div", { class: "rt" }, h("span", { class: "ttl", text: pr.branch }), PRV.mainChip(pr)),
         h(
           "div",
           { class: "rm" },
@@ -165,18 +165,8 @@
         );
         return;
       }
-      box.replaceChildren(h("ul", { class: "prlist" }, shown.map(function (p) { return row(p, reviews[p.id]); })));
+      box.replaceChildren(h("ul", { class: "prlist" }, shown.map(function (p) { return row(p); })));
     }
-
-    /* レビュー状態のチップは、先に一覧を出してから PR ごとに取り足す（失敗してもチップが無いだけ） */
-    var reviews = {};
-    prs.forEach(function (p) {
-      if (p.state !== "open") return;
-      PRV.api.review(p.id).then(function (rv) {
-        reviews[p.id] = rv;
-        if (box.isConnected) update();
-      }, function () {});
-    });
 
     PRV.mount(
       h(

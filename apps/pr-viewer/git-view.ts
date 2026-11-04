@@ -226,8 +226,6 @@ export function writeArgvAllowed(argv: string[]): boolean {
 		}
 		case "merge-base":
 			return flagsOnly(rest, ["--is-ancestor"]);
-		case "worktree":
-			return rest.length === 2 && rest[0] === "list" && rest[1] === "--porcelain";
 	}
 	return false;
 }

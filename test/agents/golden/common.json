@@ -1505,7 +1505,6 @@
      "ask",
      "action",
      "pr_summary",
-     "pr_comments",
      "mcp__*"
     ]
    },

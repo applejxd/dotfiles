@@ -73,7 +73,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 確認が取れない操作の保留と、利用者が後から承認して実行する仕組み（非同期の承認。**撤去済み**。統合は PR ビューアの押下へ）を知る | [ADR-0024](adr/0024-human-press-merges-in-app.md)、[ADR-0023](adr/0023-pending-approval.md)（Superseded）、[CHG-0055](change/closed/0055-async-approval.md) |
 | 並列実装の配車・関門・承認パケット・標的レビュー（利用者が本質的な承認に集中する自動化）を知る・変える | [CHG-0056](change/0056-orchestrator.md) |
 | 保留の承認を、巡回・一括で少ない操作にする設計（見送り・撤去済み）を知る | [CHG-0058](change/closed/0058-batch-approval.md) |
-| GitHub をリモートに持たない開発向けの、PR 風のローカルのレビュー画面（ref のスキーマ・配送・アプリの安全規則・統合）を知る・変える | [ローカル PR ビューアの設計](spec/pr-viewer.md)、[CHG-0060](change/0060-local-pr-viewer.md) |
+| GitHub をリモートに持たない開発向けの、PR 風のローカルのレビュー画面（ref のスキーマ・レビューコメント送信の撤去・アプリの安全規則・統合）を知る・変える | [ローカル PR ビューアの設計](spec/pr-viewer.md)、[CHG-0060](change/0060-local-pr-viewer.md) |
 | PR ビューアと pi の非同期のメッセージ・キュー（受信箱。見送り・撤去済み）の経緯を知る | [CHG-0061](change/closed/0061-pr-inbox.md) |
 | PR の管理・統合を、人が操作するアプリへ移す（保留・受信箱の撤去、merge commit、押下契機の `pis -p`、pi を通常のコーディングへ戻す）を知る・変える | [CHG-0062](change/0062-pr-hub-simplify.md) |
 | 親と子で文脈（AGENTS.md）を分ける（子に必要な規則だけを渡す） | [CHG-0059](change/closed/0059-child-context.md) |

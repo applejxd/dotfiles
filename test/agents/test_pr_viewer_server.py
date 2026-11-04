@@ -350,13 +350,12 @@ def test_diff_of_renamed_japanese_and_binary_files(world):
     )
     assert ja["hunks"][0]["lines"] == [{"t": "+", "o": None, "n": 1, "s": "こんにちは"}]
     _, binary = world.server.get(f"/api/prs/{alpha['id']}/diff?path=bin.dat")
-    assert {k: v for k, v in binary.items() if k not in ("oldBlob", "newBlob")} == {
+    assert binary == {
         "path": "bin.dat",
         "binary": True,
         "truncated": False,
         "hunks": [],
     }
-    assert binary["oldBlob"] is None and len(binary["newBlob"]) == 40  # 段 2: 追加されたファイル
 
 
 def test_huge_diff_is_truncated_at_a_whole_line(world):

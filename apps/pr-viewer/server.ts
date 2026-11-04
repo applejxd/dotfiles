@@ -179,16 +179,6 @@ async function serveStatic(res: ServerResponse, webDir: string, rawName: string)
 const MAX_BODY = 64 * 1024;
 const JSON_TYPE_RE = /^application\/json\s*(?:;\s*charset=utf-8\s*)?$/i;
 
-/** Origin があるときは、その host が Host ヘッダーと一致すること（別のサイトからの書き込みを止める）。 */
-function originAllowed(origin: string | undefined, host: string | undefined): boolean {
-	if (origin === undefined) return true;
-	try {
-		return host !== undefined && new URL(origin).host.toLowerCase() === host.toLowerCase();
-	} catch {
-		return false;
-	}
-}
-
 class TooLarge extends Error {}
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -212,14 +202,10 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
 	});
 }
 
-/** 書き込み（POST）。共通の規則を検査してから routes.ts へ渡す。統合系は Origin 必須・--allow-merge が要る（先に断る）。 */
+/** 書き込み（POST）。統合系だけで、Origin 必須・--allow-merge が要る（先に断る）。共通の規則を検査してから routes.ts へ渡す。 */
 async function servePost(repos: Repo[], req: IncomingMessage, res: ServerResponse, pathname: string, opts: Options): Promise<void> {
-	if (isMergePostRoute(pathname)) {
-		const denied = mergeRequestError(req.headers, opts.allowMerge);
-		if (denied) return sendError(res, denied.status, denied.code, denied.message);
-	} else if (!originAllowed(req.headers.origin, req.headers.host)) {
-		return sendError(res, 403, "forbidden_origin", "この Origin は許可されていません。");
-	}
+	const denied = mergeRequestError(req.headers, opts.allowMerge);
+	if (denied) return sendError(res, denied.status, denied.code, denied.message);
 	if (req.headers["x-prv"] !== "1" || !JSON_TYPE_RE.test(req.headers["content-type"] ?? "")) {
 		return sendError(res, 400, "bad_request", "必要なヘッダーがありません。");
 	}
