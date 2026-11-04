@@ -139,6 +139,33 @@ def test_load_returns_what_was_appended_in_order(tmp_path: Path) -> None:
     assert "recovered" not in res[-1]["value"] and "degraded" not in res[-1]["value"]
 
 
+def test_source_and_holder_survive_persist_and_reload(tmp_path: Path) -> None:
+    """出所と保持者は専用欄で永続する。落とすと再起動後の再生で利用者専用イベントが拒否される (I10)"""
+    root = tmp_path / "w"
+    res = run(
+        [
+            *opened(root),
+            acquire(),
+            append(type="plan.approved", source="user"),
+            append(type="note.appended", node="t1", source="model", holder="h"),
+            append(type="notice"),
+        ]
+    )
+    assert all(r["ok"] for r in res)
+    ev = load_as_writer(root)[-1]["value"]["events"]
+    assert [(e.get("source"), e.get("holder")) for e in ev] == [
+        ("user", None),
+        ("model", "h"),
+        (None, None),
+    ]
+    # 保存された行にも専用欄がある (data の中ではない)
+    lines = [
+        json.loads(x.rpartition(b"\t")[0])
+        for x in log_files(root)[0].read_bytes().split(b"\n")[:-1]
+    ]
+    assert lines[0]["source"] == "user" and "source" not in lines[0]["data"]
+
+
 def test_load_of_empty_root_is_empty(tmp_path: Path) -> None:
     res = run([*opened(tmp_path / "none"), {"op": "load", "name": "a"}])
     assert res[-1]["value"] == {"events": []}

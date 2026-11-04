@@ -116,6 +116,10 @@ export interface LedgerEvent {
 	data: Record<string, unknown>;
 	/** 観測用。reducer は無視する */
 	aux?: boolean;
+	/** 出所。makeEvent が呼び出し側の引数から設定する。data の中に同名の値があっても無視する */
+	source?: "user" | "model" | "system";
+	/** 追記した lease の保持者 (I8)。makeEvent が引数から設定する。data の中の holder は無視する */
+	holder?: string;
 }
 
 /** 追記するイベント (seq と ts は store が付ける) */
