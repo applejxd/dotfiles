@@ -66,6 +66,9 @@ try:
         "commit-message.js",
     ):
         shutil.copy2(SRC / name, harness / name)
+    (harness / "work").mkdir()
+    for name in ("journal.ts", "types.ts"):
+        shutil.copy2(SRC / "work" / name, harness / "work" / name)
     rules = gen.build_pi_harness({}, load_common())
     for agent in rules["agents"].values():
         agent["model"] = None
