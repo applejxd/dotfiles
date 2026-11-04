@@ -46,3 +46,11 @@
 - `run.ended` の二重配送は例外で拒否する。証拠の id（`check:<seq>`）に seq が入るので、合流性は seq を除いて成り立つ
 - `globsMayOverlap` は「ディレクトリへの書き込みは配下に及ぶ」と「スラッシュ無しはどの階層にも合致」を保守側に取る（`*.ts` と `*.md` も重なる扱い）
 - `ready` の順序: 臨界路の長さ（降順）→ bundle → 費用の昇順 → id。実行中の `writes` と重なる task は出さない
+
+## 接続と統合試験
+
+- 台帳 → スケジューラ・digest の接続は `work/adapt.ts`（`schedStateOf`・`digestInputOf`。純関数）。台帳の `ready` と同じく active な goal の task・run だけを渡す
+- 端から端の試験は `test_work_e2e.py`（store で永続 → 読み直して fold → メモリの fold と一致、kill -9 後の再生、sched・digest への接続、利用者専用イベントの偽装）
+- `globsMayOverlap` の実装は `globs.ts` に一本化した。`overlap.ts` は `strict`（根からの厳密な一致）で呼ぶ
+- 既知の食い違い（試験は `xfail`）: ①スラッシュ無しの glob（`*.py`）を sched は素、台帳の門は重なるとみなし、台帳が `run.reserved` を拒否しうる ②`ready` と sched で臨界路の既定の見積りが違い、優先順位が揃わない
+- 配線時: sched の start を台帳へ書く前に `globs.ts` の既定の判定で再確認するか、台帳の門を `strict` に揃える
