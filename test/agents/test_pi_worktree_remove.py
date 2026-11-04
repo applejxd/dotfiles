@@ -126,6 +126,21 @@ def test_everything_else_stays_denied(role, command):
         assert res["decision"] == "deny", (role, command, res)
 
 
+@pytest.mark.parametrize("role", ALLOWED_ROLES)
+@pytest.mark.parametrize(
+    "command",
+    [
+        "ssh sbx@sandbox-gpu 'git worktree remove ../wt'",
+        "ssh sbx@sandbox-gpu git worktree remove ../wt",
+        "ssh -p 22 sbx@sandbox-gpu 'git worktree remove ../wt'",
+    ],
+)
+def test_ssh_remote_does_not_get_the_exception(role, command):
+    # ssh のリモート側は再帰で判定されるが、変換後の文字列には例外を効かせない (元の入力だけ)
+    for _, res in _results([command], role=role):
+        assert res["decision"] == "deny", (role, command, res)
+
+
 @pytest.mark.parametrize("role", DENIED_ROLES)
 @pytest.mark.parametrize("command", PLAIN[:4])
 def test_roles_without_the_exception_deny_plain_too(role, command):

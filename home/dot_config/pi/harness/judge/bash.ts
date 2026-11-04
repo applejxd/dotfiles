@@ -432,7 +432,11 @@ export function makeBashDecider(tables: Tables): BashDecider {
 		const targets = ((pi.remote_exec?.targets as unknown[] | undefined) ?? []).map(String);
 		const inner = remote ? null : unwrapRemoteExec(cmd, targets);
 		if (inner !== null) return decide(inner, cwd, pi, profile, common, true);
-		const deny = bashCommonDeny(worktreeRemoveExcepted(cmd, pi, profile) ? withoutDeny(ctx, WORKTREE_REMOVE) : ctx, cmd);
+		const deny = bashCommonDeny(
+			// 例外は直接実行だけ (ssh のリモート側を再帰判定しているときは効かせない)
+			!remote && worktreeRemoveExcepted(rawCmd, pi, profile) ? withoutDeny(ctx, WORKTREE_REMOVE) : ctx,
+			cmd,
+		);
 		if (deny) return { commonDeny: deny, roleRule: null };
 		const g = guide(cmd, pi);
 		if (g) return { commonDeny: null, roleRule: g };

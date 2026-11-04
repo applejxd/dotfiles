@@ -165,7 +165,7 @@ deny = [
   "git reflog expire",
   "git stash clear",
   "git stash drop",
-  # ★pi の implementer / worker だけ、force なしを許可する (deny_except。force 付きは必須確認)
+  # ★pi の implementer / worker だけ、force なしの単純な 1 行を許可する (deny_except。force 付き・ssh 経由は deny のまま)
   # see docs/spec/guard/pi-decide.md#git-worktree-remove-の例外
   "git worktree remove",
   # 追跡ファイルの変更を破棄する (git でも復旧できない)

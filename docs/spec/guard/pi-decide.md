@@ -161,7 +161,9 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
   - **代償**: 空白を含むパスなど引用が要る正当なコマンドも deny のまま（この repo の worktree 名は空白を含まない）
 - **force の検出**（`judge/gitdestructive.ts` の `case "worktree"`、[confirm](#confirm)）: 多層防御として残す。deny が外れる形に force は付かないので通常は働かず、
   何かの不具合で force 付きが deny を通ったときだけ、`mustConfirm` の ask になる
-- **緩めたあとの判定**: force なしは `source: default`（親は ask、bypass で allow、`pis` の境界の中で allow。`[pi.shell] allow` には載せない）
+- **緩めたあとの判定**: 他の規則に当たらない plain 形は `source: default`（親は ask、bypass で allow、`pis` の境界の中で allow。`[pi.shell] allow` には載せない）
+- **ssh 経由では効かない**: 判定器は ssh を先に解いてリモート側の文字列を再帰判定するが、例外は元の入力そのもの（直接実行）にだけ効く。
+  `ssh <許可済み宛先> 'git worktree remove …'` は deny のまま（代償: リモートの正当な掃除は、リモートで手動で行う）
 - **Python 版と golden**: `decide.py` は `deny_except` を知らず deny のまま。TS も例外が効くのは force なしの 1 行だけで、golden の標本（force 付き）は
   どちらも deny なので、`judge_golden.mjs` に許容は無い。負例は `test_pi_worktree_remove.py`
 - **残る限界**:
