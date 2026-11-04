@@ -12,6 +12,7 @@ import { basename, pyRegex, shlexSplit, ShlexError, split, stripChars } from "./
 import { argv } from "./shellparse.ts";
 import { splitCommandSegments } from "./normalize.ts";
 import { inlineCodeHead } from "./rules_exec.ts";
+import { ledgerRoots, underLedgerRoot } from "./ledger_root.ts";
 import {
 	baseName,
 	clip200,
@@ -95,10 +96,14 @@ function ledgerHit(token: string, base: string | null): boolean {
 		const abs = normpath(isAbsolute(expanded) ? expanded : join(base, expanded));
 		if (LEDGER_RE.test(abs.replaceAll(sep, "/"))) return true;
 		if (LEDGER_RE.test(realpathLoose(abs).replaceAll(sep, "/"))) return true;
+		// `.git` 以外の名前の git-common-dir (separate-git-dir や GIT_DIR) の実体: fs で解いた置き場と照合する
+		const roots = ledgerRoots(base);
+		if (underLedgerRoot(abs, roots) || underLedgerRoot(realpathLoose(abs), roots)) return true;
 		// symlink と `..` を成分ごとに順に解決する (`link/..` を先に畳まない)。失敗 (循環・権限など) は字面の判定のままにする
 		try {
 			const strict = strictResolve(isAbsolute(expanded) ? expanded : `${base}${sep}${expanded}`);
 			if (LEDGER_RE.test(strict.replaceAll(sep, "/"))) return true;
+			if (underLedgerRoot(strict, roots)) return true;
 		} catch {
 			// 安全側: 上の字面の判定に任せる
 		}
