@@ -150,8 +150,13 @@ def test_index_wires_with_one_import_and_one_call_inside_register_task():
     calls = [m.start() for m in re.finditer(r"registerDriverRun\(", src)]
     assert len(calls) == 1
     assert calls[0] > src.index("function registerTask(")
-    line = src[calls[0] : src.index("\n", calls[0])]
-    assert "spawnChild" in line and "jobs" in line and "child: CHILD" in line
+    block = src[calls[0] : calls[0] + 1500]
+    assert all(k in block for k in ("spawnChild", "jobs", "child: CHILD", "canSpawn"))
+    assert (
+        'decide("task"' in block
+        and "planModeRefusal(spec.role)" in block
+        and "__piPlanMode" in block
+    )
 
 
 # ── d) 書き込み集合の排他・同時数 ──
@@ -230,7 +235,7 @@ def test_budget_steer_once_at_1_5x():
 
 def test_budget_abort_at_2x_via_force_close_without_second_steer():
     r = case("budget")["aborted"]
-    assert r["closed"] == [True]
+    assert r["closed"] == [True, False]  # 終了後の閉じ (M1) が追加で 1 回入る
     assert r["steers"] == 1
 
 
@@ -247,7 +252,7 @@ def test_budget_usage_is_summed_into_run_and_goal():
 def test_shutdown_aborts_every_child_with_force():
     r = case("shutdown")
     assert r["before"] == 3
-    assert r["closed"] == [[True], [True], [True]]
+    assert r["closed"] == [[True, False], [True, False], [True, False]]
     assert r["after"] == 0
 
 
@@ -308,3 +313,116 @@ def test_property_random_runs_keep_invariants_slots_and_budget(start):
     assert r["bad"] == []
     assert r["seeds"] == 25
     assert r["started"] > 0
+
+
+# ── i) 起動制約 (B1: canSpawn・B2: 役割と隔離の対応表・M1: 枠の解放・M2: 世代) ──
+
+_ISO_OK = ("none", "shared", "worktree")
+
+
+def _expected(row: dict) -> dict:
+    """対応表の期待値を、実装とは独立に書く"""
+    if row["kind"] == "missing":
+        return {"ok": False}
+    if row["iso"] not in _ISO_OK or row["kind"] == "bogus":
+        return {"ok": False}
+    k = row["kind"]
+    eff = (
+        k
+        if k in ("ro", "edit", "check")
+        else ("check" if row["nk"] == "check" else ("edit" if row["writes"] else "ro"))
+    )
+    if eff == "check":
+        return {"ok": False}
+    if eff == "ro":
+        return (
+            {"ok": not row["writes"], "role": "explore", "isolation": False}
+            if not row["writes"]
+            else {"ok": False}
+        )
+    return {"ok": True, "role": "worker", "isolation": True} if row["writes"] else {"ok": False}
+
+
+@pytest.mark.parametrize("kind", [None, "ro", "task", "edit", "check", "bogus"])
+@pytest.mark.parametrize("writes", [0, 1])
+def test_role_isolation_table_all_combinations(kind, writes):
+    rows = [r for r in case("table") if r["kind"] == kind and r["writes"] == writes]
+    assert len(rows) == 2 * 4 * 3  # node.kind × 隔離 × attrs.role
+    for r in rows:
+        exp = _expected(r)
+        plan = r["plan"]
+        assert plan["ok"] is exp["ok"], r
+        if exp["ok"]:
+            # 属性の role (evil など) は効かない。編集は必ず worktree 隔離 (strategy が none・shared でも)
+            assert (plan["role"], plan["isolation"]) == (exp["role"], exp["isolation"]), r
+        else:
+            assert plan["reason"], r
+
+
+def test_table_missing_task_is_rejected():
+    assert [r["plan"]["ok"] for r in case("table") if r["kind"] == "missing"] == [False]
+
+
+def test_plan_mode_starts_no_writable_child():
+    r = case("planmode")
+    assert r["manual"] == [False, True]  # 手動経路 (guarded_task) と同じ関数の形
+    assert r["edits"] == 0
+    assert r["agents"] == ["explore"]
+
+
+def test_can_spawn_deny_starts_nothing():
+    assert case("gate")["deny"] == {"spawns": 0, "live": 0}
+
+
+def test_can_spawn_ask_holds_task_ready_without_run():
+    assert case("gate")["hold"] == {"spawns": 0, "state": "ready", "runs": 0}
+
+
+def test_can_spawn_hold_resumes_when_allowed():
+    assert case("gate")["resumed"] == {"spawns": 1, "runs": 1}
+
+
+def test_editing_child_always_isolated_worker_and_reading_child_explorer():
+    r = case("roles")
+    assert r["calls"] == [["worker", True], ["explore", False]]
+
+
+def test_check_and_inconsistent_tasks_start_no_child():
+    r = case("roles")
+    assert len(r["calls"]) == 2  # E1 と R1 だけ
+    assert r["states"] == {"C1": ["failed"], "X1": ["failed"], "B1": ["failed"]}
+
+
+def test_no_isolation_available_rejects_without_fallback():
+    r = case("noisolation")
+    assert r["calls"] == [["worker", True]]  # 隔離を要求し、作れなかった。隔離なしで再試行しない
+    assert r["jobs"] == 0 and r["runs"] == ["failed"]
+
+
+def test_normally_finished_job_is_closed_and_slot_released():
+    r = case("slotsrelease")
+    assert r["closed"] == [True, True]
+
+
+def test_third_task_starts_after_two_finished_with_max_two():
+    r = case("slotsrelease")
+    assert (r["first"], r["total"]) == (2, 3)
+    assert r["t3"] == ["R1", "R2", "R3"]
+
+
+@pytest.mark.parametrize("how", ["shutdown", "restart", "swap"])
+def test_late_submit_after_shutdown_generation_or_runtime_change_spawns_nothing(how):
+    r = case("lateSubmit")[how]
+    assert r["spawns"] == 0 and r["live"] == 0
+    assert r["runStates"] and all(s == "aborted" for s in r["runStates"])  # 予約は取り消す
+
+
+def test_late_submit_without_interference_still_spawns():
+    r = case("lateSubmit")["none"]
+    assert r["spawns"] == 2 and r["live"] == 2
+
+
+def test_driver_run_source_has_generation_and_trusted_role_table():
+    src = SRC.read_text(encoding="utf-8")
+    assert "gen++" in src and "const same = " in src
+    assert 'READ_ROLE = "explore"' in src and 'EDIT_ROLE = "worker"' in src

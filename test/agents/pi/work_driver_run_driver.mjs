@@ -55,7 +55,7 @@ function fakeJob(id) {
 	return j;
 }
 
-async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [], approve = true, budget = BIG, jobsMax = 6, others = 0, mode, check = true, spawnError } = {}) {
+async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [], approve = true, budget = BIG, jobsMax = 6, others = 0, mode, check = true, spawnError, canSpawn, submitHook, realJobs } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), "driver-run-"));
 	let clock = 1_700_000_000_000;
 	const now = () => (clock += 1);
@@ -79,7 +79,8 @@ async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [],
 	const jobsLike = {
 		max: jobsMax,
 		get size() {
-			return others + [...live].filter((j) => !j.done).length;
+			// realJobs: 本物の Jobs と同じく、閉じるまで (正常終了しても) 枠を使う
+			return others + [...live].filter((j) => (realJobs ? j.closed.length === 0 : !j.done)).length;
 		},
 	};
 	const spawnChild = (...args) => {
@@ -92,12 +93,16 @@ async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [],
 		return { job: j, model: "m" };
 	};
 	const timers = { fns: [], cleared: 0, setInterval: (fn) => (timers.fns.push(fn), timers.fns.length), clearInterval: () => timers.cleared++ };
-	const source = () => (mode ? { runtime: { mode, state: () => runtime.state(), submit: async (e) => (calls.push({ submit: e.length }), { ok: false, applied: [] }) }, holder: H } : { runtime, holder: H });
+	const wrapped = { get mode() { return runtime.mode; }, state: () => runtime.state(), submit: async (e) => (submitHook && (await submitHook(e)), runtime.submit(e)) };
+	const swapped = { get mode() { return runtime.mode; }, state: () => runtime.state(), submit: (e) => runtime.submit(e) };
+	const sel = { src: null };
+	const source = () => (sel.src ? { runtime: sel.src, holder: H } : submitHook ? { runtime: wrapped, holder: H } : mode ? { runtime: { mode, state: () => runtime.state(), submit: async (e) => (calls.push({ submit: e.length }), { ok: false, applied: [] }) }, holder: H } : { runtime, holder: H });
 	const run = dr.registerDriverRun(pi, {
 		child,
 		env,
 		runtime: source,
 		spawnChild,
+		...(canSpawn ? { canSpawn } : {}),
 		jobs: jobsLike,
 		now,
 		timers,
@@ -120,6 +125,7 @@ async function mk({ env = { PI_WORK_SCHEDULER: "1" }, child = false, tasks = [],
 		first,
 		ctx,
 		now,
+		swap: () => (sel.src = swapped),
 		start: async () => handlers.get("session_start")?.({}, ctx),
 		stop: async () => handlers.get("session_shutdown")?.({}),
 		st: (id) => runtime.state().nodes.get(id)?.state,
@@ -389,6 +395,125 @@ const cases = {
 		const r = { calls: s.calls.map((c) => [c.agent, c.model, c.effort, c.cwdArg, c.isolation]), jobsMade: s.jobs.length };
 		await s.cleanup();
 		return r;
+	},
+	// B2: kind × writes × node.kind × 隔離 × attrs.role の全組み合わせ (属性の role は結果に効かない)
+	async table() {
+		const rows = [];
+		for (const kind of [undefined, "ro", "task", "edit", "check", "bogus"])
+			for (const writes of [[], ["a/**"]])
+				for (const nk of ["task", "check"])
+					for (const iso of ["none", "shared", "worktree", "bogus"])
+						for (const role of ["worker", "explore", "evil"]) {
+							const attrs = { role, ...(kind ? { kind } : {}) };
+							rows.push({ kind: kind ?? null, writes: writes.length, nk, iso, role, plan: dr.planSpawn({ kind: nk, writes, attrs }, iso) });
+						}
+				rows.push({ kind: "missing", writes: 0, nk: "", iso: "none", role: "", plan: dr.planSpawn(undefined, "none") });
+		return rows;
+	},
+	// B1: /plan 中は書き込み役割を起動しない (index.ts と同じ形の canSpawn)、読み取り専用は起動する
+	async planmode() {
+		const canSpawn = (spec) => (spec.role === "explore" ? { ok: true, reason: "" } : { ok: false, reason: "plan mode" });
+		const manual = [canSpawn({ role: "worker" }).ok, canSpawn({ role: "explore" }).ok];
+		const s = await mk({ canSpawn, tasks: [T("E1", ["a/**"]), T("E2", ["b/**"]), T("R1", [])] });
+		await s.start();
+		await s.run.kick();
+		await flush();
+		const r = { manual, agents: s.calls.map((c) => c.agent), edits: s.calls.filter((c) => c.agent === "worker").length };
+		await s.cleanup();
+		return r;
+	},
+	// B1: deny は起動しない、ask は保留 (ready のまま・失敗に数えない)、許可を戻すと起動する
+	async gate() {
+		const out = {};
+		const deny = await mk({ canSpawn: () => ({ ok: false, reason: "deny" }), tasks: [T("R1", [])] });
+		await deny.start();
+		await deny.run.kick();
+		await flush();
+		out.deny = { spawns: deny.calls.length, live: deny.run.live().length };
+		await deny.cleanup();
+		let mode = "hold";
+		const ask = await mk({ canSpawn: () => (mode === "hold" ? { ok: false, hold: true, reason: "ask" } : { ok: true, reason: "" }), tasks: [T("R1", [])] });
+		await ask.start();
+		for (let i = 0; i < 3; i++) {
+			await ask.run.kick();
+			await flush();
+		}
+		out.hold = { spawns: ask.calls.length, state: ask.st("R1"), runs: ask.runsOf("R1").length };
+		mode = "ok";
+		await ask.run.kick();
+		await flush();
+		out.resumed = { spawns: ask.calls.length, runs: ask.runsOf("R1").length };
+		await ask.cleanup();
+		return out;
+	},
+	// B2: 編集は worker + 隔離、読み取りは explore (attrs.role 無視)、check や不整合は起動しない
+	async roles() {
+		const s = await mk({ tasks: [T("E1", ["a/**"], [], "evil"), T("R1", [], [], "worker"), T("C1", [], [], "worker", "S", "check"), T("X1", ["c/**"], [], "worker", "S", "ro"), T("B1", ["d/**"], [], "worker", "S", "bogus")] });
+		await s.start();
+		await s.run.kick();
+		await flush();
+		const r = { calls: s.calls.map((c) => [c.agent, c.isolation]), spawnedTasks: spawnedTasks(s), states: Object.fromEntries(["C1", "X1", "B1"].map((t) => [t, s.runsOf(t).map((n) => n.state)])) };
+		await s.cleanup();
+		return r;
+	},
+	// B2: 隔離を作れないとき (spawnChild が error) は起動せず、隔離なしにフォールバックしない
+	async noisolation() {
+		const s = await mk({ spawnError: "worktree を作れない", tasks: [T("E1", ["a/**"])] });
+		await s.start();
+		await s.run.kick();
+		await flush();
+		const r = { calls: s.calls.map((c) => [c.agent, c.isolation]), jobs: s.jobs.length, runs: s.runsOf("E1").map((n) => n.state) };
+		await s.cleanup();
+		return r;
+	},
+	// M1: 正常終了した子を閉じ、枠を使い切らない (jobs.max + 1 件目まで起動する)
+	async slotsrelease() {
+		const s = await mk({ realJobs: true, jobsMax: 2, tasks: [T("R1", []), T("R2", []), T("R3", [])] });
+		await s.start();
+		await s.run.kick();
+		await flush();
+		const first = s.jobs.length;
+		for (const j of [...s.jobs]) s.done(j);
+		await flush();
+		await s.run.kick();
+		await flush();
+		const r = { first, total: s.jobs.length, closed: s.jobs.slice(0, 2).map((j) => j.closed.length > 0), t3: spawnedTasks(s) };
+		await s.cleanup();
+		return r;
+	},
+	// M2: 遅延 submit の間に shutdown / 新世代 / runtime 差し替えがあれば spawn しない (予約は取り消す)
+	async lateSubmit() {
+		const out = {};
+		for (const how of ["shutdown", "restart", "swap", "none"]) {
+			let release;
+			const gate = new Promise((r) => (release = r));
+			let armed = false;
+			let s;
+			s = await mk({
+				submitHook: async (e) => {
+					if (!armed || !e.some((x) => x.type === "run.reserved")) return;
+					armed = false;
+					await gate;
+				},
+				tasks: [T("R1", []), T("E1", ["a/**"])],
+			});
+			await s.start();
+			armed = true;
+			const k = s.run.kick();
+			await flush();
+			if (how === "shutdown") await s.stop();
+			if (how === "restart") {
+				await s.stop();
+				await s.start();
+			}
+			if (how === "swap") s.swap();
+			release();
+			await k;
+			await flush();
+			out[how] = { spawns: s.calls.filter((c) => c.agent).length, live: s.run.live().length, runStates: [...s.runtime.state().nodes.values()].filter((n) => n.kind === "run").map((n) => n.state) };
+			await s.cleanup();
+		}
+		return out;
 	},
 };
 
