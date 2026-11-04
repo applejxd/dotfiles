@@ -14,10 +14,8 @@ import {
 import type { BranchRef, FileEntry, Hunk, Repo } from "./git-view.ts";
 import { mergeExecute, mergePlan } from "./merge-api.ts";
 import type { MergeEnv, PostResult } from "./merge-api.ts";
-import { blobsFor, getReview, isUntouchedBrief, postComment, postSubmit } from "./review-api.ts";
+import { blobsFor, getReview, postComment, postSubmit } from "./review-api.ts";
 import type { PrCtx } from "./review-api.ts";
-import { createFeatureRoute } from "./feature-api.ts";
-import type { CreateEnv } from "./feature-api.ts";
 
 const MAX_FILES = 400;
 const MAX_COMMITS = 200;
@@ -35,7 +33,7 @@ export type PrSummary = {
 	repoName: string;
 	branch: string;
 	target: string;
-	state: "open" | "merged" | "empty";
+	state: "open" | "merged";
 	commits: number;
 	files: number;
 	additions: number;
@@ -168,15 +166,6 @@ async function reviewedKeys(repo: Repo): Promise<Set<string> | null> {
 	return keys;
 }
 
-/**
- * 0 コミットで、起票の記録があり、枝の先頭が起票時の基点のままで、統合の成功も無い PR は "empty"（起票のみ）にする。
- * 「統合済み」と区別して見せるための表示用。記録を読めないときは "merged" のまま（隠さない・権限の根拠にしない）。
- */
-async function markEmpty(repo: Repo, s: PrSummary, reviewed: Set<string> | null): Promise<PrSummary> {
-	if (s.commits !== 0 || s.state !== "merged" || (reviewed && !reviewed.has(s.prKey))) return s;
-	return (await isUntouchedBrief(repo, s.prKey, s.sourceOid)) ? { ...s, state: "empty" } : s;
-}
-
 type Holder = { branch: string; oid: string; atUnix: number };
 
 /** oid を含む feature/・bugfix/ の枝（自分を含む）。読めなかったら null（隠さない側に倒す）。 */
@@ -258,7 +247,7 @@ async function listRepoPrs(repo: Repo, errors: ListError[]): Promise<PrSummary[]
 			// 差分が無く (0 コミット。統合先と同じか祖先)、レビューの記録も無い枝は、PR として一覧に出さない (ID を直接指定すれば読める)。
 			// 記録の有無を読めなかったとき (reviewed が null) は、隠さずに出す。
 			if (c.summary.commits === 0 && reviewed && !reviewed.has(c.summary.prKey)) continue;
-			out.push(await markEmpty(repo, c.summary, reviewed));
+			out.push(c.summary);
 		} catch (e) {
 			errors.push({ repoName: repo.name, branch: b.branch, reason: reasonOf(e) });
 		}
@@ -358,12 +347,7 @@ function ctxOf(repo: Repo, c: Computed): PrCtx {
 
 /** 書き込み API（POST）の入口。body は検査済みの JSON のオブジェクト。 */
 export function isPostRoute(pathname: string): boolean {
-	return isFeaturePostRoute(pathname) || /^\/api\/prs\/[^/]+\/[^/]+\/(?:comments|submit|merge-plan|merge)$/.test(pathname);
-}
-
-/** 起票の POST（Origin 必須・--allow-create が要る経路）。 */
-export function isFeaturePostRoute(pathname: string): boolean {
-	return /^\/api\/repos\/[^/]+\/features$/.test(pathname);
+	return /^\/api\/prs\/[^/]+\/[^/]+\/(?:comments|submit|merge-plan|merge)$/.test(pathname);
 }
 
 /** 統合系の POST（Origin 必須・--allow-merge が要る経路）。 */
@@ -376,14 +360,7 @@ export async function handlePost(
 	pathname: string,
 	body: Record<string, unknown>,
 	env: MergeEnv,
-	createEnv: CreateEnv = { testDelayMs: 0, testFail: null },
 ): Promise<PostResult> {
-	const f = /^\/api\/repos\/([^/]+)\/features$/.exec(pathname);
-	if (f) {
-		const repo = /^r[0-9a-f]{8}$/.test(f[1]) ? repos.find((r) => r.repoId === f[1]) : undefined;
-		if (!repo) throw notFound();
-		return await createFeatureRoute(repo, body, createEnv);
-	}
 	const m = /^\/api\/prs\/([^/]+)\/([^/]+)\/(comments|submit|merge-plan|merge)$/.exec(pathname);
 	if (!m) throw notFound();
 	const { repo, c } = await findPr(repos, m[1], m[2]);
@@ -396,10 +373,10 @@ export async function handlePost(
 /** API の入口。成功なら応答の本体、失敗なら ApiError を投げる。 */
 export async function handleApi(repos: Repo[], pathname: string, query: URLSearchParams): Promise<unknown> {
 	if (pathname === "/api/repos") {
-		const out: Array<{ repoId: string; name: string; target: string; targetOid: string; unpushed: number | null }> = [];
+		const out: Array<{ repoId: string; name: string; target: string; unpushed: number | null }> = [];
 		for (const r of repos) {
 			const t = await resolveTarget(r);
-			if (t) out.push({ repoId: r.repoId, name: r.name, target: t.name, targetOid: t.oid, unpushed: await unpushedOf(r, t.name) });
+			if (t) out.push({ repoId: r.repoId, name: r.name, target: t.name, unpushed: await unpushedOf(r, t.name) });
 		}
 		return { repos: out };
 	}
@@ -424,7 +401,7 @@ export async function handleApi(repos: Repo[], pathname: string, query: URLSearc
 		}
 		if (m[3] === undefined) {
 			const { repo, c } = await findPr(repos, m[1], m[2]);
-			const pr = await markEmpty(repo, c.summary, null);
+			const pr = c.summary;
 			const inc = await includedInOf(repo, c.summary);
 			return {
 				pr: inc ? { ...pr, includedIn: inc } : pr,

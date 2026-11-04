@@ -7,7 +7,7 @@
     python3 scripts/pr_app.py expose | unexpose          tailnet へ HTTPS で出す／やめる（tailscale serve。Funnel は使わない）
 
 設定ファイル（既定 ~/.config/pr-viewer/env。`PRAPP_ENV_FILE` で変更）は systemd の EnvironmentFile 形式。
-キー: PRAPP_ALLOW_MERGE・PRAPP_ALLOW_CREATE・PRAPP_PORT・PRAPP_REPOS・PRAPP_ROOT。
+キー: PRAPP_ALLOW_MERGE・PRAPP_PORT・PRAPP_REPOS・PRAPP_ROOT。
 呼び出し側の環境変数が設定ファイルより優先する。**権限の旗は既定で全部無効**（`1` のときだけ `--allow-*` を付ける）。
 起動元は、このスクリプトが入っているチェックアウトの根（`PRAPP_ROOT` で上書き可）。`apps/pr-viewer/server.ts` が無ければ停止する。
 `PRAPP_DRY_RUN=1` では systemd・tailscale を触らず、ユニットの内容と実行するコマンドを表示するだけ。
@@ -30,7 +30,6 @@ from pathlib import Path
 UNIT = "pr-viewer.service"
 KEYS = (
     "PRAPP_ALLOW_MERGE",
-    "PRAPP_ALLOW_CREATE",
     "PRAPP_PORT",
     "PRAPP_REPOS",
     "PRAPP_ROOT",
@@ -151,7 +150,6 @@ def env_text(repos: str, port: str) -> str:
         "# pr_app.py の設定（systemd の EnvironmentFile 形式。変えたら: pr_app.py restart）\n"
         "# 旗は 1 で有効。既定は全部無効。有効にする前に docs/spec/pr-viewer.md の §6 を読む\n"
         "PRAPP_ALLOW_MERGE=0\n"
-        "PRAPP_ALLOW_CREATE=0\n"
         f"PRAPP_PORT={port}\n"
         f'PRAPP_REPOS="{repos}"\n'
     )
@@ -319,7 +317,6 @@ def cmd_serve(repos: list[str], pinned: bool = False) -> int:
             "--allow-merge",
             "統合を有効にして起動します。Funnel（公開）を使っていないことを確かめてください",
         ),
-        ("PRAPP_ALLOW_CREATE", "--allow-create", "「起票」を有効にして起動します"),
     ):
         if setting(name, fv) == "1":
             flags.append(flag)

@@ -128,7 +128,7 @@ HTTP・画面にはつなげていない（A2）。`planMerge`（読み取りだ
 | A3 | 合流可否・「develop が N 進んだ」・「未 push N 件」の表示（読み取りのみ）。**実装済み**（`behind`・`overlap`・`unpushed`。設計は [pr-viewer.md §6](../spec/pr-viewer.md)） | A2 |
 | A4 | 「変更を依頼」「衝突を解決」（`pis -p` の起動）。**A4a（変更を依頼）は実装したが撤去済み**（実運用で未使用。経緯は [pr-viewer.md §6](../spec/pr-viewer.md)）。A4b（衝突を解決）は未着手 | X3 合格（X3-a は A4a の有効化の前に実施） |
 | A5 | 撤去（保留・受信箱・`git_integrate`・`/pending approve` など。約 2,900 行 + 試験約 20 ファイル）。**実装済み**（2026-11-03。1 つの feature・1 回の保存で、PR ビューアが作るこの feature の統合 merge commit を `git revert -m 1` すれば旧経路が戻る（履歴には撤去本体・develop の取り込み・後続修正があり、本体 commit だけの revert は後続修正と競合しうる）。残骸の ref の掃除は利用者が `pk pending-clean` で行う。保存は利用者の確認後） | A2〜A4 の運用で足りること |
-| B1 | 起票: アプリが新しい feature（枝と worktree）を作り、依頼文 brief をレビュー記録へ残す（`POST /api/repos/<repoId>/features`。LLM・pis は呼ばない）。**実装済み・既定で無効**（`--allow-create`）。設計は [pr-viewer.md §6「起票」](../spec/pr-viewer.md) | A2 |
+| B1 | 起票: アプリが新しい feature（枝と worktree）を作り、依頼文 brief をレビュー記録へ残す（`POST /api/repos/<repoId>/features`。LLM・pis は呼ばない）。**実装したが撤去済み**（2026-11-05 に利用者が撤去を決定。実使用の証拠が 0 件。起票はチャットで行う。経緯は [pr-viewer.md §6「起票の撤去」](../spec/pr-viewer.md)） | A2 |
 | B（再判断） | アプリのジョブ実行（worktree の作成・worker の起動・コミット・検査）とマネージャー役（計画・review・衝突） | A の運用。`pis -p` の役割の試験 |
 | C（再判断） | pi 側の撤去（`guarded_task`・`git_commit` の guarded_action 統合系・盤面など）。pi をガード + 通常のツールへ戻す | B が実際に回ってから |
 

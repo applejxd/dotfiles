@@ -268,7 +268,6 @@ def test_repos_lists_name_and_target_but_not_paths(world):
         "name": "example-app",
         "target": "develop",
         "unpushed": None,  # 上流が無いリポジトリ（A3 で足した後方互換の項目）
-        "targetOid": _git(world.repo, "rev-parse", "develop").strip(),
     }
     # 統合先が無いリポジトリ (trunk だけ) は一覧に出さない
     assert "app-none" not in by_name

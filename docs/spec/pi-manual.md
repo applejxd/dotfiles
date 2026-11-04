@@ -8,7 +8,7 @@
 >
 > - 記載した既定値は、リポジトリに同梱された設定の値
 > - 保留の承認（`/pending approve`・`git_integrate`）は撤去済み。統合は必須確認（TUI）か PR ビューアの「統合する」ボタン（[CHG-0062](../change/0062-pr-hub-simplify.md)、履歴は [guard/pi-pending.md](guard/pi-pending.md)）
-> - PR ビューアの書き込み系の旗（`--allow-merge`・`--allow-create`・`--allow-jobs`）は既定で無効。ジョブ・起票・markdown 描画・worktree の所有（`wt_owner.py`）・統合用の枝（`bundle.py`）・掃除（`wt_clean.py`）の道具が入った。使い分けは [運用モード](operation-modes.md)
+> - PR ビューアの書き込み系の旗（`--allow-merge`）は既定で無効。markdown 描画・worktree の所有（`wt_owner.py`）・統合用の枝（`bundle.py`）・掃除（`wt_clean.py`）の道具が入った（ジョブと起票の機能は撤去済み）。使い分けは [運用モード](operation-modes.md)
 > - 反映は `chezmoi apply` と pi の再起動の後
 
 ## 早見（1 画面）

@@ -1,7 +1,0 @@
-{"feature": {
-  "branch": "feature/PLACEHOLDER", "prKey": "pPLACEHOLDER", "id": "r1a2b3c4d/pPLACEHOLDER",
-  "base": {"branch": "develop", "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-  "worktree": {"name": "PLACEHOLDER", "rel": ".tmp/worktrees/PLACEHOLDER"},
-  "brief": {"rev": 1, "digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "bytes": 120},
-  "recorded": true, "replay": false, "warnings": []
-}}

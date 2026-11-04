@@ -255,18 +255,3 @@ td.code.can { cursor: pointer; }
 
 /* 稼働版の表示（画面の隨） */
 .verchip { position: fixed; right: 6px; bottom: 2px; opacity: 0.7; pointer-events: none; z-index: 1; }
-
-/* 起票: 一覧のボタン・行の題名・入力シート・依頼文カード */
-.listact { margin-left: auto; }
-.rtitle { margin-top: 2px; color: var(--fg); overflow-wrap: anywhere; }
-.sheet.createsheet { width: min(640px, 100%); overflow-wrap: anywhere; }
-.createsheet > * { min-width: 0; }
-.createsheet .field { display: grid; gap: 4px; min-width: 0; }
-.createsheet input.cbox, .createsheet textarea.cbox { font-size: 16px; min-width: 0; }
-.createsheet input.cbox { min-height: 40px; }
-.createpreview code, .createcmd code { overflow-wrap: anywhere; }
-.createcmd { margin: 0; overflow-wrap: anywhere; }
-.createtext { max-height: 40vh; overflow: auto; }
-.briefcard summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; gap: 8px; }
-.briefbody { max-height: 50vh; overflow: auto; }
-@media (max-width: 719px) { .briefcard summary { min-height: 44px; } .createsheet input.cbox { min-height: 44px; } }
