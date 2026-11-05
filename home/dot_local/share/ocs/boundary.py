@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 from collections.abc import Callable
@@ -501,11 +502,19 @@ def read_request(workspace: Path) -> dict | None:
     }
 
 
+def _is_char_device(path: str) -> bool:
+    """``path`` (symlink は先を見る) がキャラクタデバイスか。ディレクトリ・通常ファイル・無いものは偽。"""
+    try:
+        return stat.S_ISCHR(os.stat(path).st_mode)
+    except OSError:
+        return False
+
+
 def default_gpu_devices(exists: Callable[[str], bool] | None = None) -> list[str]:
-    """``PIS_NO_GPU=1`` でなければ、ホストに在る既定の GPU デバイス。存在判定は注入できる。"""
+    """``PIS_NO_GPU=1`` でなければ、ホストに在る既定の GPU デバイス (キャラクタデバイスだけ)。存在判定は注入できる。"""
     if os.environ.get(NO_GPU_ENV) == "1":
         return []
-    check = exists or (lambda p: Path(p).exists())
+    check = exists or _is_char_device
     return [d for d in DEFAULT_GPU_DEVICES if check(d)]
 
 

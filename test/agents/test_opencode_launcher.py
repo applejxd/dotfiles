@@ -844,6 +844,45 @@ def test_env_extra_devices_without_file_makes_minimal_allow(tmp_path, monkeypatc
     assert got["allowPty"] is True
 
 
+def test_default_gpu_reaches_the_final_boundary_with_real_request_and_build(tmp_path, monkeypatch):
+    # 存在判定だけを注入し、実物の read_request と build_boundary で最終の Fence の設定を見る
+    launcher = _launcher()
+    monkeypatch.delenv("PIS_NO_GPU", raising=False)
+    monkeypatch.delenv("PIS_EXTRA_DEVICES", raising=False)
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    exists = {"/dev/dxg"}.__contains__
+    merged, added = launcher.boundary.with_default_gpu(launcher.boundary.read_request(ws), exists)
+    assert added == ["/dev/dxg"]
+    got = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, merged)
+    assert got["devices"] == {"mode": "minimal", "allow": ["/dev/dxg"]}
+    # 明示の宣言と合流し、既定が先頭・重複なし
+    _request(ws, 'devices = ["/dev/nvidia0", "/dev/dxg"]\n')
+    merged, added = launcher.boundary.with_default_gpu(launcher.boundary.read_request(ws), exists)
+    got = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, merged)
+    assert got["devices"]["allow"] == ["/dev/dxg", "/dev/nvidia0"]
+    # 存在するものが無ければ、明示の宣言だけの従来どおり
+    merged, added = launcher.boundary.with_default_gpu(
+        launcher.boundary.read_request(ws), {}.__contains__
+    )
+    got = launcher.boundary.build_boundary(_base_sandbox(tmp_path), ws, merged)
+    assert added == [] and got["devices"]["allow"] == ["/dev/nvidia0", "/dev/dxg"]
+
+
+def test_default_gpu_existence_check_accepts_only_character_devices(tmp_path):
+    launcher = _launcher()
+    check = launcher.boundary._is_char_device
+    regular = tmp_path / "regular"
+    regular.write_text("x")
+    link = tmp_path / "link"
+    link.symlink_to("/dev/null")
+    assert check("/dev/null") is True
+    assert check(str(link)) is True  # symlink は先を見る
+    assert check(str(regular)) is False  # 通常ファイル
+    assert check(str(tmp_path)) is False  # ディレクトリ
+    assert check(str(tmp_path / "missing")) is False
+
+
 @pytest.mark.parametrize("value", ["", ":", "::"])
 def test_env_extra_devices_empty_keeps_old_result(tmp_path, monkeypatch, value):
     launcher = _launcher()
