@@ -33,7 +33,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 | `profile` | 子の役割（`[pi.profiles]` の名前）。`task` を持つ役割は使えない（入れ子にしない） |
 | `tier` | モデルの階層。今は `[opencode.model.tier.<プロバイダ>]` から引き、`#variant` を pi の思考の強さ（`:medium` など）に読み替える。無ければ親と同じモデル |
 | `inherit_bypass` | 真なら、親が bypass のとき子も bypass で動く。ask に `git commit` などが残る役割には付けない |
-| `timeout_minutes` | 1 往復の上限（分。1〜120 の整数。省略は 15）。「まとめに入れ」の steer は、この上限の 80% で送る。深く考える `plan` だけ 30 |
+| `timeout_minutes` | 1 往復の上限（分。1〜120 の整数。省略は 15）。「まとめに入れ」の steer は、この上限の 80% で送る。大きい実装をする `worker` と深く考える `plan` だけ 30 |
 | `check_conditions` | 真なら、依頼の守る条件の番号（行頭の `C1: …`）が、返答の「守る条件の突き合わせ」の節に全部あるかを検査し、欠けていれば結果に警告を出す（`plan` だけ。下の「`plan`（計画役）」） |
 | `description` / `system` | 親のツールの説明に出す説明と、子のシステムプロンプトに足す指示（`--append-system-prompt`） |
 
@@ -113,7 +113,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
   待っていた呼び出しには `closed` を返す。`jobId → 所有確認 → running` は await の前に同期で確定する
   （並列のツール呼び出しで競合しないため。`guarded_task` を逐次実行にしないこと）
 - 生かしておく子の上限は 4（`running` も含む）。上限では追い出さず、新しい起動を断って jobId の一覧を返す。
-  枠は spawn の前に同期で確保する。1 往復の待機は役割の上限（`timeout_minutes`。省略は 15 分）まで（超えたら `limit` で止める）
+  枠は spawn の前に同期で確保する。1 往復の待機は役割の上限（`timeout_minutes`。省略は 15 分。`worker` と `plan` は 30 分）まで（超えたら `limit` で止める）
 - job は起動時の cwd と役割を持ち、別の cwd・役割からの追加依頼は断る。`jobId` は乱数だが認証手段ではなく、
   所有の確認が本体
 - **止まる契機**: `close`・`keep` 無しの完了・`done` 以外・セッションの終了と切り替えと `/reload`（`session_shutdown`）・
@@ -151,7 +151,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
   保存・通知・ToDo 反映の失敗は握りつぶさず、UI があれば `ctx.ui.notify`、無ければ stderr に警告する。セッションをまたいだ参照の境界は cwd と役割まで。
   実装の細部と試験は [job の結果の保持の仕様メモ](../../research/agents/pi-subagent-jobs-notes.md)。
 - **計画モード（`/plan`）の間**: 書き込みの権限を持つ役割（`worker`・`commit`）の子は、起動（単発・並列）も、既存の子への続きの依頼・steer もできない（`plan` 拡張が立てる `globalThis.__piPlanMode` を、`guarded_task` が見る）。読み取り専用の役割（`reader`・`explorer`）は動く。状態・一覧・abort・close は通す。並列は、1 つでも書き込みの役割があれば全体を拒否する。計画の前から動いている書き込みの子は止めない
-- **時間の上限**: 1 往復は、役割の `timeout_minutes`（省略は 15 分。`plan` は 30 分）。上限の 80% で、子へ steer で「まとめに入れ」を送る（途中の結果を残すため。送ったかの直接の試験は無い）
+- **時間の上限**: 1 往復は、役割の `timeout_minutes`（省略は 15 分。`worker` と `plan` は 30 分）。上限の 80% で、子へ steer で「まとめに入れ」を送る（途中の結果を残すため。送ったかの直接の試験は無い）
 - **利用者コマンド**: `/agents`（一覧）、`/agent <名前> <依頼>`（子を直接起動。完了はチャットに表示するだけで、モデルのターンは起こさない）。モデルは呼べない
 - **フッター**: `activity` が、動いている子が 3 件以下なら `🤖 explore 12s, review 40s`、それより多ければ件数
 - **やらないこと**: プロジェクト内の定義ファイルからの役割（`--no-approve` と衝突）、子から子（入れ子）

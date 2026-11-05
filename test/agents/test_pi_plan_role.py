@@ -47,10 +47,14 @@ def test_plan_role_is_read_only_deep_and_gets_a_longer_limit(common) -> None:
     assert plan["check_conditions"] is True
     assert plan["inherit_bypass"] is False  # 読むだけ。bypass を引き継がない
     assert plan["model"].split(":")[-1] in {"xhigh", "high"}  # deep の推論の強さ付き
-    others = {n: a for n, a in rules["agents"].items() if n != "plan"}
+    assert (
+        rules["agents"]["worker"]["timeout_minutes"] == 30
+    )  # 大きい実装が 15 分で止まるため worker も延ばす
+    others = {n: a for n, a in rules["agents"].items() if n not in ("plan", "worker")}
     assert others and all(
         a["timeout_minutes"] == 15 and a["check_conditions"] is False for a in others.values()
     )
+    assert rules["agents"]["worker"]["check_conditions"] is False
 
 
 def test_plan_uses_the_deep_tier_of_the_active_provider() -> None:
