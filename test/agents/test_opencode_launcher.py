@@ -102,6 +102,7 @@ def _clear_extra_read_env(monkeypatch):
     """実行者の ``PIS_EXTRA_READ`` を試験へ持ち込まない。"""
     monkeypatch.delenv("PIS_EXTRA_READ", raising=False)
     monkeypatch.delenv("PIS_EXTRA_DEVICES", raising=False)
+    monkeypatch.setenv("PIS_NO_GPU", "1")  # ホストの GPU の有無に依存させない
 
 
 @pytest.fixture(autouse=True)

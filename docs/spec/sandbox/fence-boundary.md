@@ -180,6 +180,18 @@ devices = ["/dev/dxg"]
 
 #### `devices` (デバイスを境界の中へ見せる)
 
+**`pis` は既定で、ホストに在る GPU のデバイスを見せる**（実測 2026-11-05。WSL2・Fence 0.1.67: `devices: {"mode": "minimal", "allow": ["/dev/dxg"]}` で `nvidia-smi -L` が RTX 3070 を認識し、許可しないと失敗する）。
+一覧は `/dev/dxg`・`/dev/nvidiactl`・`/dev/nvidia-uvm`・`/dev/nvidia-uvm-tools`・`/dev/nvidia0`〜`7` のうち、起動時に実在するものだけ（`boundary.DEFAULT_GPU_DEVICES`）。
+`.opencode/sandbox.toml` の `devices`・`PIS_EXTRA_DEVICES` と重複を 1 つにまとめ、既定が先頭。
+起動時に `pis: デバイス: /dev/dxg (既定の GPU。PIS_NO_GPU=1 で無効)` を 1 行出す。実在するものが無い機械では、何も出さず `devices` も作らない（従来と同じ）。
+`PIS_NO_GPU=1` で既定の追加だけを止める（明示した宣言は効く。`PIS_NO_GPU` は内側へ渡さない）。`ocs`・`--no-sandbox` は既定を足さない。
+
+- **境界を広げる理由**: GPU を使う開発が多く、無いと sandbox が採用できない（使わないケースの方が少ない）
+- **限界**: 内側の任意のプロセスが GPU を使える。GPU ドライバへの攻撃面が増える。GPU のメモリはプロセス間で分離されるが、ドライバの欠陥は境界の外。ホストに GPU が無ければ何も変わらない
+- 子（worktree 隔離）の Landlock の書込可（`harness/index.ts` の `ISOLATION_DEVICES`）は同じ一覧（`nvidia-modeset` は両方で除外）
+
+以下は `devices` 全般（`ocs` を含む明示の宣言）の規則。
+
 Fence の `devices.allow` へ渡す。WSL の GPU は `/dev/dxg`、ネイティブの Linux の NVIDIA は
 `/dev/nvidiactl`・`/dev/nvidia0`・`/dev/nvidia-uvm` など。
 

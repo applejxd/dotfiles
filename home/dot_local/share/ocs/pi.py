@@ -928,6 +928,8 @@ def _launch_with(
     boundary.reject_control_dirs(sandbox, workspace, request)
     boundary.reject_protected_workspace(sandbox, workspace, request)
     boundary.announce_request(request)
+    request, gpu_devices = boundary.with_default_gpu(request)
+    boundary.announce_default_gpu(gpu_devices)
     expose = boundary.read_expose_ports(workspace)
     boundary.reject_reserved_ports(
         expose,

@@ -35,6 +35,7 @@ INNER_STATE = "/tmp/xdg-state"
 DROP_ENV = (
     "PIS_EXTRA_READ",
     "PIS_EXTRA_DEVICES",
+    "PIS_NO_GPU",
     "PIS_EXPOSE_PORTS",
     "GH_TOKEN",
     "GITHUB_TOKEN",

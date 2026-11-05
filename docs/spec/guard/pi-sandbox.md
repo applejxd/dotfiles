@@ -23,6 +23,14 @@
 
 > OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。表の「設定の出所」の `[opencode.sandbox]` と「作業先ごとの追加」の `.opencode/sandbox.toml` が対象。pi の仕様は [緩和のゲート](#緩和のゲート)。
 
+### GPU（既定で見える）
+
+```sh
+PIS_NO_GPU=1 pis      # 既定の GPU のデバイスを内側へ見せない
+```
+
+`pis` は、ホストに在る GPU のデバイス（`/dev/dxg`・`/dev/nvidia*`）を既定で内側へ見せる。無ければ何も変わらない。詳細は [デバイス](../sandbox/fence-boundary.md#デバイス)。
+
 ### 公開ポート（起動例）
 
 ```sh
