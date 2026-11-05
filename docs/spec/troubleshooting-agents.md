@@ -208,6 +208,26 @@ chezmoi apply
 **成功の確認**: 上の確認コマンドで `LinkType` が `Junction`、`Target` が
 `~/.claude/skills` になる。
 
+## pis の内側で本体の git status が dirty に見える
+
+**対象**: `pis`（sandbox の内側で動く pi）で、dotfiles のリポジトリを起動ディレクトリにしたとき。
+
+**症状**: 何も編集していないのに、本体（`develop`）の `git status` が、`M`（変更）や `D`（削除）を大量に出す。
+統合（`git flow feature finish`）が `stash failed` / `unsupported file type` で落ちる。
+
+**原因**: 内側では、`deny_read` で隠した追跡ファイル（個人の設定・鍵のテンプレート・秘密の一覧など）が、
+`/dev/null`（文字デバイス）か、存在しないものに見える（[隠し方](sandbox/fence-boundary.md#境界の中身)）。
+それを git が、変更・削除として数える。作業ツリーの実体は壊れていない（sandbox の外から見れば clean）。
+
+**対処**:
+
+- **統合は sandbox の外**（PR ビューアの「統合する」）で行う。内側では `git flow feature finish`・`git stash` を使わない
+- 内側で、本体に `git add -A`・`git commit` をしない（隠れた追跡ファイルの**削除**を誤ってステージする）。
+  実装は feature の worktree（`.tmp/worktrees/<名前>/`）で行う。worktree の中は、この影響を受けない
+- 本体の dirty を判定するときは、sandbox の外で `git status` を見る
+
+恒久策（統合の手順が、隠れ蓑による見かけの差分を無視する）は未実装。
+
 ## pis の内側でクリップボードへコピーできない
 
 **対象**: `pis`（sandbox の内側で動く pi）。WSL2（WSLg）で、Orca のターミナルから使う構成で確認した。
