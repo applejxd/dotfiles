@@ -91,7 +91,14 @@ def _commit(repo: Path, name: str, text: str, msg: str) -> str:
 
 
 def _run(repo: Path, from_ref: str, to_ref: str) -> subprocess.CompletedProcess[str]:
-    env = {**os.environ, "PRE_COMMIT_FROM_REF": from_ref, "PRE_COMMIT_TO_REF": to_ref}
+    # 使い捨てリポジトリは mise.toml の外なので、gitleaks の版をリポジトリの mise.toml から引かせる
+    # (これが無いと mise が版を解決できず、「拒否」の試験が誤った理由で通ってしまう)
+    env = {
+        **os.environ,
+        "PRE_COMMIT_FROM_REF": from_ref,
+        "PRE_COMMIT_TO_REF": to_ref,
+        "MISE_GLOBAL_CONFIG_FILE": str(SCRIPT.parent.parent / "mise.toml"),
+    }
     return subprocess.run(
         [sys.executable, str(SCRIPT)],
         cwd=repo,

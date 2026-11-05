@@ -47,6 +47,8 @@ def test_inner_env_leaves_gh_alone_when_disabled(tmp_path, monkeypatch):
     pi = _ocs().pi
     monkeypatch.setattr(pi.check, "ensure_canary", lambda: None)
     monkeypatch.setenv("GH_TOKEN", "host-real-value")
+    # 実行者の環境 (pis の内側など) に GH_CONFIG_DIR があっても、inner_env が足したものだけを見る
+    monkeypatch.delenv("GH_CONFIG_DIR", raising=False)
     off = pi.inner_env(tmp_path / "agent", {"filesystem": {}})
     assert "GH_TOKEN" not in off and "GH_CONFIG_DIR" not in off
     assert os.environ["GH_TOKEN"] == "host-real-value"  # ホスト側は変えない

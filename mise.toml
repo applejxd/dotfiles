@@ -12,6 +12,9 @@ node = "latest"
 
 [env]
 UV_PROJECT_ENVIRONMENT = "{% if os() == 'windows' %}.venv-windows{% else %}.venv{% endif %}"
+# uvx が作る tools ディレクトリを作業ツリー内の .tmp へ置く。pis (Fence) の内側では ~/.local/share/uv へ書けず、
+# pre-commit の uvx hook (ruff / yamllint) が os error 13 で落ちる。see docs/spec/sandbox/fence-boundary.md#uvx-の一時領域
+UV_TOOL_DIR = "{{config_root}}/.tmp/uv-tools"
 
 [tasks.e2e]
 description = "Docker で cold start を検証する（引数: [service] [mode]。test/README.md 参照）"
