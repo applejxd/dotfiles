@@ -903,3 +903,343 @@ def test_real_fence_boundary_check_passes_for_pi(tmp_path, monkeypatch):
     assert (tmp_path / "pi-sandbox").is_dir(), "AGENT_HOME の差し替えが効いていない"
     assert not list((tmp_path / "pi-sandbox").glob("agent-*")), "境界用の置き場が残っている"
     assert (real / "sessions").is_dir(), "REAL_AGENT の差し替えが効いていない"
+
+
+# ─── 公開ポート (PIS_EXPOSE_PORTS / sandbox.toml の expose_ports) ───────────
+# see docs/spec/sandbox/fence-boundary.md#公開ポートweb-アプリをホストのブラウザで開く
+
+
+def _expose_launch(monkeypatch, tmp_path, toml: str | None = None):
+    """``_launch_with`` を Fence 抜きで走らせ、Fence へ渡る argv を返す関数を返す。"""
+    import contextlib
+
+    ocs = _ocs()
+    pi = ocs.pi
+    runtime = tmp_path / "fence"
+    runtime.write_text("", encoding="utf-8")
+    workspace = tmp_path / "ws"
+    (workspace / ".opencode").mkdir(parents=True)
+    if toml is not None:
+        (workspace / ".opencode" / "sandbox.toml").write_text(toml, encoding="utf-8")
+    monkeypatch.chdir(workspace)
+    monkeypatch.delenv("PIS_EXPOSE_PORTS", raising=False)
+    monkeypatch.setattr(
+        pi.boundary, "load_boundary", lambda *a, **k: {"runtime_path": str(runtime)}
+    )
+    for name in ("reject_unsafe_workspace", "reject_control_dirs", "reject_protected_workspace"):
+        monkeypatch.setattr(pi.boundary, name, lambda *a, **k: None)
+    monkeypatch.setattr(pi.boundary, "read_request", lambda *a, **k: None)
+    monkeypatch.setattr(
+        pi.boundary,
+        "build_boundary",
+        lambda *a, **k: {
+            "filesystem": {"allowWrite": [], "allowRead": [], "denyWrite": [], "denyRead": []},
+            "network": {},
+        },
+    )
+    monkeypatch.setattr(pi.boundary, "hide_workspace_secrets", lambda *a, **k: None)
+    monkeypatch.setattr(pi.boundary, "prepare_protected", lambda *a, **k: [])
+    monkeypatch.setattr(pi, "populate_agent_dir", lambda *a, **k: None)
+    monkeypatch.setattr(pi, "sessions_dir", lambda *a, **k: tmp_path / "sessions")
+    monkeypatch.setattr(pi, "read_network_setting", lambda *a, **k: None)
+    monkeypatch.setattr(pi, "inner_env", lambda *a, **k: {"PATH": "/usr/bin"})
+    monkeypatch.setattr(pi, "cleanup", lambda *a, **k: None)
+    monkeypatch.setattr(pi.backup, "backup_worktree", lambda *a, **k: None)
+    monkeypatch.setattr(pi.check, "preflight", lambda *a, **k: 0)
+    monkeypatch.setattr(pi.check, "host_env", lambda env, tmp: env)
+    monkeypatch.setattr(pi.cli, "write_boundary", lambda cfg: str(tmp_path / "b.json"))
+
+    @contextlib.contextmanager
+    def fake_relay(config_, env=None, network=None):
+        yield config_
+
+    monkeypatch.setattr(pi.relay, "session", fake_relay)
+    seen: dict = {}
+
+    def fake_run(argv, env, agent, broker=False):
+        seen["argv"] = argv
+        return 0
+
+    monkeypatch.setattr(pi, "run", fake_run)
+    agent = tmp_path / "agent"
+    agent.mkdir()
+    args = SimpleNamespace(check=False, no_backup=True, allowlist=False)
+
+    def launch(broker_value=None, **kw):
+        code = pi._launch_with(args, ["-c"], broker_value, agent=agent, **kw)
+        assert code == 0
+        return seen["argv"]
+
+    launch.runtime = str(runtime)
+    launch.pi = pi
+    return launch
+
+
+def test_expose_ports_toml_is_ignored_and_only_env_ports_get_p(monkeypatch, tmp_path):
+    launch = _expose_launch(monkeypatch, tmp_path, "expose_ports = [3000, 8000, 3000]\n")
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", "8000:5173")
+    argv = launch()
+    assert argv[:7] == [
+        launch.runtime,
+        "--settings",
+        str(tmp_path / "b.json"),
+        "-p",
+        "8000",
+        "-p",
+        "5173",
+    ]
+    assert argv[7] == "--"
+    assert argv.count("-p") == 2
+
+
+def test_expose_ports_from_env_only(monkeypatch, tmp_path):
+    launch = _expose_launch(monkeypatch, tmp_path)
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", "3000:8000")
+    argv = launch()
+    assert argv[3:8] == ["-p", "3000", "-p", "8000", "--"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "expose_ports = [3000]",
+        "expose_ports = [8085]",
+        "expose_ports = [3000, 8000]",
+        'expose_ports = "3000"',
+        'expose_ports = ["3000"]',
+        "expose_ports = true",
+        "expose_ports = [true]",
+        "expose_ports = [[3000]]",
+        "expose_ports = [{ port = 3000 }]",
+        "expose_ports = [80]",
+        "expose_ports = [3000, 3001, 3002, 3003, 3004, 3005, 3006, 3007, 3008]",
+    ],
+)
+def test_toml_expose_ports_never_adds_p_and_warns_once(monkeypatch, tmp_path, capsys, body):
+    launch = _expose_launch(monkeypatch, tmp_path, body + "\n")
+    argv = launch()
+    err = capsys.readouterr().err
+    assert "-p" not in argv
+    assert argv[:4] == [launch.runtime, "--settings", str(tmp_path / "b.json"), "--"]
+    assert err.count("expose_ports は無視する") == 1
+    assert "PIS_EXPOSE_PORTS" in err and "公開ポート:" not in err
+
+
+def test_toml_without_expose_ports_has_no_warning(monkeypatch, tmp_path, capsys):
+    launch = _expose_launch(monkeypatch, tmp_path, "read = []\n")
+    launch()
+    assert "無視する" not in capsys.readouterr().err
+
+
+def test_toml_expose_ports_warning_text(monkeypatch, tmp_path, capsys):
+    launch = _expose_launch(monkeypatch, tmp_path, "expose_ports = [3000]\n")
+    launch()
+    assert (
+        "pis: .opencode/sandbox.toml の expose_ports は無視する "
+        "(公開ポートは環境変数 PIS_EXPOSE_PORTS だけで宣言する)"
+    ) in capsys.readouterr().err
+
+
+def test_toml_expose_ports_with_env_bad_value_still_refuses(monkeypatch, tmp_path):
+    launch = _expose_launch(monkeypatch, tmp_path, "expose_ports = [3000]\n")
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", "80")
+    with pytest.raises(SystemExit):
+        launch()
+
+
+def test_expose_ports_toml_alongside_other_keys_still_parses(monkeypatch, tmp_path):
+    """既存の項目と同居しても、``expose_ports`` は「知らない項目」として拒否されない。"""
+    pi = _ocs().pi
+    _, extras = pi.boundary._read_request_file(
+        _write_toml(tmp_path, 'read = ["/x"]\nexpose_ports = [3000]\n')
+    )
+    assert extras["read"] == ["/x"] and "expose_ports" not in extras
+
+
+def _write_toml(tmp_path, body: str) -> Path:
+    ws = tmp_path / "toml-ws"
+    (ws / ".opencode").mkdir(parents=True, exist_ok=True)
+    (ws / ".opencode" / "sandbox.toml").write_text(body, encoding="utf-8")
+    return ws
+
+
+def test_without_expose_ports_the_fence_argv_is_unchanged(monkeypatch, tmp_path):
+    """既定は無効: 環境変数も sandbox.toml も無ければ、Fence の引数に -p が入らない。"""
+    launch = _expose_launch(monkeypatch, tmp_path, "read = []\n")
+    argv = launch()
+    assert argv[:4] == [launch.runtime, "--settings", str(tmp_path / "b.json"), "--"]
+    assert "-p" not in argv
+    assert launch.pi.boundary.expose_args(None) == []
+
+
+@pytest.mark.parametrize("value", ["", ":", "::"])
+def test_empty_env_is_the_same_as_unset(monkeypatch, tmp_path, value):
+    launch = _expose_launch(monkeypatch, tmp_path)
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", value)
+    assert "-p" not in launch()
+
+
+@pytest.mark.parametrize(
+    ("value", "shown"),
+    [
+        ("0", "'0'"),
+        ("80", "'80'"),
+        ("1023", "'1023'"),
+        ("65536", "'65536'"),
+        ("abc", "'abc'"),
+        ("0.0.0.0:8080", "'0.0.0.0'"),
+        ("127.0.0.1:3000", "'127.0.0.1'"),
+        ("3000 8000", "'3000 8000'"),
+        ("-1", "'-1'"),
+        ("1.5", "'1.5'"),
+        ("3000:abc", "'abc'"),
+        ("+3000", "'+3000'"),
+        ("３０００", "'３０００'"),
+    ],
+)
+def test_bad_env_port_refuses_to_start_and_shows_the_value(
+    monkeypatch, tmp_path, capsys, value, shown
+):
+    launch = _expose_launch(monkeypatch, tmp_path)
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", value)
+    with pytest.raises(SystemExit):
+        launch()
+    err = capsys.readouterr().err
+    assert "PIS_EXPOSE_PORTS" in err and shown in err
+
+
+def test_nine_ports_are_refused_and_eight_are_accepted(monkeypatch, tmp_path, capsys):
+    launch = _expose_launch(monkeypatch, tmp_path)
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", ":".join(str(3000 + i) for i in range(8)))
+    assert launch().count("-p") == 8
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", ":".join(str(3000 + i) for i in range(9)))
+    with pytest.raises(SystemExit):
+        launch()
+    assert "9 個" in capsys.readouterr().err
+
+
+def test_duplicates_do_not_count_toward_the_limit(monkeypatch, tmp_path):
+    launch = _expose_launch(monkeypatch, tmp_path)
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", ":".join(["3000"] * 20))
+    assert launch().count("-p") == 1
+
+
+def test_expose_ports_clashing_with_pis_own_ports_is_refused(monkeypatch, tmp_path, capsys):
+    launch = _expose_launch(monkeypatch, tmp_path)
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", "3000:18080")
+    monkeypatch.setattr(launch.pi, "verify_broker", lambda *a, **k: None)
+    with pytest.raises(SystemExit):
+        launch("http://127.0.0.1:18080")
+    assert "18080" in capsys.readouterr().err
+
+
+def test_expose_ports_clashing_with_relay_port_is_refused(monkeypatch, tmp_path, capsys):
+    """中継は ``network.upstreamProxy`` に URL を置く別の設定オブジェクトを返す (relay.py の実際の形)。"""
+    import contextlib
+
+    launch = _expose_launch(monkeypatch, tmp_path)
+    pi = launch.pi
+    events: list[str] = []
+
+    @contextlib.contextmanager
+    def relay_session(config_, env=None, network=None):
+        try:
+            yield {**config_, "network": {"upstreamProxy": "http://127.0.0.1:3000"}}
+        finally:
+            events.append("relay-stopped")
+
+    monkeypatch.setattr(pi.relay, "session", relay_session)
+    monkeypatch.setattr(pi, "cleanup", lambda *a, **k: events.append("cleanup"))
+    monkeypatch.setattr(pi, "run", lambda *a, **k: events.append("run") or 0)
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", "3000")
+    with pytest.raises(SystemExit):
+        launch()
+    assert "3000" in capsys.readouterr().err
+    assert "run" not in events and "cleanup" in events and "relay-stopped" in events
+
+
+def test_expose_ports_apart_from_relay_port_pass(monkeypatch, tmp_path):
+    import contextlib
+
+    launch = _expose_launch(monkeypatch, tmp_path)
+
+    @contextlib.contextmanager
+    def relay_session(config_, env=None, network=None):
+        yield {**config_, "network": {"upstreamProxy": "http://127.0.0.1:3999"}}
+
+    monkeypatch.setattr(launch.pi.relay, "session", relay_session)
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", "3000")
+    assert launch().count("-p") == 1
+
+
+def test_expose_ports_apart_from_pis_own_ports_pass(monkeypatch, tmp_path):
+    launch = _expose_launch(monkeypatch, tmp_path)
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", "3000")
+    monkeypatch.setattr(launch.pi, "verify_broker", lambda *a, **k: None)
+    assert launch("http://127.0.0.1:18080").count("-p") == 1
+
+
+def test_expose_ports_env_is_not_passed_inside(monkeypatch):
+    ocs = _ocs()
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", "3000")
+    monkeypatch.setenv("PIS_EXTRA_READ", "/data2")
+    assert "PIS_EXPOSE_PORTS" in ocs.cli.DROP_ENV
+    assert "PIS_EXPOSE_PORTS" not in ocs.cli.inner_env({"config_dir": "/c"})
+    monkeypatch.setattr(ocs.pi.check, "ensure_canary", lambda: None)
+    inner = ocs.pi.inner_env(
+        Path("/tmp/agent"), {"filesystem": {"allowRead": [], "allowWrite": []}}
+    )
+    assert "PIS_EXPOSE_PORTS" not in inner
+
+
+def test_expose_ports_announcement(monkeypatch, tmp_path, capsys):
+    launch = _expose_launch(monkeypatch, tmp_path, "expose_ports = [3000, 9000]\n")
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", "3000:8000")
+    launch()
+    err = capsys.readouterr().err
+    assert "pis: 公開ポート: 3000, 8000 (PIS_EXPOSE_PORTS)" in err
+    assert "sandbox.toml)" not in err and "9000" not in err
+
+
+def test_expose_ports_announcement_names_only_env(monkeypatch, tmp_path, capsys):
+    launch = _expose_launch(monkeypatch, tmp_path)
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", "3000")
+    launch()
+    assert "pis: 公開ポート: 3000 (PIS_EXPOSE_PORTS)" in capsys.readouterr().err
+
+
+def test_no_announcement_without_expose_ports(monkeypatch, tmp_path, capsys):
+    launch = _expose_launch(monkeypatch, tmp_path)
+    launch()
+    assert "公開ポート" not in capsys.readouterr().err
+
+
+def test_no_sandbox_ignores_expose_ports_and_says_so(monkeypatch, capsys):
+    ocs = _ocs()
+    _stub_pis(monkeypatch, ocs)
+    monkeypatch.setattr(ocs.pis.shutil, "which", lambda *_a, **_k: "/usr/bin/pi")
+    monkeypatch.setattr(ocs.pi, "own_extensions", lambda *_a, **_k: [])
+    captured = {}
+    monkeypatch.setattr(ocs.pis.os, "execvpe", lambda f, a, e: captured.update(command=a))
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", "3000")
+    ocs.pis.main(["--no-sandbox"])
+    assert "-p" not in captured["command"]
+    assert "--no-sandbox では公開ポートの宣言は不要" in capsys.readouterr().err
+    monkeypatch.delenv("PIS_EXPOSE_PORTS")
+    ocs.pis.main(["--no-sandbox"])
+    assert "公開ポート" not in capsys.readouterr().err
+
+
+def test_expose_ports_do_not_change_the_boundary_config(monkeypatch, tmp_path):
+    """境界チェック (カナリア) の素材となる設定には、公開ポートは入らない。"""
+    launch = _expose_launch(monkeypatch, tmp_path)
+    written = []
+    monkeypatch.setattr(
+        launch.pi.cli, "write_boundary", lambda cfg: written.append(cfg) or str(tmp_path / "b.json")
+    )
+    monkeypatch.setenv("PIS_EXPOSE_PORTS", "3000")
+    launch()
+    with_ports = json.dumps(written[-1], sort_keys=True)
+    monkeypatch.delenv("PIS_EXPOSE_PORTS")
+    launch()
+    assert json.dumps(written[-1], sort_keys=True) == with_ports

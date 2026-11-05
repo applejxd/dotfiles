@@ -23,6 +23,14 @@
 
 > OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。表の「設定の出所」の `[opencode.sandbox]` と「作業先ごとの追加」の `.opencode/sandbox.toml` が対象。pi の仕様は [緩和のゲート](#緩和のゲート)。
 
+### 公開ポート（起動例）
+
+```sh
+PIS_EXPOSE_PORTS=3000:8000 pis      # 内側の Web アプリをホストの http://127.0.0.1:3000/ で開く
+```
+
+`.opencode/sandbox.toml` の `expose_ports` は許可の根拠にしない（警告して無視）。既定は無効で、理由・検証・限界は [公開ポート](../sandbox/fence-boundary.md#公開ポートweb-アプリをホストのブラウザで開く)。
+
 ### プロキシ必須の環境での通信
 
 ホストにプロキシの環境変数（`HTTPS_PROXY` / `https_proxy` / `HTTP_PROXY` / `http_proxy`）がある機械では、
