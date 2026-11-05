@@ -211,6 +211,8 @@ chezmoi apply
 ## pis の内側で本体の git status が dirty に見える
 
 **対象**: `pis`（sandbox の内側で動く pi）で、dotfiles のリポジトリを起動ディレクトリにしたとき。
+**このリポジトリでは sandbox の内側で開発しない**（`pis --no-sandbox`。理由と再検討の条件は [ADR-0025](../adr/0025-dotfiles-dev-without-os-sandbox.md)）。
+この症状が出たら、sandbox の内側で作業している合図。
 
 **症状**: 何も編集していないのに、本体（`develop`）の `git status` が、`M`（変更）や `D`（削除）を大量に出す。
 統合（`git flow feature finish`）が `stash failed` / `unsupported file type` で落ちる。
@@ -221,12 +223,17 @@ chezmoi apply
 
 **対処**:
 
-- **統合は sandbox の外**（PR ビューアの「統合する」）で行う。内側では `git flow feature finish`・`git stash` を使わない
+- **sandbox なしの起動へ切り替える**（`pis --no-sandbox`）。このリポジトリの標準の開発手段
+- 何かの事情で内側で作業してしまったとき: **統合は sandbox の外**（PR ビューアの「統合する」）で行う。内側では `git flow feature finish`・`git merge`・`git stash` を使わない
 - 内側で、本体に `git add -A`・`git commit` をしない（隠れた追跡ファイルの**削除**を誤ってステージする）。
   実装は feature の worktree（`.tmp/worktrees/<名前>/`）で行う。worktree の中は、この影響を受けない
 - 本体の dirty を判定するときは、sandbox の外で `git status` を見る
 
-恒久策（統合の手順が、隠れ蓑による見かけの差分を無視する）は未実装。
+**原因の裏付け**: `git merge`（fast-forward 以外）は git 2.43 で、統合の前に必ず `git stash create` を呼ぶ（`GIT_TRACE=1` で確認。`--no-autostash`・`-s ort` を付けても同じ）。
+文字デバイスの追跡ファイルがあると stash が失敗する。`git flow feature finish` も内部で merge を使う。
+
+stash を使わない統合スクリプト（`feature/sandbox-merge`。merge-tree → commit-tree → read-tree → update-ref）を作ったが、
+確認規則の穴を塞ぎ続ける費用と、続けても dotfiles での sandbox 開発が抱える他の問題があるため、**統合しない**と決めた（ADR-0025）。
 
 ## pis の内側でクリップボードへコピーできない
 

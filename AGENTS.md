@@ -155,6 +155,10 @@ worker は実行せず、報告の「次の候補」に書く（worker は sandb
   `sh <長い絶対パス>` は使わない（`pk` は `chezmoi apply` で配備。未配備の機械では絶対パスで示してよい）。
   入口の先頭のコメントの 1 行目は、`pk` の一覧に出る説明として書く。話題名は短く覚えやすく（[詳細](docs/spec/development.md#補助スクリプトの短い入口pk)）
 - コミットメッセージは Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:`）。**本文は件名 + 1〜3 行の要約だけにし、箇条書きにしない**（詳細は案件・docs に書く。承認画面、とくにスマホで、長い本文が画面を埋めて読みにくいため）
+- **dotfiles のこのリポジトリは、サンドボックスの中（`pis` の既定）で開発しない。`pis --no-sandbox`（フルガードだけ）で行う**（[ADR-0025](docs/adr/0025-dotfiles-dev-without-os-sandbox.md)）。
+  内側では隠した秘密の追跡ファイルが `/dev/null` に見えて `git status` が dirty になり、統合（`git merge`）が `stash failed` で失敗する。
+  **「`pis`（サンドボックスあり）で dotfiles を開発できる」「内側で統合できる」と言わない・判断しない。** 内側の合図（`git status` が dirty に見える・読めないファイルがある）が出たら、作業を止めて、サンドボックスなしの起動へ切り替えるよう利用者に伝える。
+  サンドボックスは、外部のコード・依存・Web アプリ・GPU を実行するほかのリポジトリで使う
 - **develop / main に直接コミットしない。** 実装は feature の worktree（`.tmp/worktrees/<名前>/`）で行う。
   feature の起票とクローズ（`git flow feature start` / `finish`）は、機械では止めないので指示で守る。
   AI は、feature の worktree で起動した pi から `guarded_action` の `git_commit` を使う
