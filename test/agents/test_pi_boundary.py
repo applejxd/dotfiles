@@ -1243,3 +1243,239 @@ def test_expose_ports_do_not_change_the_boundary_config(monkeypatch, tmp_path):
     monkeypatch.delenv("PIS_EXPOSE_PORTS")
     launch()
     assert json.dumps(written[-1], sort_keys=True) == with_ports
+
+
+# ─── 既定の GPU デバイス (PIS_NO_GPU=1 で無効) ───────────────────────────
+# see docs/spec/sandbox/fence-boundary.md#デバイス
+
+
+@pytest.fixture(autouse=True)
+def _host_independent_gpu(monkeypatch):
+    """この機械の ``/dev/dxg`` の有無に試験を依存させない (GPU の試験は存在判定を注入する)。"""
+    monkeypatch.setenv("PIS_NO_GPU", "1")
+
+
+def _gpu(monkeypatch, present: set[str] | None = None, no_gpu: str | None = None):
+    """``PIS_NO_GPU`` を整え、存在判定を ``present`` の集合に固定した ``with_default_gpu`` を返す。"""
+    if no_gpu is None:
+        monkeypatch.delenv("PIS_NO_GPU", raising=False)
+    else:
+        monkeypatch.setenv("PIS_NO_GPU", no_gpu)
+    monkeypatch.delenv("PIS_EXTRA_DEVICES", raising=False)
+    boundary = _ocs().boundary
+    exists = (lambda p: p in (present or set())) if present is not None else None
+    return boundary, lambda request=None: boundary.with_default_gpu(request, exists)
+
+
+_NATIVE = {
+    "/dev/nvidiactl",
+    "/dev/nvidia-uvm",
+    "/dev/nvidia-uvm-tools",
+    "/dev/nvidia0",
+}
+
+
+@pytest.mark.parametrize(
+    ("present", "expected"),
+    [
+        ({"/dev/dxg"}, ["/dev/dxg"]),
+        (
+            _NATIVE,
+            [
+                "/dev/nvidiactl",
+                "/dev/nvidia-uvm",
+                "/dev/nvidia-uvm-tools",
+                "/dev/nvidia0",
+            ],
+        ),
+        (
+            {"/dev/dxg", "/dev/nvidiactl", "/dev/nvidia1"},
+            ["/dev/dxg", "/dev/nvidiactl", "/dev/nvidia1"],
+        ),
+        ({"/dev/nvidia7", "/dev/nvidia3"}, ["/dev/nvidia3", "/dev/nvidia7"]),
+        ({"/dev/nvidia8", "/dev/sda", "/dev/null"}, []),
+        (set(), []),
+    ],
+)
+def test_default_gpu_devices_follow_what_exists(monkeypatch, present, expected):
+    boundary, merge = _gpu(monkeypatch, present)
+    assert boundary.default_gpu_devices(lambda p: p in present) == expected
+    request, added = merge(None)
+    assert added == expected
+    if expected:
+        assert request["extras"]["devices"] == expected
+    else:
+        assert request is None  # 何も足さない (Fence の設定に devices を作らない)
+
+
+def test_default_gpu_list_is_valid_for_the_device_allowlist(monkeypatch):
+    boundary, _ = _gpu(monkeypatch, set())
+    # 既定の一覧は、sandbox.toml の devices 用の検証 (許可リスト) を全部通る
+    assert boundary._checked_devices(list(boundary.DEFAULT_GPU_DEVICES), "既定") == list(
+        boundary.DEFAULT_GPU_DEVICES
+    )
+    assert boundary.DEFAULT_GPU_DEVICES[0] == "/dev/dxg"
+    assert {f"/dev/nvidia{i}" for i in range(8)} <= set(boundary.DEFAULT_GPU_DEVICES)
+
+
+@pytest.mark.parametrize("value", ["1"])
+def test_pis_no_gpu_disables_the_default(monkeypatch, value):
+    boundary, merge = _gpu(monkeypatch, {"/dev/dxg", "/dev/nvidia0"}, no_gpu=value)
+    assert boundary.default_gpu_devices(lambda p: True) == []
+    assert merge(None) == (None, [])
+
+
+@pytest.mark.parametrize("value", ["0", "", "no", "true"])
+def test_pis_no_gpu_other_values_keep_the_default(monkeypatch, value):
+    _boundary, merge = _gpu(monkeypatch, {"/dev/dxg"}, no_gpu=value)
+    assert merge(None)[1] == ["/dev/dxg"]
+
+
+def test_default_gpu_comes_first_and_merges_without_duplicates(monkeypatch, tmp_path):
+    boundary, merge = _gpu(monkeypatch, {"/dev/dxg", "/dev/nvidiactl"})
+    ws = tmp_path / "ws"
+    (ws / ".opencode").mkdir(parents=True)
+    (ws / ".opencode" / "sandbox.toml").write_text(
+        'devices = ["/dev/nvidia0", "/dev/dxg"]\nread = ["/data"]\n', encoding="utf-8"
+    )
+    monkeypatch.setenv("PIS_EXTRA_DEVICES", "/dev/nvidia-uvm:/dev/nvidiactl")
+    request = boundary.read_request(ws)
+    merged, added = merge(request)
+    assert added == ["/dev/dxg", "/dev/nvidiactl"]
+    assert merged["extras"]["devices"] == [
+        "/dev/dxg",
+        "/dev/nvidiactl",
+        "/dev/nvidia0",
+        "/dev/nvidia-uvm",
+    ]
+    assert merged["extras"]["read"] == request["extras"]["read"]  # 他の宣言は変えない
+    # 元の request は変えない
+    assert request["extras"]["devices"] == [
+        "/dev/nvidia0",
+        "/dev/dxg",
+        "/dev/nvidia-uvm",
+        "/dev/nvidiactl",
+    ]
+
+
+def test_with_default_gpu_does_not_mutate_the_request(monkeypatch, tmp_path):
+    boundary, merge = _gpu(monkeypatch, {"/dev/dxg"})
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setenv("PIS_EXTRA_DEVICES", "/dev/nvidia0")
+    request = boundary.read_request(ws)
+    before = json.dumps(request, default=str)
+    merge(request)
+    assert json.dumps(request, default=str) == before
+
+
+def test_explicit_devices_still_work_with_pis_no_gpu(monkeypatch, tmp_path):
+    boundary, merge = _gpu(monkeypatch, {"/dev/dxg"}, no_gpu="1")
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setenv("PIS_EXTRA_DEVICES", "/dev/dxg")
+    request = boundary.read_request(ws)
+    merged, added = merge(request)
+    assert added == [] and merged is request
+    assert request["extras"]["devices"] == ["/dev/dxg"]
+
+
+def test_pis_no_gpu_is_not_passed_inside(monkeypatch, tmp_path):
+    pi = _ocs().pi
+    monkeypatch.setenv("PIS_NO_GPU", "1")
+    monkeypatch.setattr(pi.check, "ensure_canary", lambda: None)
+    env = pi.inner_env(tmp_path / "agent", {"filesystem": {"allowRead": [], "allowWrite": []}})
+    assert "PIS_NO_GPU" not in env
+    assert "PIS_NO_GPU" in _ocs().cli.DROP_ENV
+
+
+def test_announcement_text(monkeypatch, capsys):
+    boundary, _ = _gpu(monkeypatch, set())
+    boundary.announce_default_gpu(["/dev/dxg"])
+    assert capsys.readouterr().err == "pis: デバイス: /dev/dxg (既定の GPU。PIS_NO_GPU=1 で無効)\n"
+    boundary.announce_default_gpu([])
+    assert capsys.readouterr().err == ""
+
+
+def _launch_capturing_request(monkeypatch, tmp_path, present, toml=None):
+    """``_launch_with`` を走らせ、``build_boundary`` へ渡った request と起動の argv を返す。"""
+    launch = _expose_launch(monkeypatch, tmp_path, toml)
+    pi = launch.pi
+    seen: dict = {}
+
+    def build(sandbox, workspace, request, agent):
+        seen["request"] = request
+        return {
+            "filesystem": {"allowWrite": [], "allowRead": [], "denyWrite": [], "denyRead": []},
+            "network": {},
+        }
+
+    monkeypatch.setattr(pi.boundary, "build_boundary", build)
+    # read_request は stub のまま、存在判定だけ注入する
+    real_merge = pi.boundary.with_default_gpu
+    monkeypatch.setattr(
+        pi.boundary,
+        "with_default_gpu",
+        lambda req, exists=None: real_merge(req, lambda p: p in present),
+    )
+    return launch, seen
+
+
+@pytest.mark.parametrize(
+    ("present", "expected"),
+    [
+        ({"/dev/dxg"}, ["/dev/dxg"]),
+        ({"/dev/nvidiactl", "/dev/nvidia0"}, ["/dev/nvidiactl", "/dev/nvidia0"]),
+        ({"/dev/dxg", "/dev/nvidia0"}, ["/dev/dxg", "/dev/nvidia0"]),
+        (set(), None),
+    ],
+)
+def test_pis_launch_gives_build_boundary_the_default_devices(
+    monkeypatch, tmp_path, capsys, present, expected
+):
+    monkeypatch.delenv("PIS_NO_GPU", raising=False)
+    launch, seen = _launch_capturing_request(monkeypatch, tmp_path, present)
+    launch()
+    err = capsys.readouterr().err
+    if expected is None:
+        assert seen["request"] is None  # GPU の無い機械は従来と同じ (devices の素材が無い)
+        assert "デバイス" not in err
+    else:
+        assert seen["request"]["extras"]["devices"] == expected
+        assert f"pis: デバイス: {', '.join(expected)} (既定の GPU。PIS_NO_GPU=1 で無効)" in err
+
+
+def test_pis_launch_with_pis_no_gpu_adds_nothing(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("PIS_NO_GPU", "1")
+    launch, seen = _launch_capturing_request(monkeypatch, tmp_path, {"/dev/dxg"})
+    launch()
+    assert seen["request"] is None
+    assert "デバイス" not in capsys.readouterr().err
+
+
+def test_no_sandbox_adds_no_gpu_device(monkeypatch, capsys):
+    ocs = _ocs()
+    monkeypatch.delenv("PIS_NO_GPU", raising=False)
+    _stub_pis(monkeypatch, ocs)
+    monkeypatch.setattr(ocs.pis.shutil, "which", lambda *_a, **_k: "/usr/bin/pi")
+    monkeypatch.setattr(ocs.pi, "own_extensions", lambda *_a, **_k: [])
+    monkeypatch.setattr(ocs.pis.os, "execvpe", lambda f, a, e: None)
+
+    def boom(*_a, **_k):
+        raise AssertionError("--no-sandbox で GPU の既定を足してはならない")
+
+    monkeypatch.setattr(ocs.boundary, "with_default_gpu", boom)
+    ocs.pis.main(["--no-sandbox"])
+    assert "既定の GPU" not in capsys.readouterr().err
+
+
+def test_ocs_launcher_does_not_add_default_gpu(monkeypatch, tmp_path):
+    """ocs (共有の ``read_request``) は既定を足さない。足すのは pi.py だけ。"""
+    boundary, _ = _gpu(monkeypatch, set())
+    monkeypatch.delenv("PIS_NO_GPU", raising=False)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    assert boundary.read_request(ws) is None
+    cli_src = (LIB / "cli.py").read_text(encoding="utf-8")
+    assert "with_default_gpu" not in cli_src and "default_gpu" not in cli_src
+    assert "with_default_gpu" in (LIB / "pi.py").read_text(encoding="utf-8")

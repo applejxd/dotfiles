@@ -8,8 +8,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from . import backup
@@ -32,6 +34,16 @@ ALLOWED_DEVICE_NAMES = (
     "nvidiactl",
     "nvidia-uvm",
     "nvidia-uvm-tools",
+)
+# pis が既定で見せる GPU のデバイス (ホストに在るものだけ)。ocs は足さない
+# see docs/spec/sandbox/fence-boundary.md#デバイス
+NO_GPU_ENV = "PIS_NO_GPU"
+DEFAULT_GPU_DEVICES = (
+    "/dev/dxg",
+    "/dev/nvidiactl",
+    "/dev/nvidia-uvm",
+    "/dev/nvidia-uvm-tools",
+    *(f"/dev/nvidia{i}" for i in range(8)),
 )
 # 番号付きのノード (nvidia0・nvidia12 など)。re.fullmatch で照合する
 ALLOWED_DEVICE_PATTERN = r"nvidia[0-9]+"
@@ -488,6 +500,49 @@ def read_request(workspace: Path) -> dict | None:
         "env_read": env_read,
         "env_devices": env_devices,
     }
+
+
+def _is_char_device(path: str) -> bool:
+    """``path`` (symlink は先を見る) がキャラクタデバイスか。ディレクトリ・通常ファイル・無いものは偽。"""
+    try:
+        return stat.S_ISCHR(os.stat(path).st_mode)
+    except OSError:
+        return False
+
+
+def default_gpu_devices(exists: Callable[[str], bool] | None = None) -> list[str]:
+    """``PIS_NO_GPU=1`` でなければ、ホストに在る既定の GPU デバイス (キャラクタデバイスだけ)。存在判定は注入できる。"""
+    if os.environ.get(NO_GPU_ENV) == "1":
+        return []
+    check = exists or _is_char_device
+    return [d for d in DEFAULT_GPU_DEVICES if check(d)]
+
+
+def with_default_gpu(
+    request: dict | None, exists: Callable[[str], bool] | None = None
+) -> tuple[dict | None, list[str]]:
+    """``request`` に既定の GPU デバイスを先頭で合流する。足す分が無ければ ``request`` をそのまま返す。
+
+    戻り値は ``(新しい request, 既定で足したデバイス)``。
+    """
+    gpu = default_gpu_devices(exists)
+    if not gpu:
+        return request, []
+    base = request or {
+        "path": None,
+        "extras": {k: [] for k in REQUEST_KEYS},
+        "env_read": [],
+        "env_devices": [],
+    }
+    extras = {**base["extras"], "devices": _uniq([*gpu, *base["extras"]["devices"]])}
+    return {**base, "extras": extras}, gpu
+
+
+def announce_default_gpu(gpu: list[str]) -> None:
+    if gpu:
+        print(
+            f"pis: デバイス: {', '.join(gpu)} (既定の GPU。{NO_GPU_ENV}=1 で無効)", file=sys.stderr
+        )
 
 
 def _load_request_toml(path: Path) -> dict:
