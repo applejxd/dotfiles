@@ -390,7 +390,7 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。
 
 ## 既知の制約
 
-- シェルが値をコードとして実行する入口の環境変数（`PS4`・`PROMPT_COMMAND`・`BASH_ENV`・`ENV`・`LD_PRELOAD`・`LD_AUDIT`・`DYLD_INSERT_LIBRARIES`・`BASH_FUNC_*`）の設定と `compgen -C` / `complete -C` は、`rules_guard.ts` の `codeEntryEnv`（Python 版は `rules_guard.py` の `code_entry_env`）が役割・bypass によらず deny にする。名前は完全一致で、単なる言及・`PATH` などは拒否しない。名前を実行時に組み立てる形と `eval` は対象外（[詳細](pi-guard.md#コードの入口になる環境変数)）。試験は `test_pi_control_files_bash.py`・`test_decide.py`・golden。
+- シェルが値をコードとして実行する入口の環境変数（`PROMPT_COMMAND`・`BASH_ENV`・`LD_PRELOAD`・`LD_AUDIT`・`DYLD_INSERT_LIBRARIES`・`BASH_FUNC_*`、値にコマンド置換などを含む `PS4`）の設定と `compgen -C` / `complete -C` / `mapfile -C` は、`rules_guard.ts` の `codeEntryEnv`（Python 版は `rules_guard.py` の `code_entry_env`）が役割・bypass によらず deny にする。単純コマンドの語の列の、代入になりうる位置（前置代入・ラッパーの引数・`export` 等・`read`/`mapfile` の設定先・`-c` の文字列）だけを見るので、通常の引数中の言及（`rg 'PS4='` など）・`ENV=production ./deploy`・安全な `PS4` は拒否しない。名前を実行時に組み立てる形と `eval` は対象外（[詳細](pi-guard.md#コードの入口になる環境変数)）。試験は `test_pi_control_files_bash.py`・`test_decide.py`・golden。
 
 - 作業台帳の置き場は、名前の正規表現 (`.git/pi-work`・`.tmp/work`) に加え、`judge/ledger_root.ts` の `ledgerRoots(cwd, env)` が fs だけで解いた実体（`--separate-git-dir`・`GIT_DIR`・worktree の common-dir）とも照合する。bash の `ledgerHit` とファイルツールの `decideFile`（`@` などの pi のパス解釈の各形も照合）が使う。結果は 2 秒の TTL でキャッシュする。common-dir 自身の削除・移動（`.git` 名以外）も拒否する。既知の制約: 広い祖先（`~`・作業ツリー全体）の再帰削除は既存の rm の判定に任せる。TTL の間に作られた `.git` は最大 2 秒拾えない。
 - 結果は cwd ごとに最大 64 件キャッシュする（同じプロセスの中で `.git` を作り直すと古いまま）。読めない・不正な `.git` は例外にせず、名前の照合だけに戻る。試験は `test_pi_ledger_root.py`。

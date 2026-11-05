@@ -196,12 +196,13 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 
 ### コードの入口になる環境変数
 
-シェルが変数の値をコードとして実行する入口は、構文木に現れないまま実行に使える（公開の突破の型。[調査](../../research/agents/command-judge-survey.md)）。判定器（TS の `codeEntryEnv`・Python の `code_entry_env`。同じ規則を二重に持つ）は、次の名前を**設定する形**を、役割・bypass・cwd によらず deny にする。追加の厳格化だけで、既存の判定は変えない。
+シェルが変数の値をコードとして実行する入口は、構文木に現れないまま実行に使える（公開の突破の型。[調査](../../research/agents/command-judge-survey.md)）。判定器（TS の `codeEntryEnv`・Python の `code_entry_env`。同じ規則を二重に持つ）は、次の名前を**設定する形**を、役割・bypass・cwd によらず deny にする。追加の厳格化だけで、既存の判定は変えない。判定は**文字列の検索ではなく、単純コマンドの語の列**（`commands` / `argv` と同じ分割）の、代入になりうる位置だけを見る。
 
-- **名簿**（完全一致）: `PS4`・`PROMPT_COMMAND`・`BASH_ENV`・`ENV`・`LD_PRELOAD`・`LD_AUDIT`・`DYLD_INSERT_LIBRARIES`、`BASH_FUNC_` で始まる名前。
-- **検出する形**: 代入（`X=v`・`X+=v`。前置・`export`・`declare -x`・`typeset`・`local`・`readonly`・`env [-i] X=v`）、`printf -v X`・`read [-r] X`、`compgen -C`・`complete -C`（指定のコマンドを実行する）。引用符とバックスラッシュを外してから照合する（`"PS4"=x`・`P''S4=x`・`PS\4=x`）。
-- **入れないもの**: `PATH`・`NODE_OPTIONS`・`LD_LIBRARY_PATH`・`IFS`・`ENVIRONMENT`・`MY_ENV` など。通常の運用で使うため。引用符の外の `# コメント` の中の言及も見ない。`grep PS4 file`・`echo PS4`・`man bash` は拒否しない。
-- **限界**: 名前を実行時に組み立てる形（`${x}S4=…`）と `eval` の中身は静的に見えない。`trap`・`alias` は既存の規則（`normalize` の `TRAP_BINS` など）の範囲のままで、この規則では足していない。`echo PS4=x` のような引数中の `NAME=` は代入に見えて拒否しうる（安全側）。
+- **名簿**（完全一致）: `PROMPT_COMMAND`・`BASH_ENV`・`LD_PRELOAD`・`LD_AUDIT`・`DYLD_INSERT_LIBRARIES`、`BASH_FUNC_` で始まる名前。`ENV` は入れない（bash の posix 対話起動と dash の対話起動だけが読む。`ENV=production ./deploy` のような一般の使い方を誤って拒否する害が大きい）。
+- **`PS4`**: 値が、リテラルと単純な展開（`$NAME`・`${NAME}`・`${NAME[数字]}`・`${NAME[@]}`）だけのときは許可する（`export PS4='+ ${LINENO}: '`）。`$(`・バッククォート・`${…@P}`・`${…:-…}`・`$((`・バックスラッシュを含む値と、値が取れない形（`printf -v PS4`・`read PS4`・`mapfile PS4`）は拒否する。
+- **検出する位置**: ①先頭の前置代入（`X=v cmd`・`X+=v`）②ラッパーの引数（`env`〔`-i`・`-u`・`-C`・`-S '文字列'`〕・`sudo`・`doas`・`time`・`command`・`nice`・`nohup`・`timeout`・`stdbuf`・`xargs`・`exec`・`builtin` の、本体の手前の代入）③`export`・`declare`・`typeset`・`local`・`readonly` の `X=v`（オプションは読み飛ばす。値の無い `export PS4`・`export -n PS4` は対象外）④`printf -v X`⑤`read`・`mapfile`・`readarray` の設定先の変数名（値を取るオプションを読み飛ばした後の全オペランド）⑥`compgen -C`・`complete -C`・`mapfile -C`・`readarray -C`（コールバックのコマンドを実行する）⑦`bash|sh|zsh|dash|ksh -c '文字列'` の文字列（深さ 3 まで）。`if`・`then`・`do`・`{` などの直後も見る。
+- **誤拒否しないもの**: 通常の引数に現れる言及（`rg 'PS4='`・`grep -n 'BASH_ENV=' file`・`git commit -m 'fix: unset PS4=x'`・`echo "BASH_ENV=/tmp/x" > notes.txt`・`sed -i 's/PS4=.*//' f`）、`PATH`・`NODE_OPTIONS`・`LD_LIBRARY_PATH`・`IFS`・`ENVIRONMENT`・`MY_ENV`、`read line`・`mapfile -t lines`・`IFS= read -r line`・`compgen -c`。コメントの中の言及も見ない（語の分割がコメントを落とす）。
+- **限界**: 名前を実行時に組み立てる形（`${x}S4=…`）と `eval` の中身は静的に見えない。`trap`・`alias` は既存の規則（`normalize` の `TRAP_BINS` など）の範囲のままで、この規則では足していない。ヒアドキュメントの本文の行は単純コマンドとして分割されるので、本文に `BASH_ENV=x` を書くと拒否しうる（安全側）。`env -iS` のようにオプションを束ねた形の `-S` は読まない。
 
 ## 置き場
 

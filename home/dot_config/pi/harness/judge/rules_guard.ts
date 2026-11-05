@@ -9,7 +9,7 @@ import type { Ctx } from "./context.ts";
 import { tableSet } from "./context.ts";
 import { expandUser, isAbsolute, join, normpath, realpathLoose, sep, strictResolve } from "./pathutil.ts";
 import { basename, pyRegex, shlexSplit, ShlexError, split, stripChars } from "./pystr.ts";
-import { argv } from "./shellparse.ts";
+import { argv, parse } from "./shellparse.ts";
 import { splitCommandSegments } from "./normalize.ts";
 import { inlineCodeHead } from "./rules_exec.ts";
 import { ledgerCommonDirs, ledgerRoots, underLedgerRoot } from "./ledger_root.ts";
@@ -289,20 +289,182 @@ const HOOK_ENV_RE = pyRegex("\\b(AGENTS_CONFIG_DIR|PYTHONPATH|CLAUDE_[A-Z_]*HOOK
 
 // シェルが値をコードとして実行する入口の環境変数 (名前は完全一致。BASH_FUNC_ だけ前方一致)。
 // 検出する形・入れないもの・限界は docs/spec/guard/pi-guard.md#コードの入口になる環境変数
-const ENTRY_NAME = "(?:PS4|PROMPT_COMMAND|BASH_ENV|ENV|LD_PRELOAD|LD_AUDIT|DYLD_INSERT_LIBRARIES|BASH_FUNC_[^\\s=]*)";
-const ENTRY_HEAD = "(?:^|[\\s;&|(){`])";
-const ENTRY_COMMENT_RE = pyRegex("^((?:[^'\"\\\\#\\n]*\\s)?)#[^\\n]*", "gm");
-const ENTRY_ASSIGN_RE = pyRegex(`${ENTRY_HEAD}(${ENTRY_NAME})\\+?=`, "m");
-const ENTRY_ARG_RE = pyRegex(`${ENTRY_HEAD}(?:printf\\s+-v|read(?:\\s+-\\S+)*)\\s+(${ENTRY_NAME})(?![\\w])`, "m");
-const ENTRY_COMPLETE_RE = pyRegex(`${ENTRY_HEAD}(?:compgen|complete)\\s(?:[^;&|\\n]*\\s)?-[A-Za-z]*C(?![\\w])`, "m");
+// 通常の引数は走査しない: 単純コマンドの語の列の、代入になりうる位置だけを見る (同じ規則が rules_guard.py の code_entry_env にある)
+const ENTRY_NAMES = new Set(["PS4", "PROMPT_COMMAND", "BASH_ENV", "LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"]);
+const ENTRY_ASSIGN_WORD_RE = /^([A-Za-z_][A-Za-z0-9_%]*)(?:\[[^\]]*\])?\+?=([\s\S]*)$/u;
+const PS4_EXPANSION_RE = /\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*(?:\[(?:[0-9]+|@)\])?\})/gu;
+const ENTRY_KEYWORDS = new Set(["if", "then", "else", "elif", "do", "while", "until", "!", "{", "}"]);
+const ENTRY_WRAPPERS = new Set(["env", "sudo", "doas", "time", "command", "nice", "nohup", "timeout", "stdbuf", "xargs", "exec", "builtin"]);
+const ENTRY_WRAPPER_VALUE_OPTS: Record<string, Set<string>> = {
+	env: new Set(["-u", "--unset", "-C", "--chdir"]),
+	sudo: new Set(["-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T", "-U", "-r", "-t", "--user", "--group"]),
+	doas: new Set(["-u", "-C"]),
+	time: new Set(["-f", "--format", "-o", "--output"]),
+	nice: new Set(["-n", "--adjustment"]),
+	timeout: new Set(["-s", "--signal", "-k", "--kill-after"]),
+	stdbuf: new Set(["-i", "-o", "-e"]),
+	xargs: new Set(["-I", "-n", "-P", "-s", "-L", "-E", "-d", "-a"]),
+	exec: new Set(["-a"]),
+};
+const ENTRY_DECLARE = new Set(["export", "declare", "typeset", "local", "readonly"]);
+const ENTRY_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
 
-/** コードの入口になる環境変数の設定・`compgen -C` を見つける。見つからなければ null。 */
-export function codeEntryEnv(cmd: string): string | null {
-	// 引用符の外のコメントだけ落としてから、引用符とバックスラッシュを外す (`"PS4"=x`・`P''S4=x`・`PS\\4=x`)
-	const text = cmd.replace(ENTRY_COMMENT_RE, (_all, head: string) => head).replace(/['"\\]/gu, "");
-	const m = ENTRY_ASSIGN_RE.exec(text) ?? ENTRY_ARG_RE.exec(text);
-	if (m !== null) return m[1];
-	if (ENTRY_COMPLETE_RE.test(text)) return "compgen -C";
+const entryName = (name: string): boolean => ENTRY_NAMES.has(name) || name.startsWith("BASH_FUNC_");
+
+/** PS4 の値が、リテラルと単純な展開 (`$NAME`・`${NAME}`・`${NAME[数字]}`・`${NAME[@]}`) だけか。 */
+function ps4Safe(value: string): boolean {
+	return !/[$`\\]/u.test(value.replace(PS4_EXPANSION_RE, ""));
+}
+
+/** `NAME=値`・`NAME+=値` の語が名簿の変数への代入なら名前を返す (値が安全な PS4 は除く)。 */
+function entryAssign(word: string): string | null {
+	const m = ENTRY_ASSIGN_WORD_RE.exec(word);
+	if (m === null || !entryName(m[1])) return null;
+	return m[1] === "PS4" && ps4Safe(m[2]) ? null : m[1];
+}
+
+/** `read`・`printf -v` の設定先の変数名 (`NAME[idx]` の添字は外す)が名簿なら名前を返す。値は取れないので常に拒否側。 */
+function entryTarget(word: string | null): string | null {
+	if (word === null) return null;
+	const name = word.replace(/\[.*$/su, "");
+	return entryName(name) ? name : null;
+}
+
+/** 短いオプションを読む。`valueChars` の文字は値を取る (同じ語の残り、無ければ次の語)。`--` と長いオプションは読み飛ばす。 */
+function shortOpts(args: string[], valueChars: string): { opts: Array<[string, string | null]>; operands: string[] } {
+	const opts: Array<[string, string | null]> = [];
+	let i = 0;
+	for (; i < args.length; i++) {
+		const t = args[i];
+		if (t === "--") {
+			i += 1;
+			break;
+		}
+		if (t.startsWith("--")) continue;
+		if (!t.startsWith("-") || t.length < 2) break;
+		for (let k = 1; k < t.length; k++) {
+			if (valueChars.includes(t[k])) {
+				const rest = t.slice(k + 1);
+				if (rest !== "") {
+					opts.push([t[k], rest]);
+				} else {
+					opts.push([t[k], i + 1 < args.length ? args[i + 1] : null]);
+					i += 1;
+				}
+				break;
+			}
+			opts.push([t[k], null]);
+		}
+	}
+	return { opts, operands: args.slice(i) };
+}
+
+/** `env -S` の文字列 (語の残り・`=` の後・次の語) と、消費した語数。 */
+function envSplitString(args: string[], j: number): { text: string | null; used: number } {
+	const t = args[j];
+	if (t === "-S" || t === "--split-string") return { text: j + 1 < args.length ? args[j + 1] : null, used: 2 };
+	if (t.startsWith("--split-string=")) return { text: t.slice("--split-string=".length), used: 1 };
+	if (t.startsWith("-S") && !t.startsWith("--")) return { text: t.slice(2), used: 1 };
+	return { text: null, used: 0 };
+}
+
+/** 1 つの単純コマンドの語の列から、名簿の変数の設定・コールバックの入口を見つける。 */
+function entryInWords(words: string[], depth: number): string | null {
+	let i = 0;
+	while (i < words.length && ENTRY_KEYWORDS.has(words[i])) i += 1;
+	while (i < words.length && ENTRY_ASSIGN_WORD_RE.test(words[i])) {
+		const hit = entryAssign(words[i]);
+		if (hit !== null) return hit;
+		i += 1;
+	}
+	if (i >= words.length) return null;
+	const head = baseName(words[i]);
+	const args = words.slice(i + 1);
+	if (ENTRY_WRAPPERS.has(head)) {
+		const valueOpts = ENTRY_WRAPPER_VALUE_OPTS[head] ?? new Set<string>();
+		let j = 0;
+		while (j < args.length) {
+			const t = args[j];
+			if (t === "--") {
+				j += 1;
+				break;
+			}
+			if (head === "env" && (t.startsWith("-S") || t.startsWith("--split-string"))) {
+				const s = envSplitString(args, j);
+				if (s.text === null) return null;
+				return entryInWords(["env", ...shlexOrSplit(s.text), ...args.slice(j + s.used)], depth);
+			}
+			if (t.startsWith("-") && t.length > 1) {
+				j += valueOpts.has(t) ? 2 : 1;
+				continue;
+			}
+			break;
+		}
+		if (head === "timeout" && j < args.length) j += 1; // DURATION
+		return entryInWords(args.slice(j), depth);
+	}
+	if (ENTRY_DECLARE.has(head)) {
+		for (const t of args) {
+			const hit = entryAssign(t);
+			if (hit !== null) return hit;
+		}
+		return null;
+	}
+	if (head === "printf") {
+		for (const [ch, value] of shortOpts(args, "v").opts) {
+			if (ch === "v") return entryTarget(value);
+		}
+		return null;
+	}
+	if (head === "read") {
+		const { opts, operands } = shortOpts(args, "adinNptu");
+		for (const [ch, value] of opts) {
+			if (ch === "a") {
+				const hit = entryTarget(value);
+				if (hit !== null) return hit;
+			}
+		}
+		for (const t of operands) {
+			const hit = entryTarget(t);
+			if (hit !== null) return hit;
+		}
+		return null;
+	}
+	if (head === "mapfile" || head === "readarray") {
+		const { opts, operands } = shortOpts(args, "dnOsuCc");
+		if (opts.some(([ch]) => ch === "C")) return "mapfile -C";
+		for (const t of operands) {
+			const hit = entryTarget(t);
+			if (hit !== null) return hit;
+		}
+		return null;
+	}
+	if (head === "compgen" || head === "complete") {
+		return shortOpts(args, "AFGWPSXoC").opts.some(([ch]) => ch === "C") ? "compgen -C" : null;
+	}
+	if (ENTRY_SHELLS.has(head) && depth < 3) {
+		for (let k = 0; k < args.length; k++) {
+			const t = args[k];
+			if (!t.startsWith("-") || t.startsWith("--") || t.length < 2) break;
+			if (t.slice(1).includes("c")) {
+				if (k + 1 >= args.length) return null;
+				for (const inner of parse(args[k + 1])) {
+					const hit = entryInWords(argv(inner), depth + 1);
+					if (hit !== null) return hit;
+				}
+				return null;
+			}
+		}
+	}
+	return null;
+}
+
+/** コードの入口になる環境変数の設定・コールバックの入口を見つける。見つからなければ null。 */
+export function codeEntryEnv(ctx: Ctx, cmd: string): string | null {
+	for (const command of commands(ctx, cmd)) {
+		const hit = entryInWords(argv(command), 0);
+		if (hit !== null) return hit;
+	}
 	return null;
 }
 
@@ -379,12 +541,12 @@ export function checkGuardTampering(ctx: Ctx, cmd: string): string | null {
 		);
 	}
 
-	const entry = codeEntryEnv(cmd);
+	const entry = codeEntryEnv(ctx, cmd);
 	if (entry !== null) {
 		return (
 			`シェルが値をコードとして実行する入口の環境変数 (\`PS4\` など。今回は \`${entry}\`) の設定は許可されていません。\n` +
-			"PS4・PROMPT_COMMAND・BASH_ENV・ENV・LD_PRELOAD・LD_AUDIT・" +
-			"DYLD_INSERT_LIBRARIES・BASH_FUNC_* と `compgen -C` / `complete -C` が対象です。"
+			"対象は PROMPT_COMMAND・BASH_ENV・LD_PRELOAD・LD_AUDIT・DYLD_INSERT_LIBRARIES・BASH_FUNC_* と、" +
+			"値にコマンド置換などを含む PS4、`compgen -C` / `complete -C` / `mapfile -C` です。"
 		);
 	}
 

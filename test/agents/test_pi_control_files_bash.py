@@ -425,49 +425,99 @@ def test_glued_values_through_a_symlink_do_not_overmatch(tmp_path):
 # ─── シェルが値をコードとして実行する入口の環境変数 (PS4 など) ─────────────────────────────────
 # see docs/spec/guard/pi-guard.md#コードの入口になる環境変数
 ENTRY_DENY = [
+    # 前置代入
     "PS4='$(touch /tmp/x)' bash -x -c true",
-    "export PS4='$(id)'",
     "BASH_ENV=/tmp/x.sh bash -c true",
-    "env BASH_ENV=/tmp/x sh -c true",
     "LD_PRELOAD=/tmp/x.so ls",
-    "export LD_AUDIT=/tmp/x",
     "DYLD_INSERT_LIBRARIES=/tmp/x ls",
-    "export BASH_FUNC_foo%%='() { id; }'",
-    "ENV=/tmp/x sh -c true",
     "PROMPT_COMMAND='id' bash -i",
-    "declare -x PS4=x",
-    "typeset -x PS4=x",
-    "local PS4=x",
-    "readonly PS4=x",
-    "PS4+=x cmd",
+    "PS4+='$(id)' cmd",
+    "\"PS4\"='$(id)' cmd",
+    "P''S4='$(id)' cmd",
+    "PS\\4='$(id)' cmd",
+    "PS4='`id`' cmd",
+    'PS4="${x:-$(id)}" cmd',
+    "PS4='${x@P}' cmd",
+    "PS4='$((1))' cmd",
+    "PS4='\\$(id)' cmd",
+    "(BASH_ENV=x cmd)",
+    "{ BASH_ENV=x; }",
+    "if true; then BASH_ENV=x; fi",
+    "BASH_ENV=x && cmd",
+    "cmd; BASH_ENV=x",
+    "echo a\nBASH_ENV=x cmd",
+    "true '\r#'; BASH_ENV=x",
+    "echo hi # c\nBASH_ENV=x cmd",
+    # builtin
+    "export PS4='$(id)'",
+    "export LD_AUDIT=/tmp/x",
+    "export BASH_FUNC_foo%%='() { id; }'",
+    "declare -x PS4='$(id)'",
+    "declare BASH_ENV=x",
+    "typeset -g BASH_ENV=x",
+    "local BASH_ENV=x",
+    "readonly BASH_ENV=x",
+    "export -n BASH_ENV=x",
+    'sh -c "export BASH_ENV=/tmp/x"',
+    "bash -c 'BASH_ENV=x true'",
+    # ラッパー
+    "env BASH_ENV=/tmp/x sh -c true",
+    "env -i BASH_ENV=x cmd",
+    "env -S 'BASH_ENV=x cmd'",
+    "env --unset=X BASH_ENV=x cmd",
+    "env 'BASH_FUNC_x%%=() { id; }' bash",
+    "time BASH_ENV=x cmd",
+    "sudo BASH_ENV=x cmd",
+    "sudo env BASH_ENV=x cmd",
+    "xargs -I{} env BASH_ENV=x {}",
+    # 設定先の変数名・コールバック
     "printf -v PS4 x",
     "read -r PS4",
     "read PROMPT_COMMAND",
-    '"PS4"=x cmd',
-    "P''S4=x cmd",
-    "PS\\4=x cmd",
-    "env -i PS4=x cmd",
-    "echo a; PS4=x cmd",
-    "true && LD_PRELOAD=/x.so ls",
-    "(BASH_ENV=/x sh -c true)",
+    "read -r -p prompt PS4",
+    "read other PS4",
+    "read -ra PS4",
+    "mapfile PS4",
+    "readarray -t PS4",
+    "mapfile -C id arr",
     "compgen -C id",
     "complete -C id foo",
-    "echo hi # c\nPS4=x cmd",
 ]
 ENTRY_OK = [
+    # 名前を言及するだけの通常の引数
+    "rg 'PS4='",
+    "grep -n 'BASH_ENV=' file",
+    "git commit -m 'fix: unset PS4=x in script'",
+    'echo "BASH_ENV=/tmp/x" > notes.txt',
+    "sed -i 's/PS4=.*//' f",
     "grep PS4 file.sh",
     "echo PS4",
+    "echo hi  # PS4=x",
+    "ls PS4.txt",
+    "man bash",
+    # ENV は名簿ではない
+    "ENV=production ./deploy",
+    "ENV=dev make test",
+    "ENV=prod npm start",
+    # 安全な PS4
+    "export PS4='+ ${LINENO}: '",
+    "PS4='+ ${BASH_SOURCE[0]}:${LINENO}: ' ./run",
+    "PS4='+ ' ./run",
+    # 値の無い export と、名簿ではない設定先
+    "export PS4",
+    "export -n PS4",
+    "read line",
+    "read -r -p 'x: ' name",
+    "mapfile -t lines",
+    "IFS= read -r line",
+    # 通常の環境変数
     "PATH=/tmp/bin:$PATH ls",
     "NODE_OPTIONS=--max-old-space-size=4096 npm test",
     "LD_LIBRARY_PATH=/opt/lib ./prog",
-    "IFS= read -r line",
-    "man bash",
     "ENVIRONMENT=prod ./run",
     "MY_ENV=x ./run",
     "BASH_ENVX_NOT=1 ./run",
-    "echo hi  # PS4=x",
     "compgen -c",
-    "ls PS4.txt",
 ]
 
 
@@ -486,7 +536,7 @@ def test_entry_env_mentions_and_ordinary_variables_are_not_denied_by_this_rule(r
 
 def test_entry_env_is_denied_regardless_of_cwd(tmp_path):
     for cwd in (str(tmp_path), "/tmp", REPO):
-        for (cmd, flags), decision in _decide(["PS4=x cmd", "export BASH_ENV=/x"], cwd=cwd):
+        for (cmd, flags), decision in _decide(["PS4='$(id)' cmd", "export BASH_ENV=/x"], cwd=cwd):
             assert decision == "deny", f"{cwd} {cmd!r} {flags} -> {decision}"
 
 

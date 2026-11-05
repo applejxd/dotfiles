@@ -782,17 +782,35 @@ _ENTRY_DENY = [
     "export LD_AUDIT=/tmp/x",
     "DYLD_INSERT_LIBRARIES=/tmp/x ls",
     "export BASH_FUNC_foo%%='() { id; }'",
-    "ENV=/tmp/x sh -c true",
     "PROMPT_COMMAND='id' bash -i",
-    "declare -x PS4=x",
-    "PS4+=x cmd",
+    "declare -x PS4='$(id)'",
+    "PS4+='$(id)' cmd",
     "printf -v PS4 x",
-    '"PS4"=x cmd',
-    "P''S4=x cmd",
-    "env -i PS4=x cmd",
+    "\"PS4\"='$(id)' cmd",
+    "P''S4='$(id)' cmd",
+    "env -i BASH_ENV=x cmd",
+    "env -S 'BASH_ENV=x cmd'",
+    "sudo env BASH_ENV=x cmd",
+    "xargs -I{} env BASH_ENV=x {}",
+    "bash -c 'BASH_ENV=x true'",
+    "read -r -p prompt PS4",
+    "read -ra PS4",
+    "mapfile PS4",
+    "mapfile -C id arr",
     "compgen -C id",
+    "complete -C id foo",
 ]
 _ENTRY_OK = [
+    "rg 'PS4='",
+    "grep -n 'BASH_ENV=' file",
+    "git commit -m 'fix: unset PS4=x in script'",
+    'echo "BASH_ENV=/tmp/x" > notes.txt',
+    "ENV=production ./deploy",
+    "export PS4='+ ${LINENO}: '",
+    "export PS4",
+    "read line",
+    "mapfile -t lines",
+    "IFS= read -r line",
     "grep PS4 file.sh",
     "echo PS4",
     "ENVIRONMENT=prod ./run",
@@ -816,3 +834,27 @@ def test_code_entry_env_is_denied(command, role, bypass):
 @pytest.mark.parametrize("command", _ENTRY_OK)
 def test_code_entry_env_mentions_are_not_denied_by_this_rule(command):
     assert "入口の環境変数" not in bash(command).get("reason", "")
+
+
+_ENTRY_SEPARATORS = [
+    "echo a\u2028BASH_ENV=x cmd",
+    "echo a\u2029BASH_ENV=x cmd",
+    "echo a\u2028PS4='$(id)' cmd",
+    "true '\r#'; BASH_ENV=x",
+    "true '\r#'; PS4='$(id)'",
+    "echo a\rBASH_ENV=x cmd",
+]
+
+
+def test_code_entry_env_ts_and_python_agree_on_line_separators():
+    """U+2028/2029/CR は、判定器の間で語の分割が食い違いやすい (golden は splitlines で割れるのでここで見る)。"""
+    from test_pi_confirm import _bash, _judge, needs_node  # noqa: F401
+
+    cwd = str(ROOT)
+    reqs = [{**_bash(c), "role": "implementer", "cwd": cwd} for c in _ENTRY_SEPARATORS]
+    for command, ts in zip(_ENTRY_SEPARATORS, _judge(reqs), strict=True):
+        py = decide(req("bash", cwd=cwd, command=command))
+        assert ts["decision"] == py["decision"], (command, ts, py)
+        assert ("入口の環境変数" in ts.get("reason", "")) == (
+            "入口の環境変数" in py.get("reason", "")
+        ), command
