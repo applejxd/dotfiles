@@ -536,31 +536,28 @@ def env_expose_ports() -> list[int]:
 
 
 def read_expose_ports(workspace: Path) -> dict | None:
-    """公開するポートを、``.opencode/sandbox.toml`` の ``expose_ports`` と環境変数から読む。
+    """公開するポートを、環境変数 ``PIS_EXPOSE_PORTS`` だけから読む。
 
-    無ければ ``None`` (既定は無効)。ファイルの後ろに環境変数を足し、重複は 1 つにまとめる。
-    ``sources`` は表示用の由来。最大 :data:`EXPOSE_PORT_MAX_COUNT` 個で、超えたら起動しない。
+    無ければ ``None`` (既定は無効)。``.opencode/sandbox.toml`` の ``expose_ports`` は許可の根拠にせず、
+    あれば警告を 1 回出して無視する (リポジトリの宣言だけでホストのポートが開くのを防ぐ)。
+    最大 :data:`EXPOSE_PORT_MAX_COUNT` 個で、超えたら起動しない。
     """
     path = workspace / REQUEST_REL
-    from_file: list[int] = []
-    if path.is_file():
-        values = _load_request_toml(path).get(EXPOSE_PORTS_KEY, [])
-        if not isinstance(values, list):
-            die(f"{path} の {EXPOSE_PORTS_KEY} は整数の配列でなければならない")
-        if any(isinstance(v, str) for v in values):
-            die(f"{path} の {EXPOSE_PORTS_KEY} は整数の配列でなければならない (文字列は不可)")
-        from_file = _checked_ports(values, f"{path} の {EXPOSE_PORTS_KEY}")
-    from_env = env_expose_ports()
-    ports = list(dict.fromkeys([*from_file, *from_env]))
+    if path.is_file() and EXPOSE_PORTS_KEY in _load_request_toml(path):
+        print(
+            f"pis: .opencode/sandbox.toml の {EXPOSE_PORTS_KEY} は無視する "
+            f"(公開ポートは環境変数 {EXPOSE_PORTS_ENV} だけで宣言する)",
+            file=sys.stderr,
+        )
+    ports = env_expose_ports()
     if not ports:
         return None
     if len(ports) > EXPOSE_PORT_MAX_COUNT:
         die(
             f"公開ポートが多すぎる: {len(ports)} 個 (最大 {EXPOSE_PORT_MAX_COUNT} 個)",
-            f"{EXPOSE_PORTS_ENV} か {EXPOSE_PORTS_KEY} を減らす",
+            f"{EXPOSE_PORTS_ENV} を減らす",
         )
-    sources = [n for n, got in ((EXPOSE_PORTS_ENV, from_env), ("sandbox.toml", from_file)) if got]
-    return {"ports": ports, "sources": sources}
+    return {"ports": ports, "sources": [EXPOSE_PORTS_ENV]}
 
 
 def reject_reserved_ports(request: dict | None, reserved: list[int]) -> None:

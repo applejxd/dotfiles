@@ -257,18 +257,16 @@ export PIS_EXTRA_DEVICES=/dev/nvidiactl:/dev/nvidia0:/dev/nvidia-uvm  # ネイ�
 export PIS_EXPOSE_PORTS=3000:8000     # コロン区切り
 ```
 
-```toml
-# .opencode/sandbox.toml
-expose_ports = [3000, 8000]
-```
-
-- **入口は 2 つ**: 環境変数 `PIS_EXPOSE_PORTS` と、`.opencode/sandbox.toml` の `expose_ports`。ファイルの後ろに環境変数を足し、
-  重複は 1 つにまとめる。Fence の起動に `-p <PORT>` をこの順で繰り返し足す
+- **入口は環境変数 `PIS_EXPOSE_PORTS` だけ**。Fence の起動に `-p <PORT>` をこの順で繰り返し足す。
+  **`.opencode/sandbox.toml` の `expose_ports` は許可の根拠にしない**。書かれていても `-p` に渡さず、起動時に 1 行の警告を出して無視する（起動は止めない）。
+  理由: リポジトリが決めると、見知らぬリポジトリを取得して起動しただけで、ホストのループバックのポートが開く。
+  ホストの他のアプリの通信（OAuth のコールバックなど）を内側へ誘導できるため、利用者の環境変数だけを許可の根拠にする。
+  `devices`・`read` は内側に閉じるので、従来どおり宣言を適用する
 - **検証（不正は起動を拒否。黙って無視しない）**: 整数のみ・1024〜65535・最大 8 個（重複を除いた数）。
   `ADDR:PORT`・`0.0.0.0`・空白・符号・小数は拒否し、常に `127.0.0.1` だけ（LAN には公開しない）。
-  TOML は整数の配列だけ（文字列・入れ子・真偽値は拒否）。pis 自身が使うポート（ブローカー・検索・中継）と重なるときも拒否する
+  pis 自身が使うポート（ブローカー・検索・中継の `network.upstreamProxy`）と重なるときも拒否する
 - **内側へ渡さない**: `PIS_EXPOSE_PORTS` は `cli.DROP_ENV` に入れ、内側の環境へ渡さない
-- **表示**: 起動時に `pis: 公開ポート: 3000, 8000 (PIS_EXPOSE_PORTS / sandbox.toml)` を出す
+- **表示**: 起動時に `pis: 公開ポート: 3000, 8000 (PIS_EXPOSE_PORTS)` を出す
 - **`--no-sandbox`**: Fence が無くホストのループバックで直接動くので、宣言は使わず、環境変数があれば 1 行で知らせる
 - **境界チェック（`pis --check`）は変えない**: 公開ポートはカナリアの外
 - **実測（2026-11-05。Fence 0.1.67、WSL2）**: `fence --settings <最小> -p 18766 -c "python3 -m http.server 18766 --bind 127.0.0.1"` で、

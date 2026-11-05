@@ -988,7 +988,8 @@ def _launch_with(
     with relay.session(config_, None, network) as fence_config:
         project["relay"] = fence_config is not config_
         project["network"] = network
-        relay_url = str(fence_config.get("upstreamProxy") or "") if project["relay"] else ""
+        net_cfg = fence_config.get("network") if project["relay"] else None
+        relay_url = str(net_cfg.get("upstreamProxy") or "") if isinstance(net_cfg, dict) else ""
         if relay_url.rpartition(":")[2].isdigit():
             try:
                 boundary.reject_reserved_ports(expose, [int(relay_url.rpartition(":")[2])])

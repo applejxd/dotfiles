@@ -29,7 +29,7 @@
 PIS_EXPOSE_PORTS=3000:8000 pis      # 内側の Web アプリをホストの http://127.0.0.1:3000/ で開く
 ```
 
-`.opencode/sandbox.toml` の `expose_ports = [3000, 8000]` でも同じ。既定は無効で、検証・限界は [公開ポート](../sandbox/fence-boundary.md#公開ポートweb-アプリをホストのブラウザで開く)。
+`.opencode/sandbox.toml` の `expose_ports` は許可の根拠にしない（警告して無視）。既定は無効で、理由・検証・限界は [公開ポート](../sandbox/fence-boundary.md#公開ポートweb-アプリをホストのブラウザで開く)。
 
 ### プロキシ必須の環境での通信
 
