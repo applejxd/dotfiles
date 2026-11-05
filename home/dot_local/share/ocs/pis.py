@@ -195,6 +195,11 @@ def main(argv: list[str] | None = None) -> int:
             ["--no-broker", *options.rest] if options.no_broker else options.rest
         )
     print("pis: サンドボックス無しで起動する (守りはフルガードだけ)", file=sys.stderr)
+    if os.environ.get("PIS_EXPOSE_PORTS"):
+        print(
+            "pis: --no-sandbox では公開ポートの宣言は不要 (ホストのループバックで直接動く)",
+            file=sys.stderr,
+        )
     if shutil.which("pi", path=env.get("PATH")) is None:
         fail("pi が PATH に無い")
     command = plain_command(options, agent)

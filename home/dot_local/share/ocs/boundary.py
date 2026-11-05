@@ -20,6 +20,11 @@ REQUEST_REL = ".opencode/sandbox.toml"
 REQUEST_KEYS = ("read", "write", "network_allow", "devices")
 EXTRA_READ_ENV = "PIS_EXTRA_READ"
 EXTRA_DEVICES_ENV = "PIS_EXTRA_DEVICES"
+EXPOSE_PORTS_ENV = "PIS_EXPOSE_PORTS"
+EXPOSE_PORTS_KEY = "expose_ports"
+EXPOSE_PORT_MIN = 1024
+EXPOSE_PORT_MAX = 65535
+EXPOSE_PORT_MAX_COUNT = 8
 # devices に足せる /dev/ 直下の名前 (CUDA の計算に要るものだけ)。これ以外は拒否
 # see docs/spec/sandbox/fence-boundary.md#プロジェクトごとの追加
 ALLOWED_DEVICE_NAMES = (
@@ -485,21 +490,115 @@ def read_request(workspace: Path) -> dict | None:
     }
 
 
+def _load_request_toml(path: Path) -> dict:
+    """``.opencode/sandbox.toml`` を TOML として読む。読めなければ起動しない。"""
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # pragma: no cover - 3.11 未満
+        die(f"{path} を読めない (tomllib が無い)", "Python 3.11 以降が要る")
+    try:
+        return tomllib.loads(path.read_bytes().decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        die(f"{path} を解釈できない: {exc}")
+
+
+def _port_problem(raw: object) -> str | None:
+    """公開ポート 1 要素の問題。無ければ ``None``。形は整数 (1024〜65535) だけ。"""
+    if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+        return "整数でない"
+    if isinstance(raw, str):
+        if not (raw.isascii() and raw.isdigit()):
+            return "数字だけの 10 進数でない (ADDR:PORT・空白・符号・小数は不可)"
+        raw = int(raw)
+    if not EXPOSE_PORT_MIN <= raw <= EXPOSE_PORT_MAX:
+        return f"{EXPOSE_PORT_MIN}〜{EXPOSE_PORT_MAX} の範囲外"
+    return None
+
+
+def _checked_ports(values: list, source: str) -> list[int]:
+    """公開ポートを検証する。1 つでも不正なら、どの値かを示して起動しない。"""
+    bad = [f"{v!r} ({p})" for v in values if (p := _port_problem(v)) is not None]
+    if bad:
+        die(
+            f"{source} に不正なポートがある: {', '.join(bad)}",
+            f"{EXPOSE_PORT_MIN}〜{EXPOSE_PORT_MAX} の整数だけ (127.0.0.1 にだけ公開する。アドレスは書けない)",
+        )
+    return [int(v) for v in values]
+
+
+def env_expose_ports() -> list[int]:
+    """``PIS_EXPOSE_PORTS`` (コロン区切りのポート番号) を読む。空なら無効。
+
+    see docs/spec/sandbox/fence-boundary.md#公開ポートweb-アプリをホストのブラウザで開く
+    """
+    raws = [r for r in os.environ.get(EXPOSE_PORTS_ENV, "").split(":") if r]
+    return list(dict.fromkeys(_checked_ports(raws, EXPOSE_PORTS_ENV)))
+
+
+def read_expose_ports(workspace: Path) -> dict | None:
+    """公開するポートを、``.opencode/sandbox.toml`` の ``expose_ports`` と環境変数から読む。
+
+    無ければ ``None`` (既定は無効)。ファイルの後ろに環境変数を足し、重複は 1 つにまとめる。
+    ``sources`` は表示用の由来。最大 :data:`EXPOSE_PORT_MAX_COUNT` 個で、超えたら起動しない。
+    """
+    path = workspace / REQUEST_REL
+    from_file: list[int] = []
+    if path.is_file():
+        values = _load_request_toml(path).get(EXPOSE_PORTS_KEY, [])
+        if not isinstance(values, list):
+            die(f"{path} の {EXPOSE_PORTS_KEY} は整数の配列でなければならない")
+        if any(isinstance(v, str) for v in values):
+            die(f"{path} の {EXPOSE_PORTS_KEY} は整数の配列でなければならない (文字列は不可)")
+        from_file = _checked_ports(values, f"{path} の {EXPOSE_PORTS_KEY}")
+    from_env = env_expose_ports()
+    ports = list(dict.fromkeys([*from_file, *from_env]))
+    if not ports:
+        return None
+    if len(ports) > EXPOSE_PORT_MAX_COUNT:
+        die(
+            f"公開ポートが多すぎる: {len(ports)} 個 (最大 {EXPOSE_PORT_MAX_COUNT} 個)",
+            f"{EXPOSE_PORTS_ENV} か {EXPOSE_PORTS_KEY} を減らす",
+        )
+    sources = [n for n, got in ((EXPOSE_PORTS_ENV, from_env), ("sandbox.toml", from_file)) if got]
+    return {"ports": ports, "sources": sources}
+
+
+def reject_reserved_ports(request: dict | None, reserved: list[int]) -> None:
+    """公開ポートが、pis 自身が使うポート (ブローカー・中継など) と重なるなら起動しない。"""
+    if request is None:
+        return
+    clash = [p for p in request["ports"] if p in set(reserved)]
+    if clash:
+        die(
+            f"公開ポートが pis 自身の使うポートと重なる: {', '.join(map(str, clash))}",
+            "別のポートを選ぶ",
+        )
+
+
+def describe_expose_ports(request: dict) -> str:
+    return f"pis: 公開ポート: {', '.join(map(str, request['ports']))} ({' / '.join(request['sources'])})"
+
+
+def announce_expose_ports(request: dict | None) -> None:
+    if request is not None:
+        print(describe_expose_ports(request), file=sys.stderr)
+
+
+def expose_args(request: dict | None) -> list[str]:
+    """Fence の起動に足す ``-p <PORT>`` (127.0.0.1 だけ)。無効なら空で、起動は従来と同じ。"""
+    if request is None:
+        return []
+    return [a for p in request["ports"] for a in ("-p", str(p))]
+
+
 def _read_request_file(workspace: Path) -> tuple[Path | None, dict[str, list[str]]]:
     """``.opencode/sandbox.toml`` の中身。ファイルが無ければ ``(None, 空)``。"""
     path = workspace / REQUEST_REL
     empty: dict[str, list[str]] = {key: [] for key in REQUEST_KEYS}
     if not path.is_file():
         return None, empty
-    try:
-        import tomllib
-    except ModuleNotFoundError:  # pragma: no cover - 3.11 未満
-        die(f"{path} を読めない (tomllib が無い)", "Python 3.11 以降が要る")
-    try:
-        data = tomllib.loads(path.read_bytes().decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
-        die(f"{path} を解釈できない: {exc}")
-    unknown = sorted(set(data) - set(REQUEST_KEYS))
+    data = _load_request_toml(path)
+    unknown = sorted(set(data) - set(REQUEST_KEYS) - {EXPOSE_PORTS_KEY})
     if unknown:
         die(f"{path} に知らない項目がある: {', '.join(unknown)}")
     extras: dict[str, list[str]] = {}

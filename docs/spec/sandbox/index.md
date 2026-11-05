@@ -68,6 +68,7 @@
 | 内側へ渡さない環境変数 | `ocs/cli.py` の `DROP_ENV`、`ocs/pi.py` | `test/agents/test_opencode_launcher.py` |
 | `[pis.broker]` | `common.toml.tmpl` → `rules.json` の `broker.*` | `test_pi_broker_generate.py`、`test_broker.py`、`test_broker_search.py` |
 | 起動と境界の検査（カナリア） | `ocs/pi.py`・`ocs/boundary.py` | `test_pi_boundary.py` |
+| 公開ポート（`PIS_EXPOSE_PORTS` / `expose_ports`。既定は無効） | `ocs/boundary.py`・`ocs/pi.py` → Fence の `-p` | `test_pi_boundary.py`（[仕様](fence-boundary.md#公開ポートweb-アプリをホストのブラウザで開く)） |
 
 ## 文書の地図
 

@@ -928,6 +928,13 @@ def _launch_with(
     boundary.reject_control_dirs(sandbox, workspace, request)
     boundary.reject_protected_workspace(sandbox, workspace, request)
     boundary.announce_request(request)
+    expose = boundary.read_expose_ports(workspace)
+    boundary.reject_reserved_ports(
+        expose,
+        [e[1] for e in (endpoint, search_endpoint) if e is not None]
+        + list((network or {}).get("local_ports") or []),
+    )
+    boundary.announce_expose_ports(expose)
     if broker_state is not None:
         _reject_state_overlap(broker_state, workspace)
 
@@ -981,6 +988,13 @@ def _launch_with(
     with relay.session(config_, None, network) as fence_config:
         project["relay"] = fence_config is not config_
         project["network"] = network
+        relay_url = str(fence_config.get("upstreamProxy") or "") if project["relay"] else ""
+        if relay_url.rpartition(":")[2].isdigit():
+            try:
+                boundary.reject_reserved_ports(expose, [int(relay_url.rpartition(":")[2])])
+            except BaseException:
+                cleanup(agent, endpoint is not None)
+                raise
         if args.check:
             boundary_file = cli.write_boundary(fence_config)
             try:
@@ -1012,6 +1026,7 @@ def _launch_with(
             str(runtime),
             "--settings",
             boundary_file,
+            *boundary.expose_args(expose),
             "--",
             *inner_command(passthrough, env.get("PATH", check.HOST_PATH), sessions),
         ]

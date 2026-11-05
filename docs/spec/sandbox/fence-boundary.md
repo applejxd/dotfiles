@@ -248,6 +248,36 @@ export PIS_EXTRA_DEVICES=/dev/nvidiactl:/dev/nvidia0:/dev/nvidia-uvm  # ネイ�
 - 起動ラッパーが Fence の外で読み、内側へは渡さない (`cli.DROP_ENV`)。`write`・`network_allow` は
   環境変数では足せない
 
+### 公開ポート（Web アプリをホストのブラウザで開く）
+
+内側で動かす Web アプリを、ホスト側のブラウザから開けるようにする（`pis` のみ。`ocs` は読まない）。**既定は無効**で、
+宣言が無ければ Fence の起動引数は 1 バイトも変わらない。ポートは**起動時に確定**し、内側のエージェントは後から開けられない。
+
+```sh
+export PIS_EXPOSE_PORTS=3000:8000     # コロン区切り
+```
+
+```toml
+# .opencode/sandbox.toml
+expose_ports = [3000, 8000]
+```
+
+- **入口は 2 つ**: 環境変数 `PIS_EXPOSE_PORTS` と、`.opencode/sandbox.toml` の `expose_ports`。ファイルの後ろに環境変数を足し、
+  重複は 1 つにまとめる。Fence の起動に `-p <PORT>` をこの順で繰り返し足す
+- **検証（不正は起動を拒否。黙って無視しない）**: 整数のみ・1024〜65535・最大 8 個（重複を除いた数）。
+  `ADDR:PORT`・`0.0.0.0`・空白・符号・小数は拒否し、常に `127.0.0.1` だけ（LAN には公開しない）。
+  TOML は整数の配列だけ（文字列・入れ子・真偽値は拒否）。pis 自身が使うポート（ブローカー・検索・中継）と重なるときも拒否する
+- **内側へ渡さない**: `PIS_EXPOSE_PORTS` は `cli.DROP_ENV` に入れ、内側の環境へ渡さない
+- **表示**: 起動時に `pis: 公開ポート: 3000, 8000 (PIS_EXPOSE_PORTS / sandbox.toml)` を出す
+- **`--no-sandbox`**: Fence が無くホストのループバックで直接動くので、宣言は使わず、環境変数があれば 1 行で知らせる
+- **境界チェック（`pis --check`）は変えない**: 公開ポートはカナリアの外
+- **実測（2026-11-05。Fence 0.1.67、WSL2）**: `fence --settings <最小> -p 18766 -c "python3 -m http.server 18766 --bind 127.0.0.1"` で、
+  ホストから `curl http://127.0.0.1:18766/` が 200、サーバーを止めると 000。`allowLocalBinding` は不要だった。
+  GPU は `PIS_EXTRA_DEVICES=/dev/dxg` で別に通る
+- **限界**: ポートはセッションの間ずっとホストのループバックで開く（サーバーが無い間は接続拒否）。ホストの他のプロセスや
+  ブラウザ上の任意のページ（DNS rebinding など）から、そのポートへ届く（ローカルの開発サーバーと同じ）。LAN には公開しない。
+  内側から依存を入れるには、`network_allow`（`.opencode/sandbox.toml`）に registry のドメインが要る
+
 ### Copilot ブローカー（`pis` のみ）
 
 正本は [ブローカー](broker.md#copilot-ブローカー)（設定・許可する経路・上流の TLS・身元確認・範囲の限界）。
