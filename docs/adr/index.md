@@ -79,3 +79,4 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0022](0022-containment-first-minimal-approvals.md) | 確認を「人が判断を足せる操作」に絞り、残りは境界で守る（封じ込めを主、承認を従にする。ask 層とモードの廃止の方向） | Proposed | 2026-10-31 | 案件は CHG-0054。調査は [AC1](../research/agents/approval-containment-survey.md)。採用が確定したら ADR-0014 を部分改定する |
 | [0023](0023-pending-approval.md) | 承認が取れない操作を失わず保留し、利用者だけが後から承認して実行する | Superseded by ADR-0024 | 2026-10-31 | 案件は CHG-0055。ADR-0022 の「残る確認は、人が不在でも失われない」の具体化。前身は CHG-0046 の退避。2026-11-03 に ADR-0024 で置き換えた |
 | [0024](0024-human-press-merges-in-app.md) | 統合は利用者が PR ビューアで押し、アプリが同期で実行する（保留と非同期承認を置き換える） | Accepted | 2026-11-03 | 案件は CHG-0062。ADR-0023 を置き換える |
+| [0026](0026-work-ledger-integrated-architecture.md) | 作業台帳を唯一の状態にして、継続・/goal・並列実行・通知を一体で自作する | Accepted | 2026-11-05 | 公開拡張の個別導入・vendor・個別自作・最小案を比べ、状態の写しと継続の主体を 1 つにする一体の自作を選んだ。実装済み・配線は既定無効・実 pi での確認の後に有効化。実装の履歴は CHG-0062 |
