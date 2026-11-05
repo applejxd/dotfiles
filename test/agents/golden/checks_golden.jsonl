@@ -9590,6 +9590,7 @@
 {"arg": "LD_PRELOAD=/tmp/x.so git log", "fn": "http_calls", "ok": []}
 {"arg": "LD_PRELOAD=/tmp/x.so git log", "fn": "gh_calls", "ok": []}
 {"arg": "LD_PRELOAD=/tmp/x.so git log", "fn": "fetched_paths", "ok": []}
+{"arg": "LD_PRELOAD=/tmp/x.so git log", "fn": "check", "name": "check_guard_tampering", "ok": "シェルが値をコードとして実行する入口の環境変数 (`PS4` など。今回は `LD_PRELOAD`) の設定は許可されていません。\n対象は PROMPT_COMMAND・BASH_ENV・LD_PRELOAD・LD_AUDIT・DYLD_INSERT_LIBRARIES・BASH_FUNC_* と、値にコマンド置換などを含む PS4、`compgen -C` / `complete -C` / `mapfile -C` です。"}
 {"arg": "PATH=/tmp:$PATH git log", "fn": "heredoc", "literal": [], "out": "PATH=/tmp:$PATH git log"}
 {"arg": "PATH=/tmp:$PATH git log", "fn": "expand_cd", "out": ""}
 {"arg": "PATH=/tmp:$PATH git log", "fn": "commands", "ok": [{"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["git", "git"], ["log", "log"]]}, {"redirects": [], "words": [["PATH=/tmp:$PATH", "PATH=/tmp:$PATH"], ["git", "git"], ["log", "log"]]}]}

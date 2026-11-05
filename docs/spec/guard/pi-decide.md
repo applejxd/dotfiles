@@ -322,6 +322,7 @@ Python 版の判定結果を正解として、TS 版との全件一致を確か�
 - **使い方**: `judge_baseline.mjs --write-baseline`（意図した変更のあとに書き出し直す）・`--check`（1 行でも違えば 1）。`judge_diff.mjs` は差を強さ（deny > mustConfirm > ask > allow）で `relax`・`tighten`・`reason` に分け、台帳に無い差があれば終了コード 1。`--emit-ledger` は台帳の雛形を出す。`--corpus <JSON の文字列配列>` は外部コーパス（`.tmp/keep` に置き、リポジトリには入れない）を回し、baseline に無い入力の分布だけを出す（コマンドは出さない）。
 - **台帳の運用**: 1 行 `{kind, input, role, mode, old, new, class, reason, approver}`（`class` は `relax`・`tighten`・`false-positive`・`neutral`）。緩和は 1 件ずつ理由と承認者（`user`・`review`）を記録し、`relax` は台帳なしでは通らない。差が消えた台帳の行は警告（古い台帳）。承認した差は baseline を書き出し直して台帳を空に戻してよい。
 - **限界**: golden とコーパスに無い入力の退行は検知できない。baseline は「現状」で、正しさは保証しない。check は golden に載る（ヒットのある）入力だけで、ヒット無しの入力の新規ヒットは見ない。
+- **公開の突破の回帰試験**: `test_pi_public_bypasses.py` は、公開の突破の入力（引数・ラッパー・パス・展開の 4 型）の判定を bypass あり・役割 `implementer` で固定する。止まるものは `deny`、止まらない既知の穴は `xfail(strict)` で、塞がれると XPASS で失敗し表の更新を促す。結果は [調査](../../research/agents/command-judge-survey.md#公開の突破の回帰試験の結果2026-11-05)。
 
 ### 判定が前の呼び出しに依存していた（修正済み）
 
@@ -389,6 +390,8 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。
 - 限界: 子と Windows の別実行は記録の置き場が無く観測しない。判定後の確認待ちの結果（承認・拒否）は記録しない
 
 ## 既知の制約
+
+- シェルが値をコードとして実行する入口の環境変数（`PROMPT_COMMAND`・`BASH_ENV`・`LD_PRELOAD`・`LD_AUDIT`・`DYLD_INSERT_LIBRARIES`・`BASH_FUNC_*`、値にコマンド置換などを含む `PS4`）の設定と `compgen -C` / `complete -C` / `mapfile -C` は、`rules_guard.ts` の `codeEntryEnv`（Python 版は `rules_guard.py` の `code_entry_env`）が役割・bypass によらず deny にする。単純コマンドの語の列の、代入になりうる位置（前置代入・ラッパーの引数・`export` 等・`read`/`mapfile` の設定先・`-c` の文字列）だけを見るので、通常の引数中の言及（`rg 'PS4='` など）・`ENV=production ./deploy`・安全な `PS4` は拒否しない（既知の限界: `rg -- 'X=1'` や `;` を含むコミットメッセージで名簿の名前を `NAME=` で書くと誤って拒否する。詳細は仕様）。名前を実行時に組み立てる形と `eval` は対象外（[詳細](pi-guard.md#コードの入口になる環境変数)）。試験は `test_pi_control_files_bash.py`・`test_decide.py`・golden。
 
 - 作業台帳の置き場は、名前の正規表現 (`.git/pi-work`・`.tmp/work`) に加え、`judge/ledger_root.ts` の `ledgerRoots(cwd, env)` が fs だけで解いた実体（`--separate-git-dir`・`GIT_DIR`・worktree の common-dir）とも照合する。bash の `ledgerHit` とファイルツールの `decideFile`（`@` などの pi のパス解釈の各形も照合）が使う。結果は 2 秒の TTL でキャッシュする。common-dir 自身の削除・移動（`.git` 名以外）も拒否する。既知の制約: 広い祖先（`~`・作業ツリー全体）の再帰削除は既存の rm の判定に任せる。TTL の間に作られた `.git` は最大 2 秒拾えない。
 - 結果は cwd ごとに最大 64 件キャッシュする（同じプロセスの中で `.git` を作り直すと古いまま）。読めない・不正な `.git` は例外にせず、名前の照合だけに戻る。試験は `test_pi_ledger_root.py`。

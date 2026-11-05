@@ -103,6 +103,7 @@ _HOOK_TESTS = (
 )
 _ORCH = "home/dot_claude/skills/feature-orchestration/scripts"
 _PI_TESTS = (
+    "test_pi_public_bypasses",
     "test_pi_harness",
     "test_pi_harness_extensions",
     "test_pi_compact_defer",

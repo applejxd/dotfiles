@@ -28,7 +28,7 @@
 | 並列 | 実装済 | `tasks: [...]`（最大 12 件）。同時に生かす子は 6 まで（正本は `home/dot_config/pi/harness/index.ts` の `MAX_JOBS`）。超えた分は空きを待つ | 同上 |
 | 保持と追加依頼（job） | 実装済 | `keep: true` で残し、`{jobId, task}` で履歴を保って続ける。`close` で止める | [job](guard/pi-subagents.md#子を保持して追加依頼するjob) |
 | 状態・steer・abort | 実装済 | `status`・`list`・`steer`・`abort`（今の往復だけ止める） | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
-| 往復の上限 | 実装済 | 役割ごとの `timeout_minutes`（既定 15 分、`plan` は 30 分）。上限の 80% で「まとめに入れ」を送る | 同上 |
+| 往復の上限 | 実装済 | 役割ごとの `timeout_minutes`（既定 15 分、`worker` と `plan` は 30 分）。上限の 80% で「まとめに入れ」を送る | 同上 |
 | モデルと effort | 実装済（Bedrock の実機確認は未） | カタログから選ぶ。**利用者が指示したときだけ指定する**。結果に使った値を必ず出す | [CHG-0043](../change/0043-model-catalog.md)、[モデルの割り当て](agent-model-assignment.md#子エージェントのモデルのカタログ) |
 | 子の質問・親への通信 | 未対応 | 子から親への通信は無い（結果の返却と完了通知だけ） | [job](guard/pi-subagents.md#子を保持して追加依頼するjob) |
 

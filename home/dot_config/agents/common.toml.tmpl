@@ -1717,7 +1717,7 @@ plain_system = """
 
 # 計画役 (CHG-0044)。深く考えるので tier は deep (Copilot は Sonnet 5.5 の xhigh、Bedrock は Opus 5.5 の high)。
 # ★reader (bash なし): explorer は skill_scripts の許可が通るので、読み取り専用を指示だけでは強制できない。Git の情報は親が依頼文に載せる
-# ★timeout_minutes: max で 17〜18 分かかるので、plan だけ 1 往復の上限を延ばす (他の役は 15 分のまま)
+# ★timeout_minutes: plan は max で 17〜18 分かかる。worker は大きい実装が 15 分で途中で止まる。この 2 役だけ 1 往復の上限を 30 分に延ばす (他の役は 15 分のまま)
 # ★check_conditions: 依頼の守る条件の番号 (C1: …) が、返答の突き合わせの節に全部あるかを検査する (警告。満たす証明ではない)
 # see docs/change/0044-plan-agent.md
 [pi.agents.plan]
@@ -1757,6 +1757,7 @@ system = """
 profile = "worker"
 tier = "worker"
 inherit_bypass = true
+timeout_minutes = 30
 description = "割り当てられた 1 つの作業を、指定された担当ファイルの範囲で実装して確かめ、結果を返す。コミットはしない"
 system = """
 あなたは作業役です。依頼された 1 つの作業を、担当ファイルの範囲で実装し、確認方法を実行して
