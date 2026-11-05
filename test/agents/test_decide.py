@@ -799,6 +799,12 @@ _ENTRY_DENY = [
     "mapfile -C id arr",
     "compgen -C id",
     "complete -C id foo",
+    "find . -exec env BASH_ENV=x cmd {} \\;",
+    "find . -ok env LD_PRELOAD=x cmd {} \\;",
+    "bash <<< 'BASH_ENV=x cmd'",
+    "stdbuf --output L env BASH_ENV=x cmd",
+    "xargs --max-args=1 env BASH_ENV=x cmd",
+    "env 'BASH_FUNC_x-y%%=() { id; }' bash",
 ]
 _ENTRY_OK = [
     "rg 'PS4='",
@@ -819,6 +825,10 @@ _ENTRY_OK = [
     "man bash",
     "echo hi  # PS4=x",
     "LD_LIBRARY_PATH=/opt/lib ./prog",
+    "cat <<< 'BASH_ENV=x cmd'",
+    "find . -exec cat {} \\;",
+    "stdbuf --output L cat file",
+    "echo 'BASH_FUNC_x-y%%=1'",
 ]
 
 

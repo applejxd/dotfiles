@@ -482,6 +482,21 @@ ENTRY_DENY = [
     "mapfile -C id arr",
     "compgen -C id",
     "complete -C id foo",
+    # find -exec / here-string / 長いオプション / BASH_FUNC_ の名前
+    "find . -exec env BASH_ENV=x cmd {} \\;",
+    "find . -execdir BASH_ENV=x cmd {} +",
+    "find . -ok env LD_PRELOAD=x cmd {} \\;",
+    "bash <<< 'BASH_ENV=x cmd'",
+    'sh <<< "export BASH_ENV=/tmp/x"',
+    "bash <<< 'env BASH_ENV=x cmd'",
+    "stdbuf --output L env BASH_ENV=x cmd",
+    "stdbuf --output=L env BASH_ENV=x cmd",
+    "xargs --max-args 1 env BASH_ENV=x cmd",
+    "xargs --max-args=1 env BASH_ENV=x cmd",
+    "timeout --signal KILL 5 env BASH_ENV=x cmd",
+    "sudo --user root env BASH_ENV=x cmd",
+    "nice --adjustment 5 env BASH_ENV=x cmd",
+    "env 'BASH_FUNC_x-y%%=() { id; }' bash",
 ]
 ENTRY_OK = [
     # 名前を言及するだけの通常の引数
@@ -518,7 +533,33 @@ ENTRY_OK = [
     "MY_ENV=x ./run",
     "BASH_ENVX_NOT=1 ./run",
     "compgen -c",
+    # find -exec / here-string の安全な形、長いオプション、BASH_FUNC_ の言及
+    "cat <<< 'BASH_ENV=x cmd'",
+    "grep x <<< 'BASH_ENV=x'",
+    "find . -name 'BASH_ENV=x'",
+    "find . -exec grep BASH_ENV {} \\;",
+    "find . -exec cat {} \\;",
+    "stdbuf --output L cat file",
+    "xargs --max-args 1 echo BASH_ENV",
+    "echo 'BASH_FUNC_x-y%%=1'",
+    "rg 'BASH_FUNC_x'",
 ]
+
+# 既知の限界 (D): 正規化が引用を失った文字列を再解析するため、誤って拒否する。直ったらこの表を更新する
+# see docs/spec/guard/pi-guard.md#コードの入口になる環境変数
+ENTRY_KNOWN_GAP = [
+    "rg -- 'BASH_ENV=x'",
+    "git commit -m 'docs: example; BASH_ENV=x'",
+]
+
+
+@pytest.mark.xfail(
+    strict=True, reason="既知の限界 (D): -- 以降と `;` を含む引用を正規化が再解析する"
+)
+@pytest.mark.parametrize("command", ENTRY_KNOWN_GAP)
+def test_entry_env_known_gap_false_denials(command):
+    for (cmd, flags), decision in _decide([command]):
+        assert "入口の環境変数" not in decision.reason, f"{cmd!r} {flags}"
 
 
 @pytest.mark.parametrize("role", ["implementer", "worker", "explorer"])

@@ -31,7 +31,9 @@ from .rules_exec import _is_inline_code_segment
 _ENTRY_NAMES = frozenset(
     {"PS4", "PROMPT_COMMAND", "BASH_ENV", "LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"}
 )
-_ENTRY_ASSIGN_WORD_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_%]*)(?:\[[^\]]*\])?\+?=(.*)", re.S)
+_ENTRY_ASSIGN_WORD_RE = re.compile(
+    r"([A-Za-z_][A-Za-z0-9_]*|BASH_FUNC_[^=]*)(?:\[[^\]]*\])?\+?=(.*)", re.S
+)
 _PS4_EXPANSION_RE = re.compile(
     r"\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*(?:\[(?:[0-9]+|@)\])?\})"
 )
@@ -53,16 +55,22 @@ _ENTRY_WRAPPERS = frozenset(
     }
 )
 _ENTRY_WRAPPER_VALUE_OPTS: dict[str, frozenset[str]] = {
-    "env": frozenset({"-u", "--unset", "-C", "--chdir"}),
+    "env": frozenset({"-u", "--unset", "-C", "--chdir", "--argv0"}),
     "sudo": frozenset(
-        {"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T", "-U", "-r", "-t", "--user", "--group"}
+        {"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T", "-U", "-r", "-t"}
+        | {"--user", "--group", "--host", "--prompt", "--chdir", "--close-from", "--role"}
+        | {"--type", "--other-user", "--command-timeout"}
     ),
     "doas": frozenset({"-u", "-C"}),
     "time": frozenset({"-f", "--format", "-o", "--output"}),
     "nice": frozenset({"-n", "--adjustment"}),
     "timeout": frozenset({"-s", "--signal", "-k", "--kill-after"}),
-    "stdbuf": frozenset({"-i", "-o", "-e"}),
-    "xargs": frozenset({"-I", "-n", "-P", "-s", "-L", "-E", "-d", "-a"}),
+    "stdbuf": frozenset({"-i", "-o", "-e", "--input", "--output", "--error"}),
+    "xargs": frozenset(
+        {"-I", "-n", "-P", "-s", "-L", "-E", "-d", "-a"}
+        | {"--max-args", "--max-procs", "--max-lines", "--max-chars", "--delimiter", "--arg-file"}
+        | {"--process-slot-var"}
+    ),
     "exec": frozenset({"-a"}),
 }
 _ENTRY_DECLARE = frozenset({"export", "declare", "typeset", "local", "readonly"})
@@ -177,6 +185,20 @@ def _entry_in_words(words: list[str], depth: int) -> str | None:
         if head == "timeout" and j < len(args):
             j += 1  # DURATION
         return _entry_in_words(args[j:], depth)
+    if head == "find":
+        # -exec 系の直後から `;` / `+` の手前までを、コマンドの語の列として見る (`{}` はそのまま)
+        k = 0
+        while k < len(args):
+            if args[k] in ("-exec", "-execdir", "-ok", "-okdir"):
+                e = k + 1
+                while e < len(args) and args[e] not in (";", "+"):
+                    e += 1
+                hit = _entry_in_words(args[k + 1 : e], depth)
+                if hit is not None:
+                    return hit
+                k = e
+            k += 1
+        return None
     if head in _ENTRY_DECLARE:
         for t in args:
             hit = _entry_assign(t)
@@ -221,19 +243,61 @@ def _entry_in_words(words: list[str], depth: int) -> str | None:
                 if k + 1 >= len(args):
                     return None
                 for inner in shellparse.parse(args[k + 1]):
-                    hit = _entry_in_words(list(inner.argv), depth + 1)
+                    hit = _entry_in_command(inner, depth + 1)
                     if hit is not None:
                         return hit
                 return None
     return None
 
 
+def _is_shell_command(words: list[str]) -> bool:
+    """単純コマンドの先頭 (キーワード・前置代入を除く) がシェルか。"""
+    i = 0
+    while i < len(words) and (
+        words[i] in _ENTRY_KEYWORDS or _ENTRY_ASSIGN_WORD_RE.fullmatch(words[i])
+    ):
+        i += 1
+    return i < len(words) and _basename(words[i]) in _ENTRY_SHELLS
+
+
+def _entry_in_command(command: shellparse.Command, depth: int) -> str | None:
+    """単純コマンド 1 つ。シェルが here-string (`<<<`) を受けるときは、その文字列も `-c` と同じく調べる (深さ 3 まで)。"""
+    words = list(command.argv)
+    hit = _entry_in_words(words, depth)
+    if hit is not None or depth >= 3 or not _is_shell_command(words):
+        return hit
+    for r in command.redirects:
+        if r.op != "<<<" or r.target is None:
+            continue
+        for inner in shellparse.parse(r.target.value):
+            h = _entry_in_command(inner, depth + 1)
+            if h is not None:
+                return h
+    return None
+
+
+def _data_here_strings(cmd: str) -> set[str]:
+    """正規化は here-string の本文を別のセグメントにする。シェル以外が受ける本文はデータなので、そのセグメントは見ない。"""
+    skip: set[str] = set()
+    for c in shellparse.parse(cmd):
+        if _is_shell_command(list(c.argv)):
+            continue
+        for r in c.redirects:
+            if r.op == "<<<" and r.target is not None:
+                skip.add(r.target.value.strip())
+    return skip
+
+
 def code_entry_env(cmd: str) -> str | None:
     """コードの入口になる環境変数の設定・コールバックの入口を見つける。見つからなければ None。"""
-    for command in _commands(cmd):
-        hit = _entry_in_words(list(command.argv), 0)
-        if hit is not None:
-            return hit
+    skip = _data_here_strings(cmd)
+    for segment in _segments(cmd):
+        if segment != cmd and segment.strip() in skip:
+            continue
+        for command in shellparse.parse(segment):
+            hit = _entry_in_command(command, 0)
+            if hit is not None:
+                return hit
     return None
 
 

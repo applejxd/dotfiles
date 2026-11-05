@@ -10,6 +10,7 @@ import { tableSet } from "./context.ts";
 import { expandUser, isAbsolute, join, normpath, realpathLoose, sep, strictResolve } from "./pathutil.ts";
 import { basename, pyRegex, shlexSplit, ShlexError, split, stripChars } from "./pystr.ts";
 import { argv, parse } from "./shellparse.ts";
+import type { Command } from "./shellparse.ts";
 import { splitCommandSegments } from "./normalize.ts";
 import { inlineCodeHead } from "./rules_exec.ts";
 import { ledgerCommonDirs, ledgerRoots, underLedgerRoot } from "./ledger_root.ts";
@@ -291,19 +292,25 @@ const HOOK_ENV_RE = pyRegex("\\b(AGENTS_CONFIG_DIR|PYTHONPATH|CLAUDE_[A-Z_]*HOOK
 // 検出する形・入れないもの・限界は docs/spec/guard/pi-guard.md#コードの入口になる環境変数
 // 通常の引数は走査しない: 単純コマンドの語の列の、代入になりうる位置だけを見る (同じ規則が rules_guard.py の code_entry_env にある)
 const ENTRY_NAMES = new Set(["PS4", "PROMPT_COMMAND", "BASH_ENV", "LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"]);
-const ENTRY_ASSIGN_WORD_RE = /^([A-Za-z_][A-Za-z0-9_%]*)(?:\[[^\]]*\])?\+?=([\s\S]*)$/u;
+const ENTRY_ASSIGN_WORD_RE = /^([A-Za-z_][A-Za-z0-9_]*|BASH_FUNC_[^=]*)(?:\[[^\]]*\])?\+?=([\s\S]*)$/u;
 const PS4_EXPANSION_RE = /\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*(?:\[(?:[0-9]+|@)\])?\})/gu;
 const ENTRY_KEYWORDS = new Set(["if", "then", "else", "elif", "do", "while", "until", "!", "{", "}"]);
 const ENTRY_WRAPPERS = new Set(["env", "sudo", "doas", "time", "command", "nice", "nohup", "timeout", "stdbuf", "xargs", "exec", "builtin"]);
 const ENTRY_WRAPPER_VALUE_OPTS: Record<string, Set<string>> = {
-	env: new Set(["-u", "--unset", "-C", "--chdir"]),
-	sudo: new Set(["-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T", "-U", "-r", "-t", "--user", "--group"]),
+	env: new Set(["-u", "--unset", "-C", "--chdir", "--argv0"]),
+	sudo: new Set([
+		"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T", "-U", "-r", "-t",
+		"--user", "--group", "--host", "--prompt", "--chdir", "--close-from", "--role", "--type", "--other-user", "--command-timeout",
+	]),
 	doas: new Set(["-u", "-C"]),
 	time: new Set(["-f", "--format", "-o", "--output"]),
 	nice: new Set(["-n", "--adjustment"]),
 	timeout: new Set(["-s", "--signal", "-k", "--kill-after"]),
-	stdbuf: new Set(["-i", "-o", "-e"]),
-	xargs: new Set(["-I", "-n", "-P", "-s", "-L", "-E", "-d", "-a"]),
+	stdbuf: new Set(["-i", "-o", "-e", "--input", "--output", "--error"]),
+	xargs: new Set([
+		"-I", "-n", "-P", "-s", "-L", "-E", "-d", "-a",
+		"--max-args", "--max-procs", "--max-lines", "--max-chars", "--delimiter", "--arg-file", "--process-slot-var",
+	]),
 	exec: new Set(["-a"]),
 };
 const ENTRY_DECLARE = new Set(["export", "declare", "typeset", "local", "readonly"]);
@@ -403,6 +410,18 @@ function entryInWords(words: string[], depth: number): string | null {
 		if (head === "timeout" && j < args.length) j += 1; // DURATION
 		return entryInWords(args.slice(j), depth);
 	}
+	if (head === "find") {
+		// -exec 系の直後から `;` / `+` の手前までを、コマンドの語の列として見る (`{}` はそのまま)
+		for (let k = 0; k < args.length; k++) {
+			if (!["-exec", "-execdir", "-ok", "-okdir"].includes(args[k])) continue;
+			let e = k + 1;
+			while (e < args.length && args[e] !== ";" && args[e] !== "+") e += 1;
+			const hit = entryInWords(args.slice(k + 1, e), depth);
+			if (hit !== null) return hit;
+			k = e;
+		}
+		return null;
+	}
 	if (ENTRY_DECLARE.has(head)) {
 		for (const t of args) {
 			const hit = entryAssign(t);
@@ -449,7 +468,7 @@ function entryInWords(words: string[], depth: number): string | null {
 			if (t.slice(1).includes("c")) {
 				if (k + 1 >= args.length) return null;
 				for (const inner of parse(args[k + 1])) {
-					const hit = entryInWords(argv(inner), depth + 1);
+					const hit = entryInCommand(inner, depth + 1);
 					if (hit !== null) return hit;
 				}
 				return null;
@@ -459,11 +478,49 @@ function entryInWords(words: string[], depth: number): string | null {
 	return null;
 }
 
+/** 単純コマンドの先頭 (キーワード・前置代入を除く) がシェルか。 */
+function isShellCommand(words: string[]): boolean {
+	let i = 0;
+	while (i < words.length && (ENTRY_KEYWORDS.has(words[i]) || ENTRY_ASSIGN_WORD_RE.test(words[i]))) i += 1;
+	return i < words.length && ENTRY_SHELLS.has(baseName(words[i]));
+}
+
+/** 単純コマンド 1 つ。シェルが here-string (`<<<`) を受けるときは、その文字列も `-c` と同じく調べる (深さ 3 まで)。 */
+function entryInCommand(command: Command, depth: number): string | null {
+	const words = argv(command);
+	const hit = entryInWords(words, depth);
+	if (hit !== null || depth >= 3 || !isShellCommand(words)) return hit;
+	for (const r of command.redirects) {
+		if (r.op !== "<<<" || r.target === null) continue;
+		for (const inner of parse(r.target.value)) {
+			const h = entryInCommand(inner, depth + 1);
+			if (h !== null) return h;
+		}
+	}
+	return null;
+}
+
+/** 正規化は here-string の本文を別のセグメントにする。シェル以外が受ける本文はデータなので、そのセグメントは見ない。 */
+function dataHereStrings(cmd: string): Set<string> {
+	const skip = new Set<string>();
+	for (const c of parse(cmd)) {
+		if (isShellCommand(argv(c))) continue;
+		for (const r of c.redirects) {
+			if (r.op === "<<<" && r.target !== null) skip.add(r.target.value.trim());
+		}
+	}
+	return skip;
+}
+
 /** コードの入口になる環境変数の設定・コールバックの入口を見つける。見つからなければ null。 */
 export function codeEntryEnv(ctx: Ctx, cmd: string): string | null {
-	for (const command of commands(ctx, cmd)) {
-		const hit = entryInWords(argv(command), 0);
-		if (hit !== null) return hit;
+	const skip = dataHereStrings(cmd);
+	for (const segment of segments(ctx, cmd)) {
+		if (segment !== cmd && skip.has(segment.trim())) continue;
+		for (const command of parse(segment)) {
+			const hit = entryInCommand(command, 0);
+			if (hit !== null) return hit;
+		}
 	}
 	return null;
 }
