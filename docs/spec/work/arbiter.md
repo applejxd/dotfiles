@@ -2,7 +2,7 @@
 
 `agent_before_settle` の継続判断を 1 か所 (`work/arbiter.ts`。純関数) にまとめる。提案者はハンドラも副作用も持たず、
 事実 (`Facts`) から `Proposal` を返すだけ。`arbitrate(facts, proposals)` が表で 1 つに決める。
-計画: `.tmp/keep/subagents/29-work-ledger-plan.md` の C 節。配線 (`index.ts`・`wake()` の実呼び出し) は別の feature。
+背景と決定の経緯: [ADR-0026](../../adr/0026-work-ledger-integrated-architecture.md)。配線 (`index.ts`・`wake()` の実呼び出し) は別の feature。
 
 ## 優先順位表 (上から最初に当たる行が勝つ)
 
