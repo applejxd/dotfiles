@@ -28,6 +28,20 @@
 - **Reddit**（スニペットのみ。本文と票数は取得できず）: r/ClaudeCode「How often do you use --dangerously-skip-permissions」に「YOLO mode は docker の中だけ」「`dc`＝dangerous claude の alias」。r/ChatGPTCoding「Do you use yolo mode...」に「ほぼ全部 VS Code の Dev Container か VM の中」。r/ClaudeAI「How are you sandboxing your coding agents?」に「built-in では `~/.ssh` が読めるので sandbox とは言えない」。
 - **利用者を対象にした数値つきの調査**: 見つからなかった。Stack Overflow 2026 は AI の信頼と検証の方法の設問で、サンドボックスの設問は（検索の範囲では）確認できなかった。
 
+## 2b. GPU を使う割合（コンテナ設定の目安。後から追記）
+
+GitHub の公開リポジトリのコード検索（2026-11-06。ファイル数。概数）。
+
+| 検索 | 件数 | 割合 |
+| --- | ---: | ---: |
+| `devcontainer.json`（分母） | 252,672 | |
+| うち `"--gpus"` を含む | 3,724 | 約 1.5% |
+| うち `nvidia` を含む | 3,100 | 約 1.2% |
+| `docker-compose.yml`（分母） | 2,310,144 | |
+| うち `driver: nvidia` を含む | 25,088 | 約 1.1% |
+
+HN の Docker Sandboxes の公開スレッド（コメント 392 件）で、GPU に触れたのは 3 件。サンドボックス製品の GPU 対応は、Modal・Daytona・Northflank が対応、E2B・Vercel Sandbox・Cloudflare は非対応、Docker Sandboxes は専有 GPU の実験機能（販売元・比較記事の記述）。**GPU を使うコンテナ設定は、1〜3% 程度の少数派**。間に合わせの解が少ない理由になりうる（推測）。
+
 ## 3. 読み取り
 
 - 利用者の選択は、大きく **(a) ホストでそのまま（YOLO）**、**(b) Docker・devcontainer**、が多数派。OS のサンドボックス・VM・別の機械は少数。
