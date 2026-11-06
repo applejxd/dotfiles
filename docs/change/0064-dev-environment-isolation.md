@@ -106,6 +106,19 @@
 | `docs/spec/sandbox/wsl-sandbox.md` | 専用ディストロの 1 つの環境 → 開発単位の環境を作る・消す手順（テンプレート・ポート割当・資格情報） | ADR-0027・W1〜W3 の結果 | 未適用（W2 の後） |
 | `docs/spec/sandbox/` に開発単位の環境の仕様を新設 | なし → `dev-*` の共通の形と、WSL・Incus の各バックエンド | C1・N3 | 未適用 |
 
+### W2・C1 の設計案（2026-11-06。計画役の案。実装は未着手）
+
+- **共通の形は「前段 1 本＋バックエンドの薄い実行器」**。前段は Python の `dev`（`argv[0]` で `dev-new` などに分岐。Linux 上で試験できる）。名前の検証・スロットとポートの割当・状態・削除の確認・プロファイルは前段に置く。WSL 版の実行器は PowerShell（JSON を返すだけ）、Incus 版は同じ動詞表を実装する（`isx` を採るなら adapter）。
+- コマンド: `dev-new <単位> [--template T] [--profile gpu,docker,ros] [--ssh] [--keepalive] [--cred ...]`・`dev-rm <単位> [--yes] [--discard]`（`--yes` なしは計画の表示だけ。未コミット・未 push があれば拒否）・`dev-ls`・`dev-snap`（restore は常に新しい単位を作る）・`dev-tmpl`・`dev-shell`・`dev-exec`・`dev-stop`（`wsl --terminate`。`wsl --shutdown` は呼ばない）・`dev-cred`。
+- 名前: 単位 `^[a-z][a-z0-9-]{0,19}$`、バックエンド上は `dev-<単位>`（接頭辞で、メインのディストロや既存の `sandbox` に削除が届かない）。状態は `~/.local/state/dev-env/`（秘密を含めない。存在の真実はバックエンドの一覧）。
+- **ポート割当**（mirrored では単位間で衝突する）: スロット 0〜49、`20000 + 100*slot` から 100 個（sshd・rerun の Web と gRPC・compose 用 `DEV_PORT_APP_<n>`）。`ROS_DOMAIN_ID` もスロット。
+- **資格情報の口は `dev-cred` の 1 か所**（stdin → 単位内の tmpfs `/run/dev-cred`。テンプレートに口は無く、封印時に監査する）。LLM の認証（W3）の決定は、kind の表の 1 行の違いで吸収する。
+- **WSL 版**: 既存の `create.ps1` は変えず、`scripts/windows/dev-env/` を新設（W1 が検証中のため。W1 の後に統合）。テンプレートは一時ディストロを rootfs から作り、封印（machine-id・ホスト鍵・認証の削除）と監査（認証ファイル・トークンの接頭辞）を通してから `wsl --export`。単位の作成は `wsl --import` → 単位の初期化。削除は `wsl --unregister`（計画→`--yes`・接頭辞・状態ファイルの記録・既定ディストロの除外）。メインの WSL からは interop で PowerShell を呼ぶ（呼べないときはコマンドを表示して pending を記録し、後で `dev-ls --reconcile`）。
+- **最大の懸念（推測）**: 複数のディストロで dockerd を同時に動かすと、共有のネットワーク名前空間で `docker0` と iptables が衝突する可能性。**実機で先に確かめる**（確かめるまでは「同時に動かす docker の単位は 1 つ」を既定にする）。
+- **新しい権限は既定で無効**: `--ssh`・`--keepalive`・`--cred`・LAN 公開。AI からの `dev-new/rm/snap/tmpl/cred/exec/shell/stop` は `[bash] deny` へ（狭める変更）。
+- 実装の分担（契約書を先に固定して見込みで並列）: A 前段（Python。Linux で試験）・B WSL 実行器（`dev-wsl.ps1`）・C ゲスト資材（`template-build.sh`・`template-audit.sh`・`unit-init.sh`・`cred-install.sh`）・D docs・E 実機確認用のスクリプト・F ガード（deny）。
+- **利用者への確認（推奨つき）**: ①状態の置き場を前段（Linux の `~/.local/state`）にする（推奨） ②同時に動かす docker の単位の既定を 1 にする（推奨） ③AI からの `dev-*` を deny にする（推奨） ④入口を単一の `dev` ＋ symlink にする（推奨） ⑤テンプレートをプロファイルごとに作る（推奨） ⑥ポート範囲 20000〜24999 が既存のものと衝突しないか ⑦`create.ps1` との統合は W1 の後にする（推奨） ⑧`isx` を採るなら C1 の範囲が変わる（ネイティブ側は保留）。
+
 ## 実装・検証
 
 採用が決まった部分だけ具体化する。現時点で実装したものは無い（`pisd` は P2 の別の案件。ここでは扱わない）。
