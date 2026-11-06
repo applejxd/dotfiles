@@ -131,7 +131,8 @@ export function proposeTodo(f: Facts): Proposal {
 		flag = "todo.nudgedWaiting";
 		content =
 			`待ち (blocked) の項目があり、着手できる未着手 (pending) も残っています。待ち: ${t.blocked.slice(0, 3).join(" / ")}。` +
-			`未着手: ${t.queued.slice(0, 5).join(" / ")}。承認や確認の待ちは止まる理由ではありません。依存しない未着手を続けてください。`;
+			`未着手: ${t.queued.slice(0, 5).join(" / ")}。承認や確認の待ちは止まる理由ではありません。依存しない未着手を続けてください。` +
+			"未着手 (pending) は、契約が確定して着手できる項目のはずです。利用者の判断が未回答の設計や、確認されていない計画は blocked にして着手しないでください。";
 	}
 	return {
 		by: "todo",
