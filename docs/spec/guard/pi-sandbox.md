@@ -2,6 +2,9 @@
 
 `pis` が pi を Fence の中で起動するときの仕様: agent 置き場・セッション・認証・後始末、プロキシ必須の環境での通信、拒否リスト型の通信、緩和のゲート。境界の組み立ての規則は [Fence 境界の組み立て](../sandbox/fence-boundary.md)、サンドボックスの総覧は [サンドボックス](../sandbox/index.md)、起動・設定は [pi のガード](pi-guard.md)。
 
+> **使う場所**: dotfiles のリポジトリの開発では、このサンドボックスを使わない（`pis --no-sandbox`。[ADR-0025](../../adr/0025-dotfiles-dev-without-os-sandbox.md)）。
+> 隠した秘密の追跡ファイルが作業ツリーで変更に見え、統合が失敗するため。外部のコード・依存・Web アプリ・GPU を実行するほかのリポジトリで使う。
+
 ## サンドボックス
 
 `pis`（標準）は、`pi.py` の `run_sandboxed` が pi を Fence で囲って起動する（`ocs` のコマンドは経由しない。CHG-0023 の段 3c）。

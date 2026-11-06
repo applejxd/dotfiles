@@ -866,6 +866,10 @@ def _real_boundary_ready() -> str | None:
         return "bwrap が無い"
     if not (Path.home() / "bin/pi").is_file():
         return "pi が入っていない"
+    src = Path.home() / "src"
+    if src.exists() and not os.access(src, os.W_OK):
+        # pis の内側で回すと ~/src は読み取り専用 (work_read)。作業用の試験ディレクトリを作れない
+        return "~/src に書けない (sandbox の内側など)"
     return None
 
 

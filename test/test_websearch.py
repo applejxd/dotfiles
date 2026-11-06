@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import socket
 import sys
@@ -21,6 +22,17 @@ assert _spec and _spec.loader
 ws = importlib.util.module_from_spec(_spec)
 sys.modules["websearch"] = ws  # dataclass が自分のモジュールを引く
 _spec.loader.exec_module(ws)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_websearch_env(monkeypatch):
+    """実行者の環境の WEBSEARCH_* (sandbox 内のブローカー設定など) を遮断する。
+
+    ブローカーがあると URL が 127.0.0.1 へ置き換わり、ホスト別の偽応答に当たらなくなる。
+    各試験が必要な値は自分で setenv する。
+    """
+    for name in [n for n in os.environ if n.startswith("WEBSEARCH_")]:
+        monkeypatch.delenv(name)
 
 
 def resp(status=200, body=None, headers=None):

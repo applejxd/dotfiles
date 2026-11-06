@@ -1986,6 +1986,7 @@ def flow_merge_real(br, check) -> None:
 
 def browser_main(shots: pathlib.Path | None) -> int:
     """子プロセスで動く本体。失敗は JSON で標準出力へ。"""
+    from playwright.sync_api import Error as PlaywrightError
     from playwright.sync_api import sync_playwright
 
     chrome = find_chrome()
@@ -2008,7 +2009,18 @@ def browser_main(shots: pathlib.Path | None) -> int:
             fails.append(msg)
 
     with sync_playwright() as pw:
-        br = pw.chromium.launch(executable_path=chrome)
+        try:
+            br = pw.chromium.launch(executable_path=chrome)
+        except (
+            PlaywrightError
+        ) as exc:  # 起動そのものの失敗だけを skip にする (起動後の失敗は fails に出る)
+            print(
+                json.dumps(
+                    {"skip": f"Chromium を起動できない: {str(exc).splitlines()[0]}"},
+                    ensure_ascii=False,
+                )
+            )
+            return SKIP_CODE
         # 反例: 検査の仕掛け（__pwned）が、実際に実行された onerror を検出できること
         probe = br.new_page()
         probe.set_content('<img src="x" onerror="window.__pwned=1">')

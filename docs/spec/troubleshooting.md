@@ -44,6 +44,7 @@ chezmoi status --include=scripts   # 次の apply で走るスクリプト（R�
 | `Invalid arguments for tool ...`、引数が空のツール呼び出し | pi | [ツール呼び出しの引数が壊れる](troubleshooting-agents.md#ツール呼び出しの引数が壊れるinvalid-arguments引数が空) |
 | `~/.copilot/skills` が作られない | Windows の Copilot CLI | [Windows で .copilot/skills のリンクが作られない](troubleshooting-agents.md#windows-で-copilotskills-のリンクが作られない) |
 | `/copy` で `Clipboard unavailable: install wl-clipboard` と出る | `pis`（WSL2） | [pis の内側でクリップボードへコピーできない](troubleshooting-agents.md#pis-の内側でクリップボードへコピーできない) |
+| 何も編集していないのに本体の `git status` が dirty。統合が `stash failed` で落ちる | `pis`（dotfiles を起動ディレクトリにしたとき） | [pis の内側で本体の git status が dirty に見える](troubleshooting-agents.md#pis-の内側で本体の-git-status-が-dirty-に見える) |
 | `ask` のはずの操作を確認なしで実行する（OpenCode 専用。撤去予定） | OpenCode | [保存した承認の確認とリセット](agent-permissions.md#保存した承認の確認とリセット) |
 
 [仕様・運用一覧へ戻る](index.md)
