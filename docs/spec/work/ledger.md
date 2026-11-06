@@ -1,6 +1,7 @@
 # 作業台帳 (work ledger) の核
 
 追記専用のイベントログと、その畳み込み (reducer) で、ゴール・task・run の状態を導く純関数の群。pi の API にも fs にも依存しない。
+なぜ作ったか・検討した案・位置づけ: [ADR-0026](../../adr/0026-work-ledger-integrated-architecture.md)。
 配線（store・digest・sched・journal・index.ts）は別の feature。実装は `home/dot_config/pi/harness/work/`、試験は `test/agents/test_work_core.py`。
 
 ## 構成
