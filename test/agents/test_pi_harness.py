@@ -1926,7 +1926,9 @@ def test_todo_reminds_once_when_waiting_leaves_startable_pending_items(env):
     assert out.count("REMINDER=") == 1, out
     # 未着手は新しい項目 (ID が大きい) から並べる
     assert "待ち: #1 a" in out and "未着手: #3 c / #2 b" in out, out
-    assert "利用者の方針決定がないと進められる作業が無いときだけ" in out, out
+    assert "契約の範囲に進められる作業が無く、利用者の決定が要るときだけ" in out, out
+    # pending は契約が確定した項目だけ (判断が未回答のものは blocked)
+    assert "blocked にして着手しない" in out, out
 
 
 @pytest.mark.parametrize(
