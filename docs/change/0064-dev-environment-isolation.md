@@ -24,7 +24,7 @@
 | W1 | 既存の専用ディストロ（`docs/spec/sandbox/wsl-sandbox.md`）が通しで使えるか分からない | 隔離の否定試験・docker と compose・GPU（compose の GPU 指定を含む）・`docker login` の保存先を実機で測る（AI の `ssh` は拒否されるため、利用者が手元の端末で実行する） | 未着手（利用者の実行待ち） |
 | W2 | 環境の作成と削除が重い | WSL 版の `dev-new` / `dev-rm` / `dev-ls` / `dev-snap`（テンプレートの `wsl --export`・`--import`、単位ごとのポート割当）。既存の `scripts/windows/wsl-sandbox/create.ps1` を拡張する（Windows 資産。実機は利用者） | 未着手 |
 | W3 | エージェント（pi）の置き場と、LLM の認証の置き場が決まっていない | 「環境の中で pi を動かす」か「ホストの pi が `ssh` で操作する」か。後者は `remote_exec` の確認の緩和が展開後にも効くかの確認が要る。ホストに認証ブローカーを常駐させ、mirrored のネットワークで共有される `localhost` 経由で使う案の検証 | 未着手 |
-| N1 | ネイティブ Ubuntu で Incus が要件を満たすか分からない | 導入と小さな試行（下の「次の調査・実験」の T1〜T5） | **保留**（ネイティブ機のセッションで継続） |
+| N1 | ネイティブ Ubuntu で Incus が要件を満たすか分からない | 導入と小さな試行（下の「次の調査・実験」の T1〜T5） | **再開（優先。ADR-0028 で、コンテナ開発のリポジトリを native の Incus に限ると決めたため。ネイティブ機のセッションで継続）** |
 | N2 | 既存の OSS（下の「候補比較」）を使うか、借りるか、自作するか | 候補の導入前調査と、小さな試行 | **保留**（同上） |
 | N3 | WSL と同じ操作の形（`dev-*`）をネイティブでも使いたい | `dev-*` の Incus バックエンド（`incus launch` / `delete -f` / `list` / `snapshot`）の設計。N2 で既存の OSS を採るなら不要 | **保留**（同上） |
 | C1 | バックエンドごとに操作が変わる | `dev-*` の共通の形（引数・プロファイル・資格情報の入れ方・ポート割当）の仕様化 | 未着手（W2 と N3 の前） |
@@ -40,7 +40,7 @@
 - **ネイティブ Ubuntu の Incus**（導入前調査。動かしていない）: GPU の共有・非特権のまま入れ子の Docker（`security.nesting=true`）・clone と snapshot の即時性に見込みがある。要調整は、DDS のマルチキャスト（既定の NAT の `incusbr0` は LAN に出ない見込み。macvlan か host bridge）・入れ子の Docker の runc と AppArmor の回帰（修正済みの版があるが、導入する版で確認が要る）・GPU の compose 指定。コンテナはホストのカーネルを共有する。
 - **Incus を使う既存の OSS が複数ある**（検索の説明文の範囲。内容は未確認。「候補比較」）。とくに `isx`（旧 incus-spawn）は、Incus のシステムコンテナに、**ホスト側の proxy が要求に認証を付ける（環境の中に認証を入れない）**、テンプレートからの copy-on-write の clone、Docker Compose・入れ子のコンテナ、KVM の VM への切り替え、`pi` を含む複数のエージェント、を持つと説明されている。**このリポジトリの P3 と認証ブローカーの方針に最も近い**ので、自作する前に評価する（新しい規則: 公開情報に既にあるものは、まず評価する）。
 
-- **方針の再編（2026-11-06。[ADR-0028](../adr/0028-per-repo-agent-container.md) の草案）**: 汎用のサンドボックスを目指さず、**リポジトリごとの agent コンテナ（pi を入れた compose。GPU・ポート・データ・認証を宣言で足す）**にする。この案件の段 W2・C1（`dev-*` の自動化）と N1〜N3（Incus）は、ADR-0028 の確認と実物の試験の結果を見るまで**凍結**。コンテナの出し入れが開発の中心のリポジトリだけ、専用の環境（WSL の専用ディストロ）を使う。
+- **方針の再編（2026-11-06。[ADR-0028](../adr/0028-per-repo-agent-container.md) の草案）**: 汎用のサンドボックスを目指さず、**リポジトリごとの agent コンテナ（pi を入れた compose。GPU・ポート・データ・認証を宣言で足す）**にする。この案件の段 W2・C1（`dev-*` の自動化）と N3（`dev-*` の Incus バックエンド）は**凍結**。**N1（Incus の試行）と N2（OSS の評価）は、再開（優先）**。コンテナの出し入れが開発の中心のリポジトリは、**native Ubuntu の Incus**（データを native へ置ける。native 機に余力あり。利用者が確認済み）で開発する。WSL の専用ディストロは、ネットワークを隔離できないので採らない。試験の結果が出るまでは、案 1（人が `box up`）で進める。
 - **対象の開発は P3**（2026-11-06 の利用者の回答）: SLAM（WSL、GPU 推論、ROS 2 と rerun の外部通信）と、AI Web アプリ（GPU と compose が要る。認証つきイメージは基本的に自作のものだけなので、資格情報は自作のパッケージ用の読み取り専用で足りる見込み）の両方。単位ごとに環境を分け、同じ環境に同居させない。
 - **ハーネスの位置の比較（草案。文書ベースで、実測は無い）**: 用途別の混合を推奨 — P1 は現状（ホストのフルガード）、P2 は `pisd`（A）、P3 は A（環境の中に pi。pi・拡張・指示はテンプレートに焼く）。B1（ホストの pi＋git 同期）と B2（ファイルツールも遠隔化）は、同期の費用・自作の大きさ・外部の内容に仕込まれた指示への弱さで退ける。覆る条件は、環境からホストへの到達を閉じられない・環境が増えて配布が回らない・ホスト側の UI が必須になったとき。最大の未確認は「環境の中で pi がフルガード・台帳・PR ビューアに繋がるか」。利用者の判断は未回答（P3 の位置・P2 の一本化と Fence の縮小・環境内の守り・次の確認）。
 
@@ -62,8 +62,8 @@
 | T1 | 導入と初期化。Zabbly の APT（`lts-7.0` を第一候補、`lts-6.0` を代替）を、**鍵の指紋を確かめて**追加し、`apt install incus`。`incus admin init`（ストレージは btrfs。試行は loop でよい。ネットワークは既定の `incusbr0`）。ホストに Docker があれば `incusbr0` からの外向き通信が通るか | 初期化が通り、`incus launch images:ubuntu/24.04 t1` が起動する |
 | T2 | GPU。`nvidia.runtime=true` と `gpu` デバイスで `t1` に渡し、`nvidia-smi -L`。`incus snapshot` と `incus copy t1 t2` と `incus delete -f t2` の所要時間 | 中で GPU が見える。clone が数秒以内（実測を記録） |
 | T3 | 入れ子の Docker と GPU。`t1` に `security.nesting=true`。中に docker-ce と nvidia-container-toolkit を入れ、`nvidia-ctk runtime configure --runtime=docker`、`/etc/nvidia-container-runtime/config.toml` の `no-cgroups = true`。`docker run hello-world`（runc と AppArmor の回帰の確認）・`docker run --gpus all <CUDA の base イメージ> nvidia-smi`・compose の `deploy.resources.reservations.devices`・`docker login ghcr.io`（環境専用の読み取り専用トークン）での pull | 非特権のまま compose と GPU が通る |
-| T4 | DDS と rerun。macvlan か host bridge の NIC のプロファイルを作り、別の機（ロボットの代用）との間で ROS 2 のマルチキャスト（`ros2 multicast`）。rerun の Web ビューアの外部公開（`proxy` デバイス） | LAN の別の機と DDS の発見が通る。ビューアにブラウザから届く |
-| T5 | 否定試験。`t1` の中から、ホストの Incus のソケット（`/var/lib/incus/unix.socket`）・ホストの home・`~/.docker` などの認証情報が見えない。ホスト側で `incus config show t1 --expanded` に、意図しない `disk` と `proxy` が無い | 見えない・付いていない |
+| T4 | rerun の Web ビューアの公開（`proxy` デバイス、`127.0.0.1` 限定）。**実機のロボットやセンサーはつながない前提なので、LAN の別機との DDS（macvlan・host bridge）は省く** | ビューアにブラウザから届く |
+| T5 | 否定試験。`t1` の中から、ホストの Incus のソケット（`/var/lib/incus/unix.socket`）・ホストの home・`~/.docker` などの認証情報が見えない。ホスト側で `incus config show t1 --expanded` に、意図しない `disk` と `proxy` が無い。**ネットワーク隔離**: `t1`（入れ子の Docker で `--network host` を使っても）から、ホストの `127.0.0.1` で待ち受けるサービスに届かない | 見えない・付いていない・届かない |
 
 ### OSS の評価（N2）
 
