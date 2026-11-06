@@ -71,3 +71,38 @@
 
 - リポジトリは native 機のホストに置き、Incus の `disk` デバイスで箱へマウントする（`shift=true` で UID を合わせる。`readonly` を設定できる）。`.git/hooks` と `.git/config` は、別の `disk` デバイスを `readonly` で重ねる。**オプションとファイル単位のマウントは公式文書を取得できず未確認**。
 - ブランチの受け渡し: 箱の中のエージェントはローカルのブランチに commit する（push の資格情報は渡さない）。**native 機の SSH セッション（箱の外）で、人が `git push`**。Windows 側の作業用のリポジトリは GitHub から取り込む。PR ビューアを廃止すれば、この受け渡しを単純にできる（別で検討中）。
+
+### 5. WSL2 での実機確認（2026-11-07。使い捨てディストロ。T1〜T7 すべて合格）
+
+WSL2 の中で Incus のシステムコンテナ（以下「箱」）が動くかを、使い捨てのディストロ（Ubuntu 24.04。systemd 有効）で確かめた（確認用のスクリプトは非公開メモ。RTX 3070・mirrored ネットワークの機）。**要件の主要部分は、すべて満たせた**。ただし、いくつかの設定が要る。
+
+環境の事実（T0）:
+
+| 項目 | 結果 |
+| --- | --- |
+| カーネル | 6.18 系の WSL2 カーネル |
+| AppArmor | **無効**（カーネルが対応していない） |
+| ファイルシステム | **overlay のみ**（btrfs と ZFS は無い）。Incus のストレージは `dir`（clone は丸ごとコピー。9 秒前後） |
+| `/dev/kvm` | **無い**（Incus の VM は使えない。VM への GPU パススルーは WSL では不可） |
+| GPU | `/dev/dxg` と `/usr/lib/wsl/lib` があり、ホスト側で GPU が見える |
+
+試験の結果:
+
+| 試験 | 結果 | 要点と必要な設定 |
+| --- | --- | --- |
+| T1 導入と起動 | 合格 | Ubuntu 24.04 の標準パッケージ（6.0.0）。初期化は `incus admin init --minimal`（`dir` と `incusbr0`）。`images:ubuntu/24.04` の起動は 30〜45 秒 |
+| T1b 箱の外向き通信 | 合格（**要対処**） | 既定では**通らない**。WSL2 は全ディストロが 1 つのネットワーク名前空間を共有し、別のディストロの Docker が `FORWARD` を `policy drop` にするため、`incusbr0` 向けの許可が無い。`nft insert rule ip filter DOCKER-USER iifname incusbr0 accept` と、`oifname incusbr0 ct state related,established accept` で通る（VM の再起動で消える。恒久化は別途） |
+| T2 GPU を箱へ | 合格（**要設定**） | `/dev/dxg` を `unix-char` で渡し、`/usr/lib/wsl/lib` と `/usr/lib/wsl/drivers` を**別々の読み取り専用の `disk` デバイス**で渡す。`/usr/lib/wsl` を 1 つで渡すと、`lib` が別マウントのため中身が空になる。再帰と読み取り専用の併用は、カーネルが未対応で失敗する。箱の中で `ld.so.conf.d` に `/usr/lib/wsl/lib` を足して `ldconfig` |
+| T3 入れ子の Docker | 合格 | **非特権**の箱＋`security.nesting=true`。docker.io 29.1.3、ストレージは `overlayfs`（containerd のスナップショッター）。コンテナが動く |
+| T3 入れ子の GPU | 合格（**CDI のみ**） | `docker run --gpus all`（従来方式）は、既定でも `no-cgroups = true` でも失敗（`nvml error: not supported`）。**CDI は成功**: `nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml` のあと、`docker run --device nvidia.com/gpu=all`。`nvidia-ctk config --set nvidia-container-runtime.mode=cdi` なら、`--runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all` も通る（`--gpus all` は不可）。toolkit は 1.20.1。compose は `devices` に CDI 名か `runtime: nvidia` を使う（compose での確認は未実施） |
+| T4 ネットワーク隔離 | 合格 | 箱から、ディストロの `127.0.0.1` と Windows の `127.0.0.1` で待ち受けるカナリアに届かない（比較対象のディストロ自身からは届く＝mirrored のループバック共有）。入れ子の Docker の `--network host` でも届かない。**`0.0.0.0` で待ち受けるサービスは、ゲートウェイ（`incusbr0` のホスト側アドレス）経由で届く**（想定どおり。ホストの `0.0.0.0` の待ち受けは箱から見える） |
+| T5 D ドライブ | 合格 | `/mnt/d` を読み取り専用の `disk` で渡せ、一覧できて、書き込みは拒否される |
+| T6 git の重ね | 合格（**要設定**） | リポジトリを書き込み可で渡し、`.git/hooks` と `.git/config` を読み取り専用で重ねられた。hooks は箱の中で実行され、書き換えは拒否される。`shift=true`（idmapped mount）は**この環境では使えない**（`Required idmapping abilities not available`）。代わりに `/etc/subuid` と `/etc/subgid` に `root:1000:1` を足し、箱に `raw.idmap "both 1000 1000"` を設定する（ホストの uid 1000 と箱の uid 1000 を対応させ、箱で作ったファイルの所有者がホストでも uid 1000 になる） |
+| T7 複製の速度 | 合格 | `incus copy`（`dir`）で 8〜9 秒 |
+
+読み取り:
+
+- **箱は、ホストの `127.0.0.1` で待ち受ける認証なしのサービス（PR ビューアなど）に届かない**。専用ディストロでは届いてしまう（共有されるため）。これが、専用ディストロより箱を採る実測の根拠になる。
+- **共有ネットワーク名前空間の副作用**: 別のディストロの Docker の `FORWARD drop` が、箱の通信を止める。箱の `incusbr0` は、ほかのディストロからも見える。WSL では、Incus を入れる場所（主ディストロ）と、そこで動く Docker の規則の相互作用を設計に入れる必要がある。
+- **箱の外向き通信は制限していない**（T4 は、ホスト内の待ち受けへの到達だけを調べた）。許可した宛先だけに絞る仕組み（ADR-0028 の relay 型）は別に要る。
+- 未確認: 再起動後の永続化（`FORWARD` の許可・`raw.idmap`）、compose での GPU、箱の中で長く動かしたときの安定性と速度、ホストの `0.0.0.0` で待ち受ける Windows 側のサービスが箱から見えるか。
