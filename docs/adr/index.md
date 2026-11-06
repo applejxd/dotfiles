@@ -81,3 +81,4 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0024](0024-human-press-merges-in-app.md) | 統合は利用者が PR ビューアで押し、アプリが同期で実行する（保留と非同期承認を置き換える） | Accepted | 2026-11-03 | 案件は CHG-0062。ADR-0023 を置き換える |
 | [0025](0025-dotfiles-dev-without-os-sandbox.md) | dotfiles リポジトリの開発では OS のサンドボックス（pis の既定）を使わない | Accepted | 2026-11-05 | ADR-0018 の部分改定（dotfiles への適用だけを例外にする。他のリポジトリでは標準のまま） |
 | [0026](0026-work-ledger-integrated-architecture.md) | 作業台帳を唯一の状態にして、継続・/goal・並列実行・通知を一体で自作する | Accepted | 2026-11-05 | 公開拡張の個別導入・vendor・個別自作・最小案を比べ、状態の写しと継続の主体を 1 つにする一体の自作を選んだ。実装済み・配線は既定無効・実 pi での確認の後に有効化。実装の履歴は CHG-0062 |
+| [0027](0027-isolation-unit-is-environment.md) | 隔離の単位は「開発環境」にする（用途別の 3 パターン。WSL は開発単位の専用ディストロ） | Accepted | 2026-11-06 | プロセス単位の OS サンドボックスは docker・compose・GPU・apt と両立せず、主流は環境ごとの隔離。P1 フルガードのみ／P2 pisd（外部コード）／P3 開発単位の環境（SLAM・推論・compose・ROS・rerun）。Fence は縮小の方向。ネイティブ Ubuntu は Incus が候補 |
