@@ -46,6 +46,8 @@
 
 ## 未決
 
+案件は [CHG-0064](../change/0064-dev-environment-isolation.md)（ネイティブ Ubuntu 側は保留で、ネイティブ機のセッションで継続する）。
+
 - エージェント（pi）を環境の中で動かすか、ホストの pi が `ssh` で操作するか（[専用 WSL2 の評価](../spec/sandbox/wsl-sandbox.md)。ホストからの操作は `remote_exec` の緩和が展開後にも効くかの確認が要る）。
 - 認証ブローカーの常駐化と、環境からの到達範囲。認証つきレジストリの資格情報の置き場。
 - 開発単位の作成・削除のコマンド（`dev-new`・`dev-rm`・`dev-ls`・`dev-snap`。バックエンドを隠した同じ形）と、WSL 版（既存の `create.ps1` の拡張）の実機の確認。
