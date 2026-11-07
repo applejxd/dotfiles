@@ -443,6 +443,11 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule("PR ビューアの起動・常駐", ("scripts/pr_app.py",), ("test_pr_app",)),
     Rule(
+        "Incus の箱 (box)",
+        ("scripts/box/**", "test/box/**", "home/dot_local/bin/executable_box"),
+        ("test_model", "test_cli", "test_setup", "test_template", "test_dist"),
+    ),
+    Rule(
         "統合用の枝 (bundle)",
         ("scripts/bundle.py", f"{_ORCH}/bundle.py"),
         ("test_bundle", "test_script_forwarders"),
