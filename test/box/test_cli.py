@@ -97,7 +97,7 @@ def test_snapは名前を渡せる():
 def test_registerは許可表になくても動きパスワードを尋ねる():
     runner = FakeRunner(top="/work/new-repo")
     cli.main(["register"], runner=runner, fs=fs_with())
-    assert runner.calls[-1] == ["sudo", HELPER, "register", "new-repo", "/work/new-repo"]
+    assert runner.calls[-1] == ["sudo", HELPER, "register", "new-repo", "--path", "/work/new-repo"]
 
 
 def test_明示のrepoは許可表を引かずに使う():

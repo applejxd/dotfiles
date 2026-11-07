@@ -85,7 +85,8 @@ def build_argv(
     if verb == "pi":
         return exec_argv(repo_id, ["pi", *rest])
     if verb == "register":
-        return helper_argv("register", repo_id, toplevel or "")
+        # box-root の register は --path を要求する（e2e 前の実装では位置引数で渡していて拒否された）
+        return helper_argv("register", repo_id, "--path", toplevel or "", *rest)
     if verb == "snap":
         return helper_argv("snap", repo_id, *rest)
     if verb == "ls":
@@ -488,6 +489,28 @@ def cmd_setup(args: argparse.Namespace, runner: Runner) -> int:
     return runner(argv).returncode
 
 
+def register_flags(args: argparse.Namespace) -> list[str]:
+    """box register の引数を box-root register のフラグへ。"""
+    out: list[str] = []
+    for root in args.data_root:
+        out += ["--data-root", root]
+    for port in args.port:
+        out += ["--port", port]
+    for broker in args.broker:
+        out += ["--broker", broker]
+    if args.gpu:
+        out.append("--gpu")
+    for flag, value in (
+        ("--network", args.network),
+        ("--proxy-upstream", args.proxy_upstream),
+        ("--idmap", args.idmap),
+        ("--subnet", args.subnet),
+    ):
+        if value:
+            out += [flag, value]
+    return out
+
+
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--repo", help="リポジトリ id（省略時はカレントの git から許可表で決める）")
@@ -505,6 +528,24 @@ def build_parser() -> argparse.ArgumentParser:
         sp = sub.add_parser(verb, parents=[common], help=helptext)
         if verb == "snap":
             sp.add_argument("name", nargs="?", help="スナップショット名")
+        if verb == "register":
+            # 許可表へ追加する内容。実際の追記は box-root（root）が差分を表示して y/N を確認してから行う
+            sp.add_argument(
+                "--data-root", action="append", default=[], help="読み取り専用で渡してよい根"
+            )
+            sp.add_argument(
+                "--port", action="append", default=[], help="公開してよいポート（N または LO-HI）"
+            )
+            sp.add_argument(
+                "--broker", action="append", default=[], help="gh / copilot / aws / hf-cache"
+            )
+            sp.add_argument("--gpu", action="store_true", help="GPU を渡す")
+            sp.add_argument(
+                "--network", choices=("nat", "proxy-only", "offline"), help="外向き通信のモード"
+            )
+            sp.add_argument("--proxy-upstream", help="proxy-only の上流（IP:ポート）")
+            sp.add_argument("--idmap", choices=("user", "root"), help="uid の対応")
+            sp.add_argument("--subnet", help="incusbr0 のサブネット")
     sub.add_parser("ls", parents=[common], help="箱の一覧")
     pi = sub.add_parser("pi", parents=[common], help="箱の中で pi を起動する")
     pi.add_argument("pi_args", nargs=argparse.REMAINDER, help="pi へ渡す引数（-- の後ろ）")
@@ -547,6 +588,8 @@ def main(
             rest = rest[1:]
     elif args.verb == "snap" and args.name:
         rest = [args.name]
+    elif args.verb == "register":
+        rest = register_flags(args)
     res = runner(build_argv(args.verb, repo_id, rest, top))
     if res.returncode != 0 and args.verb in PASSWORDLESS:
         _out(

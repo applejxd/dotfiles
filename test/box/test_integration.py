@@ -166,3 +166,38 @@ def test_doctor_は_nopasswd_all_を検出する() -> None:
     ok = "User u may run the following commands:\n    (root) NOPASSWD: /usr/local/libexec/box/box-root up *\n    (ALL : ALL) ALL\n"
     assert cli.check_passwordless_sudo(ok).status == "ok"
     assert cli.check_passwordless_sudo(None).status == "warn"
+
+
+# ---- e2e 前に見つけた: cli の register が box-root の register の引数の形（--path 必須）と合っていること
+
+
+def test_cli_の_register_の引数を_root_helper_が解釈できる() -> None:
+    from box import cli
+    from test_cli import FakeFs, FakeRunner
+
+    runner = FakeRunner(top="/home/alice/work/newrepo")
+    rc = cli.main(
+        [
+            "register",
+            "--data-root",
+            "/mnt/d/datasets",
+            "--port",
+            "9000-9099",
+            "--broker",
+            "gh",
+            "--gpu",
+            "--network",
+            "proxy-only",
+            "--proxy-upstream",
+            "192.0.2.10:3128",
+        ],
+        runner=runner,
+        fs=FakeFs({}),
+    )
+    assert rc == 0
+    argv = [c for c in runner.calls if "register" in c][-1]
+    i = argv.index("register")
+    req = root_helper.parse_args(argv[i:])
+    assert req.verb == "register" and req.repo_id == "newrepo"
+    assert req.options["path"] == "/home/alice/work/newrepo"
+    assert req.options["gpu"] and req.options["brokers"] == ["gh"]
