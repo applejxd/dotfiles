@@ -25,6 +25,8 @@ from box.template import PI_PACKAGE, PI_VERSION_RE
 
 HELPER = f"{model.ROOT_HELPER_DIR}/box-root"
 PASSWORDLESS = frozenset({"up", "stop", "exec", "ls"})
+# ブローカーが箱に入れるダミーの認証の共通の接頭辞（scripts/box/broker/*.py の DUMMY_TOKEN）
+DUMMY_PREFIX = "box-dummy-"
 SECRET_NAME = re.compile(r"(TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|PRIVATE_?KEY)", re.I)
 SECRET_VALUE = re.compile(
     r"(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|hf_[A-Za-z0-9]{20,}"
@@ -84,6 +86,8 @@ def build_argv(
 ) -> list[str]:
     if verb == "pi":
         return exec_argv(repo_id, ["pi", *rest])
+    if verb == "exec":
+        return exec_argv(repo_id, list(rest))
     if verb == "register":
         # box-root の register は --path を要求する（e2e 前の実装では位置引数で渡していて拒否された）
         return helper_argv("register", repo_id, "--path", toplevel or "", *rest)
@@ -249,6 +253,8 @@ def judge_env(out: str) -> Check:
     hits: list[str] = []
     for line in out.splitlines():
         name, _, value = line.partition("=")
+        if value.startswith(DUMMY_PREFIX):
+            continue  # ブローカーが箱に入れるダミーの認証。本物は Envoy が注入する（e2e で、誤検出した）
         if SECRET_VALUE.search(value) or (SECRET_NAME.search(name) and len(value) >= 16):
             hits.append(name)
     if hits:
@@ -549,6 +555,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("ls", parents=[common], help="箱の一覧")
     pi = sub.add_parser("pi", parents=[common], help="箱の中で pi を起動する")
     pi.add_argument("pi_args", nargs=argparse.REMAINDER, help="pi へ渡す引数（-- の後ろ）")
+    ex = sub.add_parser("exec", parents=[common], help="箱の中でコマンドを実行する（-- の後ろ）")
+    ex.add_argument("exec_cmd", nargs=argparse.REMAINDER, help="実行するコマンド")
     su = sub.add_parser("setup", help="ホストの初期設定（root。パスワードを尋ねる）")
     su.add_argument("--dry-run", action="store_true", help="何もせず、やることを表示する")
     su.add_argument("--update", action="store_true", help="root 所有の配備コピーだけを更新する")
@@ -586,6 +594,13 @@ def main(
         rest = [a for a in args.pi_args if True]
         if rest[:1] == ["--"]:
             rest = rest[1:]
+    elif args.verb == "exec":
+        rest = list(args.exec_cmd)
+        if rest[:1] == ["--"]:
+            rest = rest[1:]
+        if not rest:
+            _out("実行するコマンドが無い（例: box exec -- ls -l）")
+            return 2
     elif args.verb == "snap" and args.name:
         rest = [args.name]
     elif args.verb == "register":

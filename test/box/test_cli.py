@@ -343,3 +343,32 @@ def test_piの版が読めないか不正なら_None():
     assert cli.find_pi_version(PI_EXE, FakeFs({pkg: bad})) is None
     other = '{"name": "other", "version": "1.2.3"}'
     assert cli.find_pi_version(PI_EXE, FakeFs({pkg: other})) is None
+
+
+# ---- ガードの案内文が許可動詞として挙げている box exec（箱の中でコマンドを実行する）
+
+
+def test_exec_は箱の中のコマンドを_passwordless_で実行する():
+    runner = FakeRunner()
+    assert cli.main(["exec", "--", "ls", "-l"], runner=runner, fs=fs_with()) == 0
+    assert runner.calls[-1] == ["sudo", "-n", HELPER, "exec", "demo", "--", "ls", "-l"]
+
+
+def test_exec_はコマンドが無ければ実行せず_2_を返す():
+    runner = FakeRunner()
+    assert cli.main(["exec"], runner=runner, fs=fs_with()) == 2
+    assert not any("exec" in c for c in runner.calls if c[:2] == ["sudo", "-n"])
+
+
+# ---- e2e で見つけた: ブローカーがダミーの認証を環境変数に入れるので selftest が誤検出していた
+
+
+def test_selftest_の環境変数の判定はブローカーのダミーを許し本物らしい値は拒否する():
+    from box.broker import copilot, gh
+
+    assert gh.DUMMY_TOKEN.startswith(cli.DUMMY_PREFIX)
+    assert copilot.DUMMY_TOKEN.startswith(cli.DUMMY_PREFIX)
+    ok = f"GH_TOKEN={gh.DUMMY_TOKEN}\nCOPILOT_GITHUB_TOKEN={copilot.DUMMY_TOKEN}\n"
+    assert cli.judge_env(ok).status == "ok"
+    real = "GH_TOKEN=ghp_" + "A" * 36 + "\n"
+    assert cli.judge_env(real).status == "fail"

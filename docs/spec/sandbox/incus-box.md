@@ -70,7 +70,7 @@ flowchart LR
 - 動詞ごとの sudoers の規則は `scripts/box/root_helper.py` の `sudoers_snippet` が作る。パスワードが要る動詞は `timestamp_timeout=0`（直前の認証を使い回さない）。
 - `--repo <id>` で対象を指定できる。省略時は、カレントの git のトップレベルを許可表の `path` と突き合わせて決める（`register` はディレクトリ名から id を作る）。
 - 秘密を表示しない。`doctor`・`selftest` は環境変数の名前だけを出す。
-- `box-root` には `exec` もあるが、`box` の動詞としては `pi` が内部で使うだけ（`box exec` は無い）。
+- `box exec -- <コマンド>` で箱の中のコマンドを実行する（パスワードなし。`box pi` はこれで `pi` を起動する）。実行は箱のユーザー（uid・同じ gid）で行い、補助グループは持たない。
 
 ## 許可表と box.toml
 
