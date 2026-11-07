@@ -3,8 +3,9 @@
 経路: 箱の AWS SDK → 127.0.0.1:7111（proxy デバイス）→ ホストの unix ソケット → aws_server → aws sts assume-role。
 - ロールの ARN は policy.secrets["aws-role"]（SecretRef）。実行時にだけ root 専用ファイルへ書く（stdin）。argv・計画には出ない
 - 箱の中に長期キー・~/.aws・AWS_CONTAINER_AUTHORIZATION_TOKEN を置かない（ソケットが箱ごとに別なので不要）
-- 未確認: AWS CLI が箱の中から FULL_URI の認証情報を取れるか（実機）。ホストの aws の認証（SSO など）を、
-  サーバーの実行ユーザーがどう得るか（起動の主体。root の systemd unit では ~/.aws が無い）
+- ホストの aws の認証（SSO など）は、リポジトリの uid（cfg.uid）で動かすサーバーが、その uid の ~/.aws から得る
+  （systemd-run --uid/--gid。状態ディレクトリ・ロール ARN のファイルは uid 所有の 0700 / 0600）
+- 未確認: AWS CLI が箱の中から FULL_URI の認証情報を取れるか（実機）。uid の ~/.aws の SSO が有効か（実機）
 - 未確認: PYTHONPATH（ROOT_HELPER_DIR の親）に box パッケージが配備される前提
 """
 
@@ -47,8 +48,8 @@ def plan(
     host_ops = (
         ensure_command_op("aws", "aws CLI が無い（ホストに aws を入れる）"),
         stop_unit_op(cfg.repo_id, "aws"),
-        ensure_dirs_op(cfg.repo_id),
-        prepare_op(cfg.repo_id, "aws", ref),
+        ensure_dirs_op(cfg.repo_id, owner_uid=cfg.uid),
+        prepare_op(cfg.repo_id, "aws", ref, owner_uid=cfg.uid),
         start_unit_op(
             cfg.repo_id,
             "aws",
@@ -66,7 +67,8 @@ def plan(
                 "--ttl",
                 str(ttl),
             ),
-            "aws の認証情報サーバーを常駐させる（固定ロール・固定 TTL）",
+            "aws の認証情報サーバーを常駐させる（リポジトリの uid で。固定ロール・固定 TTL）",
+            run_as=cfg.uid,
         ),
     )
     return model.BrokerPlan(

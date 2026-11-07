@@ -96,33 +96,51 @@ def require_secret(policy: model.RepoPolicy, name: str) -> model.SecretRef:
     return ref
 
 
-def ensure_dirs_op(repo_id: str) -> model.Op:
-    """ブローカーのソケットの置き場（root 所有 0711。箱の uid は中を一覧できず、ソケットも開けない）。"""
-    return model.Op(
-        "host",
-        (
-            "install",
-            "-d",
-            "-m",
-            "0711",
-            "-o",
-            "root",
-            "-g",
-            "root",
-            model.BROKER_HOST_DIR,
-            host_dir(repo_id),
-        ),
-        "ブローカーのソケットのディレクトリを作る（root 所有 0711）",
+def _check_uid(uid: int) -> int:
+    """シェルへ埋め込む uid は、1 以上の整数だけ（root への付け替えや文字列の混入を防ぐ）。"""
+    if isinstance(uid, bool) or not isinstance(uid, int) or uid < 1:
+        raise ValueError("uid が不正（1 以上の整数）")
+    return uid
+
+
+def ensure_dirs_op(repo_id: str, owner_uid: int | None = None) -> model.Op:
+    """ブローカーのソケットの置き場を作る。
+
+    親（BROKER_HOST_DIR）は root 所有 0711。<repo-id> ディレクトリは、owner_uid があればその uid 所有 0700
+    （aws_server が uid の権限でソケットを作る。root の Envoy・forkproxy は 0700 でも入れる）。
+    owner_uid が無いとき（gh・copilot）は、無ければ root 所有 0711 で作り、既にあれば所有者を変えない
+    （aws が先に作った uid 所有のディレクトリを root へ戻さない）。
+    """
+    parent = model.BROKER_HOST_DIR
+    d = host_dir(repo_id)
+    script = (
+        'set -eu; install -d -m 0711 -o root -g root "$1"; '
+        'if [ "$#" -ge 3 ]; then install -d -m 0700 -o "$3" -g "$3" "$2"; '
+        'else [ -d "$2" ] || install -d -m 0711 -o root -g root "$2"; fi'
     )
+    argv = ["sh", "-c", script, "box-dirs", parent, d]
+    if owner_uid is not None:
+        argv.append(str(_check_uid(owner_uid)))
+    desc = (
+        "ブローカーのソケットのディレクトリを作る（uid 所有 0700）"
+        if owner_uid is not None
+        else "ブローカーのソケットのディレクトリを作る（無ければ root 所有 0711）"
+    )
+    return model.Op("host", tuple(argv), desc)
 
 
 def prepare_op(
-    repo_id: str, kind: str, ref: model.SecretRef, extra_files: dict[str, str] | None = None
+    repo_id: str,
+    kind: str,
+    ref: model.SecretRef,
+    extra_files: dict[str, str] | None = None,
+    owner_uid: int | None = None,
 ) -> model.Op:
     """秘密を、root 専用 0600 のファイル <state_dir>/token へ書く。値は stdin だけで渡す。
 
     extra_files（名前 → 内容。秘密を含まない設定だけ）も、同じ 0700 のディレクトリへ 0600 で置く。
     改行・CR は取り除く（SDS・Envoy が値をそのまま読むため）。
+    owner_uid があれば、ディレクトリとファイルをその uid 所有にする（0700 / 0600。aws_server が uid で読む）。
     """
     d = state_dir(repo_id, kind)
     extras = extra_files or {}
@@ -133,6 +151,9 @@ def prepare_op(
             raise ValueError("extra_files の名前が不正")
         script += f'; printf %s "${i}" > "$d/{name}"'
         argv.append(body)
+    if owner_uid is not None:
+        uid = _check_uid(owner_uid)
+        script += f'; chown -R -- {uid}:{uid} "$d"'
     argv[2] = script
     return model.Op(
         "host",
@@ -152,12 +173,31 @@ def ensure_command_op(command: str, hint: str) -> model.Op:
 
 
 def start_unit_op(
-    repo_id: str, kind: str, argv: tuple[str, ...], desc: str, role: str = ""
+    repo_id: str,
+    kind: str,
+    argv: tuple[str, ...],
+    desc: str,
+    role: str = "",
+    run_as: int | None = None,
 ) -> model.Op:
-    """systemd の一時 unit として常駐させる（停止は stop_unit_op。再起動の復活はしない）。"""
+    """systemd の一時 unit として常駐させる（停止は stop_unit_op。再起動の復活はしない）。
+
+    run_as があれば、その uid・gid で動かす（HOME は systemd がそのユーザーのものにする）。
+    """
+    who: tuple[str, ...] = ()
+    if run_as is not None:
+        uid = _check_uid(run_as)
+        who = (f"--uid={uid}", f"--gid={uid}")
     return model.Op(
         "host",
-        ("systemd-run", "--quiet", "--collect", f"--unit={unit_name(repo_id, kind, role)}", *argv),
+        (
+            "systemd-run",
+            "--quiet",
+            "--collect",
+            f"--unit={unit_name(repo_id, kind, role)}",
+            *who,
+            *argv,
+        ),
         desc,
     )
 
