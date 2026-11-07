@@ -145,7 +145,13 @@
    "twine upload",
    "cargo publish",
    "gem push",
-   "docker push"
+   "docker push",
+   "incus",
+   "kcage-root",
+   "/usr/local/libexec/kcage/kcage-root",
+   "kcage rm",
+   "kcage register",
+   "kcage setup"
   ],
   "deny_guide": {
    "alternative": [
@@ -190,6 +196,27 @@
       "docker network prune"
      ],
      "message": "docker の prune は許可されていません。消す対象を指定して `docker rm <container>` / `docker rmi <image>` を使ってください (確認が出ます)。ボリュームとネットワークの削除は利用者に依頼してください。"
+    },
+    {
+     "commands": [
+      "incus"
+     ],
+     "message": "incus の操作 (読み取りの list も含む) は許可されていません。箱の一覧は `kcage ls`、起動は `kcage up`、停止は `kcage stop`、箱の中の実行は `kcage exec` / `kcage pi` を使ってください。箱の作成・削除・設定の変更は、利用者にホストの端末での実行を依頼してください。"
+    },
+    {
+     "commands": [
+      "kcage-root",
+      "/usr/local/libexec/kcage/kcage-root"
+     ],
+     "message": "root 所有の補助 (kcage-root) は直接呼べません。`kcage` コマンド (ls / up / stop / pi / exec / doctor / selftest) を使ってください。"
+    },
+    {
+     "commands": [
+      "kcage rm",
+      "kcage register",
+      "kcage setup"
+     ],
+     "message": "kcage rm / register / setup は人だけが行う操作です。実行してほしいコマンドと理由を利用者に示し、ホストの端末で実行してもらってください。"
     },
     {
      "commands": [
@@ -437,7 +464,12 @@
    "~/.pi/agent/extensions/**",
    "~/.config/pi/harness/**",
    "**/.git/pi-work/**",
-   "**/.tmp/work/**"
+   "**/.tmp/work/**",
+   "/etc/kcage/**",
+   "/usr/local/libexec/kcage/**",
+   "/etc/sudoers",
+   "/etc/sudoers.d/**",
+   "/run/kcage-broker/**"
   ]
  },
  "hooks": [
@@ -1274,6 +1306,21 @@
     "pattern": "(^|&&|[;|&(\\n]|\\b(do|then|else))\\s*sleep\\s+(\\d{2,}(\\.\\d+)?s?|\\d+(\\.\\d+)?[mhd]|infinity)(\\s|;|&|\\)|$)",
     "scope": "foreground",
     "unless": "(^|&&|;|\\n)\\s*(git|gh)\\s[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=]"
+   },
+   {
+    "id": "kcage-socket",
+    "message": "Incus・Docker のソケット (/var/lib/incus、incus の unix.socket、docker.sock) への接続やマウントは許可されていません (管理者権限と同じになるため)。箱の操作は `kcage ls` / `kcage up` / `kcage exec` などの kcage コマンドを使ってください。",
+    "pattern": "\\b(curl|nc|ncat|netcat|python3?|node|perl|ruby|ssh|docker|podman)\\b[^\\n]*(/var/lib/incus|/run/incus|incus/unix\\.socket|docker\\.sock|podman\\.sock)"
+   },
+   {
+    "id": "kcage-protected-write",
+    "message": "箱の設定・配備先・許可表 (/etc/kcage/、/usr/local/libexec/kcage/、/etc/sudoers と /etc/sudoers.d/、/run/kcage-broker/) への書き込みは許可されていません。変更が必要なら、内容と理由を利用者に示し、ホストの端末で実行してもらってください (ユーザーの設定 ~/.config/kcage/ は書けます)。",
+    "pattern": "(?:>>?\\s*|\\b(?:tee|cp|mv|rm|rmdir|install|ln|dd|truncate|touch|chmod|chown|mkdir|shred|visudo)\\b[^\\n;&|]*?\\s|\\bsed\\s+-\\w*i\\w*\\b[^\\n;&|]*?\\s)[\"']?(?:/etc/kcage(?:/|\\b)|/usr/local/libexec/kcage(?:/|\\b)|/etc/sudoers(?:\\.d)?(?:/|\\b)|/run/kcage-broker(?:/|\\b))"
+   },
+   {
+    "id": "kcage-admin-group",
+    "message": "incus-admin グループへの追加や切り替えは許可されていません (root 相当になるため)。箱の操作は kcage コマンドを使ってください。権限の変更が必要なら、利用者にホストの端末での実行を依頼してください。",
+    "pattern": "\\b(?:usermod|gpasswd|adduser|addgroup|useradd|groupmod)\\b[^\\n;&|]*\\bincus-admin\\b|\\b(?:sg|newgrp)\\s+incus-admin\\b"
    }
   ],
   "integrate": {

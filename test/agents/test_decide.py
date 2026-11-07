@@ -738,6 +738,9 @@ def test_decide_matches_check_bash_on_the_hook_test_corpus(chunk):
         if got["decision"] == "deny" and got["reason"].startswith(ACTION_DENY_PREFIX):
             # implementer (action ツールあり) の git commit / gh issue comment は guarded_action へ誘導する pi だけの deny
             ok = got["source"] == "rule"
+        elif got.get("guide") and got["decision"] == "deny" and got["source"] == "rule":
+            # 誘導は pi だけの deny。hook が ask を返す入力（例: docker.sock を指す curl）でも、pi は誘導で止める（より厳しい）
+            ok = True
         elif expected in ("deny", "ask"):
             ok = got["decision"] == expected and got["source"] in ("rule", "check")
         elif got.get("guide"):

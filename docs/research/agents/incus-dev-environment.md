@@ -106,3 +106,70 @@ WSL2 の中で Incus のシステムコンテナ（以下「箱」）が動く�
 - **共有ネットワーク名前空間の副作用**: 別のディストロの Docker の `FORWARD drop` が、箱の通信を止める。箱の `incusbr0` は、ほかのディストロからも見える。WSL では、Incus を入れる場所（主ディストロ）と、そこで動く Docker の規則の相互作用を設計に入れる必要がある。
 - **箱の外向き通信は制限していない**（T4 は、ホスト内の待ち受けへの到達だけを調べた）。許可した宛先だけに絞る仕組み（ADR-0028 の relay 型）は別に要る。
 - 未確認: 再起動後の永続化（`FORWARD` の許可・`raw.idmap`）、compose での GPU、箱の中で長く動かしたときの安定性と速度、ホストの `0.0.0.0` で待ち受ける Windows 側のサービスが箱から見えるか。
+
+### 6. 制限つきプロジェクトの実測（T10）と、箱の結合試験（e2e）
+
+2026-11-07。使い捨ての WSL ディストロ（Incus 6.0.0）での実機の確認。（注: 実測した当時の道具の名前は試作名 `box`。名前は `kcage` に確定したので、この節のコマンド名・パスは新しい名前で書いてある。）
+
+**T10: 管理権限のないユーザーに、Incus の制限つきプロジェクトと制限つき証明書で何を許せるか。**
+
+| 項目 | 結果 |
+| --- | --- |
+| 管理ソケットへの接続・他のプロジェクトの操作・特権化・許可表（パスの一覧）にないホストパスの重ね・`raw.lxc`・`raw.idmap`・サーバー設定・ネットワーク設定 | 拒否される |
+| 制限つきプロジェクトの成立条件 | 独自のプロファイルが必須（共有の default のプロファイルでは設定できない）。管理者でも、`unix-char`・`proxy` を制限つきプロジェクトのプロファイルに入れられない |
+| GPU（`unix-char`）とブローカー（`proxy`）のために、それらを許す | 利用者が任意の `proxy` デバイスを足せる。**ホストの Incus の管理ソケットを箱へ転送でき、箱の中から `default` プロジェクトのインスタンス一覧を取得できた（完全な脱出）** |
+| `restricted.idmap.uid` | `raw.idmap "both 0 0"` を拒否しなかった |
+
+結論: デバイスを作れる権限は管理者権限と同じ。デバイスの作成は、root 所有の補助が許可表から固定生成するしかない（ADR-0028 の 9）。
+
+**e2e（`kcage setup`・`kcage-root up`・箱の中の確認。proxy なしの nat モード）**
+
+| 項目 | 結果 |
+| --- | --- |
+| `setup`（Incus の導入・初期化・`subuid`/`subgid`・root 所有の配備コピー・許可表・sudoers の検証と配置・`FORWARD` の許可のユニット） | 合格。ユーザーは `incus-admin` に入らない |
+| 権限モデル | `rm` はパスワード必須、`sudo incus`・`incus` の直接実行は拒否、不正な id・動詞は拒否、`up`・`exec`・`ls` はパスワードなし |
+| `up`（非特権・`nesting`・`raw.idmap "both 1000 1000"`・ラベル・リポジトリ rw・`.git/hooks` と `.git/config` ro・データ ro・GPU・ポートの `proxy`） | 合格 |
+| 箱の中 | uid 1000、新規ファイルの所有者はホストでも uid 1000、hooks・config・データは書き込み不可、ホストのホームは見えない、GPU が見える、nat の外向き通信が通る |
+| 冪等・`ls`・`stop` と再 `up` | 合格 |
+
+e2e で見つけて直した不具合（単体試験では見つからなかったもの）:
+
+- 配備される `kcage-root` の入口が `main()` を引数なしで呼び、全動詞が `TypeError` で落ちていた（入口を実際に実行する試験を足した）。
+- `kcage register` が補助の引数の形（`--path` 必須）と合っていなかった。
+- WSL のディストロの既定のユーザーに `NOPASSWD: ALL` があり、`sudo incus` が通った（`kcage doctor` に検出を足した。設計の前提）。
+- `disk` に `/var/run/docker.sock` を重ねられた（`/var/run` は `/run` への symlink）。拒否リストと `.sock` の拒否を足した。
+
+**e2e 第 3 段（`proxy-only`・`offline`・`kcage.toml` の締め付け。上流は擬似プロキシ）**
+
+| 項目 | 結果 |
+| --- | --- |
+| `proxy-only` の箱 | NIC なし（箱の中のリンクは `lo` のみ）、`proxy` デバイスあり。直通は遮断、プロキシ経由は通る。DNS と IPv6 は遮断。環境変数と apt のプロキシ設定が入る。プロキシを止めると外へ出られない（fail-close） |
+| `offline` の箱 | NIC もプロキシも付かず、外へ出られない |
+| `kcage.toml` の締め付け | nat の許可表に `offline` を要求すると NIC なし。`proxy-only` の許可表に `nat` を要求しても NIC なしのまま。`data` の `..` と未知のキー（`privileged`）は拒否 |
+
+見つけて直した不具合: NIC なしの箱用のプロファイルを `incus init` の後に作っていた（先に作る必要がある）。擬似プロキシが IPv4 を先に試さず、到達しない IPv6 のタイムアウトで CONNECT が応答しなかった。
+
+e2e 第 4〜6 段（実際のテンプレート作成・箱の中の docker と GPU・gh ブローカー・selftest）の結果:
+
+| 項目 | 結果 |
+| --- | --- |
+| 実際の `kcage template`（docker・compose・buildx・NVIDIA toolkit の鍵の指紋の照合・CDI ユニット・Node 24・pi） | 合格。一時の箱は後始末される |
+| 箱の中の GPU（uid 1000） | RTX 3070 が見える |
+| 入れ子の Docker・入れ子の GPU（`--device nvidia.com/gpu=all`）・compose の GPU 予約 | 合格 |
+| 再起動後の CDI | 起動のたびに生成される |
+| `gh` ブローカー | Envoy が PAT を注入して `api.github.com` に届く（箱から認証ヘッダーなしで「Bad credentials」が返る。直接送ると「Requires authentication」）。`gh` CLI も動く。本物のトークンは、箱のファイル・Incus の設定・ホストの引数のどこにも無い。箱を消すとブローカーのユニットも止まる |
+| `copilot` ブローカー（ダミーの認証） | 短命トークンへの交換が失敗して `up` がきれいに止まる（箱・ユニット・引数に残らない） |
+| `kcage selftest`・`kcage doctor` | 全項目 OK |
+
+実機で見つけて直した不具合（単体試験では見つからなかったもの）:
+
+- `incus file push -r` は、宛先のディレクトリが無いと Not Found になる（`/opt` へ push してから移す）。
+- apt の Node 18 では pi が動かない（Node 22.1 以上が要る。公式配布を SHASUMS256 で検証して入れる）。
+- `incus exec` は gid 0 で、docker のソケットに届かず、リポジトリに作るファイルのグループもずれる（`--group` を渡し、`docker.socket` の drop-in でソケットのグループを揃える）。
+- `/dev/dxg` を重ねても mode 0660（root だけ）で、uid 1000 が GPU を開けない（mode 0666 で重ねる）。
+- GPU のライブラリの索引がビルド時の `ldconfig` に載らない（CDI ユニットで起動のたびに `ldconfig` し、`--mode=wsl` で生成する）。
+- `/run` は起動のたびに tmpfs で作り直され、`proxy` デバイスの listen（`bind=instance`・unix ソケット）が間に合わない（イメージに持つ `/var/lib/kcage-sock` に変更）。
+- net・ブローカーの環境変数が、定義だけで箱に入っていなかった（`environment.*` へ入れる）。
+- `kcage selftest` が、ブローカーのダミーの認証を秘密と誤検出した。
+
+未検証: 本物の Copilot トークンでの動作、`aws` ブローカー（本物のロールが要る）、`hf-cache`、会社の機（TLS 検査・プロキシ・認証の粒度）、Windows 側。
