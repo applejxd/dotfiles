@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 from pathlib import Path
 
 import pytest
-from box import model, root_helper
+from box import distcheck, model, root_helper
 from box_fakes import POLICY_TEXT, FakeRunner, demo_fs
 
 DUMMY = "DUMMY-SECRET-VALUE-0123456789"
@@ -363,8 +364,15 @@ def test_sudoers_snippet_content() -> None:
     free = re.search(r"Cmnd_Alias BOX_FREE = (.*)", s).group(1)
     pw = re.search(r"Cmnd_Alias BOX_PW = (.*)", s).group(1)
     assert {x.split()[1] for x in free.split(", ")} == {"up", "stop", "exec", "ls"}
-    assert {x.split()[1] for x in pw.split(", ")} == {"register", "rm", "snap", "selftest"}
+    assert {x.split()[1] for x in pw.split(", ")} == {
+        "register",
+        "rm",
+        "snap",
+        "selftest",
+        "template",
+    }
     assert "rm" not in free and "register" not in free
+    assert "template" not in free
     assert "Defaults!BOX_PW timestamp_timeout=0" in s
     assert "alice ALL=(root) NOPASSWD: BOX_FREE" in s and "alice ALL=(root) PASSWD: BOX_PW" in s
     assert model.ROOT_HELPER_DIR + "/box-root" in free
@@ -394,7 +402,7 @@ def test_core_does_not_import_dotfiles_specifics() -> None:
     forbidden = re.compile(
         r"^\s*(?:from|import)\s+(?:adapters|scripts\.agents|agents|chezmoi|dotfiles)\b", re.M
     )
-    for name in ("policy", "config", "plan", "root_helper", "secrets"):
+    for name in ("policy", "config", "plan", "root_helper", "secrets", "distcheck", "template"):
         f = BOX / f"{name}.py"
         if f.exists():
             assert not forbidden.search(f.read_text(encoding="utf-8")), name
@@ -403,3 +411,288 @@ def test_core_does_not_import_dotfiles_specifics() -> None:
 
 def test_policy_text_constant_sane() -> None:
     assert "[repo.demo]" in POLICY_TEXT
+
+
+# ---- template verb（テンプレートの作成。パスワード必須）
+
+
+def _ok_dist(path: str, uid: int) -> str:
+    return path
+
+
+def test_templateはパスワードなしの動詞に入らない() -> None:
+    assert "template" in root_helper.VERBS
+    assert "template" not in root_helper.PASSWORDLESS
+    s = root_helper.sudoers_snippet("alice")
+    free = re.search(r"Cmnd_Alias BOX_FREE = (.*)", s).group(1)
+    pw = re.search(r"Cmnd_Alias BOX_PW = (.*)", s).group(1)
+    assert "template" not in free
+    assert "template" in pw
+    # NOPASSWD の行が参照するのは BOX_FREE だけ
+    nopasswd = next(ln for ln in s.splitlines() if "NOPASSWD" in ln and ln.startswith("alice"))
+    assert nopasswd.endswith("BOX_FREE")
+
+
+def test_templateの引数の解釈() -> None:
+    r = root_helper.parse_args(["template"])
+    assert (
+        r.verb == "template"
+        and r.repo_id is None
+        and r.options == {"dist": None, "pi_version": None}
+    )
+    r = root_helper.parse_args(
+        ["template", "--dist", "/home/a/.cache/box/dist", "--pi-version", "1.5.0"]
+    )
+    assert r.options == {"dist": "/home/a/.cache/box/dist", "pi_version": "1.5.0"}
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["template", "demo"],  # repo id は取らない
+        ["template", "--dist"],
+        ["template", "--dist", "rel/path"],
+        ["template", "--dist", "/a", "--dist", "/b"],
+        ["template", "--pi-version", "latest"],
+        ["template", "--pi-version", "1.5.0; id"],
+        ["template", "--unknown", "x"],
+    ],
+)
+def test_templateの不正な引数は2で終わる(argv) -> None:
+    rc, runner, _o = call(argv)
+    assert rc == 2 and runner.calls == []
+
+
+def test_templateはrootとsudo経由が必要() -> None:
+    assert call(["template"], euid=1000)[0] == 1
+    assert call(["template"], env={})[0] == 1
+
+
+def test_templateは許可表のtemplateで作り_repo登録は要らない() -> None:
+    fs = demo_fs()
+    fs.add_file("/etc/box/policy.toml", '[defaults]\ntemplate = "my-tpl"\n')
+    rc, runner, o = call(["template"], fs=fs, dist_checker=_ok_dist)
+    assert rc == 0, o.err.getvalue()
+    argvs = runner.argvs
+    assert ("incus", "publish", "box-template-build", "--alias", "my-tpl") in argvs
+    assert not any("--dist" in a for a in argvs)
+    # 公開・削除は最後の方、検査済みの NVIDIA の指紋が入っている
+    joined = [" ".join(a) for a in argvs]
+    assert any(template_fpr() in x for x in joined)
+
+
+def template_fpr() -> str:
+    from box import template
+
+    return template.NVIDIA_KEY_FPR
+
+
+def test_templateは検証済みのdistを箱へ入れる() -> None:
+    seen: list[tuple[str, int]] = []
+
+    def checker(path: str, uid: int) -> str:
+        seen.append((path, uid))
+        return path
+
+    rc, runner, o = call(
+        ["template", "--dist", "/home/alice/.cache/box/dist"], dist_checker=checker
+    )
+    assert rc == 0, o.err.getvalue()
+    assert seen == [("/home/alice/.cache/box/dist", 1000)]
+    push = next(a for a in runner.argvs if a[:3] == ("incus", "file", "push") and "-r" in a)
+    assert "/home/alice/.cache/box/dist" in push
+
+
+def test_templateのdist検証の失敗はhelperエラーで何も実行しない() -> None:
+    def checker(path: str, uid: int) -> str:
+        raise root_helper.distcheck.DistCheckError("拒否名を含む: auth.json")
+
+    rc, runner, o = call(["template", "--dist", "/x"], dist_checker=checker)
+    assert rc == 1 and runner.calls == []
+    assert "--dist" in o.err.getvalue()
+
+
+def test_templateはpi_versionを版つきで入れる() -> None:
+    rc, runner, o = call(["template", "--pi-version", "1.5.0"], dist_checker=_ok_dist)
+    assert rc == 0, o.err.getvalue()
+    assert ("incus", "exec", "box-template-build", "--", "npm", "install", "-g",
+            "@earendil-works/pi-coding-agent@1.5.0") in runner.argvs  # fmt: skip
+
+
+def test_templateはbuild_proxyの設定を置いてpublishの前に消す() -> None:
+    fs = demo_fs()
+    text = POLICY_TEXT.replace("[defaults]\n", '[defaults]\nbuild_proxy = "192.0.2.10:3128"\n', 1)
+    fs.add_file("/etc/box/policy.toml", text)
+    rc, runner, o = call(["template"], fs=fs, dist_checker=_ok_dist)
+    assert rc == 0, o.err.getvalue()
+    calls = runner.calls
+    apt_put = next(
+        i
+        for i, (a, _) in enumerate(calls)
+        if a[:3] == ("incus", "file", "push") and "99box-build-proxy" in " ".join(a)
+    )
+    assert b"http://192.0.2.10:3128" in calls[apt_put][1]
+    first_apt = next(i for i, (a, _) in enumerate(calls) if a[-2:] == ("apt-get", "update"))
+    rm = next(
+        i
+        for i, (a, _) in enumerate(calls)
+        if a[:4] == ("incus", "exec", "box-template-build", "--") and a[4:6] == ("rm", "-f")
+    )
+    pub = next(i for i, (a, _) in enumerate(calls) if a[:2] == ("incus", "publish"))
+    assert apt_put < first_apt < rm < pub
+
+
+def test_templateのビルド用proxyが許可表に無ければ設定を置かない() -> None:
+    rc, runner, _o = call(["template"], dist_checker=_ok_dist)
+    assert rc == 0
+    assert not any("build-proxy" in " ".join(a) for a in runner.argvs)
+
+
+# ---- --dist の検証（distcheck。実ファイルで確かめる）
+
+MY_UID = os.getuid()
+
+
+def _dist(tmp_path: Path) -> Path:
+    d = tmp_path.resolve() / "dist"
+    d.mkdir(mode=0o700)
+    (d / "ext").mkdir()
+    (d / "ext" / "a.ts").write_text("export const a = 1\n", encoding="utf-8")
+    (d / "AGENTS.md").write_text("# 指示\n", encoding="utf-8")
+    return d
+
+
+def test_dist_正常なら通る(tmp_path: Path) -> None:
+    d = _dist(tmp_path)
+    assert distcheck.validate_dist(str(d), MY_UID) == str(d)
+
+
+def test_dist_helper経由でも通り_拒否は終了コード1(tmp_path: Path) -> None:
+    d = _dist(tmp_path)
+    env = {"SUDO_UID": str(MY_UID)} if MY_UID >= 1 else None
+    if env is None:
+        pytest.skip("root では SUDO_UID を作れない")
+    assert call(["template", "--dist", str(d)], env=env)[0] == 0
+    (d / "auth.json").write_text("{}", encoding="utf-8")
+    rc, runner, _o = call(["template", "--dist", str(d)], env=env)
+    assert rc == 1 and runner.calls == []
+
+
+@pytest.mark.parametrize("bad", ["rel/dist", "/a/../b", "/a//b", "/a/b/", "", "/a\nb"])
+def test_dist_相対や非正規のパスは拒否(bad: str) -> None:
+    with pytest.raises(distcheck.DistCheckError):
+        distcheck.validate_dist(bad, MY_UID)
+
+
+def test_dist_経路にsymlinkがあれば拒否(tmp_path: Path) -> None:
+    d = _dist(tmp_path)
+    link = tmp_path.resolve() / "link"
+    link.symlink_to(d)
+    with pytest.raises(distcheck.DistCheckError, match="symlink"):
+        distcheck.validate_dist(str(link), MY_UID)
+    with pytest.raises(distcheck.DistCheckError, match="symlink"):
+        distcheck.validate_dist(str(link / "ext"), MY_UID)
+
+
+def test_dist_中のsymlinkは拒否(tmp_path: Path) -> None:
+    d = _dist(tmp_path)
+    (d / "ext" / "evil").symlink_to("/etc/passwd")
+    with pytest.raises(distcheck.DistCheckError, match="symlink"):
+        distcheck.validate_dist(str(d), MY_UID)
+
+
+def test_dist_他人の所有は拒否(tmp_path: Path) -> None:
+    d = _dist(tmp_path)
+    with pytest.raises(distcheck.DistCheckError, match="所有"):
+        distcheck.validate_dist(str(d), MY_UID + 1)
+
+
+def test_dist_他人から書けるディレクトリは拒否(tmp_path: Path) -> None:
+    d = _dist(tmp_path)
+    d.chmod(0o775)
+    with pytest.raises(distcheck.DistCheckError, match="書ける"):
+        distcheck.validate_dist(str(d), MY_UID)
+
+
+def test_dist_ディレクトリでなければ拒否(tmp_path: Path) -> None:
+    f = tmp_path.resolve() / "file"
+    f.write_text("x", encoding="utf-8")
+    with pytest.raises(distcheck.DistCheckError, match="ディレクトリ"):
+        distcheck.validate_dist(str(f), MY_UID)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "auth.json",
+        "sessions",
+        "a.jsonl",
+        ".env",
+        ".env.local",
+        "mcp.json",
+        "models.json",
+        ".ssh",
+        ".aws",
+        "id_rsa",
+        "x.pem",
+    ],
+)
+def test_dist_禁止名は拒否(tmp_path: Path, name: str) -> None:
+    d = _dist(tmp_path)
+    target = d / "ext" / name
+    if name in ("sessions", ".ssh", ".aws"):
+        target.mkdir()
+    else:
+        target.write_text("x", encoding="utf-8")
+    with pytest.raises(distcheck.DistCheckError, match="拒否名"):
+        distcheck.validate_dist(str(d), MY_UID)
+
+
+def test_dist_秘密らしい内容は拒否し内容は出さない(tmp_path: Path) -> None:
+    d = _dist(tmp_path)
+    token = "ghp_" + "A" * 30
+    (d / "ext" / "b.ts").write_text(f"const t = '{token}'\n", encoding="utf-8")
+    with pytest.raises(distcheck.DistCheckError) as ei:
+        distcheck.validate_dist(str(d), MY_UID)
+    assert token not in str(ei.value) and "b.ts" in str(ei.value)
+
+
+def test_dist_巨大なら拒否(tmp_path: Path) -> None:
+    d = _dist(tmp_path)
+    (d / "big.bin").write_bytes(b"\0" * 2048)
+    with pytest.raises(distcheck.DistCheckError, match="サイズ"):
+        distcheck.validate_dist(str(d), MY_UID, max_bytes=1024)
+    assert distcheck.validate_dist(str(d), MY_UID, max_bytes=1024 * 1024)
+
+
+def test_dist_件数の上限を超えたら拒否(tmp_path: Path) -> None:
+    d = _dist(tmp_path)
+    with pytest.raises(distcheck.DistCheckError, match="件数"):
+        distcheck.validate_dist(str(d), MY_UID, max_entries=1)
+
+
+def test_dist_fifoやハードリンクは拒否(tmp_path: Path) -> None:
+    d = _dist(tmp_path)
+    os.mkfifo(d / "pipe")
+    with pytest.raises(distcheck.DistCheckError, match="通常ファイル"):
+        distcheck.validate_dist(str(d), MY_UID)
+    (d / "pipe").unlink()
+    os.link(d / "AGENTS.md", d / "ext" / "hard.md")
+    with pytest.raises(distcheck.DistCheckError, match="ハードリンク"):
+        distcheck.validate_dist(str(d), MY_UID)
+
+
+def test_dist_拒否名リストは汎用でdotfiles固有を含まない() -> None:
+    for name in (
+        "auth.json",
+        ".env",
+        "mcp.json",
+        "models.json",
+        ".ssh",
+        ".aws",
+        "sessions",
+        "*.jsonl",
+    ):
+        assert name in distcheck.DENY_NAMES
+    src = (BOX / "distcheck.py").read_text(encoding="utf-8")
+    assert not re.search(r"^\s*(?:from|import)\s+\S*(?:adapters|dotfiles)", src, re.M)

@@ -189,3 +189,8 @@ def test_配備される入口スクリプトは実際に動き_引数を渡す(
         check=False,
     )
     assert "未知の verb" in proc.stderr
+
+
+def test_最後の案内にbox_templateが入る():
+    assert "box template" in setup.NEXT_STEPS
+    assert setup.NEXT_STEPS.index("box template") < setup.NEXT_STEPS.index("box register")

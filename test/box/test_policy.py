@@ -167,3 +167,23 @@ def test_render_does_not_mutate_inputs_and_is_pure() -> None:
     a = policy.render_repo_block("a1", path="/x")
     b = policy.render_repo_block("a1", path="/x")
     assert a == b
+
+
+# ---- build_proxy
+
+
+def test_build_proxyはdefaultsから読めてhostpolicyに入る() -> None:
+    pol = policy.parse('[defaults]\nbuild_proxy = "192.0.2.10:3128"\n')
+    assert pol.build_proxy == "192.0.2.10:3128"
+    assert policy.parse('[defaults]\nbuild_proxy = "proxy.example.test:8080"\n').build_proxy == (
+        "proxy.example.test:8080"
+    )
+    assert policy.parse("").build_proxy is None
+
+
+@pytest.mark.parametrize(
+    "bad", ['"192.0.2.10"', '"a b:80"', '"192.0.2.10:99999"', "3128", '"http://x:1"']
+)
+def test_build_proxyの不正は拒否する(bad: str) -> None:
+    with pytest.raises(P):
+        policy.parse(f"[defaults]\nbuild_proxy = {bad}\n")

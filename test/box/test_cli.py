@@ -269,3 +269,77 @@ def test_本体はadaptersをimportしない():
             elif isinstance(node, ast.ImportFrom):
                 names = [(node.module or "")] + [a.name for a in node.names]
             assert not any("adapters" in n for n in names), f"{path.name}: {names}"
+
+
+# ---- template ----
+
+PI_PKG_JSON = '{"name": "@earendil-works/pi-coding-agent", "version": "1.5.0"}'
+PI_EXE = "/opt/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
+
+
+def test_templateは配布物を作りsudoでbox_root_templateを呼ぶ(tmp_path):
+    runner = FakeRunner()
+    built: list[Path] = []
+    rc = cli.cmd_template(runner, fs_with(), built.append, lambda: "1.5.0", home=str(tmp_path))
+    dest = tmp_path / ".cache" / "box" / "dist"
+    assert rc == 0 and built == [dest]
+    assert runner.calls == [
+        ["sudo", HELPER, "template", "--dist", str(dest), "--pi-version", "1.5.0"]
+    ]
+    assert "-n" not in runner.calls[0]  # パスワードを尋ねる（passwordless ではない）
+    assert (tmp_path / ".cache" / "box").stat().st_mode & 0o777 == 0o700
+    assert dest.stat().st_mode & 0o777 == 0o700 if dest.exists() else True
+
+
+def test_templateはサブコマンドとして呼べる(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    runner = FakeRunner()
+    assert cli.main(["template"], runner=runner, fs=fs_with(), dist_builder=lambda d: None,
+                    pi_version_reader=lambda: None) == 0  # fmt: skip
+    assert runner.calls[-1][:3] == ["sudo", HELPER, "template"]
+
+
+def test_templateは版が読めなければ警告して版なしで呼ぶ(tmp_path, capsys):
+    runner = FakeRunner()
+    rc = cli.cmd_template(runner, fs_with(), lambda d: None, lambda: None, home=str(tmp_path))
+    assert rc == 0
+    assert "--pi-version" not in runner.calls[0]
+    assert "警告" in capsys.readouterr().out
+
+
+def test_templateは配布物の作成に失敗したらsudoを呼ばない(tmp_path, capsys):
+    def boom(dest):
+        raise RuntimeError("配布物に秘密らしいものがある")
+
+    runner = FakeRunner()
+    assert cli.cmd_template(runner, fs_with(), boom, lambda: "1.5.0", home=str(tmp_path)) == 1
+    assert runner.calls == []
+
+
+def test_templateは配布物の作成関数が無ければ止まる(tmp_path):
+    runner = FakeRunner()
+    assert cli.cmd_template(runner, fs_with(), None, home=str(tmp_path)) == 2
+    assert runner.calls == []
+
+
+def test_配布物のディレクトリがsymlinkなら拒否する(tmp_path):
+    (tmp_path / ".cache").mkdir()
+    (tmp_path / "elsewhere").mkdir()
+    (tmp_path / ".cache" / "box").symlink_to(tmp_path / "elsewhere")
+    with pytest.raises(OSError):
+        cli.prepare_dist_dir(str(tmp_path))
+
+
+def test_piの版はパッケージのpackage_jsonから読む():
+    fs = FakeFs({"/opt/node_modules/@earendil-works/pi-coding-agent/package.json": PI_PKG_JSON})
+    assert cli.find_pi_version(PI_EXE, fs) == "1.5.0"
+
+
+def test_piの版が読めないか不正なら_None():
+    pkg = "/opt/node_modules/@earendil-works/pi-coding-agent/package.json"
+    assert cli.find_pi_version(PI_EXE, FakeFs({})) is None
+    assert cli.find_pi_version(PI_EXE, FakeFs({pkg: "not json"})) is None
+    bad = '{"name": "@earendil-works/pi-coding-agent", "version": "latest"}'
+    assert cli.find_pi_version(PI_EXE, FakeFs({pkg: bad})) is None
+    other = '{"name": "other", "version": "1.2.3"}'
+    assert cli.find_pi_version(PI_EXE, FakeFs({pkg: other})) is None

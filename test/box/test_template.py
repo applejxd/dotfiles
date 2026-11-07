@@ -127,3 +127,95 @@ def test_計画に秘密や組織固有の値を含めない():
 
 def test_計画は純粋で毎回同じ():
     assert build() == build()
+
+
+# ---- 鍵の指紋・pi の版・build_proxy
+
+
+def test_nvidia鍵の指紋は主鍵の40桁の16進():
+    import re
+
+    assert re.fullmatch(r"[0-9A-F]{40}", template.NVIDIA_KEY_FPR)
+    assert template.NVIDIA_KEY_FPR == "C95B321B61E88C1809C4F759DDCAE044F796ECB0"  # gitleaks:allow
+    # 既定の opts がそのまま使え、検査の行にも入る
+    p = template.plan_build(template.TemplateOpts())
+    assert any(template.NVIDIA_KEY_FPR in x for x in flat(p))
+
+
+def test_pi_versionが無ければ版なしで入れる():
+    assert any(x == f"npm install -g {template.PI_PACKAGE}" for x in flat(build()))
+
+
+@pytest.mark.parametrize("v", ["1.5.0", "0.12.3-beta.1", "2.0.0.rc1", "10.20.30"])
+def test_pi_versionは版つきで入れる(v):
+    assert f"npm install -g {template.PI_PACKAGE}@{v}" in flat(build(pi_version=v))
+
+
+@pytest.mark.parametrize(
+    "v", ["", "1.5", "latest", "1.5.0; rm -rf /", "^1.5.0", "1.5.0 x", "v1.5.0"]
+)
+def test_pi_versionの不正は拒否する(v):
+    with pytest.raises(ValueError):
+        build(pi_version=v)
+
+
+def test_build_proxyなしなら設定ファイルを置かない():
+    p = build()
+    paths = [s.path for s in p.steps if isinstance(s, model.FilePut)]
+    assert not any("build-proxy" in x for x in paths)
+    assert "/etc/gitconfig" not in paths
+
+
+def test_build_proxyの設定は箱の中へ置きnetを使わない():
+    setup_steps, cleanup = template.build_proxy_steps("192.0.2.10:3128")
+    puts = {s.path: s.content for s in setup_steps if isinstance(s, model.FilePut)}
+    url = "http://192.0.2.10:3128"
+    assert url in puts["/etc/apt/apt.conf.d/99box-build-proxy"]
+    assert "Acquire::https::Proxy" in puts["/etc/apt/apt.conf.d/99box-build-proxy"]
+    assert "HTTPS_PROXY" in puts["/etc/profile.d/box-build-proxy.sh"]
+    assert f"proxy = {url}" in puts["/etc/gitconfig"]
+    env_op = next(
+        s for s in setup_steps if isinstance(s, model.Op) and "/etc/environment" in s.argv[-1]
+    )
+    assert url in env_op.argv[-1] and ">>" in env_op.argv[-1]
+    assert "127.0.0.1:3128" not in repr(setup_steps)  # net.proxy_env の固定値は使わない
+    # 片づける側は、置いた設定ファイルを全部消す
+    rm = next(s for s in cleanup if isinstance(s, model.Op) and s.argv[:2] == ("rm", "-f"))
+    assert set(template.BUILD_PROXY_FILES) <= set(rm.argv)
+    assert set(puts) <= set(rm.argv)
+
+
+def test_build_proxyの設定はpublishの前に消す():
+    setup_steps, cleanup = template.build_proxy_steps("proxy.example.test:8080")
+    p = build(extra_steps=setup_steps, cleanup_steps=cleanup)
+    steps = list(p.steps)
+    i_setup = next(
+        i
+        for i, s in enumerate(steps)
+        if isinstance(s, model.FilePut) and "99box-build-proxy" in s.path
+    )
+    i_apt = next(
+        i
+        for i, s in enumerate(steps)
+        if isinstance(s, model.Op) and s.argv[:2] == ("apt-get", "update")
+    )
+    i_rm = next(
+        i for i, s in enumerate(steps) if isinstance(s, model.Op) and s.argv[:2] == ("rm", "-f")
+    )
+    i_stop = next(
+        i
+        for i, s in enumerate(steps)
+        if isinstance(s, model.Op) and s.argv[:2] == ("incus", "stop")
+    )
+    i_pub = next(
+        i
+        for i, s in enumerate(steps)
+        if isinstance(s, model.Op) and s.argv[:2] == ("incus", "publish")
+    )
+    assert i_setup < i_apt  # 最初の apt より前に proxy を置く
+    assert i_rm < i_stop < i_pub  # 止める・公開する前に消す
+
+
+def test_build_proxyの形が不正なら作らない():
+    with pytest.raises(ValueError):
+        template.build_proxy_steps("http://192.0.2.10:3128")
