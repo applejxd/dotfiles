@@ -62,7 +62,7 @@
 
    **LLM ゲートウェイ（LiteLLM など）は使わない**（サプライチェーン事件が 2 回、仮想キーに DB が必須で長期キーが集まる。[調査記録 D4](../research/agents/agent-auth-delegation.md)）。開発中のアプリが複数のプロバイダーや予算の上限を要するときだけ、その repo の compose で再検討する。
 8. **git のフックと設定**: `.git/hooks` と `.git/config` は**既定で読み取り専用**（フックの実行は妨げない。書き換えだけを防ぐ。ホストの git が、書き換えられたフックを実行するのを避ける）。必要なリポジトリは、オプションで書き込み可にできる（信頼するリポジトリ）。
-9. **ソケットは渡さない。** 箱へ、docker のソケットも **Incus のソケットも渡さない**（`incus` を叩ける `incus-admin` は実質 root）。`incus` を操作するのは人だけ。**特権の箱は作らない**。フルガードに、`incus config set … security.privileged` などの deny を足す（実装の項目）。箱の中の Docker は、箱の中に閉じる。
+9. **ソケットは渡さない。制御面は、root 所有の補助（`box-root`）を `sudo` で呼ぶ形に一本化する。** 箱へ、docker のソケットも **Incus のソケットも渡さない**。`incus-admin` は実質 root なので、**ホストの pi の実行主体を入れない**（入れると pi も箱を特権化できる）。`box` コマンドは `sudo box-root <動詞> <リポジトリ>` を呼ぶ薄い入口で、補助は root 所有の許可表（`/etc/box/policy.toml`）にある項目だけを**固定生成**する（呼び出し側はデバイスや設定を指定できない。`device_to_argv` が最後の関門）。`up`・`stop`・`exec`・`ls` はパスワードなし（登録済みの箱しか作れず、特権が増えない）、`register`・`rm`・`setup`・`template` はパスワード必須。**特権の箱は作らない**。フルガードは、`incus`・`box-root`・`box rm/register/setup`・ソケットや配備先への書き込み・`incus-admin` への追加を拒否する。箱の中の Docker は、箱の中に閉じる。根拠: Incus の制限つきプロジェクトと制限つき証明書は成立しなかった（GPU とブローカーに要る proxy・unix-char デバイスを許すと、利用者が proxy で Incus の管理ソケットを箱へ転送でき、箱から管理 API を使えた。[実測](../research/agents/incus-dev-environment.md#6-制限つきプロジェクトの実測t10と箱の結合試験e2e)）。前提: パスワードなしで何でも実行できる sudo（`NOPASSWD: ALL`）が無いこと（`box doctor` が検出する）。
 10. **Orca は、ターミナル起動だけを使う**（構造化チャットは使わない）。画像のアップロード・通知・GitHub 連携は使う。
     - 画像: 貼り付け画像のフォルダを、読み取り専用の `disk` として重ねる（Windows の Temp 全体は渡さない）。
     - 通知: 箱の端末が通す BEL・OSC。
