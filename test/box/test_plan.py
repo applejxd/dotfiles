@@ -148,39 +148,47 @@ def test_device_rejected(dev: model.DeviceSpec) -> None:
         },
         {
             "bind": "instance",
-            "listen": "unix:/run/box/x.sock",
+            "listen": "unix:/var/lib/box-sock/x.sock",
             "connect": "unix:/var/lib/incus/unix.socket",
         },
         {
             "bind": "instance",
-            "listen": "unix:/run/box/x.sock",
+            "listen": "unix:/var/lib/box-sock/x.sock",
             "connect": "unix:/var/run/docker.sock",
         },
-        {"bind": "instance", "listen": "unix:/run/box/x.sock", "connect": "unix:/run/docker.sock"},
         {
             "bind": "instance",
-            "listen": "unix:/run/box/docker.sock",
+            "listen": "unix:/var/lib/box-sock/x.sock",
+            "connect": "unix:/run/docker.sock",
+        },
+        {
+            "bind": "instance",
+            "listen": "unix:/var/lib/box-sock/docker.sock",
             "connect": "unix:/run/box-broker/demo/gh.sock",
         },
         {
             "bind": "instance",
-            "listen": "unix:/run/box/x.sock",
+            "listen": "unix:/var/lib/box-sock/x.sock",
             "connect": "unix:/run/box-broker/demo/unix.socket",
         },
-        {"bind": "instance", "listen": "unix:/run/box/x.sock", "connect": "unix:/run/other/x.sock"},
         {
             "bind": "instance",
-            "listen": "unix:/run/box/x.sock",
+            "listen": "unix:/var/lib/box-sock/x.sock",
+            "connect": "unix:/run/other/x.sock",
+        },
+        {
+            "bind": "instance",
+            "listen": "unix:/var/lib/box-sock/x.sock",
             "connect": "unix:/run/box-broker/../x.sock",
         },
         {
             "bind": "instance",
-            "listen": "unix:/run/box/x.sock",
+            "listen": "unix:/var/lib/box-sock/x.sock",
             "connect": "unix:/run/box-broker/demo/sub/x.sock",
         },
         {
             "bind": "instance",
-            "listen": "unix:/run/box/../x.sock",
+            "listen": "unix:/var/lib/box-sock/../x.sock",
             "connect": "unix:/run/box-broker/demo/gh.sock",
         },
         {
@@ -191,7 +199,7 @@ def test_device_rejected(dev: model.DeviceSpec) -> None:
         # bind=host は loopback の tcp だけ
         {"bind": "host", "listen": "tcp:0.0.0.0:8080", "connect": "tcp:127.0.0.1:8080"},
         {"bind": "host", "listen": "tcp:127.0.0.1:8080", "connect": "tcp:192.0.2.1:80"},
-        {"bind": "host", "listen": "unix:/run/box/x.sock", "connect": "tcp:127.0.0.1:80"},
+        {"bind": "host", "listen": "unix:/var/lib/box-sock/x.sock", "connect": "tcp:127.0.0.1:80"},
         {"bind": "host", "listen": "tcp:127.0.0.1:0", "connect": "tcp:127.0.0.1:80"},
         {"bind": "host", "listen": "tcp:127.0.0.1:70000", "connect": "tcp:127.0.0.1:80"},
         # bind の値・tcp の形
@@ -220,7 +228,7 @@ def test_proxy_rejected(cfg: dict[str, str]) -> None:
         },
         {
             "bind": "instance",
-            "listen": "unix:/run/box/gh.sock",
+            "listen": "unix:/var/lib/box-sock/gh.sock",
             "connect": "unix:/run/box-broker/demo/gh.sock",
         },
         {"bind": "host", "listen": "tcp:127.0.0.1:8080", "connect": "tcp:127.0.0.1:8080"},
@@ -257,7 +265,7 @@ def _broker(kind: str = "gh", modes: tuple[str, ...] = ("nat", "proxy-only")) ->
                 "proxy",
                 {
                     "bind": "instance",
-                    "listen": f"unix:/run/box/{kind}.sock",
+                    "listen": f"unix:/var/lib/box-sock/{kind}.sock",
                     "connect": f"unix:/run/box-broker/demo/{kind}.sock",
                 },
             ),
@@ -444,7 +452,7 @@ def test_plan_functions_are_pure() -> None:
 
 _SOCK = {
     "bind": "instance",
-    "listen": "unix:/run/box/gh.sock",
+    "listen": "unix:/var/lib/box-sock/gh.sock",
     "connect": "unix:/run/box-broker/demo/gh.sock",
 }
 

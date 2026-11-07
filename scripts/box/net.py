@@ -42,7 +42,7 @@ NONET_PROFILE = "box-nonet"
 PROXY_LISTEN_ALL = f"tcp:0.0.0.0:{PROXY_BOX_PORT}"
 PROXY_LISTEN_LOOPBACK = f"tcp:{LOOPBACK}:{PROXY_BOX_PORT}"
 PROXY_URL = f"http://{LOOPBACK}:{PROXY_BOX_PORT}"
-# /run/box 以下のソケットは unix ソケットなので環境変数に入れる必要はない（NO_PROXY の対象外）
+# 箱の中のソケット置き場（BOX_SOCK_DIR）以下のソケットは unix ソケットなので環境変数に入れる必要はない（NO_PROXY の対象外）
 NO_PROXY = "127.0.0.1,localhost,::1,172.17.0.1,host.docker.internal"
 
 FORWARD_COMMENT = "incus-box"

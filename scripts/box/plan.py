@@ -180,7 +180,9 @@ def device_to_argv(box: str, dev: model.DeviceSpec) -> tuple[str, ...]:
         if owner_keys:
             # uid・gid・mode は、箱の中の unix ソケットを待ち受ける proxy だけに許す
             if c["bind"] != "instance" or not _BOX_SOCK_RE.match(c["listen"]):
-                raise PlanError("uid・gid・mode は unix:/run/box/<名前>.sock の listen だけ")
+                raise PlanError(
+                    "uid・gid・mode は unix:<箱のソケット置き場>/<名前>.sock の listen だけ"
+                )
             for k in ("uid", "gid"):
                 if k in c and not (
                     c[k].isdigit() and 1 <= int(c[k]) <= 65535 and str(int(c[k])) == c[k]
@@ -198,6 +200,21 @@ def device_to_argv(box: str, dev: model.DeviceSpec) -> tuple[str, ...]:
 # ---------------------------------------------------------------- インスタンス設定
 
 LABEL_KEY = "user." + model.LABEL_PREFIX + "repo"  # 所属の確認に使う（箱の config のキー）
+
+
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+_ENV_VALUE_RE = re.compile(r"^[^\x00-\x1f\x7f]{0,2048}$")
+# コードやライブラリの読み込みに効く変数は、箱の環境変数として置かない
+_ENV_DENY = frozenset(
+    {"BASH_ENV", "ENV", "PATH", "NODE_OPTIONS", "PYTHONPATH", "PYTHONSTARTUP", "IFS"}
+)
+
+
+def _check_env(key: str, value: str) -> None:
+    if not _ENV_KEY_RE.match(key) or key.upper().startswith("LD_") or key.upper() in _ENV_DENY:
+        raise PlanError(f"環境変数名が不正または拒否対象: {key}")
+    if not _ENV_VALUE_RE.match(value):
+        raise PlanError(f"環境変数 {key} の値が不正")
 
 
 def instance_config(cfg: model.BoxConfig) -> dict[str, str]:
@@ -283,6 +300,14 @@ def plan_up(
         cargs += ["-p", prof]
     for k, v in instance_config(cfg).items():
         cargs += ["-c", f"{k}={v}"]
+    # net とブローカーの環境変数（ダミーの GH_TOKEN・HTTPS_PROXY など）。インスタンスの environment.* は incus exec にも届く
+    # （/etc/environment は exec では読まれない。e2e で、定義だけで箱に入っていなかったと判明）
+    env: dict[str, str] = {**net.env}
+    for b in active:
+        env.update(b.env)
+    for k, v in sorted(env.items()):
+        _check_env(k, v)
+        cargs += ["-c", f"environment.{k}={v}"]
     # プロファイルは init の前に作る（e2e で、後だと「プロファイルが無い」で up が失敗した）
     steps2: list[model.Step] = [
         *net.profile_ops,

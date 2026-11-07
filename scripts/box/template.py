@@ -46,6 +46,7 @@ APT_PACKAGES = (
     "docker.io",
     "docker-compose-v2",
     "docker-buildx",
+    "gh",
     "xz-utils",
 )
 # pi は Node 22.1 以上を要求する（Ubuntu 24.04 の apt の nodejs は 18。e2e で enableCompileCache が無いと判明）。
@@ -200,6 +201,10 @@ def plan_build(opts: TemplateOpts) -> model.Plan:
             "uid 1000 のユーザーを用意する",
         ),
         _box(["usermod", "-aG", "docker", model.BOX_USER], "docker グループへ入れる"),
+        _box(
+            ["mkdir", "-p", "-m", "0755", model.BOX_SOCK_DIR],
+            "ブローカーのソケット置き場を作る（起動時に proxy デバイスが listen できるようイメージに持つ）",
+        ),
         _put("/etc/ld.so.conf.d/wsl-lib.conf", LD_CONF),
         _box(["ldconfig"], "共有ライブラリの索引を更新する"),
         _put("/etc/docker/daemon.json", DOCKER_DAEMON_JSON),

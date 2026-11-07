@@ -41,11 +41,13 @@ path = "/home/alice/.config/box/aws-role"
 """
 
 
-def _run(network: str, brokers: list[str]):
+def _run(network: str, brokers: list[str], box_toml: str | None = None):
     upstream = 'proxy_upstream = "192.0.2.10:3128"\n' if network == "proxy-only" else ""
     text = POLICY.format(brokers=str(brokers).replace("'", '"'), network=network, upstream=upstream)
     fs = demo_fs()
     fs.add_file("/etc/box/policy.toml", text)
+    if box_toml is not None:
+        fs.add_file("/home/alice/work/demo/box.toml", box_toml)
     runner = FakeRunner()
     out, err = io.StringIO(), io.StringIO()
     rc = root_helper.main(
@@ -205,3 +207,33 @@ def test_cli_の_register_の引数を_root_helper_が解釈できる() -> None:
     assert req.verb == "register" and req.repo_id == "newrepo"
     assert req.options["path"] == "/home/alice/work/newrepo"
     assert req.options["gpu"] and req.options["brokers"] == ["gh"]
+
+
+# ---- e2e で見つけた: ブローカー・net の環境変数が箱に入っていなかった（定義だけで plan_up が使っていない）
+
+
+def test_net_と_ブローカーの環境変数が_init_の_environment_に入る() -> None:
+    rc, runner, _, err = _run("proxy-only", [])
+    assert rc == 0, err
+    (init,) = [a for a in runner.argvs if a[:2] == ("incus", "init")]
+    pairs = {init[i + 1] for i, x in enumerate(init) if x == "-c"}
+    assert "environment.HTTPS_PROXY=http://127.0.0.1:3128" in pairs
+    rc, runner, _, err = _run("nat", ["gh"], 'brokers = ["gh"]\n')
+    assert rc == 0, err
+    (init,) = [a for a in runner.argvs if a[:2] == ("incus", "init")]
+    pairs = {init[i + 1] for i, x in enumerate(init) if x == "-c"}
+    assert any(p.startswith("environment.GH_TOKEN=") for p in pairs)
+    # 本物の秘密は環境変数にも入らない
+    assert all(DUMMY not in p for p in pairs)
+
+
+@pytest.mark.parametrize(
+    "key", ["LD_PRELOAD", "PATH", "BASH_ENV", "ld_preload", "A B", "X=1", "NODE_OPTIONS"]
+)
+def test_plan_up_は危険な環境変数名を拒否する(key: str) -> None:
+    from box import plan
+
+    with pytest.raises(plan.PlanError):
+        plan._check_env(key, "x")
+    with pytest.raises(plan.PlanError):
+        plan._check_env("OK_NAME", "a\nb")

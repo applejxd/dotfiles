@@ -130,11 +130,11 @@ path = "/etc/box/secret/gh"
 | `unix-char` | `gpu`。`/dev/dxg` だけ | — |
 | `proxy`（ホスト側で待ち受け） | `ports` ごと。`127.0.0.1:<port>` → 箱の `127.0.0.1:<port>` | — |
 | `nic` | `nat` のとき。`incusbr0` に `eth0` | — |
-| `proxy`（箱の中で待ち受け） | `proxy-only` の一般通信、ブローカー（`/run/box/<kind>.sock` か loopback の TCP） | — |
+| `proxy`（箱の中で待ち受け） | `proxy-only` の一般通信、ブローカー（`/var/lib/box-sock/<kind>.sock` か loopback の TCP） | — |
 
 - `disk` の source は、拒否リスト（`/etc/box`・`/usr/local/libexec/box`・`/etc/sudoers*`・`/var/lib/incus`・`/var/lib/docker`・`/run`・`/var/run`・`/proc`・`/sys`・`/dev`、ホームの `.ssh`・`.gnupg`・`.aws`・`.azure`・`.config/gh`・`.config/box`・`.docker/config.json`・`.netrc`・`.git-credentials`・`.pi/agent/auth.json`・HF のトークン）と、`.sock` で終わるもの・管理ソケットへの経路を拒否する（実測: `/var/run/docker.sock` を重ねられた不具合を、このために直した。§6）。
 - 箱は `security.nesting=true`・`security.privileged=false`・`raw.idmap`（`idmap = "user"` は `both <uid> <uid>`、`root` は箱の root をホストの uid に対応）。箱の中のユーザーは `ubuntu`（uid 1000）。
-- ホスト側のブローカーのソケットは `/run/box-broker/<repo-id>/<kind>.sock`。箱の中は `/run/box/<kind>.sock`（`0600`・箱の uid のみ）。
+- ホスト側のブローカーのソケットは `/run/box-broker/<repo-id>/<kind>.sock`。箱の中は `/var/lib/box-sock/<kind>.sock`（`0660`・箱の uid のみ。`/run` は起動のたびに作り直され、proxy デバイスの listen が間に合わないため、イメージに持つ永続のディレクトリを使う）。
 
 ## 外向き通信
 
@@ -156,7 +156,7 @@ path = "/etc/box/secret/gh"
 
 | 種類 | 箱の中 | ホスト側 | 経路 |
 | --- | --- | --- | --- |
-| `gh` | ダミーの `GH_TOKEN`、`gh` の設定（`http_unix_socket`） | Envoy が `api.github.com` だけを許し、`Authorization` を本物の PAT で差し替える | unix ソケット（`/run/box/gh.sock`）→ Envoy。`nat`・`proxy-only` |
+| `gh` | ダミーの `GH_TOKEN`、`gh` の設定（`http_unix_socket`） | Envoy が `api.github.com` だけを許し、`Authorization` を本物の PAT で差し替える | unix ソケット（`/var/lib/box-sock/gh.sock`）→ Envoy。`nat`・`proxy-only` |
 | `copilot` | ダミーの `COPILOT_GITHUB_TOKEN`、`models.json` の `baseUrl`（`127.0.0.1:7112`） | Envoy が `POST /v1/messages`・`/responses`・`/chat/completions` だけを通す。長期トークンから短命トークンへ交換して差し替える | loopback → proxy デバイス → unix ソケット。`nat`・`proxy-only` |
 | `aws` | `AWS_CONTAINER_CREDENTIALS_FULL_URI`（`127.0.0.1:7111`）。長期キー・`~/.aws` は無い | 認証情報サーバー（`broker/aws_server.py`）が、固定ロール・固定 TTL の `assume-role` の短期認証情報を `GET /creds` だけで返す。許可表の uid の権限で動く | loopback → proxy デバイス → unix ソケット。`nat`・`proxy-only` |
 | `hf-cache` | `HF_HOME`（箱ごとの書き込み領域）とテレメトリ無効だけ。**トークンは無し** | なし | 公開モデルは一般通信で取得。ゲート付きは、ホストで取得して `data_roots` で ro に渡す |

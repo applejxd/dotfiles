@@ -69,7 +69,7 @@ def test_proxy_only_の箱内ファイルと環境変数():
     for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
         assert f"{k}=http://127.0.0.1:3128\n" in env
     assert "NO_PROXY=127.0.0.1,localhost,::1,172.17.0.1,host.docker.internal\n" in env
-    assert "/run/box" not in env
+    assert "/var/lib/box-sock" not in env
     assert "Acquire::https::Proxy" in f["/etc/apt/apt.conf.d/99box-proxy"].content
     assert "HTTPS_PROXY=http://127.0.0.1:3128" in (
         f["/etc/systemd/system/docker.service.d/box-proxy.conf"].content

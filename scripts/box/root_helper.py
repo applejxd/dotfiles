@@ -35,7 +35,7 @@ _DIR_RE = re.compile(r"^/[A-Za-z0-9/_.-]*$")
 _MODE_RE = re.compile(r"^0?[0-7]{3,4}$")
 _OWNER_RE = re.compile(r"^([A-Za-z0-9_][A-Za-z0-9_-]*):([A-Za-z0-9_][A-Za-z0-9_-]*)$")
 _PORT_RE = re.compile(r"^(\d{1,5})(?:-(\d{1,5}))?$")
-_HOST_FILE_ROOTS = (model.BROKER_HOST_DIR + "/", model.BOX_SOCK_DIR + "/")
+_HOST_FILE_ROOTS = (model.BROKER_HOST_DIR + "/",)
 _MIN_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 _TERM_RE = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
 _REGISTER_FLAGS = {"--gpu"}
@@ -301,7 +301,7 @@ class _Executor:
             )  # fmt: skip
         else:
             if not fp.path.startswith(_HOST_FILE_ROOTS):
-                raise HelperError("ホスト側の FilePut は /run/box*/ の下だけ")
+                raise HelperError("ホスト側の FilePut は /run/box-broker/ の下だけ")
             argv = ("install", "-D", "-m", fp.mode, "-o", user, "-g", group, "/dev/stdin", fp.path)
         self.runner.run(argv, stdin=data)
 
