@@ -156,7 +156,7 @@ _PI_TESTS = (
     "test_pi_orchestrate",
     "test_pi_allow_output_quoting",
     "test_pi_deny_default_ask",
-    "test_deny_box",
+    "test_deny_kcage",
     "test_pi_model_catalog",
     "test_pi_scratch_protected",
     "test_pi_session_tmp",
@@ -444,8 +444,8 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule("PR ビューアの起動・常駐", ("scripts/pr_app.py",), ("test_pr_app",)),
     Rule(
-        "Incus の箱 (box)",
-        ("scripts/box/**", "test/box/**", "home/dot_local/bin/executable_box"),
+        "Incus の箱 (kcage)",
+        ("scripts/kcage/**", "test/kcage/**", "home/dot_local/bin/executable_kcage"),
         (
             "test_model",
             "test_policy",

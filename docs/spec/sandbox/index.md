@@ -80,7 +80,7 @@
 - [Claude Code / Copilot CLI の sandbox](agent-sandbox.md): それらの CLI 自身が持つ sandbox（`pis` の Fence とは別物）の層・ネットワーク・seccomp。
 - [隔離 GPU サンドボックス（WSL2）](wsl-sandbox.md): GPU 付きの検証用に専用の WSL2 ディストロを作る手順。`pis` の sandbox とは別目的。
 - [ガード（総覧）](../guard/index.md): 判定と確認。
-- [箱（Incus。試作名 `box`）](incus-box.md): リポジトリごとの Incus の箱の仕様（仕組み・コマンド・許可表・信頼境界・限界）。方針は [ADR-0028](../../adr/0028-per-repo-agent-container.md)。
+- [箱（Incus。試作名 `kcage`）](incus-box.md): リポジトリごとの Incus の箱の仕様（仕組み・コマンド・許可表・信頼境界・限界）。方針は [ADR-0028](../../adr/0028-per-repo-agent-container.md)。
 
 ## 未解決
 

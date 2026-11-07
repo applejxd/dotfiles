@@ -109,7 +109,7 @@ WSL2 の中で Incus のシステムコンテナ（以下「箱」）が動く�
 
 ### 6. 制限つきプロジェクトの実測（T10）と、箱の結合試験（e2e）
 
-2026-11-07。使い捨ての WSL ディストロ（Incus 6.0.0）での実機の確認。
+2026-11-07。使い捨ての WSL ディストロ（Incus 6.0.0）での実機の確認。（注: 実測した当時の道具の名前は試作名 `box`。名前は `kcage` に確定したので、この節のコマンド名・パスは新しい名前で書いてある。）
 
 **T10: 管理権限のないユーザーに、Incus の制限つきプロジェクトと制限つき証明書で何を許せるか。**
 
@@ -122,7 +122,7 @@ WSL2 の中で Incus のシステムコンテナ（以下「箱」）が動く�
 
 結論: デバイスを作れる権限は管理者権限と同じ。デバイスの作成は、root 所有の補助が許可表から固定生成するしかない（ADR-0028 の 9）。
 
-**e2e（`box setup`・`box-root up`・箱の中の確認。proxy なしの nat モード）**
+**e2e（`kcage setup`・`kcage-root up`・箱の中の確認。proxy なしの nat モード）**
 
 | 項目 | 結果 |
 | --- | --- |
@@ -134,18 +134,18 @@ WSL2 の中で Incus のシステムコンテナ（以下「箱」）が動く�
 
 e2e で見つけて直した不具合（単体試験では見つからなかったもの）:
 
-- 配備される `box-root` の入口が `main()` を引数なしで呼び、全動詞が `TypeError` で落ちていた（入口を実際に実行する試験を足した）。
-- `box register` が補助の引数の形（`--path` 必須）と合っていなかった。
-- WSL のディストロの既定のユーザーに `NOPASSWD: ALL` があり、`sudo incus` が通った（`box doctor` に検出を足した。設計の前提）。
+- 配備される `kcage-root` の入口が `main()` を引数なしで呼び、全動詞が `TypeError` で落ちていた（入口を実際に実行する試験を足した）。
+- `kcage register` が補助の引数の形（`--path` 必須）と合っていなかった。
+- WSL のディストロの既定のユーザーに `NOPASSWD: ALL` があり、`sudo incus` が通った（`kcage doctor` に検出を足した。設計の前提）。
 - `disk` に `/var/run/docker.sock` を重ねられた（`/var/run` は `/run` への symlink）。拒否リストと `.sock` の拒否を足した。
 
-**e2e 第 3 段（`proxy-only`・`offline`・`box.toml` の締め付け。上流は擬似プロキシ）**
+**e2e 第 3 段（`proxy-only`・`offline`・`kcage.toml` の締め付け。上流は擬似プロキシ）**
 
 | 項目 | 結果 |
 | --- | --- |
 | `proxy-only` の箱 | NIC なし（箱の中のリンクは `lo` のみ）、`proxy` デバイスあり。直通は遮断、プロキシ経由は通る。DNS と IPv6 は遮断。環境変数と apt のプロキシ設定が入る。プロキシを止めると外へ出られない（fail-close） |
 | `offline` の箱 | NIC もプロキシも付かず、外へ出られない |
-| `box.toml` の締め付け | nat の許可表に `offline` を要求すると NIC なし。`proxy-only` の許可表に `nat` を要求しても NIC なしのまま。`data` の `..` と未知のキー（`privileged`）は拒否 |
+| `kcage.toml` の締め付け | nat の許可表に `offline` を要求すると NIC なし。`proxy-only` の許可表に `nat` を要求しても NIC なしのまま。`data` の `..` と未知のキー（`privileged`）は拒否 |
 
 見つけて直した不具合: NIC なしの箱用のプロファイルを `incus init` の後に作っていた（先に作る必要がある）。擬似プロキシが IPv4 を先に試さず、到達しない IPv6 のタイムアウトで CONNECT が応答しなかった。
 
@@ -153,13 +153,13 @@ e2e 第 4〜6 段（実際のテンプレート作成・箱の中の docker と 
 
 | 項目 | 結果 |
 | --- | --- |
-| 実際の `box template`（docker・compose・buildx・NVIDIA toolkit の鍵の指紋の照合・CDI ユニット・Node 24・pi） | 合格。一時の箱は後始末される |
+| 実際の `kcage template`（docker・compose・buildx・NVIDIA toolkit の鍵の指紋の照合・CDI ユニット・Node 24・pi） | 合格。一時の箱は後始末される |
 | 箱の中の GPU（uid 1000） | RTX 3070 が見える |
 | 入れ子の Docker・入れ子の GPU（`--device nvidia.com/gpu=all`）・compose の GPU 予約 | 合格 |
 | 再起動後の CDI | 起動のたびに生成される |
 | `gh` ブローカー | Envoy が PAT を注入して `api.github.com` に届く（箱から認証ヘッダーなしで「Bad credentials」が返る。直接送ると「Requires authentication」）。`gh` CLI も動く。本物のトークンは、箱のファイル・Incus の設定・ホストの引数のどこにも無い。箱を消すとブローカーのユニットも止まる |
 | `copilot` ブローカー（ダミーの認証） | 短命トークンへの交換が失敗して `up` がきれいに止まる（箱・ユニット・引数に残らない） |
-| `box selftest`・`box doctor` | 全項目 OK |
+| `kcage selftest`・`kcage doctor` | 全項目 OK |
 
 実機で見つけて直した不具合（単体試験では見つからなかったもの）:
 
@@ -168,8 +168,8 @@ e2e 第 4〜6 段（実際のテンプレート作成・箱の中の docker と 
 - `incus exec` は gid 0 で、docker のソケットに届かず、リポジトリに作るファイルのグループもずれる（`--group` を渡し、`docker.socket` の drop-in でソケットのグループを揃える）。
 - `/dev/dxg` を重ねても mode 0660（root だけ）で、uid 1000 が GPU を開けない（mode 0666 で重ねる）。
 - GPU のライブラリの索引がビルド時の `ldconfig` に載らない（CDI ユニットで起動のたびに `ldconfig` し、`--mode=wsl` で生成する）。
-- `/run` は起動のたびに tmpfs で作り直され、`proxy` デバイスの listen（`bind=instance`・unix ソケット）が間に合わない（イメージに持つ `/var/lib/box-sock` に変更）。
+- `/run` は起動のたびに tmpfs で作り直され、`proxy` デバイスの listen（`bind=instance`・unix ソケット）が間に合わない（イメージに持つ `/var/lib/kcage-sock` に変更）。
 - net・ブローカーの環境変数が、定義だけで箱に入っていなかった（`environment.*` へ入れる）。
-- `box selftest` が、ブローカーのダミーの認証を秘密と誤検出した。
+- `kcage selftest` が、ブローカーのダミーの認証を秘密と誤検出した。
 
 未検証: 本物の Copilot トークンでの動作、`aws` ブローカー（本物のロールが要る）、`hf-cache`、会社の機（TLS 検査・プロキシ・認証の粒度）、Windows 側。
