@@ -193,6 +193,9 @@ class Route:
 @dataclass(frozen=True)
 class NetPlan:
     mode: NetMode
+    # incus init に -p で渡すプロファイル。NIC を付けないモード（proxy-only・offline）は NIC の無いプロファイル
+    # （box-nonet。profile_ops が作る）を使う。既定の default プロファイルは eth0（NIC）を持つため使えない
+    profiles: tuple[str, ...] = ("default",)
     profile_ops: tuple[Op, ...] = ()
     devices: tuple[DeviceSpec, ...] = ()
     files: tuple[FilePut, ...] = ()
