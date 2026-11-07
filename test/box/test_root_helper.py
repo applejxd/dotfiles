@@ -171,11 +171,11 @@ def test_exec_argv_handling() -> None:
     rc, _runner, _ = call(["exec", "demo", "--", "sh", "-c", "echo $HOME; --user 0"], runner=r)
     assert rc == 0
     (argv,) = [x for x in r.argvs if x[:2] == ("incus", "exec")]
-    assert argv[:10] == (
-        "incus", "exec", "box-demo", "--user", "1000", "--cwd", "/home/alice/work/demo",
-        "--env", "HOME=/home/ubuntu", "--",
+    assert argv[:12] == (
+        "incus", "exec", "box-demo", "--user", "1000", "--group", "1000", "--cwd",
+        "/home/alice/work/demo", "--env", "HOME=/home/ubuntu", "--",
     )  # fmt: skip
-    assert argv[10:] == ("sh", "-c", "echo $HOME; --user 0")  # 箱の中のコマンドとしてそのまま
+    assert argv[12:] == ("sh", "-c", "echo $HOME; --user 0")  # 箱の中のコマンドとしてそのまま
 
 
 def test_exec_requires_existing_box() -> None:

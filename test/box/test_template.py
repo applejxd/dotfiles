@@ -30,8 +30,11 @@ def test_一時の箱をubuntu24_04から作る():
 
 def test_docker_node_git_toolkitを入れる():
     text = "\n".join(flat(build()))
-    for pkg in ("docker.io", "nodejs", "git", "nvidia-container-toolkit"):
+    for pkg in ("docker.io", "docker-compose-v2", "git", "nvidia-container-toolkit"):
         assert pkg in text
+    # pi は Node 22.1 以上が要る。apt の nodejs（18）ではなく公式配布を検証して入れる
+    assert "nodejs.org/dist/latest-v" in text and "sha256sum -c" in text
+    assert " nodejs" not in text.split("apt-get install -y")[1].split("\n")[0]
 
 
 def test_nvidiaの鍵は指紋を確かめてから置く():
@@ -68,6 +71,8 @@ def test_dockerのcdiを有効にする設定とld_confを置く():
     p = build()
     paths = {s.path: s for s in p.steps if isinstance(s, model.FilePut)}
     assert '"cdi": true' in paths["/etc/docker/daemon.json"].content
+    # docker のソケットのグループは箱のユーザーの主グループ（exec の --group で届く。docker.socket の drop-in）
+    assert "SocketGroup=ubuntu" in paths[template.DOCKER_SOCKET_DROPIN_PATH].content
     assert paths["/etc/ld.so.conf.d/wsl-lib.conf"].content.strip() == "/usr/lib/wsl/lib"
 
 

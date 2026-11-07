@@ -38,7 +38,32 @@ REPO_LINE = (
 )
 DIST_DEST = "/opt/box-dist"
 PI_PACKAGE = "@earendil-works/pi-coding-agent"
-APT_PACKAGES = ("ca-certificates", "curl", "gnupg", "git", "docker.io", "nodejs", "npm")
+APT_PACKAGES = (
+    "ca-certificates",
+    "curl",
+    "gnupg",
+    "git",
+    "docker.io",
+    "docker-compose-v2",
+    "docker-buildx",
+    "xz-utils",
+)
+# pi は Node 22.1 以上を要求する（Ubuntu 24.04 の apt の nodejs は 18。e2e で enableCompileCache が無いと判明）。
+# 公式配布（nodejs.org）の最新の LTS 系統を、SHASUMS256 で検証して /usr/local へ展開する
+NODE_MAJOR = "24"
+NODE_BASE = f"https://nodejs.org/dist/latest-v{NODE_MAJOR}.x"
+NODE_SCRIPT = (
+    "set -e; cd /tmp; "
+    f"curl -fsSLO {NODE_BASE}/SHASUMS256.txt; "
+    "case $(uname -m) in x86_64) A=x64;; aarch64) A=arm64;; *) echo unsupported arch; exit 1;; esac; "
+    'F=$(grep -o "node-v[0-9.]*-linux-${A}[.]tar[.]xz" SHASUMS256.txt | head -1); '
+    '[ -n "$F" ]; '
+    f"curl -fsSLO {NODE_BASE}/"
+    "$F; "
+    'grep -F " $F" SHASUMS256.txt | sha256sum -c -; '
+    "tar -xJf $F -C /usr/local --strip-components=1 --no-same-owner; "
+    "rm -f $F SHASUMS256.txt"
+)
 
 CDI_UNIT = """[Unit]
 Description=NVIDIA の CDI 定義を生成する（起動のたびに。ドライバの更新でパスが変わるため）
@@ -47,13 +72,19 @@ Before=docker.service
 
 [Service]
 Type=oneshot
+# GPU のライブラリは箱の起動時に重ねられるので、ビルド時の ldconfig では索引に載らない。起動のたびに更新する
+ExecStartPre=/sbin/ldconfig
 ExecStartPre=/usr/bin/mkdir -p /etc/cdi
-ExecStart=/usr/bin/nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+ExecStart=/usr/bin/nvidia-ctk cdi generate --mode=wsl --output=/etc/cdi/nvidia.yaml
 
 [Install]
 WantedBy=multi-user.target
 """
+# docker のソケットは docker.socket（systemd）が作る。グループは箱のユーザーの主グループにする
+# （incus exec は補助グループを設定しない。--group で主グループだけ渡す。daemon.json の group はソケット活性化では効かない）
 DOCKER_DAEMON_JSON = '{\n  "features": {\n    "cdi": true\n  }\n}\n'
+DOCKER_SOCKET_DROPIN_PATH = "/etc/systemd/system/docker.socket.d/box-group.conf"
+DOCKER_SOCKET_DROPIN = f"[Socket]\nSocketGroup={model.BOX_USER}\n"
 LD_CONF = f"{model.GPU_LIB}\n"
 
 
@@ -146,7 +177,8 @@ def plan_build(opts: TemplateOpts) -> model.Plan:
         *opts.extra_steps,
         _box(["systemctl", "is-system-running", "--wait"], "起動の完了を待つ", check=False),
         _box(["apt-get", "update"], "apt の索引を更新する"),
-        _box(["apt-get", "install", "-y", *APT_PACKAGES], "docker・Node・git などを入れる"),
+        _box(["apt-get", "install", "-y", *APT_PACKAGES], "docker・compose・git などを入れる"),
+        _sh(NODE_SCRIPT, "Node（公式配布。SHASUMS256 で検証）を入れる"),
         # NVIDIA の鍵は、指紋を確かめてから keyring に置く
         _box(["curl", "-fsSL", "-o", "/tmp/nvidia.asc", KEY_URL], "NVIDIA の鍵を取得する"),
         _sh(
@@ -171,6 +203,7 @@ def plan_build(opts: TemplateOpts) -> model.Plan:
         _put("/etc/ld.so.conf.d/wsl-lib.conf", LD_CONF),
         _box(["ldconfig"], "共有ライブラリの索引を更新する"),
         _put("/etc/docker/daemon.json", DOCKER_DAEMON_JSON),
+        _put(DOCKER_SOCKET_DROPIN_PATH, DOCKER_SOCKET_DROPIN),
         _put("/etc/systemd/system/box-cdi.service", CDI_UNIT),
         _box(
             ["systemctl", "enable", "box-cdi.service"],
@@ -196,6 +229,12 @@ def plan_build(opts: TemplateOpts) -> model.Plan:
                 )
             )
         steps.append(_box(["chown", "-R", "root:root", DIST_DEST], "配布物の所有者を root にする"))
+        steps.append(
+            _box(
+                ["chmod", "-R", "go+rX", DIST_DEST],
+                "配布物を箱のユーザーが読めるようにする（秘密を含まないことは検査済み）",
+            )
+        )
     steps += [
         *opts.cleanup_steps,
         _box(["apt-get", "clean"], "apt のキャッシュを消す"),

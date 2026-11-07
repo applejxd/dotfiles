@@ -64,7 +64,7 @@ def devices_for(cfg: model.BoxConfig) -> tuple[model.DeviceSpec, ...]:
             model.DeviceSpec(
                 "gpu-dxg",
                 "unix-char",
-                {"source": model.GPU_DEVICE, "path": model.GPU_DEVICE},
+                {"source": model.GPU_DEVICE, "path": model.GPU_DEVICE, "mode": "0666"},
             )
         )
     for pf in cfg.ports:
@@ -157,10 +157,13 @@ def device_to_argv(box: str, dev: model.DeviceSpec) -> tuple[str, ...]:
             raise PlanError("disk の readonly は true / false のみ")
         order = ("source", "path", "readonly")
     elif dev.type == "unix-char":
-        _check_keys(dev, ("source", "path"), ("source", "path"))
+        _check_keys(dev, ("source", "path", "mode"), ("source", "path"))
         if c["source"] != model.GPU_DEVICE or c["path"] != model.GPU_DEVICE:
             raise PlanError(f"unix-char は {model.GPU_DEVICE} のみ")
-        order = ("source", "path")
+        # 既定の mode 0660（root だけ）だと uid 1000 のプロセスが GPU を開けない（e2e で判明）。ホストの /dev/dxg と同じ 0666
+        if c.get("mode", "0666") != "0666":
+            raise PlanError("unix-char の mode は 0666 のみ")
+        order = ("source", "path", "mode")
     elif dev.type == "nic":
         _check_keys(dev, ("network", "name"), ("network", "name"))
         if c["network"] != model.INCUS_BRIDGE or not _DEV_NAME_RE.match(c["name"]):
@@ -321,6 +324,10 @@ def plan_exec(cfg: model.BoxConfig, argv: Sequence[str]) -> model.Plan:
         "exec",
         cfg.name,
         "--user",
+        str(cfg.uid),
+        # incus exec は補助グループを設定しない。主グループを uid と同じにする
+        # （既定の gid 0 だと docker のソケットに届かず、リポジトリに作るファイルのグループもホストのユーザーとずれる）
+        "--group",
         str(cfg.uid),
         "--cwd",
         cfg.repo_path,

@@ -426,7 +426,7 @@ def test_plan_exec_fixed_shape() -> None:
     cfg = _cfg()
     p = plan.plan_exec(cfg, ["pi", "--help"])
     assert p.steps[0].argv == (  # type: ignore[union-attr]
-        "incus", "exec", "box-demo", "--user", "1000", "--cwd", REPO_PATH,
+        "incus", "exec", "box-demo", "--user", "1000", "--group", "1000", "--cwd", REPO_PATH,
         "--env", "HOME=/home/ubuntu", "--", "pi", "--help",
     )  # fmt: skip
     with pytest.raises(PE):
@@ -494,3 +494,20 @@ def test_proxy_owner_keys_only_for_unix_listen(cfg: dict[str, str]) -> None:
 def test_owner_keys_not_allowed_on_other_types() -> None:
     with pytest.raises(PE):
         plan.device_to_argv("box-demo", _dev("disk", source="/a", path="/a", uid="1000"))
+
+
+# ---- e2e で見つけた: /dev/dxg を重ねても mode 0660（root だけ）だと uid 1000 が GPU を開けない
+
+
+def test_gpu_dxg_は_mode_0666_で重ね_他の_mode_は拒否する() -> None:
+    good = model.DeviceSpec(
+        "gpu-dxg", "unix-char", {"source": "/dev/dxg", "path": "/dev/dxg", "mode": "0666"}
+    )
+    assert "mode=0666" in plan.device_to_argv("box-demo", good)
+    bad = model.DeviceSpec(
+        "gpu-dxg", "unix-char", {"source": "/dev/dxg", "path": "/dev/dxg", "mode": "0777"}
+    )
+    with pytest.raises(PE):
+        plan.device_to_argv("box-demo", bad)
+    devs = plan.devices_for(_cfg(gpu=True))
+    assert any(d.type == "unix-char" and d.config.get("mode") == "0666" for d in devs)
