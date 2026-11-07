@@ -43,6 +43,11 @@ def test_parse_demo() -> None:
         "[repo.demo]\npath='/a'\nuid=0\n",
         "[repo.demo]\npath='/a'\nuid=65536\n",
         "[repo.demo]\npath='/a'\nuid='1000'\n",
+        "[repo.demo]\npath='/a'\ngid=0\n",
+        "[repo.demo]\npath='/a'\ngid=65536\n",
+        "[repo.demo]\npath='/a'\ngid='1001'\n",
+        "[repo.demo]\npath='/a'\ngid=true\n",
+        "[repo.demo]\npath='/a'\ngid=0123\n",  # 先頭ゼロは TOML として不正
         "[repo.demo]\npath='/a'\ngpu='yes'\n",
         "[repo.demo]\npath='/a'\nsubnet='10.0.0.1/8'\n",  # strict でない CIDR
         "[repo.demo]\npath='/a'\nnetwork='proxy-only'\n",  # 上流なし
@@ -120,6 +125,13 @@ def test_check_file_safe_missing() -> None:
         policy.check_file_safe("/etc/kcage/none.toml", fs=_fs_for_policy())
 
 
+def test_gidの既定はuid() -> None:
+    r = policy.parse("[repo.demo]\npath='/a'\nuid=1001\n").repos["demo"]
+    assert r.uid == 1001 and r.gid == 1001
+    r = policy.parse("[repo.demo]\npath='/a'\nuid=1000\ngid=1001\n").repos["demo"]
+    assert r.gid == 1001
+
+
 def test_load_uses_fs() -> None:
     fs = _fs_for_policy()
     fs.add_file("/etc/kcage/policy.toml", POLICY_TEXT)
@@ -138,11 +150,12 @@ def test_render_and_add_repo_roundtrip() -> None:
         proxy_upstream="192.0.2.5:3128",
         idmap="root",
         uid=1001,
+        gid=1002,
         subnet="10.88.0.0/24",
     )
     text = policy.add_repo(POLICY_TEXT, block)
     r = policy.parse(text).repos["new1"]
-    assert r.idmap == "root" and r.uid == 1001 and r.ports[1].hi == 9010
+    assert r.idmap == "root" and r.uid == 1001 and r.gid == 1002 and r.ports[1].hi == 9010
     assert "demo" in policy.parse(text).repos  # 既存は残る
 
 

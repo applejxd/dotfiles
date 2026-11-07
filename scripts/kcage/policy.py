@@ -57,6 +57,7 @@ _REPO_KEYS = {
     "proxy_upstream",
     "idmap",
     "uid",
+    "gid",
     "subnet",
     "secrets",
 }
@@ -206,6 +207,9 @@ def _parse_repo(repo_id: str, t: Any, default_net: str) -> model.RepoPolicy:
     uid = t.get("uid", 1000)
     if not _is_int(uid) or not 1 <= uid <= 65535:
         raise PolicyError("uid は 1〜65535 の整数が必要（0 は不可）")
+    gid = t.get("gid", uid)  # 省略時はホストの gid = uid（従来の仮定）
+    if not _is_int(gid) or not 1 <= gid <= 65535:
+        raise PolicyError("gid は 1〜65535 の整数が必要（0 は不可）")
     subnet = t.get("subnet")
     if subnet is not None:
         try:
@@ -228,6 +232,7 @@ def _parse_repo(repo_id: str, t: Any, default_net: str) -> model.RepoPolicy:
         proxy_upstream=upstream,
         idmap=idmap,
         uid=uid,
+        gid=gid,
         subnet=subnet,
         secrets=_parse_secrets(repo_id, t.get("secrets", {})),
     )
@@ -318,6 +323,7 @@ def render_repo_block(
     proxy_upstream: str | None = None,
     idmap: str = "user",
     uid: int = 1000,
+    gid: int | None = None,
     subnet: str | None = None,
 ) -> str:
     """[repo.<id>] のブロックを描画する（純粋関数。描画後に parse で検証する）。"""
@@ -337,6 +343,8 @@ def render_repo_block(
         lines.append(f"proxy_upstream = {_q(proxy_upstream)}")
     lines.append(f"idmap = {_q(idmap)}")
     lines.append(f"uid = {uid}")
+    if gid is not None and gid != uid:
+        lines.append(f"gid = {gid}")
     if subnet is not None:
         lines.append(f"subnet = {_q(subnet)}")
     return "\n".join(lines) + "\n"  # 形の検証は add_repo が parse で行う

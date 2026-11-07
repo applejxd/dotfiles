@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 import pytest
-from kcage import distcheck, model, root_helper
+from kcage import distcheck, model, policy, root_helper
 from kcage_fakes import POLICY_TEXT, FakeRunner, demo_fs
 
 DUMMY = "DUMMY-SECRET-VALUE-0123456789"
@@ -354,6 +354,42 @@ def test_register_refusals(extra: list[str]) -> None:
 def test_register_requires_root_and_sudo_uid() -> None:
     assert call(["register", "n1", "--path", "/x"], euid=1000)[0] == 1
     assert call(["register", "n1", "--path", "/x"], env={})[0] == 1
+
+
+def _register_text(env: dict[str, str], extra: list[str] | None = None) -> tuple[int, str]:
+    fs = demo_fs()
+    fs.add_dir("/home/alice/work/new", uid=1000)
+    written: dict[str, str] = {}
+    rc, _, _ = call(
+        ["register", "new1", "--path", "/home/alice/work/new", *(extra or [])],
+        env=env,
+        fs=fs,
+        confirm=lambda q: True,
+        writer=lambda p, t: written.update({p: t}),
+    )
+    return rc, written.get(model.POLICY_PATH, "")
+
+
+def test_register_SUDO_GIDをgidとして記録する() -> None:
+    rc, text = _register_text({"SUDO_UID": "1000", "SUDO_GID": "1001"})
+    assert rc == 0
+    assert policy.parse(text).repos["new1"].gid == 1001
+
+
+@pytest.mark.parametrize("raw", [None, "abc", "0", "-1", "70000", "01001", ""])
+def test_register_SUDO_GIDが無い・不正ならuid(raw: str | None) -> None:
+    env = {"SUDO_UID": "1000"}
+    if raw is not None:
+        env["SUDO_GID"] = raw
+    rc, text = _register_text(env)
+    assert rc == 0
+    assert policy.parse(text).repos["new1"].gid == 1000
+
+
+def test_register_引数でgidを上書きできない() -> None:
+    env = {"SUDO_UID": "1000", "SUDO_GID": "1001"}
+    rc, _ = _register_text(env, ["--gid", "5"])
+    assert rc == 2  # 未知の引数は拒否
 
 
 # ---- sudoers

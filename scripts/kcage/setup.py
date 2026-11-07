@@ -60,6 +60,7 @@ class Opts:
     user: str
     uid: int
     src_dir: str  # 複製元の scripts/kcage
+    gid: int | None = None  # ホストの gid（SUDO_GID）。省略は uid と同じ
     state: State = field(default_factory=State)
     sudoers_text: str = ""  # root_helper.sudoers_snippet の出力（実行層が渡す）
     update: bool = False  # 配備コピーの更新だけ
@@ -135,9 +136,13 @@ def plan(opts: Opts) -> model.Plan:
         steps.append(_op(["apt-get", "install", "-y", "incus"], "Incus を導入する（Ubuntu 標準）"))
     if not st.incus_initialized:
         steps.append(_op(["incus", "admin", "init", "--minimal"], "Incus を初期化する"))
-    line = subid_line(opts.uid)
-    for present, name in ((st.subuid_has, "subuid"), (st.subgid_has, "subgid")):
+    gid = opts.uid if opts.gid is None else opts.gid
+    for present, name, ident in (
+        (st.subuid_has, "subuid", opts.uid),
+        (st.subgid_has, "subgid", gid),
+    ):
         if not present:
+            line = subid_line(ident)
             f = f"/etc/{name}"
             steps.append(
                 _op(
@@ -258,8 +263,9 @@ def _read(path: str) -> str:
         return ""
 
 
-def gather_state(user: str, uid: int) -> State:
+def gather_state(user: str, uid: int, gid: int | None = None) -> State:
     line = subid_line(uid)
+    gline = subid_line(uid if gid is None else gid)
     initialized = False
     if shutil.which("incus"):
         initialized = (
@@ -276,7 +282,7 @@ def gather_state(user: str, uid: int) -> State:
         incus_installed=shutil.which("incus") is not None,
         incus_initialized=initialized,
         subuid_has=line in _read("/etc/subuid").splitlines(),
-        subgid_has=line in _read("/etc/subgid").splitlines(),
+        subgid_has=gline in _read("/etc/subgid").splitlines(),
         policy_exists=Path(model.POLICY_PATH).exists(),
         user_in_incus_admin=user in members,
     )
@@ -319,12 +325,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("root で実行する: kcage setup（sudo がパスワードを尋ねる）", file=sys.stderr)
         return 2
     uid = pwd.getpwnam(user).pw_uid
+    raw_gid = os.environ.get("SUDO_GID", "")
+    gid = (
+        int(raw_gid)
+        if raw_gid.isascii() and raw_gid.isdigit() and 1 <= int(raw_gid) <= 65535
+        else uid
+    )
     net_steps, net_ok = _net_steps()
     opts = Opts(
         user=user,
         uid=uid,
+        gid=gid,
         src_dir=str(Path(__file__).resolve().parent),
-        state=gather_state(user, uid),
+        state=gather_state(user, uid, gid),
         sudoers_text=_sudoers_text(user),
         update=args.update,
         net_steps=net_steps,

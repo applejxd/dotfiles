@@ -57,6 +57,33 @@ def test_2回計画しても同じ():
     assert setup.plan(opts()) == setup.plan(opts())
 
 
+def _subid_cmds(p: model.Plan) -> dict[str, str]:
+    return {
+        f: x[2]
+        for x in argvs(p)
+        if x[0] == "sh"
+        for f in ("/etc/subuid", "/etc/subgid")
+        if f in x[2]
+    }
+
+
+def test_subgidはgidで書く_subuidはuid():
+    c = _subid_cmds(setup.plan(opts(gid=1001)))
+    assert "root:1000:1" in c["/etc/subuid"] and "root:1001" not in c["/etc/subuid"]
+    assert "root:1001:1" in c["/etc/subgid"] and "root:1000" not in c["/etc/subgid"]
+
+
+def test_gid省略はuidと同じ():
+    c = _subid_cmds(setup.plan(opts()))
+    assert "root:1000:1" in c["/etc/subgid"]
+
+
+def test_subgid済みなら足さない_冪等():
+    st = setup.State(subuid_has=True, subgid_has=True)
+    assert _subid_cmds(setup.plan(opts(gid=1001, state=st))) == {}
+    assert setup.plan(opts(gid=1001)) == setup.plan(opts(gid=1001))
+
+
 def test_配備コピーはroot所有の配備先へ作業ツリーから複製する():
     p = setup.plan(opts())
     a = argvs(p)

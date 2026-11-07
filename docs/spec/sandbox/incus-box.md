@@ -95,6 +95,7 @@ network = "proxy-only"
 proxy_upstream = "192.0.2.10:3128"  # proxy-only のとき必須
 idmap = "user"                   # user | root
 uid = 1000                       # 1〜65535（0 は不可）
+gid = 1000                       # 1〜65535（省略時は uid。register は SUDO_GID を書く）
 subnet = "10.77.0.0/24"          # incusbr0 のサブネットを固定
 
 [repo.myrepo.secrets.gh]         # 秘密の出どころ（値は書かない）
@@ -133,7 +134,7 @@ path = "/etc/kcage/secret/gh"
 | `proxy`（箱の中で待ち受け） | `proxy-only` の一般通信、ブローカー（`/var/lib/kcage-sock/<kind>.sock` か loopback の TCP） | — |
 
 - `disk` の source は、拒否リスト（`/etc/kcage`・`/usr/local/libexec/kcage`・`/etc/sudoers*`・`/var/lib/incus`・`/var/lib/docker`・`/run`・`/var/run`・`/proc`・`/sys`・`/dev`、ホームの `.ssh`・`.gnupg`・`.aws`・`.azure`・`.config/gh`・`.config/kcage`・`.docker/config.json`・`.netrc`・`.git-credentials`・`.pi/agent/auth.json`・HF のトークン）と、`.sock` で終わるもの・管理ソケットへの経路を拒否する（実測: `/var/run/docker.sock` を重ねられた不具合を、このために直した。§6）。
-- 箱は `security.nesting=true`・`security.privileged=false`・`raw.idmap`（`idmap = "user"` は `both <uid> <uid>`、`root` は箱の root をホストの uid に対応）。箱の中のユーザーは `ubuntu`（uid 1000）。
+- 箱は `security.nesting=true`・`security.privileged=false`・`raw.idmap`（`idmap = "user"` は `uid <uid> <uid>` と `gid <gid> <uid>`、`root` は箱の root をホストの uid・gid に対応）。箱の中のユーザーは `ubuntu`（uid・gid とも 1000）。ホストの gid は許可表の `gid`（省略時は uid。`kcage register` は呼び出し元の `SUDO_GID` を書く）。`kcage setup` は `/etc/subuid` に `root:<uid>:1`、`/etc/subgid` に `root:<gid>:1` を足す。
 - ホスト側のブローカーのソケットは `/run/kcage-broker/<repo-id>/<kind>.sock`。箱の中は `/var/lib/kcage-sock/<kind>.sock`（`0660`・箱の uid のみ。`/run` は起動のたびに作り直され、proxy デバイスの listen が間に合わないため、イメージに持つ永続のディレクトリを使う）。
 
 ## 外向き通信
@@ -211,6 +212,7 @@ path = "/etc/kcage/secret/gh"
 
 ## 既知の限界と運用上の懸念
 
+- **ホストの gid が uid と違う機**: 許可表の `gid` で対応させる（旧版は gid = uid を仮定し、リポジトリのファイルのグループがホストでは別のグループになった）。既存の許可表・箱は、`gid` を足して `kcage setup` を実行し、箱を作り直すまで旧い対応のまま。
 - **箱の中の root のコンテナのファイル所有者**: 入れ子の Docker のコンテナが root で動くと、リポジトリに作ったファイルがホストでは別の uid になり、ホストのユーザーが消せなくなることがある。compose に `user: "1000:1000"` を付けるか、`idmap = "root"` を使う。実物では未確認。
 - **ディスクの重複**: ストレージが `dir`（WSL では overlay 上）なので、箱ごとに Docker のイメージが重複し、WSL の仮想ディスクは自動では縮まない。認証つきレジストリの認証は箱に入れない方針で、ホスト側にミラーを置く案は未実装。
 - **更新への追従**: テンプレートの更新は、`kcage template` で作り直し、箱を作り直す（既存の箱は元のテンプレートのまま）。pi の版はテンプレート作成時の版に固定される。
