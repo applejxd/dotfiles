@@ -280,9 +280,10 @@ def plan_up(
         cargs += ["-p", prof]
     for k, v in instance_config(cfg).items():
         cargs += ["-c", f"{k}={v}"]
+    # プロファイルは init の前に作る（e2e で、後だと「プロファイルが無い」で up が失敗した）
     steps2: list[model.Step] = [
-        model.Op("host", ("incus", "init", template, box, *cargs), "箱を作成"),
         *net.profile_ops,
+        model.Op("host", ("incus", "init", template, box, *cargs), "箱を作成"),
     ]
     devices = [*devices_for(cfg), *net.devices, *(d for b in active for d in b.devices)]
     for d in devices:

@@ -316,9 +316,11 @@ def test_plan_up_nonet_profile() -> None:
         ),
     )
     p = _up(cfg, _net(profile_ops=ops, profiles=("box-nonet",)))
-    init = p.steps[0].argv  # type: ignore[union-attr]
+    # プロファイルは init の前に作る（e2e で、後だと「プロファイルが無い」で up が失敗した）
+    assert p.steps[0:2] == ops
+    init = p.steps[2].argv  # type: ignore[union-attr]
+    assert init[:2] == ("incus", "init")
     assert init[init.index("-p") + 1] == "box-nonet" and "default" not in init
-    assert p.steps[1:3] == ops
 
 
 @pytest.mark.parametrize("profiles", [("default", "box-nonet"), ("other",), (), ("box-nonet", "x")])

@@ -86,6 +86,10 @@ def test_nic_なしのモードは_box_nonet_で作る() -> None:
         assert not any(
             a[:6] == ("incus", "config", "device", "add", "box-demo", "eth0") for a in runner.argvs
         )
+        # e2e で見つけた: プロファイルの作成は init より前（後だと「プロファイルが無い」で失敗する）
+        i_create = runner.argvs.index(("incus", "profile", "create", "box-nonet"))
+        i_init = runner.argvs.index(inits[0])
+        assert i_create < i_init
 
 
 def test_nat_は_default_プロファイルと_nic() -> None:

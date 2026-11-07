@@ -34,6 +34,27 @@ class _Server(socketserver.ThreadingTCPServer):
         self.seen: list[str] = []  # 試験用: 通した・拒否した宛先
 
 
+def _connect(host: str, port: int, timeout: float = 10) -> socket.socket:
+    """IPv4 を先に試す接続（IPv6 を使えない環境で、到達しない AAAA のタイムアウトを累積して待たせない）。"""
+    infos = sorted(
+        socket.getaddrinfo(host, port, type=socket.SOCK_STREAM),
+        key=lambda i: i[0] != socket.AF_INET,
+    )
+    last: OSError = OSError("名前解決に失敗")
+    for family, kind, proto, _, addr in infos:
+        s = socket.socket(family, kind, proto)
+        s.settimeout(timeout)
+        try:
+            s.connect(addr)
+        except OSError as exc:
+            s.close()
+            last = exc
+            continue
+        s.settimeout(None)
+        return s
+    raise last
+
+
 class _Handler(BaseHTTPRequestHandler):
     server: _Server
     protocol_version = "HTTP/1.1"
@@ -57,7 +78,7 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._permitted(host, port):
             return self._deny()
         try:
-            upstream = socket.create_connection((host, port), timeout=10)
+            upstream = _connect(host, port)
         except OSError:
             return self.send_error(502, "upstream failed")
         self.send_response(200, "Connection established")
