@@ -151,7 +151,9 @@
    "/usr/local/libexec/kcage/kcage-root",
    "kcage rm",
    "kcage register",
-   "kcage setup"
+   "kcage setup",
+   "kcage init",
+   "kcage uninstall"
   ],
   "deny_guide": {
    "alternative": [
@@ -214,9 +216,11 @@
      "commands": [
       "kcage rm",
       "kcage register",
-      "kcage setup"
+      "kcage setup",
+      "kcage init",
+      "kcage uninstall"
      ],
-     "message": "kcage rm / register / setup は人だけが行う操作です。実行してほしいコマンドと理由を利用者に示し、ホストの端末で実行してもらってください。"
+     "message": "kcage rm / register / setup / init / uninstall は人だけが行う操作です。実行してほしいコマンドと理由を利用者に示し、ホストの端末で実行してもらってください。"
     },
     {
      "commands": [

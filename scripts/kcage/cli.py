@@ -20,7 +20,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from kcage import model
+from kcage import model, trust
 from kcage.template import PI_PACKAGE, PI_VERSION_RE
 
 HELPER = f"{model.ROOT_HELPER_DIR}/kcage-root"
@@ -495,6 +495,63 @@ def cmd_setup(args: argparse.Namespace, runner: Runner) -> int:
     return runner(argv).returncode
 
 
+def cmd_init(args: argparse.Namespace, runner: Runner, template: Callable[[], int]) -> int:
+    """setup → template を続けて行う。setup が失敗したら template は実行しない。dry-run は setup の表示だけ。"""
+    ns = argparse.Namespace(dry_run=args.dry_run, update=False)
+    rc = cmd_setup(ns, runner)
+    if rc != 0 or args.dry_run:
+        return rc
+    return template()
+
+
+UNINSTALL_UNTRUSTED = (
+    "kcage uninstall: root 所有の配備コピーが無い、または信頼できない。"
+    "導入されていないか、配備コピーが古い・欠けている。"
+    "`kcage setup --update` で配備し直してから実行する（導入されていないなら何もしなくてよい）"
+)
+
+
+def uninstall_script(
+    deployed_dir: str = model.ROOT_HELPER_DIR, *, anchor: str = "/", root_uid: int = 0
+) -> Path | None:
+    """root で実行する uninstall.py。root 所有で信頼できる配備コピーだけを返す。
+
+    無い・信頼できないときは None（このリポジトリのコードへは戻さない。利用者が書けるコードを root で実行しないため）。
+    anchor・root_uid は試験用（検査の起点・root とみなす uid）。
+    """
+    pkg = os.path.join(deployed_dir, "kcage")
+    script = os.path.join(pkg, "uninstall.py")
+    try:
+        # uninstall.py が import 経路に足す配備の根（kcage-root の入口を含む）全体を検査する
+        trust.check_tree(deployed_dir, start=anchor, root_uid=root_uid)
+        trust.check_trusted(script, start=anchor, root_uid=root_uid)
+    except (trust.TrustError, OSError):
+        return None
+    if trust.missing_modules(pkg):
+        return None
+    return Path(script)
+
+
+def cmd_uninstall(args: argparse.Namespace, runner: Runner) -> int:
+    """root で uninstall.py を実行する（人が起動し、sudo がパスワードを尋ねる）。"""
+    # -I: 環境変数（PYTHONPATH など）と利用者の site を読まない
+    script = uninstall_script()
+    if script is None:
+        print(UNINSTALL_UNTRUSTED, file=sys.stderr)
+        return 2
+    # -B: root が __pycache__ を書かない
+    argv = ["sudo", "python3", "-I", "-B", str(script)]
+    for flag, on in (
+        ("--dry-run", args.dry_run),
+        ("--keep-policy", args.keep_policy),
+        ("--drop-subid", getattr(args, "drop_subid", False)),
+        ("--yes", args.yes),
+    ):
+        if on:
+            argv.append(flag)
+    return runner(argv).returncode
+
+
 def register_flags(args: argparse.Namespace) -> list[str]:
     """kcage register の引数を kcage-root register のフラグへ。"""
     out: list[str] = []
@@ -561,6 +618,17 @@ def build_parser() -> argparse.ArgumentParser:
     su.add_argument("--dry-run", action="store_true", help="何もせず、やることを表示する")
     su.add_argument("--update", action="store_true", help="root 所有の配備コピーだけを更新する")
     sub.add_parser("template", help="テンプレート（箱の元のイメージ）を作る（パスワードを尋ねる）")
+    ini = sub.add_parser("init", help="初期化: setup → template を続けて行う（パスワードを尋ねる）")
+    ini.add_argument("--dry-run", action="store_true", help="setup のやることを表示するだけ")
+    un = sub.add_parser("uninstall", help="導入物を戻す（root。Incus 本体は残す）")
+    un.add_argument("--dry-run", action="store_true", help="何もせず、やることを表示する")
+    un.add_argument("--keep-policy", action="store_true", help="許可表（/etc/kcage）を残す")
+    un.add_argument(
+        "--drop-subid",
+        action="store_true",
+        help="subuid/subgid の kcage 用の行も消す（既定は残す）",
+    )
+    un.add_argument("--yes", action="store_true", help="箱を消す確認を省く")
     return p
 
 
@@ -579,6 +647,12 @@ def main(
         return cmd_setup(args, runner)
     if args.verb == "template":
         return cmd_template(runner, fs, dist_builder, pi_version_reader)
+    if args.verb == "init":
+        return cmd_init(
+            args, runner, lambda: cmd_template(runner, fs, dist_builder, pi_version_reader)
+        )
+    if args.verb == "uninstall":
+        return cmd_uninstall(args, runner)
     if args.verb == "doctor":
         return cmd_doctor(args, runner, fs)
     if args.verb == "selftest":
