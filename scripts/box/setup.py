@@ -39,7 +39,7 @@ sys.path.insert(0, "{model.ROOT_HELPER_DIR}")
 
 from box.root_helper import main  # noqa: E402
 
-sys.exit(main())
+sys.exit(main(sys.argv[1:]))
 '''
 
 

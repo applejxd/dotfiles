@@ -153,3 +153,16 @@ def test_parse_spec_は純粋で_load_spec_と同じ検証() -> None:
     assert spec.gpu and spec.ports == (9000,) and spec.brokers == ("gh",)
     with pytest.raises(config.ConfigError):
         config.parse_spec("unknown = 1")
+
+
+# ---- e2e で見つけた: パスワードなしで何でも実行できる sudo の検出
+
+
+def test_doctor_は_nopasswd_all_を検出する() -> None:
+    from box import cli
+
+    bad = "User u may run the following commands:\n    (ALL : ALL) ALL\n    (ALL) NOPASSWD: ALL\n"
+    assert cli.check_passwordless_sudo(bad).status == "fail"
+    ok = "User u may run the following commands:\n    (root) NOPASSWD: /usr/local/libexec/box/box-root up *\n    (ALL : ALL) ALL\n"
+    assert cli.check_passwordless_sudo(ok).status == "ok"
+    assert cli.check_passwordless_sudo(None).status == "warn"

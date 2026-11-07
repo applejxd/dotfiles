@@ -156,3 +156,36 @@ def test_dry_runの表示は全手順を含みファイルの内容を出さな�
 def test_複製先とパスはモデルの固定値を使う():
     assert f"{model.ROOT_HELPER_DIR}/box-root" == setup.HELPER_ENTRY
     assert setup.subid_line(1001) == "root:1001:1"
+
+
+def test_配備される入口スクリプトは実際に動き_引数を渡す(tmp_path):
+    """e2e で見つけた不具合: 入口が main() を引数なしで呼び、全 verb が TypeError で落ちていた。文字列の試験では見つからない。"""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    scripts = Path(setup.__file__).resolve().parents[1]
+    entry = tmp_path / "box-root"
+    entry.write_text(
+        setup.HELPER_SCRIPT.replace(model.ROOT_HELPER_DIR, str(scripts)), encoding="utf-8"
+    )
+    # root でないので拒否されるが、使い方の誤り（TypeError）ではなく、box-root の拒否メッセージで終わること
+    proc = subprocess.run(
+        [sys.executable, str(entry), "ls"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={"PATH": "/usr/bin:/bin"},
+        check=False,
+    )
+    assert "TypeError" not in proc.stderr, proc.stderr
+    assert proc.returncode != 0 and "box-root:" in proc.stderr
+    proc = subprocess.run(
+        [sys.executable, str(entry), "frobnicate", "demo"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={"PATH": "/usr/bin:/bin"},
+        check=False,
+    )
+    assert "未知の verb" in proc.stderr

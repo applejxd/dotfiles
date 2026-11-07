@@ -149,6 +149,24 @@ def check_policy(
     return Check("許可表", "ok", f"登録済み: {rid}")
 
 
+def check_passwordless_sudo(sudo_l_output: str | None) -> Check:
+    """パスワードなしで何でも実行できる sudo があると、ホストの pi が root になれる（箱の制御面の分離が成立しない）。
+
+    e2e で見つけた: WSL のディストロの既定のユーザーには `NOPASSWD: ALL` が入っていることがある。
+    """
+    if sudo_l_output is None:
+        return Check("sudo の範囲", "warn", "sudo -n -l が使えない（確認できない）")
+    for line in sudo_l_output.splitlines():
+        if re.search(r"NOPASSWD:\s*ALL\b", line):
+            return Check(
+                "sudo の範囲",
+                "fail",
+                "NOPASSWD: ALL の規則がある。ホストの pi が root になれるので、"
+                "箱の制御面の分離が成立しない（/etc/sudoers.d/ の該当の規則を外す）",
+            )
+    return Check("sudo の範囲", "ok", "NOPASSWD: ALL なし")
+
+
 def check_sudoers(sudo_l_output: str | None) -> Check:
     if sudo_l_output is None:
         return Check("sudoers", "fail", "sudo -n -l が失敗（雛形が無い、または認証が要る）")
@@ -326,6 +344,7 @@ def cmd_doctor(args: argparse.Namespace, runner: Runner, fs: Fs) -> int:
     ]
     res = runner(["sudo", "-n", "-l"], capture=True)
     checks.append(check_sudoers(res.stdout if res.returncode == 0 else None))
+    checks.append(check_passwordless_sudo(res.stdout if res.returncode == 0 else None))
     checks.append(check_box_toml(top, fs))
     checks.extend(
         check_git_config(
