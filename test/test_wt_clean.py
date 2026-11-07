@@ -220,3 +220,77 @@ def test_usage_error_exit_code(w, tmp_path):
         check=False,
     )
     assert r.returncode == 2
+
+
+def _detach(w, name: str, merged: bool = True) -> Path:
+    """枝を消して detached HEAD の worktree だけを残す（finish --keepremote の後の形）。"""
+    wt = w.feature(name, merged=merged)
+    _git(wt, "checkout", "-q", "--detach")
+    _git(w.repo, "branch", "-D", f"feature/{name}")
+    return wt
+
+
+def test_detached_merged_worktree_is_removed(w):
+    wt = _detach(w, "b")
+    (wt / "__pycache__").mkdir()
+    (wt / "__pycache__" / "x.pyc").write_text("pyc\n")
+    r = _run(w.repo, "b")
+    assert r.returncode == 0 and "削除した" in r.stdout, r.stdout + r.stderr
+    assert not wt.exists() and "worktrees/b" not in _git(w.repo, "worktree", "list")
+    assert len(w.backups()) == 1
+
+
+def test_detached_dry_run_changes_nothing(w):
+    wt = _detach(w, "b")
+    r = _run(w.repo, "b", "--dry-run")
+    assert r.returncode == 0 and "dry-run" in r.stdout and wt.exists()
+
+
+def test_detached_unmerged_is_kept(w):
+    wt = _detach(w, "b", merged=False)
+    r = _run(w.repo, "b")
+    assert r.returncode == 3 and "未統合" in r.stdout and wt.exists()
+
+
+def test_detached_tracked_change_is_kept(w):
+    wt = _detach(w, "b")
+    (wt / "a.txt").write_text("変更\n")
+    r = _run(w.repo, "b")
+    assert r.returncode == 3 and "未コミット" in r.stdout
+    assert (wt / "a.txt").read_text() == "変更\n"
+
+
+def test_detached_untracked_file_is_kept(w):
+    wt = _detach(w, "b")
+    (wt / "new.txt").write_text("未追跡\n")
+    r = _run(w.repo, "b")
+    assert r.returncode == 3 and (wt / "new.txt").exists()
+
+
+def test_detached_outside_worktrees_dir_is_refused(w, tmp_path):
+    out = tmp_path / "outside"
+    _git(w.repo, "worktree", "add", "-q", "--detach", str(out))
+    w.wts.mkdir(parents=True, exist_ok=True)
+    (w.wts / "lnk").symlink_to(out)
+    for name in ("lnk", "..", "../../outside", ".", "worktrees/x"):
+        r = _run(w.repo, name)
+        assert r.returncode == 3 and "拒否" in r.stdout, (name, r.stdout)
+    assert out.exists() and (out / "a.txt").exists() and w.repo.exists()
+
+
+def test_detached_path_without_worktree_is_refused(w):
+    (w.wts / "plain").mkdir(parents=True)
+    r = _run(w.repo, "plain")
+    assert r.returncode == 3 and "拒否" in r.stdout and (w.wts / "plain").exists()
+
+
+def test_missing_name_is_refused_as_before(w):
+    r = _run(w.repo, "nothing")
+    assert r.returncode == 3 and "拒否" in r.stdout
+
+
+def test_branch_worktree_is_still_removed_with_branch(w):
+    wt = w.feature("a")
+    r = _run(w.repo, "a")
+    assert r.returncode == 0 and "worktree と枝" in r.stdout
+    assert not wt.exists() and w.branches() == []

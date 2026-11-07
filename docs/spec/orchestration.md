@@ -75,6 +75,7 @@
 3. 削除前に無視ファイルを tgz へ退避する（ビューアは `--state-dir` 配下の `cleanup-backups/`、CLI は `<共通 git-dir>/pi-cleanup-backups/`。`<名前>-<時刻>.tgz`）。200 MB 超・数えられない・失敗なら worktree を残して警告。退避は新しい順に 5 件まで。
 4. **有効な owner の lock**（pid が生きている）・人が付けた lock・**残骸の lock**（pid が死んだ lock）は、いずれも掃除しない（worktree も枝も残す）。残骸は解除もしない（古い観測で他方の新しい lock を外しうるため）。「`python3 scripts/wt_owner.py reap` で解除してから、もう一度」と案内する（CLI は拒否・終了コード 3。ビューアは統合の成功のまま警告に載せる）。
 5. 枝は `git branch -d`（ビューアは承認した先頭を指定した CAS で削除）。
+6. 枝が無く、`.tmp/worktrees/<名前>`（本体の直下 1 階層。シンボリックリンク・`..`・範囲外は拒否）の worktree が detached HEAD のときも（`finish --keepremote` で枝だけ消えた統合用の束など）、HEAD が統合先の祖先・追跡ファイルの変更なし・未追跡なし・有効な lock なしなら、worktree だけを削除する（CLI のみ。未統合・変更ありは拒否）。
 
 CLI の終了コード: 0 = 全て処理、3 = 一部を残した・拒否、2 = 使い方の誤り。
 
