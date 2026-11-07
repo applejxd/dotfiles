@@ -139,8 +139,6 @@ e2e で見つけて直した不具合（単体試験では見つからなかっ�
 - WSL のディストロの既定のユーザーに `NOPASSWD: ALL` があり、`sudo incus` が通った（`box doctor` に検出を足した。設計の前提）。
 - `disk` に `/var/run/docker.sock` を重ねられた（`/var/run` は `/run` への symlink）。拒否リストと `.sock` の拒否を足した。
 
-未実施: 実際のテンプレート作成（docker・NVIDIA toolkit・CDI）と入れ子の Docker の GPU、ブローカー（gh・copilot・aws）、会社の機（TLS 検査・プロキシ・認証の粒度）。
-
 **e2e 第 3 段（`proxy-only`・`offline`・`box.toml` の締め付け。上流は擬似プロキシ）**
 
 | 項目 | 結果 |
@@ -150,3 +148,28 @@ e2e で見つけて直した不具合（単体試験では見つからなかっ�
 | `box.toml` の締め付け | nat の許可表に `offline` を要求すると NIC なし。`proxy-only` の許可表に `nat` を要求しても NIC なしのまま。`data` の `..` と未知のキー（`privileged`）は拒否 |
 
 見つけて直した不具合: NIC なしの箱用のプロファイルを `incus init` の後に作っていた（先に作る必要がある）。擬似プロキシが IPv4 を先に試さず、到達しない IPv6 のタイムアウトで CONNECT が応答しなかった。
+
+e2e 第 4〜6 段（実際のテンプレート作成・箱の中の docker と GPU・gh ブローカー・selftest）の結果:
+
+| 項目 | 結果 |
+| --- | --- |
+| 実際の `box template`（docker・compose・buildx・NVIDIA toolkit の鍵の指紋の照合・CDI ユニット・Node 24・pi） | 合格。一時の箱は後始末される |
+| 箱の中の GPU（uid 1000） | RTX 3070 が見える |
+| 入れ子の Docker・入れ子の GPU（`--device nvidia.com/gpu=all`）・compose の GPU 予約 | 合格 |
+| 再起動後の CDI | 起動のたびに生成される |
+| `gh` ブローカー | Envoy が PAT を注入して `api.github.com` に届く（箱から認証ヘッダーなしで「Bad credentials」が返る。直接送ると「Requires authentication」）。`gh` CLI も動く。本物のトークンは、箱のファイル・Incus の設定・ホストの引数のどこにも無い。箱を消すとブローカーのユニットも止まる |
+| `copilot` ブローカー（ダミーの認証） | 短命トークンへの交換が失敗して `up` がきれいに止まる（箱・ユニット・引数に残らない） |
+| `box selftest`・`box doctor` | 全項目 OK |
+
+実機で見つけて直した不具合（単体試験では見つからなかったもの）:
+
+- `incus file push -r` は、宛先のディレクトリが無いと Not Found になる（`/opt` へ push してから移す）。
+- apt の Node 18 では pi が動かない（Node 22.1 以上が要る。公式配布を SHASUMS256 で検証して入れる）。
+- `incus exec` は gid 0 で、docker のソケットに届かず、リポジトリに作るファイルのグループもずれる（`--group` を渡し、`docker.socket` の drop-in でソケットのグループを揃える）。
+- `/dev/dxg` を重ねても mode 0660（root だけ）で、uid 1000 が GPU を開けない（mode 0666 で重ねる）。
+- GPU のライブラリの索引がビルド時の `ldconfig` に載らない（CDI ユニットで起動のたびに `ldconfig` し、`--mode=wsl` で生成する）。
+- `/run` は起動のたびに tmpfs で作り直され、`proxy` デバイスの listen（`bind=instance`・unix ソケット）が間に合わない（イメージに持つ `/var/lib/box-sock` に変更）。
+- net・ブローカーの環境変数が、定義だけで箱に入っていなかった（`environment.*` へ入れる）。
+- `box selftest` が、ブローカーのダミーの認証を秘密と誤検出した。
+
+未検証: 本物の Copilot トークンでの動作、`aws` ブローカー（本物のロールが要る）、`hf-cache`、会社の機（TLS 検査・プロキシ・認証の粒度）、Windows 側。

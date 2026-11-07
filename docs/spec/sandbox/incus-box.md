@@ -200,12 +200,13 @@ path = "/etc/box/secret/gh"
 | Incus の導入、箱の外向き通信（`FORWARD` の対処）、GPU（`/dev/dxg`）、入れ子の Docker、箱からホストの `127.0.0.1` へ届かないこと、データの ro、git の重ね、複製の速度 | **実測済み**（[§5](../../research/agents/incus-dev-environment.md)。使い捨ての WSL ディストロ） |
 | 制限つきプロジェクトでは足りないこと（デバイス作成権限は管理者権限と同じ） | **実測済み**（[§6 T10](../../research/agents/incus-dev-environment.md)） |
 | `box setup`・`up`・`stop`・再 `up`・`ls`・権限モデル（`rm` はパスワード必須、`sudo incus` の拒否）・箱の中の確認（uid・所有者・ro・ホストのホームが見えない・GPU・nat の外向き通信）。`nat` のみ | **実測済み**（[§6 e2e](../../research/agents/incus-dev-environment.md)） |
-| ブローカー（`gh`・`copilot`・`aws`・`hf-cache`）の実機での動作 | **未検証**（計画と設定の生成は単体試験のみ。Envoy の SDS の再読み込み、`aws` CLI の `FULL_URI`、Node の `fetch` の loopback など） |
-| 実際の `box template`（docker・NVIDIA toolkit・CDI の導入） | **未検証** |
-| 入れ子の Docker の GPU（CDI）を `box` のテンプレートで | **未検証**（素の箱での CDI は §5 で実測済み） |
+| `gh` ブローカー・`copilot` ブローカー（ダミーの認証での起動の失敗）・`box selftest`・`box doctor` | **実測済み**（[§6 e2e 第 4〜6 段](../../research/agents/incus-dev-environment.md#6-制限つきプロジェクトの実測t10と箱の結合試験e2e)） |
+| ブローカー `aws`・`hf-cache`、`copilot` の本物のトークンでの動作 | **未検証**（計画と設定の生成は単体試験のみ。Envoy の SDS の再読み込み、`aws` CLI の `FULL_URI`、Node の `fetch` の loopback など） |
+| 実際の `box template`（docker・compose・NVIDIA toolkit・CDI・Node・pi） | **実測済み**（同上） |
+| 入れ子の Docker と GPU（CDI）・compose の GPU 予約・再起動後の CDI | **実測済み**（同上） |
 | `proxy-only`・`offline` の実機での動作（NIC なし・プロキシ経由だけが通る・直通と DNS と IPv6 の遮断・プロキシ停止で止まる・`box.toml` は締める方向だけ） | **実測済み**（[§6 e2e](../../research/agents/incus-dev-environment.md#6-制限つきプロジェクトの実測t10と箱の結合試験e2e)。擬似プロキシ）。`box selftest` の実行は未検証 |
 | 認証つきプロキシ・TLS 検査のある環境 | **未検証** |
-| compose の GPU・再起動後の復帰（`raw.idmap`・`FORWARD` の許可のユニット）・長時間の安定 | **未検証** |
+| 再起動後の復帰（`raw.idmap`・`FORWARD` の許可のユニット）・長時間の安定 | **未検証** |
 | Windows 側（PowerShell から使う運用など） | **未検証**（WSL の Ubuntu 内だけが対象） |
 
 ## 既知の限界と運用上の懸念
