@@ -45,10 +45,17 @@ def test_devices_for_fixed_generation() -> None:
 def test_instance_config() -> None:
     c = plan.instance_config(_cfg())
     assert c["security.privileged"] == "false" and c["security.nesting"] == "true"
-    assert c["raw.idmap"] == "both 1000 1000"
+    assert c["raw.idmap"] == "uid 1000 1000\ngid 1000 1000"
     assert c[plan.LABEL_KEY] == "demo"
     root = plan.instance_config(_cfg(idmap="root"))
     assert root["raw.idmap"] == "uid 1000 0\ngid 1000 0"
+
+
+def test_instance_config_gidがuidと違う() -> None:
+    user = plan.instance_config(_cfg(gid=1001))
+    assert user["raw.idmap"] == "uid 1000 1000\ngid 1001 1000"
+    root = plan.instance_config(_cfg(idmap="root", gid=1001))
+    assert root["raw.idmap"] == "uid 1000 0\ngid 1001 0"
 
 
 # ---- device_to_argv

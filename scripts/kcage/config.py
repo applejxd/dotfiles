@@ -312,6 +312,7 @@ def resolve(
         repo_id=repo_id,
         repo_path=repo,
         uid=rp.uid,
+        gid=rp.gid,
         idmap=rp.idmap,
         mounts=tuple(mounts),
         ports=tuple(ports),

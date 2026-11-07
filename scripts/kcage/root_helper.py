@@ -365,10 +365,19 @@ def _caller_uid(env: Mapping[str, str]) -> int:
     return int(raw)
 
 
+def _caller_gid(env: Mapping[str, str], uid: int) -> int:
+    """sudo が設定した SUDO_GID。無い・不正・範囲外なら uid にする（引数では指定できない）。"""
+    raw = env.get("SUDO_GID", "")
+    if raw.isascii() and raw.isdigit() and 1 <= int(raw) <= 65535 and raw == str(int(raw)):
+        return int(raw)
+    return uid
+
+
 def _register(
     req: Request,
     *,
     uid: int,
+    gid: int,
     policy_path: str,
     fs: Fs,
     out: IO[str],
@@ -397,6 +406,7 @@ def _register(
             proxy_upstream=o.get("proxy_upstream"),
             idmap=o.get("idmap", "user"),
             uid=uid,
+            gid=gid,
             subnet=o.get("subnet"),
         )
         new_text = policy.add_repo(text, block)
@@ -492,7 +502,14 @@ def _run(
     uid = _caller_uid(env)
     if req.verb == "register":
         return _register(
-            req, uid=uid, policy_path=policy_path, fs=fs, out=out, confirm=confirm, writer=writer
+            req,
+            uid=uid,
+            gid=_caller_gid(env, uid),
+            policy_path=policy_path,
+            fs=fs,
+            out=out,
+            confirm=confirm,
+            writer=writer,
         )
 
     policy.check_file_safe(policy_path, fs=fs)

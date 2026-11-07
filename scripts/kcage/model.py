@@ -93,8 +93,13 @@ class RepoPolicy:
     proxy_upstream: str | None = None  # proxy-only の上流（許可表にだけ書く。IP:ポート）
     idmap: IdmapMode = "user"
     uid: int = 1000
+    gid: int | None = None  # ホストの gid。省略（None）は uid と同じ
     subnet: str | None = None  # incusbr0・docker0 の衝突を避けるための固定
     secrets: Mapping[str, SecretRef] = field(default_factory=dict)  # ブローカー名 -> 出どころ
+
+    def __post_init__(self) -> None:
+        if self.gid is None:
+            object.__setattr__(self, "gid", self.uid)
 
 
 @dataclass(frozen=True)
@@ -152,6 +157,11 @@ class BoxConfig:
     proxy_upstream: str | None
     subnet: str | None
     labels: Mapping[str, str] = field(default_factory=dict)
+    gid: int | None = None  # ホストの gid。省略（None）は uid と同じ
+
+    def __post_init__(self) -> None:
+        if self.gid is None:
+            object.__setattr__(self, "gid", self.uid)
 
 
 @dataclass(frozen=True)

@@ -219,11 +219,12 @@ def _check_env(key: str, value: str) -> None:
 
 def instance_config(cfg: model.BoxConfig) -> dict[str, str]:
     """incus init -c に渡す設定。特権化は常に明示的に false。"""
+    gid = cfg.uid if cfg.gid is None else cfg.gid  # ホストの gid（許可表の gid。既定は uid）
     if cfg.idmap == "user":
-        idmap = f"both {cfg.uid} {cfg.uid}"
+        # ホストの uid・gid を、箱の uid・gid（ubuntu = uid と同じ値）へ対応させる
+        idmap = f"uid {cfg.uid} {cfg.uid}\ngid {gid} {cfg.uid}"
     elif cfg.idmap == "root":
-        # gid は uid と同じと仮定する（許可表に gid の項目が無いため）
-        idmap = f"uid {cfg.uid} 0\ngid {cfg.uid} 0"
+        idmap = f"uid {cfg.uid} 0\ngid {gid} 0"
     else:
         raise PlanError("idmap が不正")
     return {
