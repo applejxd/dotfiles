@@ -348,14 +348,37 @@ def _atomic_write(path: str, text: str) -> None:
         raise
 
 
-def _tty_confirm(question: str) -> bool:
+def _tty_confirm(
+    question: str,
+    *,
+    opener: Callable[..., Any] = open,
+    stdin: IO[str] | None = None,
+    stderr: IO[str] | None = None,
+) -> bool:
+    """人が端末で答える確認。/dev/tty を使い、開けないときは標準入力が端末のときだけそれを使う。
+
+    パイプやファイルからは答えられない（自動化が y を流し込めない）。どちらも使えないときは、理由を示して中止する
+    （黙って中止すると、プロンプトが見えないまま「中止しました」とだけ出て原因が分からない）。
+    """
+    err = stderr if stderr is not None else sys.stderr
+    inp = stdin if stdin is not None else sys.stdin
     try:
-        with open("/dev/tty", "r+", encoding="utf-8") as tty:
+        with opener("/dev/tty", "r+", encoding="utf-8") as tty:
             tty.write(question)
             tty.flush()
             return tty.readline().strip().lower() in ("y", "yes")
-    except OSError:
+    except OSError as exc:
+        reason = f"/dev/tty を開けない: {exc}"
+    try:
+        interactive = inp.isatty()
+    except (OSError, ValueError, AttributeError):
+        interactive = False
+    if not interactive:
+        print(f"端末で確認できないため中止する（{reason}。標準入力も端末ではない）", file=err)
         return False
+    err.write(question)
+    err.flush()
+    return inp.readline().strip().lower() in ("y", "yes")
 
 
 def _caller_uid(env: Mapping[str, str]) -> int:

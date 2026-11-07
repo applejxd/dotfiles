@@ -732,3 +732,76 @@ def test_dist_拒否名リストは汎用でdotfiles固有を含まない() -> N
         assert name in distcheck.DENY_NAMES
     src = (BOX / "distcheck.py").read_text(encoding="utf-8")
     assert not re.search(r"^\s*(?:from|import)\s+\S*(?:adapters|dotfiles)", src, re.M)
+
+
+# ---- 実機で見つけた: 端末の確認（register）が /dev/tty を開けず、プロンプトも出さずに「中止しました」だけ出していた
+
+
+class _Tty:
+    def __init__(self, answer: str) -> None:
+        self.answer = answer
+        self.written: list[str] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def write(self, s: str) -> None:
+        self.written.append(s)
+
+    def flush(self) -> None:
+        pass
+
+    def readline(self) -> str:
+        return self.answer
+
+
+class _Stdin:
+    def __init__(self, answer: str, tty: bool) -> None:
+        self.answer, self.tty = answer, tty
+
+    def isatty(self) -> bool:
+        return self.tty
+
+    def readline(self) -> str:
+        return self.answer
+
+
+def test_tty_confirm_は_dev_tty_で_y_だけを肯定する():
+    from kcage import root_helper
+
+    for ans, want in (("y\n", True), ("YES\n", True), ("n\n", False), ("\n", False)):
+        tty = _Tty(ans)
+        assert root_helper._tty_confirm("q? ", opener=lambda *a, tty=tty, **k: tty) is want
+        assert tty.written == ["q? "]
+
+
+def test_tty_confirm_は_dev_tty_が開けなければ端末の標準入力へ_そうでなければ理由を出して中止する():
+    import io
+
+    from kcage import root_helper
+
+    def boom(*a, **k):
+        raise OSError(6, "No such device or address")
+
+    err = io.StringIO()
+    # 標準入力が端末なら、そこで答えられる（プロンプトは stderr）
+    assert (
+        root_helper._tty_confirm("q? ", opener=boom, stdin=_Stdin("y\n", True), stderr=err) is True
+    )
+    assert "q? " in err.getvalue()
+    assert (
+        root_helper._tty_confirm(
+            "q? ", opener=boom, stdin=_Stdin("n\n", True), stderr=io.StringIO()
+        )
+        is False
+    )
+    # パイプ（端末でない標準入力）からは答えられない。理由を出して中止（y を流し込んでも通らない）
+    err = io.StringIO()
+    assert (
+        root_helper._tty_confirm("q? ", opener=boom, stdin=_Stdin("y\n", False), stderr=err)
+        is False
+    )
+    assert "/dev/tty を開けない" in err.getvalue() and "端末ではない" in err.getvalue()
