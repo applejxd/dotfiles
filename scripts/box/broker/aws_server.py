@@ -7,7 +7,9 @@ unix ソケットの HTTP で、`GET /creds` だけに答える。箱の中の l
 - ロール・TTL・セッション名は起動時の引数（ロールは root 専用ファイル）で固定する。要求（パス・クエリ・ヘッダー）からは選べない。
   広いロールへの代替は作らない（契約 C1）
 - 認証情報はキャッシュするが、ログ・標準エラー・例外には出さない。assume-role の失敗は 503（理由の定型文だけ）
-- ホストの aws CLI の認証（SSO など）は、このプロセスの実行ユーザーのものを使う。起動の主体は未確認（申し送り）
+- ホストの aws CLI の認証（SSO など）は、このプロセスを起動したユーザー（リポジトリの uid。systemd-run --uid）の
+  ~/.aws を使う。プロファイルは要求から選ばせない（aws の既定のまま。AWS_* の環境変数も引き継がない）
+- ロールの ARN のファイルは、自分の uid 所有でなければ読まない
 """
 
 from __future__ import annotations
@@ -47,6 +49,21 @@ def clamp_ttl(ttl: int) -> int:
     return max(MIN_TTL, min(int(ttl), MAX_TTL))
 
 
+def minimal_env() -> dict[str, str]:
+    """aws CLI に渡す環境。HOME・PATH・LANG だけ（AWS_* の認証系を引き継がない）。"""
+    env = {k: os.environ[k] for k in ("HOME", "PATH", "LANG") if k in os.environ}
+    env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
+    return env
+
+
+def read_role_arn_file(path: str) -> str:
+    """ロール ARN のファイルを読む。自分の uid 所有の通常ファイルでなければ拒否する。"""
+    st = os.stat(path)
+    if not os.path.isfile(path) or st.st_uid != os.geteuid():
+        raise ValueError("ロール ARN のファイルの所有者が自分ではない")
+    return Path(path).read_text(encoding="utf-8").strip()
+
+
 def _default_runner(argv: Sequence[str]) -> tuple[int, str]:
     try:
         done = subprocess.run(
@@ -56,6 +73,7 @@ def _default_runner(argv: Sequence[str]) -> tuple[int, str]:
             encoding="utf-8",
             timeout=ASSUME_TIMEOUT_SECONDS,
             stdin=subprocess.DEVNULL,
+            env=minimal_env(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return 127, ""
@@ -208,7 +226,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--ttl", type=int, default=DEFAULT_TTL)
     args = parser.parse_args(argv)
     try:
-        role = Path(args.role_arn_file).read_text(encoding="utf-8").strip()
+        role = read_role_arn_file(args.role_arn_file)
         source = CredentialSource(role, args.session_name, args.ttl)
     except (OSError, ValueError) as e:
         print(f"起動できない: {type(e).__name__}", file=sys.stderr)  # 値は出さない

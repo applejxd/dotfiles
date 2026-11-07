@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import http.client
 import json
+import os
 import shutil
 import socket
+import subprocess
 import tempfile
 import threading
 from collections.abc import Iterator
@@ -120,6 +122,129 @@ def test_aws_ttl_is_clamped() -> None:
 
 
 # ---- hf-cache ----
+
+
+def _flag(op: model.Op, prefix: str) -> list[str]:
+    return [a for a in op.argv if a.startswith(prefix)]
+
+
+def test_aws_unit_runs_as_repo_uid_but_gh_and_copilot_do_not() -> None:
+    aws_plan = broker_plan("aws", cfg(), policy())
+    unit = next(op for op in aws_plan.host_ops if op.argv[0] == "systemd-run")
+    assert "--uid=1000" in unit.argv and "--gid=1000" in unit.argv
+    for kind in ("gh", "copilot"):
+        for op in broker_plan(kind, cfg(), policy()).host_ops:
+            assert not _flag(op, "--uid") and not _flag(op, "--gid"), kind
+
+
+def test_aws_state_dir_and_arn_file_are_owned_by_uid() -> None:
+    p = broker_plan("aws", cfg(), policy())
+    prep = next(op for op in p.host_ops if op.stdin_secret is not None)
+    script = prep.argv[2]
+    assert "install -d -m 0700" in script and "umask 077" in script
+    assert 'chown -R -- 1000:1000 "$d"' in script
+    state = f"{model.BROKER_HOST_DIR}/{REPO}/.state-aws"
+    assert prep.argv[-1] == state
+    server = next(op for op in p.host_ops if "box.broker.aws_server" in op.argv)
+    assert server.argv[server.argv.index("--role-arn-file") + 1] == f"{state}/token"
+
+
+def test_gh_and_copilot_state_stay_root_only() -> None:
+    for kind in ("gh", "copilot"):
+        prep = next(op for op in broker_plan(kind, cfg(), policy()).host_ops if op.stdin_secret)
+        assert "chown" not in prep.argv[2], kind
+
+
+def test_aws_socket_dir_is_owned_by_uid_0700() -> None:
+    p = broker_plan("aws", cfg(), policy())
+    dirs = p.host_ops[2]
+    assert dirs.argv[-1] == "1000"
+    assert dirs.argv[-2] == f"{model.BROKER_HOST_DIR}/{REPO}"
+    assert 'install -d -m 0700 -o "$3" -g "$3" "$2"' in dirs.argv[2]
+
+
+def test_gh_socket_dir_does_not_reset_owner() -> None:
+    from box.broker import ensure_dirs_op
+
+    op = ensure_dirs_op(REPO)
+    assert len(op.argv) == 6  # uid 引数が無い
+    assert '[ -d "$2" ] ||' in op.argv[2]
+
+
+def test_run_as_rejects_bad_uid() -> None:
+    from box.broker import ensure_dirs_op, start_unit_op
+
+    for bad in (0, -1, True):
+        with pytest.raises(ValueError):
+            start_unit_op(REPO, "aws", ("x",), "d", run_as=bad)  # type: ignore[arg-type]
+        with pytest.raises(ValueError):
+            ensure_dirs_op(REPO, bad)  # type: ignore[arg-type]
+
+
+def test_cleanup_removes_state_and_socket_as_root() -> None:
+    p = broker_plan("aws", cfg(), policy())
+    assert p.stop_ops[1].argv[:3] == ("rm", "-rf", "--")
+    assert not any("--uid" in a for a in p.stop_ops[1].argv)
+
+
+def test_aws_plan_has_no_dummy_arn_or_sts_values() -> None:
+    text = flat(broker_plan("aws", cfg(), policy()))
+    for v in (DUMMY_ROLE_ARN, DUMMY_STS_KEY, DUMMY_STS_SECRET, DUMMY_STS_TOKEN):
+        assert v not in text
+
+
+def test_minimal_env_drops_aws_variables(monkeypatch: pytest.MonkeyPatch) -> None:
+    for k, v in {
+        "AWS_PROFILE": "other",
+        "AWS_ACCESS_KEY_ID": "x",
+        "AWS_SECRET_ACCESS_KEY": "y",
+        "AWS_SESSION_TOKEN": "z",
+        "HOME": "/home/u",
+        "PATH": "/usr/bin",
+        "LANG": "C",
+    }.items():
+        monkeypatch.setenv(k, v)
+    assert aws_server.minimal_env() == {"HOME": "/home/u", "PATH": "/usr/bin", "LANG": "C"}
+
+
+def test_default_runner_passes_only_minimal_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_run(argv, **kw):  # type: ignore[no-untyped-def]
+        seen.update(kw)
+        return subprocess.CompletedProcess(argv, 0, stdout="{}", stderr="")
+
+    monkeypatch.setenv("AWS_PROFILE", "other")
+    monkeypatch.setattr(aws_server.subprocess, "run", fake_run)
+    aws_server._default_runner(["aws"])
+    env = seen["env"]
+    assert isinstance(env, dict) and not any(k.startswith("AWS_") for k in env)
+
+
+def test_role_arn_file_must_be_owned_by_self(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    f = tmp_path / "token"
+    f.write_text(DUMMY_ROLE_ARN + "\n", encoding="utf-8")
+    assert aws_server.read_role_arn_file(str(f)) == DUMMY_ROLE_ARN
+    other = os.geteuid() + 1
+    monkeypatch.setattr(aws_server.os, "geteuid", lambda: other)
+    with pytest.raises(ValueError, match="所有者") as e:
+        aws_server.read_role_arn_file(str(f))
+    assert DUMMY_ROLE_ARN not in str(e.value)
+    assert (
+        aws_server.main(
+            [
+                "--socket",
+                str(tmp_path / "s"),
+                "--role-arn-file",
+                str(f),
+                "--session-name",
+                "box-demo",
+            ]
+        )
+        == 2
+    )
 
 
 def test_hfcache_has_no_secret_no_ops_no_devices() -> None:
