@@ -39,6 +39,17 @@ GPU_DRIVERS = "/usr/lib/wsl/drivers"
 INCUS_BRIDGE = "incusbr0"
 RESERVED_PORT_MAX = 1023  # これ以下は、許可表に明記したときだけ
 
+# 配備・ソケットの置き場（コードに固定。呼び出し側は変えられない）
+POLICY_PATH = "/etc/box/policy.toml"  # root 所有の許可表
+ROOT_HELPER_DIR = "/usr/local/libexec/box"  # root 所有の配備コピー（box-root はここから実行する）
+BROKER_HOST_DIR = (
+    "/run/box-broker"  # ホスト側のブローカーのソケット: /run/box-broker/<repo-id>/<kind>.sock
+)
+BOX_SOCK_DIR = "/run/box"  # 箱の中のソケット: /run/box/<kind>.sock
+PROXY_BOX_PORT = 3128  # proxy-only: 箱の中の 127.0.0.1 のポート（箱の中の docker0 からも届く）
+BOX_USER = "ubuntu"  # 箱の中のユーザー（uid 1000）
+BOX_HOME = "/home/ubuntu"
+
 
 @dataclass(frozen=True)
 class SecretRef:
