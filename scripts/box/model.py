@@ -98,6 +98,8 @@ class HostPolicy:
     repos: Mapping[str, RepoPolicy]
     deny_paths: tuple[str, ...] = ()  # 根の下でも拒否するパス（ホームの秘密・ソケットなど）
     default_network: NetMode = "nat"
+    # テンプレートの作成時だけ使う上流プロキシ（IP:ポート。許可表の [defaults] build_proxy。無ければ直接つなぐ）
+    build_proxy: str | None = None
     template: str = "box-template"  # テンプレートのイメージの別名
 
 
