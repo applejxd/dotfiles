@@ -22,12 +22,12 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import IO, Any, Protocol
 
-from box import config, model, plan, policy
+from box import config, distcheck, model, plan, policy, template
 from box.config import ConfigError, Fs, RealFs
 from box.plan import PlanError
 from box.policy import REPO_ID_RE, PolicyError
 
-VERBS = ("register", "up", "stop", "rm", "exec", "ls", "snap", "selftest")
+VERBS = ("register", "up", "stop", "rm", "exec", "ls", "snap", "selftest", "template")
 PASSWORDLESS = frozenset({"up", "stop", "exec", "ls"})
 
 _USER_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$")
@@ -149,12 +149,32 @@ def _parse_register(rest: Sequence[str]) -> dict[str, Any]:
     return opts
 
 
+def _parse_template(rest: Sequence[str]) -> dict[str, Any]:
+    """template [--dist <絶対パス>] [--pi-version <版>]。repo id は取らない。"""
+    opts: dict[str, Any] = {"dist": None, "pi_version": None}
+    keys = {"--dist": "dist", "--pi-version": "pi_version"}
+    i = 0
+    while i < len(rest):
+        flag = rest[i]
+        if flag not in keys or i + 1 >= len(rest) or opts[keys[flag]] is not None:
+            raise UsageError("template の引数が不正")
+        opts[keys[flag]] = rest[i + 1]
+        i += 2
+    if opts["dist"] is not None and not opts["dist"].startswith("/"):
+        raise UsageError("--dist は絶対パス")
+    if opts["pi_version"] is not None and not template.PI_VERSION_RE.match(opts["pi_version"]):
+        raise UsageError("--pi-version の形が不正")
+    return opts
+
+
 def parse_args(argv: Sequence[str]) -> Request:
     """引数を厳格に解釈する。形違い・未知の引数は UsageError。"""
     args = list(argv)
     if not args or args[0] not in VERBS:
         raise UsageError("未知の verb")
     verb, rest = args[0], args[1:]
+    if verb == "template":
+        return Request(verb, options=_parse_template(rest))
     if verb == "ls":
         if len(rest) > 1:
             raise UsageError("ls の引数が多すぎる")
@@ -417,6 +437,7 @@ def main(
     writer: Callable[[str, str], None] | None = None,
     sleep: Callable[[float], None] | None = None,
     secret_resolver: Callable[[model.SecretRef, int | None], str] | None = None,
+    dist_checker: Callable[[str, int], str] | None = None,
 ) -> int:
     out = stdout if stdout is not None else sys.stdout
     err = stderr if stderr is not None else sys.stderr
@@ -436,6 +457,7 @@ def main(
             writer=writer or _atomic_write,
             sleep=sleep or time.sleep,
             resolver=secret_resolver or _default_secret_resolver,
+            dist_checker=dist_checker or distcheck.validate_dist,
         )
     except UsageError as e:
         print(f"box-root: 引数が不正: {e}", file=err)
@@ -463,6 +485,7 @@ def _run(
     writer: Callable[[str, str], None],
     sleep: Callable[[float], None],
     resolver: Callable[[model.SecretRef, int | None], str],
+    dist_checker: Callable[[str, int], str] = distcheck.validate_dist,
 ) -> int:
     if euid != 0:
         raise HelperError("root 権限が必要（sudo 経由で実行する）")
@@ -474,6 +497,9 @@ def _run(
 
     policy.check_file_safe(policy_path, fs=fs)
     pol = policy.load(policy_path, fs=fs)
+
+    if req.verb == "template":
+        return _template(req, pol, uid, runner, out, resolver, sleep, dist_checker)
 
     if req.verb == "ls":
         mine = [r for r in pol.repos.values() if r.uid == uid and req.repo_id in (None, r.id)]
@@ -541,6 +567,42 @@ def _run(
     raise UsageError("未知の verb")  # 到達しない（parse_args が検査済み）
 
 
+def _template(
+    req: Request,
+    pol: model.HostPolicy,
+    uid: int,
+    runner: Runner,
+    out: IO[str],
+    resolver: Callable[[model.SecretRef, int | None], str],
+    sleep: Callable[[float], None],
+    dist_checker: Callable[[str, int], str],
+) -> int:
+    """テンプレートの作成。許可表の template と build_proxy だけを信じ、--dist は厳格に検証する。"""
+    dist = req.options.get("dist")
+    if dist is not None:
+        try:
+            dist = dist_checker(dist, uid)
+        except distcheck.DistCheckError as e:
+            raise HelperError(f"--dist を拒否: {e}") from e
+    extra: tuple[model.Step, ...] = ()
+    cleanup: tuple[model.Step, ...] = ()
+    if pol.build_proxy:
+        extra, cleanup = template.build_proxy_steps(pol.build_proxy)
+    opts = template.TemplateOpts(
+        alias=pol.template,
+        nvidia_key_fpr=template.NVIDIA_KEY_FPR,
+        dist_dir=dist,
+        extra_steps=extra,
+        cleanup_steps=cleanup,
+        pi_version=req.options.get("pi_version"),
+    )
+    try:
+        p = template.plan_build(opts)
+    except ValueError as e:
+        raise HelperError(f"テンプレートの計画を作れない: {e}") from e
+    return _Executor(runner, out, resolver, uid, sleep).execute(p)
+
+
 def _noop(out: IO[str]) -> int:
     print("[box] すでに起動中（変更なし）", file=out)
     return 0
@@ -554,7 +616,9 @@ def sudoers_snippet(user: str, *, helper_dir: str = model.ROOT_HELPER_DIR) -> st
         raise ValueError("helper_dir の形が不正")
     exe = f"{helper_dir.rstrip('/')}/box-root"
     free = ", ".join([f"{exe} up *", f"{exe} stop *", f"{exe} exec *", f"{exe} ls", f"{exe} ls *"])
-    pw = ", ".join(f"{exe} {v} *" for v in ("register", "rm", "snap", "selftest"))
+    pw_list = [f"{exe} {v} *" for v in ("register", "rm", "snap", "selftest")]
+    pw_list += [f"{exe} template", f"{exe} template *"]  # 引数なしもある
+    pw = ", ".join(pw_list)
     return (
         "# box-root の sudoers 雛形（/etc/sudoers.d/box に置く。visudo -cf で検査してから配備する）\n"
         "# 引数の厳密な検査は box-root 自身が行う。ここは動詞ごとにパスワードの要否を分けるだけ。\n"

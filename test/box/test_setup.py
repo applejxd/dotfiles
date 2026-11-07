@@ -156,3 +156,8 @@ def test_dry_runの表示は全手順を含みファイルの内容を出さな�
 def test_複製先とパスはモデルの固定値を使う():
     assert f"{model.ROOT_HELPER_DIR}/box-root" == setup.HELPER_ENTRY
     assert setup.subid_line(1001) == "root:1001:1"
+
+
+def test_最後の案内にbox_templateが入る():
+    assert "box template" in setup.NEXT_STEPS
+    assert setup.NEXT_STEPS.index("box template") < setup.NEXT_STEPS.index("box register")

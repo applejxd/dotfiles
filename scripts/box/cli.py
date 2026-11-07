@@ -8,9 +8,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -19,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from box import model
+from box.template import PI_PACKAGE, PI_VERSION_RE
 
 HELPER = f"{model.ROOT_HELPER_DIR}/box-root"
 PASSWORDLESS = frozenset({"up", "stop", "exec", "ls"})
@@ -387,6 +390,74 @@ def _policy_network(fs: Fs, repo_id: str) -> str:
     return ent.get("network") or data.get("defaults", {}).get("network", "nat")
 
 
+DistBuilder = Callable[[Path], object]
+PiVersionReader = Callable[[], str | None]
+
+
+def find_pi_version(start: str, fs: Fs) -> str | None:
+    """pi の実体のパスから上へ package.json を探し、pi の版を返す。読めなければ None。"""
+    cur = fs.realpath(start)
+    for _ in range(8):
+        cur = os.path.dirname(cur)
+        cand = f"{cur}/package.json"
+        if fs.exists(cand):
+            try:
+                data = json.loads(fs.read_text(cand))
+            except (OSError, ValueError):
+                return None
+            if isinstance(data, dict) and data.get("name") == PI_PACKAGE:
+                v = data.get("version")
+                return v if isinstance(v, str) and PI_VERSION_RE.match(v) else None
+        if cur in ("/", ""):
+            break
+    return None
+
+
+def default_pi_version(fs: Fs | None = None) -> str | None:
+    exe = shutil.which("pi")
+    return find_pi_version(exe, fs or Fs()) if exe else None
+
+
+def prepare_dist_dir(home: str) -> Path:
+    """~/.cache/box/dist（呼び出し元だけが書ける 0700。symlink は拒否）を返す。中身は作り直す側で消す。"""
+    base = Path(home) / ".cache" / "box"
+    base.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    for d in (base, base / "dist"):
+        if d.is_symlink():
+            raise OSError(f"symlink は使わない: {d}")
+    base.mkdir(mode=0o700, exist_ok=True)
+    base.chmod(0o700)
+    return base / "dist"
+
+
+def cmd_template(
+    runner: Runner,
+    fs: Fs,
+    dist_builder: DistBuilder | None,
+    pi_version_reader: PiVersionReader | None = None,
+    home: str | None = None,
+) -> int:
+    """配布物をユーザー権限で作り、sudo box-root template --dist <パス> を呼ぶ（パスワードが要る）。"""
+    if dist_builder is None:
+        _out("配布物を作る関数が結線されていない（box の入口から呼ぶ）")
+        return 2
+    dest = prepare_dist_dir(home or os.path.expanduser("~"))
+    try:
+        dist_builder(dest)
+    except Exception as exc:  # DistError など。内容は出さない
+        _out(f"配布物を作れない（{type(exc).__name__}）: {exc}")
+        return 1
+    if dest.exists():
+        dest.chmod(0o700)
+    version = (pi_version_reader or default_pi_version)()
+    extra: list[str] = []
+    if version:
+        extra = ["--pi-version", version]
+    else:
+        _out("警告: ホストの pi の版を読めない。版を固定せずに最新を入れる")
+    return runner(helper_argv("template", "--dist", str(dest), *extra)).returncode
+
+
 def cmd_setup(args: argparse.Namespace, runner: Runner) -> int:
     """root で setup.py を実行する（人が起動し、sudo がパスワードを尋ねる）。"""
     script = Path(__file__).resolve().parent / "setup.py"
@@ -421,17 +492,25 @@ def build_parser() -> argparse.ArgumentParser:
     su = sub.add_parser("setup", help="ホストの初期設定（root。パスワードを尋ねる）")
     su.add_argument("--dry-run", action="store_true", help="何もせず、やることを表示する")
     su.add_argument("--update", action="store_true", help="root 所有の配備コピーだけを更新する")
+    sub.add_parser("template", help="テンプレート（箱の元のイメージ）を作る（パスワードを尋ねる）")
     return p
 
 
 def main(
-    argv: Sequence[str] | None = None, *, runner: Runner | None = None, fs: Fs | None = None
+    argv: Sequence[str] | None = None,
+    *,
+    runner: Runner | None = None,
+    fs: Fs | None = None,
+    dist_builder: DistBuilder | None = None,
+    pi_version_reader: PiVersionReader | None = None,
 ) -> int:
     runner = runner or default_runner
     fs = fs or Fs()
     args = build_parser().parse_args(list(argv) if argv is not None else None)
     if args.verb == "setup":
         return cmd_setup(args, runner)
+    if args.verb == "template":
+        return cmd_template(runner, fs, dist_builder, pi_version_reader)
     if args.verb == "doctor":
         return cmd_doctor(args, runner, fs)
     if args.verb == "selftest":

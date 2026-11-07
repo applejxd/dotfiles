@@ -6,6 +6,7 @@
     network = "nat"                 # nat | proxy-only | offline（省略時 nat）
     deny_paths = ["/mnt/c/Users"]   # 根の下でも拒否する追加のパス（絶対パス）
     template = "box-template"       # テンプレートのイメージの別名
+    build_proxy = "192.0.2.10:3128" # テンプレート作成時だけ使う上流プロキシ（host:port。省略時は直接つなぐ）
 
     [repo.myrepo]                   # repo id: ^[a-z0-9][a-z0-9-]{0,30}$
     path = "/home/alice/work/myrepo"        # rw で重ねる唯一のパス（絶対パス）
@@ -45,7 +46,7 @@ BROKER_KINDS: tuple[str, ...] = ("gh", "aws", "copilot", "hf-cache")
 NET_MODES: tuple[str, ...] = tuple(model.NET_STRICTNESS)
 IDMAP_MODES: tuple[str, ...] = ("user", "root")
 
-_DEFAULT_KEYS = {"network", "deny_paths", "template"}
+_DEFAULT_KEYS = {"network", "deny_paths", "template", "build_proxy"}
 _REPO_KEYS = {
     "path",
     "data_roots",
@@ -253,12 +254,16 @@ def parse(text: str) -> model.HostPolicy:
     repos_doc = doc.get("repo", {})
     if not isinstance(repos_doc, dict):
         raise PolicyError("repo はテーブルが必要")
+    build_proxy = d.get("build_proxy")
+    if build_proxy is not None:
+        build_proxy = validate_upstream(build_proxy)
     repos = {rid: _parse_repo(rid, t, default_net) for rid, t in repos_doc.items()}
     return model.HostPolicy(
         repos=repos,
         deny_paths=deny,
         default_network=default_net,  # type: ignore[arg-type]
         template=template,
+        build_proxy=build_proxy,
     )
 
 

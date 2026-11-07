@@ -168,7 +168,10 @@ def warnings(opts: Opts, *, net_available: bool = True) -> list[str]:
     return out
 
 
-NEXT_STEPS = "次の手順: リポジトリの中で `box register` → `box up` → `box selftest`"
+NEXT_STEPS = (
+    "次: box template（箱の元のテンプレートを作る。初回のみ。パスワードを尋ねる）"
+    " → リポジトリの中で `box register` → `box up` → `box selftest`"
+)
 
 
 def describe(p: model.Plan) -> list[str]:

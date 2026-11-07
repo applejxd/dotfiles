@@ -14,7 +14,14 @@ from pathlib import Path
 scripts = Path(os.environ.get("BOX_SCRIPTS") or Path.home() / ".local/share/chezmoi/scripts")
 sys.path.insert(0, str(scripts))
 
+from box.adapters.dotfiles import dist  # noqa: E402
 from box.cli import main  # noqa: E402
 
+
+def build_dist(dest: Path) -> object:
+    """pi の配布物をホームから作る（dotfiles 固有。cli 本体は adapters を import しない）。"""
+    return dist.build_dist(Path.home(), dest)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(dist_builder=build_dist))
