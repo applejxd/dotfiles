@@ -18,7 +18,7 @@ def _net(mode: str, cfg: model.BoxConfig) -> model.NetPlan:
     return model.NetPlan(mode=mode)  # type: ignore[arg-type]
 
 
-def _no_broker(kind: str, cfg: model.BoxConfig) -> None:
+def _no_broker(kind: str, cfg: model.BoxConfig, policy: model.RepoPolicy) -> None:
     return None
 
 
@@ -233,7 +233,7 @@ def test_secrets_never_in_argv_logs_or_errors() -> None:
         ["up", "demo"],
         runner=r,
         fs=fs,
-        brokerplanner=lambda k, c: _broker_with_secret(),
+        brokerplanner=lambda k, c, p: _broker_with_secret(),
         secret_resolver=lambda ref, uid: DUMMY,
     )
     assert rc == 0, o.err.getvalue()
@@ -253,7 +253,7 @@ def test_secret_failure_message_has_no_value() -> None:
     rc, _, o = call(
         ["up", "demo"],
         fs=fs,
-        brokerplanner=lambda k, c: _broker_with_secret(),
+        brokerplanner=lambda k, c, p: _broker_with_secret(),
         secret_resolver=bad,
     )
     assert rc == 1 and DUMMY not in o.err.getvalue() + o.out.getvalue()

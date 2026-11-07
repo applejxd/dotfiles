@@ -189,15 +189,17 @@ def _default_netplanner(mode: str, cfg: model.BoxConfig) -> model.NetPlan:
         from box import net
     except ImportError as e:
         raise PlanError("box.net が無い（ネットワーク計画を作れない）") from e
-    return net.plan(mode, cfg)
+    return net.plan(cfg)  # mode は cfg.network（解決済み）
 
 
-def _default_brokerplanner(kind: str, cfg: model.BoxConfig) -> model.BrokerPlan | None:
+def _default_brokerplanner(
+    kind: str, cfg: model.BoxConfig, policy: model.RepoPolicy
+) -> model.BrokerPlan | None:
     try:
-        from box.broker import plan as bplan
+        from box import broker
     except ImportError:
         return None  # ブローカー未実装: 空として扱う
-    return bplan.plan(kind, cfg)
+    return broker.plan(kind, cfg, policy)
 
 
 def _default_secret_resolver(ref: model.SecretRef, caller_uid: int | None) -> str:
@@ -246,7 +248,12 @@ class _Executor:
             argv = ("incus", "exec", p.box, "--", *argv)
         else:
             wait = False
-            if argv[0] == "incus" and "device" in argv[1:4]:
+            if (
+                argv[0] == "incus"
+                and tuple(argv[1:3]) in {("config", "device"), ("profile", "device")}
+                and tuple(argv)
+                not in plan.ALLOWED_PROFILE_OPS  # NIC なしのプロファイル用の allowlist
+            ):
                 raise HelperError("incus のデバイス操作は DeviceSpec 経由のみ")
         stdin = self._secret(op.stdin_secret) if op.stdin_secret is not None else None
         if p.verb != "exec":
@@ -401,7 +408,8 @@ def main(
     policy_path: str = model.POLICY_PATH,
     fs: Fs | None = None,
     netplanner: Callable[[str, model.BoxConfig], model.NetPlan] | None = None,
-    brokerplanner: Callable[[str, model.BoxConfig], model.BrokerPlan | None] | None = None,
+    brokerplanner: Callable[[str, model.BoxConfig, model.RepoPolicy], model.BrokerPlan | None]
+    | None = None,
     euid: int | None = None,
     stdout: IO[str] | None = None,
     stderr: IO[str] | None = None,
@@ -448,7 +456,7 @@ def _run(
     policy_path: str,
     fs: Fs,
     netplanner: Callable[[str, model.BoxConfig], model.NetPlan],
-    brokerplanner: Callable[[str, model.BoxConfig], model.BrokerPlan | None],
+    brokerplanner: Callable[[str, model.BoxConfig, model.RepoPolicy], model.BrokerPlan | None],
     euid: int,
     out: IO[str],
     confirm: Callable[[str], bool],
@@ -495,7 +503,7 @@ def _run(
 
     brokers: list[model.BrokerPlan] = []
     for kind in cfg.brokers:
-        bp = brokerplanner(kind, cfg)
+        bp = brokerplanner(kind, cfg, rp)
         if bp is not None:
             brokers.append(bp)
 

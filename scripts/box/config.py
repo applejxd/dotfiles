@@ -153,8 +153,17 @@ def load_spec(repo_path: str, *, fs: Fs | None = None) -> model.RepoSpec:
     if fs.size(path) > MAX_SPEC_BYTES:
         raise ConfigError("box.toml が 64KiB を超える")
     try:
-        doc = tomllib.loads(fs.read_bytes(path).decode("utf-8"))
-    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+        text = fs.read_bytes(path).decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise ConfigError(f"box.toml を解釈できない: {e}") from e
+    return parse_spec(text)
+
+
+def parse_spec(text: str) -> model.RepoSpec:
+    """box.toml の本文を厳格に解釈する（純粋。doctor も使う）。"""
+    try:
+        doc = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as e:
         raise ConfigError(f"box.toml を解釈できない: {e}") from e
     unknown = sorted(set(doc) - _SPEC_KEYS)
     if unknown:

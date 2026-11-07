@@ -174,11 +174,11 @@ def check_box_toml(repo_path: str, fs: Fs) -> Check:
 
 
 def _spec_loader() -> Callable[[str], object]:
-    """W1a の config.load_spec(text)。まだ無い環境では TOML の構文だけ見る。"""
+    """W1a の config.parse_spec(text)（box.toml を厳格に検証する）。無い環境では TOML の構文だけ見る。"""
     try:
         from box import config
 
-        return config.load_spec
+        return config.parse_spec
     except (ImportError, AttributeError):
         return tomllib.loads
 
