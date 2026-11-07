@@ -7,6 +7,7 @@ incus publish し、一時の箱を消す。CDI の定義はドライバの更�
 
 from __future__ import annotations
 
+import posixpath
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -178,13 +179,23 @@ def plan_build(opts: TemplateOpts) -> model.Plan:
         _box(["npm", "install", "-g", pi_pkg], "pi を入れる"),
     ]
     if opts.dist_dir:
-        steps += [
+        # incus file push -r は、元のディレクトリ名のまま <宛先>/<名前> に置く（宛先が無いと Not Found。e2e で判明）。
+        # 所定の名前（DIST_DEST）へは、箱の中で移す
+        base = posixpath.basename(opts.dist_dir.rstrip("/"))
+        steps.append(
             _host(
-                ["incus", "file", "push", "-r", opts.dist_dir, f"{name}{DIST_DEST}"],
-                "pi の配布物を入れる",
-            ),
-            _box(["chown", "-R", "root:root", DIST_DEST], "配布物の所有者を root にする"),
-        ]
+                ["incus", "file", "push", "-r", opts.dist_dir, f"{name}/opt/"],
+                "pi の配布物を /opt へ入れる",
+            )
+        )
+        if base != posixpath.basename(DIST_DEST):
+            steps.append(
+                _sh(
+                    f"rm -rf {DIST_DEST} && mv /opt/{_shq(base)} {DIST_DEST}",
+                    "配布物を所定の場所へ移す",
+                )
+            )
+        steps.append(_box(["chown", "-R", "root:root", DIST_DEST], "配布物の所有者を root にする"))
     steps += [
         *opts.cleanup_steps,
         _box(["apt-get", "clean"], "apt のキャッシュを消す"),

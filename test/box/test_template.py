@@ -93,7 +93,13 @@ def test_既定の別名はbox_template():
 def test_配布物があれば箱へ入れ_なければ入れない():
     assert not any("file push" in x for x in flat(build()))
     p = build(dist_dir="/tmp/dist")
-    assert "incus file push -r /tmp/dist box-template-build/opt/box-dist" in flat(p)
+    # push -r は元のディレクトリ名で宛先の下へ置く（宛先が無いと Not Found）。所定の名前へは箱の中で移す
+    assert "incus file push -r /tmp/dist box-template-build/opt/" in flat(p)
+    assert any("mv /opt/'dist' /opt/box-dist" in x for x in flat(p))
+    assert any(x.startswith("chown -R root:root /opt/box-dist") for x in flat(p))
+    # 元の名前が所定の名前と同じなら移さない
+    q = build(dist_dir="/tmp/box-dist")
+    assert not any("mv /opt/" in x for x in flat(q))
 
 
 def test_net由来の手順は起動の直後_apt_getの前に入る():
