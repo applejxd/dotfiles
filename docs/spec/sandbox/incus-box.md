@@ -57,6 +57,8 @@ flowchart LR
 | --- | --- | --- |
 | `kcage setup [--dry-run] [--update]` | ホストの初期設定（Incus の導入と初期化・`subuid`/`subgid`・root 所有の配備コピー・許可表の雛形・sudoers・nat 用の `FORWARD` 許可）。`--update` は配備コピーの更新だけ。冪等 | 要（root で実行） |
 | `kcage template` | テンプレートの作成（[テンプレート](#テンプレート)） | 要 |
+| `kcage init [--dry-run]` | 初期化を 1 コマンドで行う: `kcage setup` → `kcage template` の順（setup が失敗したら template は実行しない）。`--dry-run` は setup の手順表示だけ。人だけが実行する | 要（root で実行） |
+| `kcage uninstall [--dry-run] [--keep-policy] [--drop-subid] [--yes]` | 導入の巻き戻し。順序は setup の逆で冪等。箱（接頭辞 `kcage-` かつラベルあり。削除の直前にラベルを再確認）と `kcage-broker-*` のユニット・テンプレートの画像・`kcage-nonet`・`kcage-forward` と `DOCKER-USER` の規則（コメント `incus-kcage`）・`/etc/sudoers.d/kcage-<user>`・`/run/kcage-broker`・許可表 `/etc/kcage`（`--keep-policy` で残す）・最後に root 所有の配備コピー `/usr/local/libexec/kcage` を消す。`subuid`/`subgid` の行は既定で残し、`--drop-subid` のときだけ完全一致の行を消す。`--yes` が無ければ箱の一覧を見せて端末で `yes` を打たせる。人だけが実行する | 要（root で実行） |
 | `kcage register [--data-root P] [--port N\|LO-HI] [--broker K] [--gpu] [--network M] [--proxy-upstream H:P] [--idmap user\|root] [--subnet CIDR]` | カレントの git のリポジトリを許可表へ登録する。追記の差分を表示し、端末で `y/N` を確認してから書く。リポジトリは呼び出し元の所有で、拒否リストに当たらないこと | 要 |
 | `kcage up` | 箱を作って起動する（冪等。同名の別リポジトリの箱は拒否） | 不要 |
 | `kcage stop` | 箱とブローカーを止める | 不要 |
@@ -70,6 +72,23 @@ flowchart LR
 - 動詞ごとの sudoers の規則は `scripts/kcage/root_helper.py` の `sudoers_snippet` が作る。パスワードが要る動詞は `timestamp_timeout=0`（直前の認証を使い回さない）。
 - `--repo <id>` で対象を指定できる。省略時は、カレントの git のトップレベルを許可表の `path` と突き合わせて決める（`register` はディレクトリ名から id を作る）。
 - 秘密を表示しない。`doctor`・`selftest` は環境変数の名前だけを出す。
+- **導入の巻き戻しの範囲（`kcage uninstall`）**: root が消すのは `scripts/kcage/uninstall.py` の許可リスト（固定のパスと、形を検証した `kcage-<SUDO_USER>` の 1 ファイル）だけで、シンボリックリンクと root 所有でないものは拒否する。**Incus 本体（apt のパッケージ）・`incus-admin` グループ・`incus admin init` の結果は消さない**。終わりに手動で消す手順（`apt-get purge incus` など）を案内する。`kcage init` / `kcage uninstall` は実機（incus・root）での確認は未実施。
+  - **実行元**: root で動かすのは root 所有の配備コピー（`/usr/local/libexec/kcage/kcage/uninstall.py`）だけで、このリポジトリのコードへは戻さない。cli（`sudo` の前）と `uninstall.py`（起動直後）は同じ検査（`scripts/kcage/trust.py`）で、**配備の根（`/usr/local/libexec/kcage` 全体。`kcage-root` の入口を含む）**と祖先が「root 所有・グループ/他人から書けない・途中にシンボリックリンクが無い」ことを確かめる。`uninstall.py` が import するモジュール（`trust.py`・`model.py`・`net.py`・`setup.py`・`plan.py`・`policy.py`・`config.py` など）が配備に無ければ、cli は `sudo` の前に「配備コピーが古い・欠けている。`kcage setup --update` で配備し直す」と案内する。満たさなければ `sudo` を呼ばず（`uninstall.py` は何もせず）終了コード 2。起動は `python3 -I -B`（環境変数・利用者の site を読まず、`__pycache__` を書かない）。
+  - **事前検査（preflight）**: 破壊の前に、消すパスと実行する削除スクリプトが上の検査を満たすか、再帰削除する対象の中（と対象自身）にマウントポイント（bind mount を含む。`/proc/self/mountinfo` を bytes で読み、`\n` と ASCII の空白で分けて解析する。形の崩れたレコードは解析失敗として中止する）が無いか、Remove の種別（再帰でない対象は通常ファイル、再帰の対象はディレクトリ）が合うかを確かめる。1 つでも満たさなければ、`systemctl`・`incus` を含め何も実行せず終了コード 2（`--dry-run` でも結果を表示する）。実行の直前にも `realpath` とマウントを再検査する。
+  - **状態の調査**: `incus`・`systemctl` の問い合わせが、成功（0）でも未導入（127）でもなく失敗したら、何も消さずに終了する。実行ファイルが無い（`FileNotFoundError`）ときだけ未導入として続行し、権限エラーなどで起動できないときは撤去を中止する。ブローカーの停止に失敗したら以降を実行しない。箱はラベルを削除の直前に再取得し、空なら全体を中止する。子プロセスの環境は `PATH` と `LANG` だけ（`INCUS_*` などを継承しない）。
+  - **subuid/subgid を既定で残す理由**: setup が足した行か、利用者が自分で足した行かを区別できない（同じ `root:<uid>:1`）ため。`--drop-subid` のときだけ、完全一致の行を消す（指定が無ければ `/etc/subuid`・`/etc/subgid` は読みもしない）。そのとき対象は root 所有の通常ファイル・グループ/他人から書けない・FIFO やリンクでないことを確かめ、開いた fd（`O_NOFOLLOW`）で読み、置換の直前に再読込して変化があれば中止する。書き込みは全 bytes を書き切るまで繰り返し、書けなければ置換せず中止する。終わりの案内は、実行結果とフラグ（`--drop-subid`・`--keep-policy`）から作る。
+  - **手順全体はトランザクションではない**: 途中で失敗したら、済んだ手順を表示して止まる（元には戻さない）。root 所有の配備コピーは最後に消すので、途中の失敗でも `kcage uninstall` を再実行できる。
+  - **信頼の前提と既知の限界**: この道具が守るのは「利用者が書き換えられるコード・パスを root で実行・削除してしまうこと」。**root 所有の場所（`/etc`・`/usr/local/libexec`・`/etc/systemd/system`・`/proc`）は信頼する**。root がすでに侵害されている、または root 所有の領域に利用者所有のファイルが置かれている状況は対象外（その時点でホストは守れない）。次はこの前提と費用のつり合いからコードでは直していない。いずれも、疑わしいときは手動で確認してから実行する。
+    - **配備の根の中に利用者所有のファイルがある**（root 所有ディレクトリの sibling に利用者所有の `tomllib.py` など）: 根全体は検査するが、検査の外の標準ライブラリ側の置き換えは防がない。対処: `ls -la /usr/local/libexec/kcage` で所有者を確かめ、疑わしければ `kcage setup --update`。
+    - **systemd の drop-in・停止コマンド**（`/etc/systemd/system/*.d/` による `ExecStop` の差し替えなど）: root 所有の設定は信頼する。対処: `systemctl cat kcage-broker-*.service` で確かめる。
+    - **他の管理ツールとの subuid/subgid の同時更新**は保護しない（自前の flock は足さない。置換前の再読込で検出できる範囲だけ中止する）。対処: `--drop-subid` はほかの管理ツールが動いていないときに実行する。
+    - **同名で別ラベルの箱**: ラベルの有無で kcage の箱かを判断し、ラベルの値（同じ利用者か）までは区別しない。対処: `incus list` と `incus config get <箱> user.kcage.*` で確かめる。
+    - **Incus の remote・project・alias**: 既定の remote・project だけを対象にする。ほかの project の `kcage-*` は消さない。対象の固定（`--project` の明示など）は使い捨て環境での確認が未実施。対処: `incus project list`・`incus remote list` を見る。
+    - **TOCTOU（確認と実行の間の変化）**: preflight は確認の前に 1 回で、実行の直前には `realpath`・マウントだけを再検査する。再帰削除（`shutil.rmtree`）はマウントの越境を禁止していない（検査後に bind mount が作られると、その中も消える）。root 権限での bind mount の作成は対象外。
+    - **画像は alias 名（`kcage-template`）で消す**: 同名の別物を区別しない。対処: `incus image alias list` で確かめる。
+    - **規則の削除スクリプト**（`kcage-forward-del.sh`）は `nft` の問い合わせの失敗を成功として扱う。対処: 実行後に `sudo nft list ruleset | grep incus-kcage` で残りを確かめる。
+    - **起動済みの子が返した rc=127**: 実行ファイルが無いときの 127 と区別できず未導入として扱う（`incus` の内部エラーでも続行しうる）。対処: 撤去後に `incus list` で残りを確かめる。
+    - **未確認**: 実機の bind mount・ブローカーの停止 hook・Incus の対象固定は、使い捨て環境での確認が未実施。
 - `kcage exec -- <コマンド>` で箱の中のコマンドを実行する（パスワードなし。`kcage pi` はこれで `pi` を起動する）。実行は箱のユーザー（uid・同じ gid）で行い、補助グループは持たない。
 
 ## 許可表と kcage.toml
@@ -186,7 +205,7 @@ path = "/etc/kcage/secret/gh"
 | 拒否するもの | 規則 |
 | --- | --- |
 | `incus`（読み取りの `list` も）、`kcage-root` の直接呼び出し | `[bash] deny` |
-| 人だけが行う `kcage rm`・`kcage register`・`kcage setup` | `[bash] deny` |
+| 人だけが行う `kcage rm`・`kcage register`・`kcage setup`・`kcage init`・`kcage uninstall` | `[bash] deny` |
 | Incus・Docker のソケットへの接続 | `[[pi.guide]]` の `kcage-socket` |
 | `/etc/kcage/`・`/usr/local/libexec/kcage/`・`/etc/sudoers*`・`/run/kcage-broker/` への書き込み | `[file] write_deny_globs`、`[[pi.guide]]` の `kcage-protected-write` |
 | `incus-admin` グループへの追加 | `[[pi.guide]]` の `kcage-admin-group` |

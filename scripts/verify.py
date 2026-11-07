@@ -461,6 +461,7 @@ RULES: tuple[Rule, ...] = (
             "test_cli",
             "test_setup",
             "test_template",
+            "test_uninstall",
             "test_dist",
             "test_integration",
         ),

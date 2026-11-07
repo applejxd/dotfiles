@@ -278,6 +278,8 @@ deny = [
   "kcage rm",
   "kcage register",
   "kcage setup",
+  "kcage init",
+  "kcage uninstall",
 ]
 
 # OpenCode だけ。deny の全項目を 3 つのどれかに分類し、静的 deny の前に説明付きで止める。
@@ -412,8 +414,8 @@ commands = ["kcage-root", "/usr/local/libexec/kcage/kcage-root"]
 message = "root 所有の補助 (kcage-root) は直接呼べません。`kcage` コマンド (ls / up / stop / pi / exec / doctor / selftest) を使ってください。"
 
 [[bash.deny_guide.alternative]]
-commands = ["kcage rm", "kcage register", "kcage setup"]
-message = "kcage rm / register / setup は人だけが行う操作です。実行してほしいコマンドと理由を利用者に示し、ホストの端末で実行してもらってください。"
+commands = ["kcage rm", "kcage register", "kcage setup", "kcage init", "kcage uninstall"]
+message = "kcage rm / register / setup / init / uninstall は人だけが行う操作です。実行してほしいコマンドと理由を利用者に示し、ホストの端末で実行してもらってください。"
 
 [[bash.deny_guide.alternative]]
 commands = ["npm cache clean", "yarn cache clean", "pnpm store prune"]

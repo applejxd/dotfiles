@@ -64,8 +64,11 @@ def test_denials_have_guidance_in_the_opencode_deny_guide():
     alternatives = load_common()["bash"]["deny_guide"]["alternative"]
     messages = {c: a["message"] for a in alternatives for c in a["commands"]}
     assert "kcage ls" in messages["incus"]
-    assert "kcage" in messages["kcage-root"] and "kcage" in messages["/usr/local/libexec/kcage/kcage-root"]
-    for verb in ("kcage rm", "kcage register", "kcage setup"):
+    assert (
+        "kcage" in messages["kcage-root"]
+        and "kcage" in messages["/usr/local/libexec/kcage/kcage-root"]
+    )
+    for verb in ("kcage rm", "kcage register", "kcage setup", "kcage init", "kcage uninstall"):
         assert "人だけ" in messages[verb]
 
 
@@ -92,6 +95,12 @@ BOX_HUMAN = [
     "kcage register",
     "kcage register ~/src/repo",
     "kcage setup",
+    "kcage init",
+    "kcage init --dry-run",
+    "kcage uninstall",
+    "kcage uninstall --yes --keep-policy",
+    "sh -c 'kcage uninstall'",
+    "env kcage init",
     "cd /tmp && kcage rm repo",
     "env kcage rm repo",
     "sh -c 'kcage setup'",
