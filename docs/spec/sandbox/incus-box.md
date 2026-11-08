@@ -272,3 +272,15 @@ path = "/etc/kcage/secret/gh"
 - **GPU の VRAM** は箱どうしで共有される（隔離されない）。CPU・メモリ・ディスクの上限は設定していない。
 - **作業ツリー内の `.env`** などは、リポジトリが rw で見えるので箱から読める。`kcage.toml` の `data` や拒否リストは、リポジトリの中身には効かない。
 - **Windows 側は未検証**。`kcage` は WSL2 の Ubuntu（または Linux）の中で使う。
+
+### 箱に入れないもの（人向けの設定）と、その理由
+
+- 箱は AI の作業台で、人は `kcage pi` の画面とホスト側のエディタから使う。シェル・端末・エディタの設定（`.bashrc`・`.tmux.conf`・`.vimrc` など）と、他の AI ツールの設定は入れない。
+- 箱の中で `chezmoi apply` はしない。dotfiles には無 sudo・無秘密のモード（`CHEZMOI_NO_SUDO=1`・`--skip-secrets`）があり、秘密と sudo の問題は避けられる。それでも個別の配布物（許可リスト）を選ぶ理由は、ガードのコードと方針を root 所有の `/opt/kcage-dist` に置けること、ホストの方針を箱用に描画するための分岐をテンプレートへ足さずに済むこと（箱用の調整は生成した `rules.json` への overlay で行う）、展開された `~/.pi/agent/settings.json` がホスト版の方針を読み込んで起動スクリプトと矛盾しないこと、外部取得（`.chezmoiexternal`）を走らせないこと。
+- 人向けの快適さが要るようになったら、無害な項目だけを対象に限定して `CHEZMOI_NO_SUDO=1 chezmoi apply --skip-secrets --exclude=scripts` を実行する案がある（pi 関連と他の AI ツール関連は対象外にする）。
+- git のコミット者情報（`user.name`・`user.email`）は、ホストの実効の git 設定（リポジトリごと）から `kcage up` が読み取って箱へ渡し、箱の `~/.config/git/config` に生成する（利用者の追加の操作は無し。実装中）。ホストの設定は `~/.config/git/config` と、そこから `include` される `~/.config/git/user`（個人の機だけ・秘密由来）にあり、`~/.gitconfig` はほぼ空なので、`~/.gitconfig` だけを読み取り専用で重ねても入らない。XDG の 2 ファイルを重ねると credential helper や `include` のホスト前提まで持ち込むので、必要な値だけを渡す。
+
+### 同じ WSL に複数のディストロがあるときの注意
+
+- WSL2 のネットワークは、ディストロ間で共有される。主ディストロで Incus（`incusbr0`）を導入済みの間に、別のディストロで Incus を初期化すると、後者の箱が主ディストロのブリッジに繋がって通信できなくなる（実測: `Network is unreachable`）。使い捨てのディストロでの結合試験は、主ディストロに kcage を導入する前にだけ行える。導入後の確認は、導入済みの箱に対して `kcage exec` などで行う。
+- 使い捨てのディストロを作った場合は、終わったら削除する。`kcage-forward` が入れる規則（コメント `incus-kcage`）は共有の nft にあり、ディストロの削除では消えない（主ディストロの導入と同じ規則なので、そのままでよい）。
