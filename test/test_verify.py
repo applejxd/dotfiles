@@ -767,3 +767,191 @@ def test_missing_prerequisites_only_for_pr_viewer_tests():
         verify.missing_prerequisites(["test/agents/test_pi_judge_ts.py"], node_ok=lambda: False)
         == []
     )
+
+
+# --- 閉じたモジュール (T2 の省略) ---
+
+KCAGE_FILE = "scripts/kcage/example.py"
+
+
+def _closed(*paths: str):
+    return verify.closed_scope(list(paths), TEST_FILES, exists=lambda _p: True, refs={})
+
+
+def test_closed_scope_accepts_only_changes_inside_the_module():
+    scope = _closed(KCAGE_FILE, "test/kcage/test_cli.py", "home/dot_local/bin/executable_kcage")
+    assert [m.name for m in scope] == ["kcage"]
+    assert _closed(KCAGE_FILE, "docs/spec/development.md") is None  # 範囲外が 1 つでもあれば全件
+    assert _closed(KCAGE_FILE, "scripts/verify.py") is None
+    assert _closed("unknown/file.txt") is None  # どの規則にも当たらない
+    assert _closed() is None  # 変更なしは全件のまま
+
+
+def test_closed_scope_falls_back_for_deleted_paths_and_outside_readers():
+    gone = verify.closed_scope([KCAGE_FILE], TEST_FILES, exists=lambda _p: False, refs={})
+    assert gone is None
+    outside = "test/test_zzz_outside.py"
+    refs = {outside: frozenset({KCAGE_FILE})}
+    files = [*TEST_FILES, outside]
+    reader = verify.closed_scope([KCAGE_FILE], files, exists=lambda _p: True, refs=refs)
+    assert reader is None  # モジュール外の試験が読むファイルは閉じていない
+
+
+def test_full_stages_can_skip_t2():
+    stages = verify.full_stages(["test/kcage/test_cli.py"], [], TEST_FILES, skip_t2=True)
+    flat = [c for s in stages for c in s]
+    assert not any("--ignore=" in part for c in flat for part in c)
+    assert len(stages) == 2  # T0 と T1 だけ
+    assert len(verify.full_stages([], [], TEST_FILES, skip_t2=True)) == 1
+
+
+def _kcage_repo(tmp_path: Path, *extra: str) -> Path:
+    repo = _repo(tmp_path)
+    _g(repo, "switch", "-q", "-c", "feature/x")
+    for rel in (KCAGE_FILE, *extra):
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text("x\n", encoding="utf-8")
+    _g(repo, "add", ".")
+    _g(repo, "commit", "-q", "-m", "change")
+    return repo
+
+
+def _t2_lines(out: str) -> list[str]:
+    return [line for line in out.splitlines() if "--ignore=" in line]
+
+
+def test_all_skips_t2_for_closed_module_changes_and_says_so(tmp_path, monkeypatch, capsys):
+    repo = _kcage_repo(tmp_path)
+    assert _run_main(monkeypatch, repo, "--all") == 0
+    out = capsys.readouterr().out
+    assert "閉じたモジュール (kcage)" in out and "mise run verify:full" in out
+    assert _t2_lines(out) == []
+    assert "pre-commit run --all-files" in out  # T0 は残る
+    assert "test/test_verify.py" in out  # 登録ずれの検査も残る
+
+
+def test_all_full_never_skips(tmp_path, monkeypatch, capsys):
+    repo = _kcage_repo(tmp_path)
+    assert _run_main(monkeypatch, repo, "--all", "--full") == 0
+    out = capsys.readouterr().out
+    assert "T2" not in out and "閉じたモジュール" not in out
+    assert len(_t2_lines(out)) == 1
+
+
+def test_all_runs_everything_when_a_path_is_outside_the_module(tmp_path, monkeypatch, capsys):
+    repo = _kcage_repo(tmp_path, "docs/a.md")
+    assert _run_main(monkeypatch, repo, "--all") == 0
+    out = capsys.readouterr().out
+    assert "閉じたモジュール" not in out and len(_t2_lines(out)) == 1
+
+
+def test_all_runs_everything_when_the_base_is_unknown(tmp_path, monkeypatch, capsys):
+    repo = _repo(tmp_path, branch="zzz")
+    (repo / "scripts" / "kcage").mkdir(parents=True)
+    (repo / KCAGE_FILE).write_text("x\n", encoding="utf-8")
+    assert _run_main(monkeypatch, repo, "--all") == 0
+    out = capsys.readouterr().out
+    assert "閉じたモジュール" not in out and len(_t2_lines(out)) == 1
+
+
+def test_full_requires_all(capsys):
+    with pytest.raises(SystemExit):
+        verify.main(["--full"])
+
+
+def test_stamp_notes_the_scope_when_t2_was_skipped(tmp_path, monkeypatch):
+    repo = _kcage_repo(tmp_path)
+    monkeypatch.setattr(verify, "ROOT", repo)
+    monkeypatch.setattr(verify, "execute", lambda *a, **k: [])
+    monkeypatch.setattr(verify, "acquire_all_lock", lambda *_a, **_k: None)
+    written: list[str] = []
+
+    class Stamp(_FakeStamp):
+        def write_stamp(self, _root, entries=None, scope="full"):
+            written.append(scope)
+
+    monkeypatch.setattr(verify, "_stamp_module", lambda: Stamp({}))
+    monkeypatch.setattr(verify, "_stamp_snapshot", dict)
+    assert verify.main(["--all"]) == 0
+    assert written == ["closed:kcage"]
+    written.clear()
+    assert verify.main(["--all", "--full"]) == 0
+    assert written == ["full"]  # 従来どおり scope を渡さない (印の既定は full)
+
+
+# 閉じていることの機械検査 (表 CLOSED_MODULES が正本)
+
+
+def _tracked_files() -> list[str]:
+    out = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=False
+    ).stdout.decode("utf-8", "replace")
+    return [f for f in out.split("\0") if f and (ROOT / f).exists()]
+
+
+@pytest.mark.parametrize("module", verify.CLOSED_MODULES, ids=lambda m: m.name)
+def test_closed_module_globs_match_real_paths(module):
+    files = _tracked_files()
+    assert files
+    for pattern in module.scope_paths:
+        assert any(verify._match(pattern, f) for f in files), f"{module.name}: {pattern}"
+    for pattern in module.shared_reads:
+        assert any(verify._match(pattern, f) for f in files), f"{module.name}: {pattern}"
+
+
+@pytest.mark.parametrize("module", verify.CLOSED_MODULES, ids=lambda m: m.name)
+def test_closed_module_tests_read_only_inside_the_module(module):
+    """モジュールの試験が読むパスは、モジュールの範囲か共有の読み取り専用に収まる。"""
+    # 走査系 (scanners) はリポジトリ全体を読むので、モジュール自身の試験の検査から外す
+    scanners = set(verify.resolve_tests(module.scanners, TEST_FILES))
+    tests = sorted(verify.module_test_files(module, TEST_FILES) - scanners)
+    assert tests
+    allowed = (*module.scope_paths, *module.shared_reads)
+    stray = []
+    for test, refs in verify.test_references(tests).items():
+        for ref in sorted(refs):
+            if test == ref or any(
+                verify._match(p, ref) or verify._match(p, ref + "/") for p in allowed
+            ):
+                continue
+            stray.append(f"{test} <- {ref}")
+    assert stray == []
+
+
+@pytest.mark.parametrize("module", verify.CLOSED_MODULES, ids=lambda m: m.name)
+def test_closed_module_files_are_not_read_by_outside_tests(module):
+    """モジュールの変更パスを、モジュール外の試験が読んでいない (読むなら閉じていない)。"""
+    own = verify.module_test_files(module, TEST_FILES)
+    own |= set(module.ignored_readers) | {*verify.T0_PYTEST_FILES, verify.REGISTRATION_TEST}
+    outside = [t for t in TEST_FILES if t not in own]
+    refs = verify.test_references(outside)
+    leaks = []
+    for f in _tracked_files():
+        if not any(verify._match(p, f) for p in module.scope_paths):
+            continue
+        for test, rs in refs.items():
+            if any(f == r or f.startswith(r + "/") for r in rs):
+                leaks.append(f"{test} <- {f}")
+    assert leaks == []
+
+
+@pytest.mark.parametrize("module", verify.CLOSED_MODULES, ids=lambda m: m.name)
+def test_every_tracked_file_of_a_closed_module_is_closed(module):
+    files = [f for f in _tracked_files() if any(verify._match(p, f) for p in module.scope_paths)]
+    assert files
+    for f in files:
+        scope = verify.closed_scope([f], TEST_FILES)
+        assert scope is not None and [m.name for m in scope] == [module.name], f
+
+
+def test_closed_scope_accepts_the_modules_own_docs_with_code():
+    """kcage のコードと kcage の文書だけの変更は閉じている (文書の lint は T0 が全件で回す)。"""
+    paths = ["scripts/kcage/cli.py", "docs/spec/sandbox/incus-box.md"]
+    hit = verify.closed_scope(paths, TEST_FILES)
+    assert hit is not None and [m.name for m in hit] == ["kcage"]
+
+
+def test_closed_scope_rejects_other_docs():
+    """モジュール外の文書が混ざれば閉じていない (従来どおり全件)。"""
+    paths = ["scripts/kcage/cli.py", "docs/spec/development.md"]
+    assert verify.closed_scope(paths, TEST_FILES) is None

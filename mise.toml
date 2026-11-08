@@ -28,6 +28,10 @@ run = "python3 scripts/verify.py --changed"
 description = "検証を全件実行する（安い検査を先に回し、前の段が落ちたら止まる。コミット前に 1 回）"
 run = "python3 scripts/verify.py --all"
 
+[tasks."verify:full"]
+description = "閉じたモジュールの省略をせず、必ず全件を実行する（main への統合の前はこれ）"
+run = "python3 scripts/verify.py --all --full"
+
 [tasks.prs]
 description = "develop へのマージ待ちの一覧（枝名・先行数・件名だけ。詳細・統合・掃除はエージェントへ）"
 run = "python3 scripts/prs.py"
