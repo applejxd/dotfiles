@@ -10,7 +10,7 @@ import io
 
 import pytest
 from kcage import root_helper
-from kcage_fakes import FakeRunner, demo_fs
+from kcage_fakes import FakeCommondirOps, FakeRunner, demo_fs
 
 DUMMY = "DUMMY-SECRET-VALUE-0123456789"
 
@@ -59,6 +59,7 @@ def _run(network: str, brokers: list[str], box_toml: str | None = None):
         stdout=out,
         stderr=err,
         sleep=lambda s: None,
+        commondir_ops=FakeCommondirOps(b".\n"),
         secret_resolver=lambda ref, uid: DUMMY,
     )
     return rc, runner, out.getvalue(), err.getvalue()

@@ -450,6 +450,7 @@ RULES: tuple[Rule, ...] = (
             "test_model",
             "test_policy",
             "test_config",
+            "test_commondir",
             "test_plan",
             "test_root_helper",
             "test_resolver",

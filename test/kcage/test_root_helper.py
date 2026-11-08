@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from kcage import distcheck, model, policy, root_helper
-from kcage_fakes import POLICY_TEXT, FakeRunner, demo_fs
+from kcage_fakes import POLICY_TEXT, FakeCommondirOps, FakeRunner, demo_fs
 
 DUMMY = "DUMMY-SECRET-VALUE-0123456789"
 ENV = {"SUDO_UID": "1000"}
@@ -42,6 +42,7 @@ def call(argv, *, runner=None, env=ENV, fs=None, euid=0, **kw):
         stdout=o.out,
         stderr=o.err,
         sleep=lambda s: None,
+        commondir_ops=kw.pop("commondir_ops", FakeCommondirOps(b".\n")),
         **kw,
     )
     return rc, runner, o

@@ -28,7 +28,7 @@ def test_defaults_mounts_and_labels() -> None:
     rw = [m for m in cfg.mounts if not m.readonly]
     assert [(m.kind, m.source, m.path) for m in rw] == [("repo", REPO, REPO)]
     ro = {m.source for m in cfg.mounts if m.readonly}
-    assert ro == {f"{REPO}/.git/hooks", f"{REPO}/.git/config"}
+    assert ro == {f"{REPO}/.git/hooks", f"{REPO}/.git/config", f"{REPO}/.git/commondir"}
     assert cfg.labels[model.LABEL_PREFIX + "repo"] == "demo"
     assert cfg.labels[model.LABEL_PREFIX + "managed"] == "true"
     assert cfg.network == "proxy-only" and cfg.proxy_upstream == "192.0.2.10:3128"

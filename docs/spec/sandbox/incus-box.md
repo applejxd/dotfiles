@@ -66,8 +66,8 @@ flowchart LR
 | `kcage snap [名前]` | スナップショットを取る | 要 |
 | `kcage ls` | 呼び出し元の箱の一覧（`RUNNING`・`STOPPED`・`-`） | 不要 |
 | `kcage pi [-- 引数]` | 箱の中で pi を起動する（作業ディレクトリはリポジトリ、ユーザーは許可表の uid） | 不要 |
-| `kcage doctor` | 設定の点検（許可表・sudoers・`NOPASSWD: ALL`・kcage.toml・`core.hooksPath`・`extensions.worktreeConfig`。`incusbr0` の経路の点検は、`net.doctor_checks` があれば呼ぶ設計だが、現状の `net.py` には無い） | 不要 |
-| `kcage selftest` | 箱の中からの否定試験（ホームの秘密・環境変数の秘密・`.git/hooks` と `.git/config` が書けない・proxy-only で直通できない） | 不要 |
+| `kcage doctor` | 設定の点検（許可表・sudoers・`NOPASSWD: ALL`・kcage.toml・`core.hooksPath`・`extensions.worktreeConfig`・`.git` の metadata（`commondir` など）。`incusbr0` の経路の点検は、`net.doctor_checks` があれば呼ぶ設計だが、現状の `net.py` には無い） | 不要 |
+| `kcage selftest` | 箱の中からの否定試験（ホームの秘密・環境変数の秘密・`.git/hooks`・`.git/config`・`.git/commondir` が書けない・proxy-only で直通できない） | 不要 |
 
 - 動詞ごとの sudoers の規則は `scripts/kcage/root_helper.py` の `sudoers_snippet` が作る。パスワードが要る動詞は `timestamp_timeout=0`（直前の認証を使い回さない）。
 - `--repo <id>` で対象を指定できる。省略時は、カレントの git のトップレベルを許可表の `path` と突き合わせて決める（`register` はディレクトリ名から id を作る）。
@@ -144,7 +144,7 @@ path = "/etc/kcage/secret/gh"
 | 種類 | 条件 | 向き |
 | --- | --- | --- |
 | `disk` リポジトリ | 常に。ホストと同じ絶対パス | **rw** |
-| `disk` `.git/hooks`・`.git/config` | 存在し symlink でないとき重ねる | **ro** |
+| `disk` `.git/hooks`・`.git/config`・`.git/commondir` | 存在し symlink でないとき重ねる（`commondir` は up が先に用意する。既知の限界を参照） | **ro** |
 | `disk` データ | kcage.toml の `data`（許可表の根の下） | ro |
 | `disk` GPU のライブラリ | `gpu`。`/usr/lib/wsl/lib` と `/usr/lib/wsl/drivers`（別々に渡す） | ro |
 | `unix-char` | `gpu`。`/dev/dxg` だけ | — |
@@ -240,7 +240,9 @@ path = "/etc/kcage/secret/gh"
 - **CDI の再生成**: ドライバの更新後は、箱を起動し直すと再生成される（箱の中のユニット）。
 - **署名**: コミットの署名鍵は箱に入れない。署名が要る運用ではホスト側でコミットする。
 - **`--dist` の検証後の差し替え（TOCTOU）**: `kcage-root` が検証してから `incus file push` するまでに、呼び出し元が配布物を書き換えられる。配布物は呼び出し元が作る（元から呼び出し元の権限の範囲）ので、**許容**する。
-- **`.git/hooks` の読み取り専用の限界**: `.git/hooks` と `.git/config` は ro で重ねるが、ホストの git の実行経路の一部しか守らない。`core.hooksPath`・`extensions.worktreeConfig`・作業ツリー内のスクリプト（`Makefile` やテストなど）は、箱が書いたコードがホストで実行されうる。`kcage doctor` が前 2 つを警告する。ホストでは、箱が書いたコードを自動で実行しない。
+- **`.git/hooks` の読み取り専用の限界**: `.git/hooks`・`.git/config`・`.git/commondir` は ro で重ねるが、ホストの git の実行経路の一部しか守らない。`core.hooksPath`・`extensions.worktreeConfig`・作業ツリー内のスクリプト（`Makefile` やテストなど）は、箱が書いたコードがホストで実行されうる。`kcage doctor` が前 2 つを警告する。ホストでは、箱が書いたコードを自動で実行しない。
+- **`.git/commondir` の迂回（封じ済み）**: `.git/commondir` に別のディレクトリを書くと、git はそこから config・hooks を読むため、箱が書ける作業ツリー内を指されると `hooks`・`config` の ro を迂回できる。`kcage up`（kcage-root）が、メインの `.git`（実ディレクトリ）に中身 `.` の `commondir` を、無ければ作り、有って無害（`.` または `.git` 自身）なら何もせず、それ以外なら up を拒否する。作成は呼び出し元の uid・gid へ権限を落として `O_CREAT|O_EXCL|O_NOFOLLOW` で行い（root が書くのはこの 1 ファイルだけ）、戻せなければ異常終了する。そのうえで `commondir` を ro で重ねる。この対策の前に作った箱は `commondir` が書けるので、`selftest` が fail する。`kcage rm` のあと `up` し直す。
+- **共有の `.git` に残る信頼の前提**: refs・objects・index・`info/`・`modules/` などは箱から変更できる（箱は develop の ref も動かせる。worktree の約束は process の統制で、機械の強制ではない）。ホストで commit・merge などの git を動かす前に `kcage doctor` を実行する。`doctor` は `commondir` の不審な値（fail）と、`config.worktree`・`info/attributes`・`objects/info/alternates`・`remotes/`・`branches/`・`modules/`（warn）を調べる。`.git` が実ディレクトリでない（linked worktree・symlink）リポジトリには、commondir の封じ込めは適用されない（hooks・config と同じ扱い）。
 - **箱を捨てると失うもの**: 箱の中だけにあるもの（リポジトリ外のファイル、入れ子の Docker のイメージ・ボリューム、箱の中のユーザー設定）。リポジトリとデータはホストにあるので残る。必要ならスナップショット（`kcage snap`）を取る。
 - **GPU の VRAM** は箱どうしで共有される（隔離されない）。CPU・メモリ・ディスクの上限は設定していない。
 - **作業ツリー内の `.env`** などは、リポジトリが rw で見えるので箱から読める。`kcage.toml` の `data` や拒否リストは、リポジトリの中身には効かない。

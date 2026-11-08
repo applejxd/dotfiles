@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import difflib
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -22,7 +23,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import IO, Any, Protocol
 
-from kcage import config, distcheck, model, plan, policy, template
+from kcage import config, distcheck, gitmeta, model, plan, policy, template
 from kcage.config import ConfigError, Fs, RealFs
 from kcage.plan import PlanError
 from kcage.policy import REPO_ID_RE, PolicyError
@@ -448,6 +449,7 @@ def main(
     sleep: Callable[[float], None] | None = None,
     secret_resolver: Callable[[model.SecretRef, int | None], str] | None = None,
     dist_checker: Callable[[str, int], str] | None = None,
+    commondir_ops: gitmeta.CommondirOps | None = None,
 ) -> int:
     out = stdout if stdout is not None else sys.stdout
     err = stderr if stderr is not None else sys.stderr
@@ -468,6 +470,7 @@ def main(
             sleep=sleep or time.sleep,
             resolver=secret_resolver or _default_secret_resolver,
             dist_checker=dist_checker or distcheck.validate_dist,
+            commondir_ops=commondir_ops or gitmeta.RealOps(),
         )
     except UsageError as e:
         print(f"kcage-root: 引数が不正: {e}", file=err)
@@ -496,6 +499,7 @@ def _run(
     sleep: Callable[[float], None],
     resolver: Callable[[model.SecretRef, int | None], str],
     dist_checker: Callable[[str, int], str] = distcheck.validate_dist,
+    commondir_ops: gitmeta.CommondirOps | None = None,
 ) -> int:
     if euid != 0:
         raise HelperError("root 権限が必要（sudo 経由で実行する）")
@@ -538,6 +542,13 @@ def _run(
     # kcage.toml は要求。up 以外は、壊れていても止めない（stop・rm は常に実行できるように）
     try:
         spec = config.load_spec(rp.path, fs=fs)
+        if req.verb == "up" and commondir_ops is not None:
+            # 箱を新規に作る前に、.git/commondir を封じる（resolve が ro の重ねに加える）
+            res = gitmeta.ensure_commondir(
+                posixpath.join(rp.path, ".git"), uid, _caller_gid(env, uid), commondir_ops
+            )
+            if res == "created":
+                print("[kcage] .git/commondir（中身 .）を作成", file=out)
         cfg = config.resolve(pol, rid, spec, fs)
     except ConfigError:
         if req.verb == "up":

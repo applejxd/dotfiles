@@ -6,7 +6,7 @@ import ast
 from pathlib import Path
 
 import pytest
-from kcage import cli, model
+from kcage import cli, gitmeta, model
 
 HELPER = f"{model.ROOT_HELPER_DIR}/kcage-root"
 POLICY = """
@@ -219,9 +219,69 @@ def test_環境変数の秘密は名前だけを出し値は出さない():
 
 
 def test_gitの読み取り専用の判定():
-    assert cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n").status == "ok"
-    assert cli.judge_git_ro(".git/hooks=rw\n.git/config=ro\n").status == "fail"
+    ro = ".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n"
+    assert cli.judge_git_ro(ro).status == "ok"
+    assert cli.judge_git_ro(".git/hooks=rw\n.git/config=ro\n.git/commondir=ro\n").status == "fail"
+    # commondir が書ける（古い箱）
+    assert cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n.git/commondir=rw\n").status == "fail"
+    assert cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n").status == "fail"
     assert cli.judge_git_ro("").status == "fail"
+
+
+GIT = "/work/demo/.git"
+
+
+def test_git_metadata_の判定():
+    ins = gitmeta.inspect_metadata
+    assert ins(None, GIT, frozenset()) == [("ok", "追加の参照先なし")]
+    assert ins(b".\n", GIT, frozenset()) == [("ok", "追加の参照先なし")]
+    assert ins(GIT.encode(), GIT, frozenset())[0][0] == "ok"
+    assert ins(b"/tmp/x", GIT, frozenset())[0][0] == "fail"
+    names = [n for n, _ in gitmeta.WARN_ENTRIES]
+    for n in names:
+        assert ins(None, GIT, frozenset({n}))[0][0] == "warn"
+    assert len(ins(None, GIT, frozenset(names))) == len(names)
+
+
+class GitFs(FakeFs):
+    def __init__(self, files: dict[str, str], dirs: set[str]):
+        super().__init__(files)
+        self.dirs = dirs
+
+    def isdir(self, path: str) -> bool:
+        return path in self.dirs
+
+    def exists(self, path: str) -> bool:
+        return path in self.files or path in self.dirs
+
+    def read_bytes(self, path: str):
+        return self.files[path].encode() if path in self.files else None
+
+
+def _git_doctor(files: dict[str, str], dirs: set[str], capsys):
+    runner = FakeRunner({("sudo", "-n", "-l"): cli.Result(0, SUDO_OK)})
+    base = fs_with()
+    fs = GitFs({**base.files, **files}, {GIT, *dirs})
+    rc = cli.main(["doctor"], runner=runner, fs=fs)
+    return rc, capsys.readouterr().out
+
+
+def test_doctorはcommondirが別の場所なら失敗(capsys):
+    rc, out = _git_doctor({GIT + "/commondir": "/tmp/x\n"}, set(), capsys)
+    assert rc == 1
+    assert "[FAIL] git の metadata" in out
+
+
+def test_doctorはgitのmetadataに追加の参照先が無ければok(capsys):
+    rc, out = _git_doctor({GIT + "/commondir": ".\n"}, set(), capsys)
+    assert rc == 0
+    assert "[OK  ] git の metadata: 追加の参照先なし" in out
+
+
+def test_doctorはmodulesなどを警告する(capsys):
+    rc, out = _git_doctor({GIT + "/config.worktree": ""}, {GIT + "/modules"}, capsys)
+    assert rc == 0
+    assert out.count("[WARN] git の metadata") == 2
 
 
 def test_直通はproxy_onlyのときだけ検査する():
@@ -244,7 +304,7 @@ def test_selftestは箱の中のexecだけをsudo_nで呼ぶ(capsys):
         if "curl" in joined:
             return cli.Result(0, "rc=7\n")
         if ".git/hooks" in joined:
-            return cli.Result(0, ".git/hooks=ro\n.git/config=ro\n")
+            return cli.Result(0, ".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n")
         return res
 
     assert cli.main(["selftest"], runner=run, fs=fs_with()) == 0

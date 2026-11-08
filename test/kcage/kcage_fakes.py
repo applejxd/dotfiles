@@ -107,11 +107,51 @@ def demo_fs() -> FakeFs:
     fs.add_dir("/home/alice/work/demo/.git", uid=1000)
     fs.add_dir("/home/alice/work/demo/.git/hooks", uid=1000)
     fs.add_file("/home/alice/work/demo/.git/config", "[core]\n", uid=1000)
+    fs.add_file("/home/alice/work/demo/.git/commondir", ".\n", uid=1000)
     fs.add_dir("/mnt/d/datasets/models/small", uid=1000)
     fs.add_dir("/mnt/e/data/other", uid=1000)
     fs.add_dir("/etc/kcage")
     fs.add_file("/etc/kcage/policy.toml", POLICY_TEXT)
     return fs
+
+
+class FakeCommondirOps:
+    """commondir の実行層の偽物。呼ばれた順序を events に残す（実際に setuid しない）。"""
+
+    def __init__(
+        self,
+        content: bytes | None = None,
+        *,
+        real_dir: bool = True,
+        read_error: OSError | None = None,
+        create_error: OSError | None = None,
+    ) -> None:
+        self.content, self.real_dir = content, real_dir
+        self.read_error, self.create_error = read_error, create_error
+        self.events: list[str] = []
+        self.created: list[tuple[str, bytes]] = []
+
+    def is_real_dir(self, path: str) -> bool:
+        self.events.append("is_real_dir")
+        return self.real_dir
+
+    def drop(self, uid: int, gid: int) -> None:
+        self.events.append(f"drop:{uid}:{gid}")
+
+    def restore(self) -> None:
+        self.events.append("restore")
+
+    def read(self, path: str) -> bytes | None:
+        self.events.append("read")
+        if self.read_error:
+            raise self.read_error
+        return self.content
+
+    def create(self, path: str, data: bytes) -> None:
+        self.events.append("create")
+        if self.create_error:
+            raise self.create_error
+        self.created.append((path, data))
 
 
 def demo_policy() -> model.HostPolicy:
