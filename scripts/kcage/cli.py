@@ -177,6 +177,24 @@ def check_policy(
     return Check("許可表", "ok", f"登録済み: {rid}")
 
 
+def check_limits(text: str | None, toplevel: str, realpath: Callable[[str], str]) -> Check | None:
+    """資源上限と idmap 分離の有無を表示するだけ（fail にしない）。"""
+    if text is None:
+        return None
+    try:
+        repos = parse_policy(text)
+    except ValueError:
+        return None
+    rid = find_repo_id(repos, toplevel, realpath)
+    if rid is None:
+        return None
+    ent = repos[rid]
+    parts = [f"{k}={ent[k]}" for k in ("cpu", "memory", "processes") if k in ent]
+    if ent.get("idmap_isolated") is True:
+        parts.append("idmap_isolated")
+    return Check("資源上限", "ok", ", ".join(parts) if parts else "設定なし（上限なし）")
+
+
 def check_passwordless_sudo(sudo_l_output: str | None) -> Check:
     """パスワードなしで何でも実行できる sudo があると、ホストの pi が root になれる（箱の制御面の分離が成立しない）。
 
@@ -403,6 +421,9 @@ def cmd_doctor(args: argparse.Namespace, runner: Runner, fs: Fs) -> int:
     checks = [
         check_policy(_read_policy(fs), top, fs.realpath),
     ]
+    limits = check_limits(_read_policy(fs), top, fs.realpath)
+    if limits is not None:
+        checks.append(limits)
     res = runner(["sudo", "-n", "-l"], capture=True)
     checks.append(check_sudoers(res.stdout if res.returncode == 0 else None))
     checks.append(check_passwordless_sudo(res.stdout if res.returncode == 0 else None))
@@ -615,11 +636,16 @@ def register_flags(args: argparse.Namespace) -> list[str]:
         out += ["--broker", broker]
     if args.gpu:
         out.append("--gpu")
+    if args.idmap_isolated:
+        out.append("--idmap-isolated")
     for flag, value in (
         ("--network", args.network),
         ("--proxy-upstream", args.proxy_upstream),
         ("--idmap", args.idmap),
         ("--subnet", args.subnet),
+        ("--cpu", args.cpu),
+        ("--memory", args.memory),
+        ("--processes", args.processes),
     ):
         if value:
             out += [flag, value]
@@ -661,6 +687,14 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--proxy-upstream", help="proxy-only の上流（IP:ポート）")
             sp.add_argument("--idmap", choices=("user", "root"), help="uid の対応")
             sp.add_argument("--subnet", help="incusbr0 のサブネット")
+            sp.add_argument("--cpu", help="CPU 数の上限（1〜1024。省略は上限なし）")
+            sp.add_argument("--memory", help="メモリの上限（例 8GiB / 512MiB）")
+            sp.add_argument("--processes", help="プロセス数の上限（64〜4194304）")
+            sp.add_argument(
+                "--idmap-isolated",
+                action="store_true",
+                help="security.idmap.isolated（未検証。docs を読んでから）",
+            )
     sub.add_parser("ls", parents=[common], help="箱の一覧")
     pi = sub.add_parser("pi", parents=[common], help="箱の中で pi を起動する")
     pi.add_argument("pi_args", nargs=argparse.REMAINDER, help="pi へ渡す引数（-- の後ろ）")

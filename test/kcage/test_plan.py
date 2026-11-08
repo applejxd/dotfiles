@@ -569,3 +569,39 @@ def test_pin_を許しても無関係な_rw_の_source_は拒否のまま() -> N
         plan.device_to_argv(
             "kcage-demo", _dev("disk", source="/var/lib/incus/unix.socket", path="/x/.git")
         )
+
+
+# ---- 資源の上限と idmap の分離（任意。既定は従来どおり）
+
+
+def test_instance_config_既定では上限も分離も入れない() -> None:
+    c = plan.instance_config(_cfg())
+    assert not any(k.startswith("limits.") for k in c)
+    assert "security.idmap.isolated" not in c
+
+
+def test_instance_config_上限と分離が入る() -> None:
+    c = plan.instance_config(_cfg(cpu=4, memory_mib=8192, processes=4096, idmap_isolated=True))
+    assert c["limits.cpu"] == "4" and c["limits.memory"] == "8192MiB"
+    assert c["limits.processes"] == "4096" and c["security.idmap.isolated"] == "true"
+
+
+@pytest.mark.parametrize(
+    "over", [{"cpu": 0}, {"cpu": True}, {"memory_mib": 64}, {"processes": 10}, {"cpu": "4"}]
+)
+def test_instance_config_範囲外や型違いは拒否する(over) -> None:
+    with pytest.raises(PE):
+        plan.instance_config(_cfg(**over))
+
+
+def test_plan_up_は上限を_incus_init_の_c_へ_1_引数で渡す() -> None:
+    p = _up(_cfg(cpu=2, memory_mib=1024, processes=512, idmap_isolated=True), _net())
+    init = next(s for s in p.steps if isinstance(s, model.Op) and s.argv[:2] == ("incus", "init"))
+    for kv in (
+        "limits.cpu=2",
+        "limits.memory=1024MiB",
+        "limits.processes=512",
+        "security.idmap.isolated=true",
+    ):
+        assert kv in init.argv
+    assert "limits.cpu=2" in init.argv and init.argv[init.argv.index("limits.cpu=2") - 1] == "-c"

@@ -11,7 +11,7 @@ import posixpath
 import re
 from collections.abc import Mapping, Sequence
 
-from kcage import model
+from kcage import model, policy
 from kcage.config import DENY_ABS, is_denied
 from kcage.policy import REPO_ID_RE
 
@@ -227,12 +227,28 @@ def instance_config(cfg: model.BoxConfig) -> dict[str, str]:
         idmap = f"uid {cfg.uid} 0\ngid {gid} 0"
     else:
         raise PlanError("idmap が不正")
-    return {
+    conf = {
         "security.nesting": "true",
         "security.privileged": "false",
         "raw.idmap": idmap,
         LABEL_KEY: cfg.repo_id,
     }
+    # 任意の締める設定。値は整数だけ（実行直前にも範囲を検証）。see docs/spec/sandbox/incus-box.md（資源の上限）
+    try:
+        if cfg.cpu is not None:
+            conf["limits.cpu"] = str(policy.parse_cpu(cfg.cpu))
+        if cfg.memory_mib is not None:
+            if not isinstance(cfg.memory_mib, int) or isinstance(cfg.memory_mib, bool):
+                raise PlanError("memory が不正")
+            policy.parse_memory(f"{cfg.memory_mib}MiB")
+            conf["limits.memory"] = f"{cfg.memory_mib}MiB"
+        if cfg.processes is not None:
+            conf["limits.processes"] = str(policy.parse_processes(cfg.processes))
+    except policy.PolicyError as e:
+        raise PlanError(f"資源上限が不正: {e}") from e
+    if cfg.idmap_isolated:
+        conf["security.idmap.isolated"] = "true"
+    return conf
 
 
 # ---------------------------------------------------------------- 計画

@@ -442,3 +442,27 @@ def test_selftest_の環境変数の判定はブローカーのダミーを許�
     assert cli.judge_env(ok).status == "ok"
     real = "GH_TOKEN=ghp_" + "A" * 36 + "\n"
     assert cli.judge_env(real).status == "fail"
+
+
+def test_registerは上限と_idmap_isolated_を渡す():
+    runner = FakeRunner(top="/work/new-repo")
+    cli.main(
+        ["register", "--cpu", "4", "--memory", "8GiB", "--processes", "4096", "--idmap-isolated"],
+        runner=runner,
+        fs=fs_with(),
+    )
+    argv = runner.calls[-1]
+    assert argv[:5] == ["sudo", HELPER, "register", "new-repo", "--path"]
+    assert "--idmap-isolated" in argv
+    for flag, val in (("--cpu", "4"), ("--memory", "8GiB"), ("--processes", "4096")):
+        assert argv[argv.index(flag) + 1] == val
+
+
+def test_doctorの資源上限の表示は有無だけで_fail_にしない():
+    text = '[repo.demo]\npath = "/work/demo"\ncpu = 2\nmemory = "4GiB"\nidmap_isolated = true\n'
+    c = cli.check_limits(text, "/work/demo", lambda p: p)
+    assert c is not None and c.status == "ok"
+    assert "cpu=2" in c.detail and "memory=4GiB" in c.detail and "idmap_isolated" in c.detail
+    none = cli.check_limits('[repo.demo]\npath = "/work/demo"\n', "/work/demo", lambda p: p)
+    assert none is not None and none.status == "ok" and "上限なし" in none.detail
+    assert cli.check_limits(None, "/work/demo", lambda p: p) is None

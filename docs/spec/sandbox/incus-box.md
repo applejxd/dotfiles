@@ -47,7 +47,7 @@ flowchart LR
 守らないもの（対象外。ADR-0028 の脅威モデルに従う）:
 
 - カーネル・GPU ドライバ・Incus・Docker の脆弱性による脱出。ホストを最新に保つ運用で対処する。
-- 許可した範囲の中の操作の妥当性。リポジトリは rw、データは ro、認証は外部のスコープ（PAT・IAM）が決める範囲で使える。
+- WSL2 では、箱を抜けた場合の到達先（WSL の VM 全体・Windows 側の interop・共有されるネットワーク）が、箱の外にも広い。WSL2 は Microsoft が隔離境界とみなしていない（公開されている WSL の文書による。断定はせず、実機の挙動は未検証）。`kcage selftest` は、箱から `/mnt` のドライブ・`cmd.exe` 等・WSL の環境変数やソケットが見えないことを確かめる（[selftest](#コマンド)）。- 許可した範囲の中の操作の妥当性。リポジトリは rw、データは ro、認証は外部のスコープ（PAT・IAM）が決める範囲で使える。
 - ホストの pi と箱の中の pi は**別物**。ホストの pi には `kcage` の許可された動詞だけを使わせ、`incus`・`kcage-root`・`kcage rm/register/setup` などはフルガードが拒否する（[フルガードの deny](#フルガードの-deny)）。これは「うっかり防止」で、境界ではない。境界は OS の権限（`incus-admin` に入らない・`kcage-root` の許可表）。
 - **`NOPASSWD: ALL` の sudo 規則があると成立しない**。ホストの pi が `sudo incus` や `sudo` での任意の書き換えを通せる。WSL のディストロの既定のユーザーに入っていることがあり（実測。§6）、`kcage doctor` が検出して失敗にする。規則を外す（`/etc/sudoers.d/` の該当行）のは人の作業。
 
@@ -59,7 +59,7 @@ flowchart LR
 | `kcage template` | テンプレートの作成（[テンプレート](#テンプレート)） | 要 |
 | `kcage init [--dry-run]` | 初期化を 1 コマンドで行う: `kcage setup` → `kcage template` の順（setup が失敗したら template は実行しない）。`--dry-run` は setup の手順表示だけ。人だけが実行する | 要（root で実行） |
 | `kcage uninstall [--dry-run] [--keep-policy] [--drop-subid] [--yes]` | 導入の巻き戻し。順序は setup の逆で冪等。箱（接頭辞 `kcage-` かつラベルあり。削除の直前にラベルを再確認）と `kcage-broker-*` のユニット・テンプレートの画像・`kcage-nonet`・`kcage-forward` と `DOCKER-USER` の規則（コメント `incus-kcage`）・`/etc/sudoers.d/kcage-<user>`・`/run/kcage-broker`・許可表 `/etc/kcage`（`--keep-policy` で残す）・最後に root 所有の配備コピー `/usr/local/libexec/kcage` を消す。`subuid`/`subgid` の行は既定で残し、`--drop-subid` のときだけ完全一致の行を消す。`--yes` が無ければ箱の一覧を見せて端末で `yes` を打たせる。人だけが実行する | 要（root で実行） |
-| `kcage register [--data-root P] [--port N\|LO-HI] [--broker K] [--gpu] [--network M] [--proxy-upstream H:P] [--idmap user\|root] [--subnet CIDR]` | カレントの git のリポジトリを許可表へ登録する。追記の差分を表示し、端末で `y/N` を確認してから書く。リポジトリは呼び出し元の所有で、拒否リストに当たらないこと | 要 |
+| `kcage register [--data-root P] [--port N\|LO-HI] [--broker K] [--gpu] [--network M] [--proxy-upstream H:P] [--idmap user\|root] [--subnet CIDR] [--cpu N] [--memory SIZE] [--processes N] [--idmap-isolated]` | カレントの git のリポジトリを許可表へ登録する。追記の差分を表示し、端末で `y/N` を確認してから書く。リポジトリは呼び出し元の所有で、拒否リストに当たらないこと。`--cpu`・`--memory`・`--processes` は資源の上限（任意。形と範囲は [許可表](#許可表etckcagepolicytoml) と同じで、不正な形は拒否）。`--idmap-isolated` は未検証（[資源の上限](#資源の上限と-idmap-の分離任意)） | 要 |
 | `kcage up` | 箱を作って起動する（冪等。同名の別リポジトリの箱は拒否） | 不要 |
 | `kcage stop` | 箱とブローカーを止める | 不要 |
 | `kcage rm` | 箱を消す（ブローカーの後始末を含む） | 要 |
@@ -67,7 +67,7 @@ flowchart LR
 | `kcage ls` | 呼び出し元の箱の一覧（`RUNNING`・`STOPPED`・`-`） | 不要 |
 | `kcage pi [-- 引数]` | 箱の中で pi を起動する（作業ディレクトリはリポジトリ、ユーザーは許可表の uid） | 不要 |
 | `kcage doctor` | 設定の点検（許可表・sudoers・`NOPASSWD: ALL`・kcage.toml・`core.hooksPath`・`extensions.worktreeConfig`・`.git` の metadata（`commondir` など）。`incusbr0` の経路の点検は、`net.doctor_checks` があれば呼ぶ設計だが、現状の `net.py` には無い） | 不要 |
-| `kcage selftest` | 箱の中からの否定試験（ホームの秘密・環境変数の秘密・`.git/hooks`・`.git/config`・`.git/commondir` が書けない・proxy-only で直通できない） | 不要 |
+| `kcage selftest` | 箱の中からの否定試験（ホームの秘密・環境変数の秘密・`.git/hooks`・`.git/config`・`.git/commondir` が書けない・proxy-only で直通できない。root_helper 側では、WSL・Windows 側へ届かない確認も行う: `/mnt/?` に中身つきのドライブが無い・`cmd.exe`/`powershell.exe`/`wsl.exe` が PATH に無い・`WSL_INTEROP`/`WSL_DISTRO_NAME` が無く `/run/WSL` にソケットが無い。`/proc/sys/fs/binfmt_misc/WSLInterop` は、無い・`disabled` なら pass、それ以外は fail にせず警告を出す（カーネル全体の設定で、箱から見えるかは実機で未検証のため）） | 不要 |
 
 - 動詞ごとの sudoers の規則は `scripts/kcage/root_helper.py` の `sudoers_snippet` が作る。パスワードが要る動詞は `timestamp_timeout=0`（直前の認証を使い回さない）。
 - `--repo <id>` で対象を指定できる。省略時は、カレントの git のトップレベルを許可表の `path` と突き合わせて決める（`register` はディレクトリ名から id を作る）。
@@ -116,11 +116,23 @@ idmap = "user"                   # user | root
 uid = 1000                       # 1〜65535（0 は不可）
 gid = 1000                       # 1〜65535（省略時は uid。register は SUDO_GID を書く）
 subnet = "10.77.0.0/24"          # incusbr0 のサブネットを固定
+cpu = 4                          # 任意。1〜1024（省略は上限なし）
+memory = "8GiB"                  # 任意。<整数>MiB / GiB、128MiB〜1024GiB
+processes = 4096                 # 任意。64〜4194304
+idmap_isolated = false           # 任意。既定 false（未検証。下記）
 
 [repo.myrepo.secrets.gh]         # 秘密の出どころ（値は書かない）
 source = "file"                  # file | command | prompt
 path = "/etc/kcage/secret/gh"
 ```
+
+### 資源の上限と idmap の分離（任意）
+
+- `cpu`・`memory`・`processes` は、箱の**新規作成時**（`kcage up` の `incus init`）に `limits.cpu`・`limits.memory`・`limits.processes` として渡す。未設定なら従来どおり上限なし。値は整数・単位の形を `fullmatch` で検証し、`incus init` へは `-c key=value` の 1 引数（argv のリスト）で渡す。既存の箱へは反映されない（`kcage rm` → `up` で作り直す）。ディスクの上限は `dir` ストレージでは設定できない。
+- kcage.toml の `cpu`・`memory`・`processes` は、許可表の値より**小さい値にだけ**効く（大きい要求は許可表の値に切り詰める。許可表が未設定なら要求は無視する）。
+- `kcage doctor` は上限の有無を表示するだけ（fail にしない）。
+- `idmap_isolated = true` は `security.idmap.isolated=true` を渡す。**未検証。`raw.idmap` との併用と `/etc/subuid` の範囲の関係は実機で確かめていない。実機で `kcage up` と `kcage selftest` が通ることを確かめてから使う。**
+- 反映には、配備コピーの更新（`kcage setup --update`）が要る（`kcage-root` は配備コピーから動くため）。
 
 ### kcage.toml（リポジトリのルート。要求）
 
@@ -134,6 +146,7 @@ path = "/etc/kcage/secret/gh"
 | `gpu` | GPU | 許可表で `gpu = true` のときだけ |
 | `network` | 外向き通信のモード | **より厳しい方向だけ**（`nat` < `proxy-only` < `offline`）。緩める要求は無視され、許可表の値になる |
 | `images` | 貼り付け画像 | 未対応（`true` は拒否） |
+| `cpu`・`memory`・`processes` | 資源の上限 | **許可表の値より小さいときだけ**効く。許可表が未設定なら無視 |
 
 未知のキー・64KiB 超・symlink の kcage.toml は拒否する。`up` 以外（`stop`・`rm` など）は、kcage.toml が壊れていても要求なしとして実行する。
 
@@ -248,6 +261,6 @@ path = "/etc/kcage/secret/gh"
   - **未検証の推測（断定しない）**: 箱の中のユーザーは `docker` グループに入っており、入れ子の Docker で箱の root 相当になれる。root 相当は自分のマウント名前空間で ro・pin の重ねを外せる（`umount`）可能性があり、その場合は `.git/config` などの基になるファイルへ書ける。ro・pin の重ねは、箱の root 相当に対する境界ではないかもしれない（未検証。実機で確かめる）。公開されている同種の OSS（coi）も、bind mount の ro は root で外せると述べ、ホスト側の `chattr +i` を併用している。
 - **共有の `.git` に残る信頼の前提**: refs・objects・index・`info/`・`modules/` などは箱から変更できる（箱は develop の ref も動かせる。worktree の約束は process の統制で、機械の強制ではない）。ホストで commit・merge などの git を動かす前に `kcage doctor` を実行する。`doctor` は `commondir` の不審な値（fail）と、`config.worktree`・`info/attributes`・`objects/info/alternates`・`remotes/`・`branches/`・`modules/`（warn）を調べる。`.git` が実ディレクトリでない（linked worktree・symlink）リポジトリには、commondir の封じ込めは適用されない（hooks・config と同じ扱い）。
 - **箱を捨てると失うもの**: 箱の中だけにあるもの（リポジトリ外のファイル、入れ子の Docker のイメージ・ボリューム、箱の中のユーザー設定）。リポジトリとデータはホストにあるので残る。必要ならスナップショット（`kcage snap`）を取る。
-- **GPU の VRAM** は箱どうしで共有される（隔離されない）。CPU・メモリ・ディスクの上限は設定していない。
+- **GPU の VRAM** は箱どうしで共有される（隔離されない）。CPU・メモリ・プロセス数の上限は任意（許可表の `cpu`・`memory`・`processes`。既定は上限なし）。ディスクの上限は `dir` ストレージでは不可。
 - **作業ツリー内の `.env`** などは、リポジトリが rw で見えるので箱から読める。`kcage.toml` の `data` や拒否リストは、リポジトリの中身には効かない。
 - **Windows 側は未検証**。`kcage` は WSL2 の Ubuntu（または Linux）の中で使う。
