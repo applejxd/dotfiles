@@ -95,6 +95,11 @@ class RepoPolicy:
     uid: int = 1000
     gid: int | None = None  # ホストの gid。省略（None）は uid と同じ
     subnet: str | None = None  # incusbr0・docker0 の衝突を避けるための固定
+    # 資源上限（任意。None は上限なし）と idmap の分離。see docs/spec/sandbox/incus-box.md（資源の上限）
+    cpu: int | None = None
+    memory_mib: int | None = None
+    processes: int | None = None
+    idmap_isolated: bool = False
     secrets: Mapping[str, SecretRef] = field(default_factory=dict)  # ブローカー名 -> 出どころ
 
     def __post_init__(self) -> None:
@@ -122,6 +127,10 @@ class RepoSpec:
     gpu: bool = False
     network: NetMode | None = None  # より厳しい方向にだけ上書きできる
     images: bool = False  # Orca の貼り付け画像（既定は無効）
+    # 資源上限の要求。許可表の値より小さいときだけ効く（許可表が未設定なら無視）
+    cpu: int | None = None
+    memory_mib: int | None = None
+    processes: int | None = None
 
 
 @dataclass(frozen=True)
@@ -158,6 +167,10 @@ class BoxConfig:
     subnet: str | None
     labels: Mapping[str, str] = field(default_factory=dict)
     gid: int | None = None  # ホストの gid。省略（None）は uid と同じ
+    cpu: int | None = None
+    memory_mib: int | None = None
+    processes: int | None = None
+    idmap_isolated: bool = False
 
     def __post_init__(self) -> None:
         if self.gid is None:

@@ -11,6 +11,9 @@ kcage.toml の例（未知のキーは拒否）:
     gpu = false
     network = "offline"         # より厳しい方向にだけ効く
     images = false              # true は未対応（拒否）
+    cpu = 2                     # 許可表の cpu より小さいときだけ効く（許可表が未設定なら無視）
+    memory = "4GiB"             # 同上（<整数>MiB / GiB）
+    processes = 1024            # 同上
 """
 
 from __future__ import annotations
@@ -22,7 +25,14 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from kcage import model
-from kcage.policy import BROKER_KINDS, NET_MODES
+from kcage.policy import (
+    BROKER_KINDS,
+    NET_MODES,
+    PolicyError,
+    parse_cpu,
+    parse_memory,
+    parse_processes,
+)
 
 MAX_SPEC_BYTES = 64 * 1024
 
@@ -55,7 +65,7 @@ DENY_HOME_REL: tuple[str, ...] = (
     ".cache/huggingface/stored_tokens",
 )
 
-_SPEC_KEYS = {"data", "ports", "brokers", "gpu", "network", "images"}
+_SPEC_KEYS = {"data", "ports", "brokers", "gpu", "network", "images", "cpu", "memory", "processes"}
 
 
 class ConfigError(ValueError):
@@ -190,6 +200,12 @@ def parse_spec(text: str) -> model.RepoSpec:
     network = doc.get("network")
     if network is not None and network not in NET_MODES:
         raise ConfigError(f"network は {'/'.join(NET_MODES)} のいずれか")
+    try:
+        cpu = parse_cpu(doc["cpu"]) if "cpu" in doc else None
+        memory_mib = parse_memory(doc["memory"]) if "memory" in doc else None
+        processes = parse_processes(doc["processes"]) if "processes" in doc else None
+    except PolicyError as e:
+        raise ConfigError(f"kcage.toml: {e}") from e
     return model.RepoSpec(
         data=strs("data"),
         ports=tuple(ports),
@@ -197,7 +213,17 @@ def parse_spec(text: str) -> model.RepoSpec:
         gpu=doc.get("gpu", False),
         network=network,
         images=doc.get("images", False),
+        cpu=cpu,
+        memory_mib=memory_mib,
+        processes=processes,
     )
+
+
+def _tighten(policy_v: int | None, req: int | None) -> int | None:
+    """資源上限: 許可表が未設定なら要求は無視。設定済みなら小さいほう（締める方向だけ）。"""
+    if policy_v is None:
+        return None
+    return policy_v if req is None else min(policy_v, req)
 
 
 def _resolve_data(rel: str, roots: Sequence[str], fs: Fs) -> str:
@@ -324,6 +350,10 @@ def resolve(
         network=network,
         proxy_upstream=rp.proxy_upstream,
         subnet=rp.subnet,
+        cpu=_tighten(rp.cpu, spec.cpu),
+        memory_mib=_tighten(rp.memory_mib, spec.memory_mib),
+        processes=_tighten(rp.processes, spec.processes),
+        idmap_isolated=rp.idmap_isolated,
         labels={
             model.LABEL_PREFIX + "repo": repo_id,
             model.LABEL_PREFIX + "managed": "true",

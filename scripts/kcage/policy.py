@@ -19,6 +19,10 @@
     idmap = "user"                          # user | root
     uid = 1000                              # 1〜65535
     subnet = "10.77.0.0/24"
+    cpu = 4                                 # 任意（1〜1024。省略時は上限なし）
+    memory = "8GiB"                         # 任意（<整数>MiB / GiB。128MiB〜1024GiB）
+    processes = 4096                        # 任意（64〜4194304）
+    idmap_isolated = false                  # 任意（既定 false。未検証）
 
     [repo.myrepo.secrets.gh]        # 秘密の出どころ（値は書かない）
     source = "file"                 # file | command | prompt
@@ -59,6 +63,10 @@ _REPO_KEYS = {
     "uid",
     "gid",
     "subnet",
+    "cpu",
+    "memory",
+    "processes",
+    "idmap_isolated",
     "secrets",
 }
 _HOST_RE = re.compile(
@@ -69,6 +77,36 @@ _ALIAS_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
 
 class PolicyError(ValueError):
     """許可表が不正。"""
+
+
+# 資源上限の検証。see docs/spec/sandbox/incus-box.md（資源の上限）
+_MEMORY_RE = re.compile(r"([1-9][0-9]{0,6})(MiB|GiB)")
+CPU_RANGE = (1, 1024)
+MEMORY_MIB_RANGE = (128, 1024 * 1024)
+PROCESSES_RANGE = (64, 4194304)
+
+
+def parse_cpu(v: Any, what: str = "cpu") -> int:
+    if not _is_int(v) or not CPU_RANGE[0] <= v <= CPU_RANGE[1]:
+        raise PolicyError(f"{what} は {CPU_RANGE[0]}〜{CPU_RANGE[1]} の整数が必要")
+    return v
+
+
+def parse_processes(v: Any, what: str = "processes") -> int:
+    if not _is_int(v) or not PROCESSES_RANGE[0] <= v <= PROCESSES_RANGE[1]:
+        raise PolicyError(f"{what} は {PROCESSES_RANGE[0]}〜{PROCESSES_RANGE[1]} の整数が必要")
+    return v
+
+
+def parse_memory(v: Any, what: str = "memory") -> int:
+    """'<整数>MiB' / '<整数>GiB'（128MiB〜1024GiB）を MiB の整数にする。"""
+    m = _MEMORY_RE.fullmatch(v) if isinstance(v, str) else None
+    if m is None:
+        raise PolicyError(f"{what} は '<整数>MiB' または '<整数>GiB' の形が必要")
+    mib = int(m.group(1)) * (1024 if m.group(2) == "GiB" else 1)
+    if not MEMORY_MIB_RANGE[0] <= mib <= MEMORY_MIB_RANGE[1]:
+        raise PolicyError(f"{what} は 128MiB〜1024GiB の範囲が必要")
+    return mib
 
 
 def _is_int(v: Any) -> bool:
@@ -216,6 +254,12 @@ def _parse_repo(repo_id: str, t: Any, default_net: str) -> model.RepoPolicy:
             ipaddress.ip_network(subnet, strict=True)
         except (ValueError, TypeError) as e:
             raise PolicyError("subnet は CIDR が必要") from e
+    cpu = parse_cpu(t["cpu"]) if "cpu" in t else None
+    memory_mib = parse_memory(t["memory"]) if "memory" in t else None
+    processes = parse_processes(t["processes"]) if "processes" in t else None
+    idmap_isolated = t.get("idmap_isolated", False)
+    if not isinstance(idmap_isolated, bool):
+        raise PolicyError("idmap_isolated は真偽値が必要")
     upstream = t.get("proxy_upstream")
     if upstream is not None:
         upstream = validate_upstream(upstream)
@@ -234,6 +278,10 @@ def _parse_repo(repo_id: str, t: Any, default_net: str) -> model.RepoPolicy:
         uid=uid,
         gid=gid,
         subnet=subnet,
+        cpu=cpu,
+        memory_mib=memory_mib,
+        processes=processes,
+        idmap_isolated=idmap_isolated,
         secrets=_parse_secrets(repo_id, t.get("secrets", {})),
     )
 
@@ -325,6 +373,10 @@ def render_repo_block(
     uid: int = 1000,
     gid: int | None = None,
     subnet: str | None = None,
+    cpu: int | None = None,
+    memory: str | None = None,
+    processes: int | None = None,
+    idmap_isolated: bool = False,
 ) -> str:
     """[repo.<id>] のブロックを描画する（純粋関数。描画後に parse で検証する）。"""
     lines = [f"[repo.{repo_id}]", f"path = {_q(path)}"]
@@ -347,6 +399,15 @@ def render_repo_block(
         lines.append(f"gid = {gid}")
     if subnet is not None:
         lines.append(f"subnet = {_q(subnet)}")
+    if cpu is not None:
+        lines.append(f"cpu = {parse_cpu(cpu)}")
+    if memory is not None:
+        parse_memory(memory)  # 形の検証（_q で引用して書く）
+        lines.append(f"memory = {_q(memory)}")
+    if processes is not None:
+        lines.append(f"processes = {parse_processes(processes)}")
+    if idmap_isolated:
+        lines.append("idmap_isolated = true")
     return "\n".join(lines) + "\n"  # 形の検証は add_repo が parse で行う
 
 

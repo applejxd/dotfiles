@@ -327,3 +327,40 @@ def test_hf_cache_whole_denied_but_hub_allowed() -> None:
 def test_builtin_credential_paths_denied(p: str) -> None:
     assert config.is_denied(p)
     assert not config.is_denied("/home/alice/.cache/huggingface/hub")
+
+
+# ---- 資源の上限（kcage.toml は許可表より小さい値にだけできる）
+
+
+def _limited_policy(**kw) -> model.HostPolicy:
+    import dataclasses
+
+    pol = demo_policy()
+    repo = dataclasses.replace(pol.repos["demo"], **kw)
+    return dataclasses.replace(pol, repos={"demo": repo})
+
+
+def test_上限は許可表が未設定なら要求を無視する() -> None:
+    cfg = _resolve(model.RepoSpec(cpu=2, memory_mib=256, processes=100))
+    assert (cfg.cpu, cfg.memory_mib, cfg.processes, cfg.idmap_isolated) == (None, None, None, False)
+
+
+def test_上限は小さい要求だけが効く() -> None:
+    pol = _limited_policy(cpu=4, memory_mib=4096, processes=1000, idmap_isolated=True)
+    cfg = _resolve(model.RepoSpec(cpu=2, memory_mib=8192), pol=pol)
+    assert (cfg.cpu, cfg.memory_mib, cfg.processes) == (2, 4096, 1000)  # 大きい要求は切り詰め
+    assert cfg.idmap_isolated is True
+    assert _resolve(model.RepoSpec(), pol=pol).cpu == 4
+
+
+def test_kcage_toml_の上限を読む() -> None:
+    spec = config.parse_spec('cpu = 2\nmemory = "1GiB"\nprocesses = 100\n')
+    assert (spec.cpu, spec.memory_mib, spec.processes) == (2, 1024, 100)
+
+
+@pytest.mark.parametrize(
+    "text", ["cpu = 0\n", 'memory = "1GB"\n', "processes = 1\n", 'cpu = "2"\n']
+)
+def test_kcage_toml_の不正な上限は拒否する(text: str) -> None:
+    with pytest.raises(E):
+        config.parse_spec(text)
