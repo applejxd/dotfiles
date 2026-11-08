@@ -28,9 +28,27 @@ args = [
 | OpenCode V2 | `~/.config/opencode/opencode.json` の `mcp.servers` | `generate.py --target opencode-config` |
 | Codex CLI | `~/.codex/config.toml` の `mcp_servers` | `modify_config.toml` が `fromToml` で描画 |
 | Claude Code | `~/.claude.json` | `400_unix/410` (Unix) と `300_windows/346` (Windows) が `claude mcp add-json` で登録 |
-| pi（Unix・Windows） | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](guard/pi-guard.md#mcp)。`mcp.json` へ書く経路は無い。[経緯](../research/agents/agent-config-generation-notes.md)） |
+| pi・stock（Unix・Windows） | `~/.pi/agent/mcp.json` の `mcpServers`（pi 組み込みの MCP も `pi-mcp-adapter` もこれを読む） | `generate.py --target pi-mcp`。配備は `home/dot_pi/agent/modify_mcp.json.py.tmpl`（stock だけ。custom は `.chezmoiignore.tmpl` で配らない）。宣言したサーバの `command` / `args`（http は `url`）だけを更新し、`pi mcp add` や `/mcp` で足したサーバと、宣言済みサーバの利用者のキー（`env`・`enabled`・`exposure` など）は保つ。`[[mcp]]` の `exposure`・`requires_env` は出さない。壊れた JSON は触らない |
+| pi・custom（Unix・Windows） | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](guard/pi-guard.md#mcp)。`mcp.json` へ書く経路は無い。[経緯](../research/agents/agent-config-generation-notes.md)） |
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
+
+### websearch（家の機の検索）
+
+```toml
+[[mcp]]
+id = "websearch"
+clis = ["pi"]
+transport = "stdio"
+command = "uv"
+args = ["run", "--no-project", "--quiet", '{{ .chezmoi.homeDir }}/.config/agents/websearch/mcp_server.py']
+```
+
+- 自作の stdio サーバ（ツール `web_search`・`fetch_page`・`search_papers`。仕様は [Web 検索](web-search.md#mcp-サーバ)）。
+- **`is-work` が `true` の機では宣言しない**（`[[mcp]]` のブロックごと条件で囲む）。検索の送り先が限られる環境では登録しない、という一般論による。その機の検索は `agentcore-websearch` だけ。
+- `clis = ["pi"]` のため、custom の harness（`rules.json`）にも `websearch` が登録される。custom は凍結だが、検索が使えるのは害がないので意図した変更として受け入れる。
+- 家の機の `mcp.json` には `agentcore-websearch` も出る（`clis` に `pi` が常にある）。認証が無ければツールの無い空のサーバになる。受け入れる。
+- permission（stock）: `pi-permission-policy.json` の `mcp` は、`websearch`・`agentcore-websearch` を allow（検索は読み取りのため）、他の MCP は ask のまま。
 
 **`[[mcp]]` の任意のキー `exposure`（pi だけに効く）**: モデルへのツールの見せ方で、`direct` / `codemode` / `deferred` / `hidden`（不正な値は生成が止まる）。
 **省略すると pi には `direct` を出す。** pi 本体の既定は `codemode` だが、`pis` は `-ne` で組み込みの `codemode` / `tool_search` を外すので、

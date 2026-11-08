@@ -691,6 +691,38 @@ def merge_copilot_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[
 
 
 # ---------------------------------------------------------------------------
+# stock の pi の MCP 設定 (~/.pi/agent/mcp.json。pi 組み込みの MCP も pi-mcp-adapter も読む)
+# ---------------------------------------------------------------------------
+
+
+def merge_pi_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """``~/.pi/agent/mcp.json`` の ``mcpServers`` を更新する。
+
+    ``pi mcp add`` や ``/mcp`` も書き込むので、common.toml が宣言した名前だけを更新し、
+    ほかのサーバは残す。宣言したサーバでも ``command`` / ``args`` だけを持ち、
+    ``env`` / ``enabled`` / ``exposure`` / ``timeout`` など利用者が足したキーは保つ
+    (common.toml が持たない情報)。``[[mcp]]`` の ``exposure`` / ``requires_env`` は
+    pi 本体の MCP が解釈しないので出さない。http は ``url``、stdio は ``command`` / ``args``。
+    """
+    out = dict(existing) if isinstance(existing, dict) else {}
+    servers = dict(out.get("mcpServers") or {})
+    for name, server in mcp_servers(common, "pi"):
+        entry = dict(servers.get(name) or {})
+        if server["transport"] == "http":
+            entry["url"] = server["url"]
+            stale = ("command", "args")
+        else:
+            entry["command"] = server["command"]
+            entry["args"] = server["args"]
+            stale = ("url", "headers")
+        for key in stale:
+            entry.pop(key, None)
+        servers[name] = entry
+    out["mcpServers"] = servers
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Copilot settings target (一部キーのみ置換し、他は温存)
 # ---------------------------------------------------------------------------
 
@@ -3576,6 +3608,7 @@ TARGETS = {
     "opencode-guide": build_opencode_guide,
     "opencode-service": merge_opencode_service,
     "pi-harness": build_pi_harness,
+    "pi-mcp": merge_pi_mcp,
     "pi-settings": merge_pi_settings,
     "pi-keybindings": pi_keybindings,
     "pi-subagents": build_pi_subagents,
@@ -3590,6 +3623,10 @@ FULL_GENERATION_TARGETS = {
     "pi-keybindings",
     "pi-subagents",
 }
+
+
+# 既存ファイルが壊れた JSON のとき、エラーにせず入力をそのまま返す (apply を止めず、利用者の編集中のファイルを壊さない)。
+PASSTHROUGH_BROKEN_TARGETS = {"pi-mcp"}
 
 
 def load_existing(path: str | None) -> dict[str, Any]:
@@ -3890,7 +3927,23 @@ def main(argv: list[str] | None = None) -> int:
     common = apply_local_overlay(common, load_local_overlay())
     # 旧名・綴り間違いは防御を黙って消すので、生成前に落とす
     validate_sandbox_keys(common)
-    existing = {} if args.target in FULL_GENERATION_TARGETS else load_existing(args.existing)
+    if args.target in PASSTHROUGH_BROKEN_TARGETS:
+        # 利用者も書くファイル。壊れていたら触らずそのまま返す (利用者が直す)
+        raw = (
+            sys.stdin.read()
+            if args.existing in (None, "-")
+            else Path(args.existing).read_text(encoding="utf-8")
+        )
+        try:
+            parsed = json.loads(raw) if raw.strip() else {}
+        except json.JSONDecodeError:
+            parsed = None
+        if not isinstance(parsed, dict):
+            sys.stdout.write(raw)
+            return 0
+        existing = parsed
+    else:
+        existing = {} if args.target in FULL_GENERATION_TARGETS else load_existing(args.existing)
     merger = TARGETS[args.target]
     merged = merger(existing, common)
 

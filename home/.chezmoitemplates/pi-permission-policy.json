@@ -74,7 +74,11 @@
       "sh -s*": { "action": "deny", "reason": "ネット上のスクリプトをシェルへ渡す実行は禁止" },
       "bash -s*": { "action": "deny", "reason": "ネット上のスクリプトをシェルへ渡す実行は禁止" }
     },
-    "mcp": { "*": "ask" },
+    "mcp": {
+      "*": "ask",
+      "websearch": "allow",
+      "agentcore-websearch": "allow"
+    },
     "skill": { "*": "allow" },
     "todo": "allow",
     "ask_user_question": "allow",
