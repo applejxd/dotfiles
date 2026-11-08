@@ -76,7 +76,7 @@ stock にしても kcage は残る。使わないなら次の順で片付ける�
 
 | 再開したいこと | 入口 |
 | --- | --- |
-| 自作の基盤へ全部戻す | `~/.config/chezmoi/pi-profile` を消して `chezmoi apply`。ソース・docs・試験は残っている |
+| 自作の基盤へ全部戻す | `~/.config/chezmoi/pi-profile` を消して `chezmoi apply`。ソース・docs・試験は残っている。凍結直前の develop は注釈つき tag `archive/agent-stack-2026-11-08`（`86de89dd`。ローカルのみ。自作基盤が全部入った最後の状態で、`git checkout` で見られる） |
 | kcage の clone モードを続ける | 原本の `kcage-clone-mode/contract-and-decisions.txt`（決定・段階）→ `api-contract.txt`（署名・担当・波）。枝は上の表。第 2 波（`repos`）から。基は `feature/kcage-clone-gitrun`（`policy` の枝との merge が要る）。**先に S0**（導入済みの箱で、悪性 bundle の拒否・転送・性能の実機確認）。接続の注意: 枝どうしの merge は確認が要る |
 | ツール隔離（pi はホストに残し、ツールだけ隔離）を試す | [実現性の調査](../research/agents/tool-isolation-feasibility-2026-11.md)と、原本の `tool-isolation/spike-brief.txt`（最小プロトタイプの依頼文。未着手）。鏡写し cwd・`PI_REMOTE_EXEC`・フェイルクローズ |
 | 同種の OSS を再評価する | [評価](../research/agents/oss-sandbox-evaluations-2026-11.md)と原本 |
