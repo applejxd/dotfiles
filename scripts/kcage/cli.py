@@ -35,6 +35,9 @@ SECRET_VALUE = re.compile(
 HOME_SECRET_DIRS = ("~/.ssh", "~/.aws", "~/.gnupg", "~/.config/gh", "~/.config/kcage")
 # 箱の中で読み取り専用であるべき .git の中身（config.py の重ねと対応）
 GIT_RO_PATHS = (".git/hooks", ".git/config", ".git/commondir")
+# .git 自体がマウントポイント（pin）であることの判定。cd 済みの作業ディレクトリで評価する
+GIT_PIN_KEY = ".git"
+GIT_PIN_TEST = 'grep -qF " $(pwd)/.git " /proc/self/mountinfo'
 
 
 @dataclass
@@ -301,10 +304,19 @@ def judge_env(out: str) -> Check:
 def judge_git_ro(out: str) -> Check:
     state = dict(ln.split("=", 1) for ln in out.splitlines() if "=" in ln)
     bad = [k for k in GIT_RO_PATHS if state.get(k) != "ro"]
+    if state.get(GIT_PIN_KEY) != "pin":
+        return Check(
+            "git の重ね",
+            "fail",
+            ".git がマウントポイントでない（mv .git で ro を迂回できる古い箱）。"
+            "kcage rm のあと kcage up で作り直す",
+        )
     if bad:
         return Check("git の読み取り専用", "fail", "書き込める、または判定不能: " + ", ".join(bad))
     return Check(
-        "git の読み取り専用", "ok", ".git/hooks・.git/config・.git/commondir は書き込み不可"
+        "git の読み取り専用",
+        "ok",
+        ".git/hooks・.git/config・.git/commondir は書き込み不可、.git は pin 済み",
     )
 
 
@@ -324,7 +336,8 @@ def selftest_commands(repo_path: str) -> dict[str, list[str]]:
     quoted = shlex.quote(repo_path)
     git = (
         f"cd {quoted} && for p in {' '.join(GIT_RO_PATHS)}; do "
-        'if [ -w "$p" ]; then echo "$p=rw"; else echo "$p=ro"; fi; done'
+        'if [ -w "$p" ]; then echo "$p=rw"; else echo "$p=ro"; fi; done; '
+        f'if {GIT_PIN_TEST}; then echo "{GIT_PIN_KEY}=pin"; else echo "{GIT_PIN_KEY}=nopin"; fi'
     )
     return {
         "home": ["sh", "-c", f"ls -A {dirs} 2>/dev/null | head -5; true"],

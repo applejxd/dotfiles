@@ -144,6 +144,7 @@ path = "/etc/kcage/secret/gh"
 | 種類 | 条件 | 向き |
 | --- | --- | --- |
 | `disk` リポジトリ | 常に。ホストと同じ絶対パス | **rw** |
+| `disk` `.git` の pin | `.git` が実ディレクトリ（symlink でない）のとき、自分自身へ重ねる（下の「`.git` の差し替え」）。ro の子より前 | **rw** |
 | `disk` `.git/hooks`・`.git/config`・`.git/commondir` | 存在し symlink でないとき重ねる（`commondir` は up が先に用意する。既知の限界を参照） | **ro** |
 | `disk` データ | kcage.toml の `data`（許可表の根の下） | ro |
 | `disk` GPU のライブラリ | `gpu`。`/usr/lib/wsl/lib` と `/usr/lib/wsl/drivers`（別々に渡す） | ro |
@@ -242,6 +243,9 @@ path = "/etc/kcage/secret/gh"
 - **`--dist` の検証後の差し替え（TOCTOU）**: `kcage-root` が検証してから `incus file push` するまでに、呼び出し元が配布物を書き換えられる。配布物は呼び出し元が作る（元から呼び出し元の権限の範囲）ので、**許容**する。
 - **`.git/hooks` の読み取り専用の限界**: `.git/hooks`・`.git/config`・`.git/commondir` は ro で重ねるが、ホストの git の実行経路の一部しか守らない。`core.hooksPath`・`extensions.worktreeConfig`・作業ツリー内のスクリプト（`Makefile` やテストなど）は、箱が書いたコードがホストで実行されうる。`kcage doctor` が前 2 つを警告する。ホストでは、箱が書いたコードを自動で実行しない。
 - **`.git/commondir` の迂回（封じ済み）**: `.git/commondir` に別のディレクトリを書くと、git はそこから config・hooks を読むため、箱が書ける作業ツリー内を指されると `hooks`・`config` の ro を迂回できる。`kcage up`（kcage-root）が、メインの `.git`（実ディレクトリ）に中身 `.` の `commondir` を、無ければ作り、有って無害（`.` または `.git` 自身）なら何もせず、それ以外なら up を拒否する。作成は呼び出し元の uid・gid へ権限を落として `O_CREAT|O_EXCL|O_NOFOLLOW` で行い（root が書くのはこの 1 ファイルだけ）、戻せなければ異常終了する。そのうえで `commondir` を ro で重ねる。この対策の前に作った箱は `commondir` が書けるので、`selftest` が fail する。`kcage rm` のあと `up` し直す。
+- **`.git` の差し替え（`mv .git`）の迂回（封じ済み）**: リポジトリを rw で重ね、その中の `.git/hooks`・`.git/config`・`.git/commondir` だけを ro で重ねるだけだと、`.git` ディレクトリ自体はマウントポイントでないので、箱の中の一般ユーザーが `mv .git .git.old` でき、書き込み可能な `.git` を作り直せる（ro の重ねは移動した側に付いたまま）。ホストの git は新しい `.git/config`（例 `core.fsmonitor`）と `.git/hooks` を読むので、箱から脱出できる（bubblewrap の mount namespace で再現済み）。対策は、`.git` を**自分自身へ rw で bind（pin）してから**子の ro の重ねを付けること（`config.resolve` が ro の前に足す。`device_to_argv` は source と path が同じ rw の disk を、拒否リスト・ソケットの検査を通した上で許す）。pin 済みの `.git` は `mv`・`rm -rf` が EBUSY で失敗し、ro の重ねは保たれ、objects・HEAD などの通常の書き込みはできる（bubblewrap で確認済み）。`.git` が実ディレクトリでない（linked worktree・symlink）ときは適用されない（hooks・config と同じ扱い）。`selftest` が、`.git` がマウントポイントであることと、`mv .git` が失敗すること（成功したら元へ戻して fail）を調べ、`doctor` も pin の有無を fail で報告する。この対策の前に作った箱は pin が無いので、`kcage setup --update`（配備コピーの更新）のあと `kcage rm` → `kcage up` で作り直す。
+  - **未検証**: Incus が disk デバイスを path の浅い順（親が先）にマウントするか、pin が Incus の箱で実際に効くかは実機で未確認（デバイス名は `m-repo-<連番>` で、親を先に足している）。
+  - **未検証の推測（断定しない）**: 箱の中のユーザーは `docker` グループに入っており、入れ子の Docker で箱の root 相当になれる。root 相当は自分のマウント名前空間で ro・pin の重ねを外せる（`umount`）可能性があり、その場合は `.git/config` などの基になるファイルへ書ける。ro・pin の重ねは、箱の root 相当に対する境界ではないかもしれない（未検証。実機で確かめる）。公開されている同種の OSS（coi）も、bind mount の ro は root で外せると述べ、ホスト側の `chattr +i` を併用している。
 - **共有の `.git` に残る信頼の前提**: refs・objects・index・`info/`・`modules/` などは箱から変更できる（箱は develop の ref も動かせる。worktree の約束は process の統制で、機械の強制ではない）。ホストで commit・merge などの git を動かす前に `kcage doctor` を実行する。`doctor` は `commondir` の不審な値（fail）と、`config.worktree`・`info/attributes`・`objects/info/alternates`・`remotes/`・`branches/`・`modules/`（warn）を調べる。`.git` が実ディレクトリでない（linked worktree・symlink）リポジトリには、commondir の封じ込めは適用されない（hooks・config と同じ扱い）。
 - **箱を捨てると失うもの**: 箱の中だけにあるもの（リポジトリ外のファイル、入れ子の Docker のイメージ・ボリューム、箱の中のユーザー設定）。リポジトリとデータはホストにあるので残る。必要ならスナップショット（`kcage snap`）を取る。
 - **GPU の VRAM** は箱どうしで共有される（隔離されない）。CPU・メモリ・ディスクの上限は設定していない。

@@ -219,12 +219,22 @@ def test_環境変数の秘密は名前だけを出し値は出さない():
 
 
 def test_gitの読み取り専用の判定():
-    ro = ".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n"
+    ro = ".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n.git=pin\n"
     assert cli.judge_git_ro(ro).status == "ok"
-    assert cli.judge_git_ro(".git/hooks=rw\n.git/config=ro\n.git/commondir=ro\n").status == "fail"
+    assert (
+        cli.judge_git_ro(".git/hooks=rw\n.git/config=ro\n.git/commondir=ro\n.git=pin\n").status
+        == "fail"
+    )
     # commondir が書ける（古い箱）
-    assert cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n.git/commondir=rw\n").status == "fail"
-    assert cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n").status == "fail"
+    assert (
+        cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n.git/commondir=rw\n.git=pin\n").status
+        == "fail"
+    )
+    assert cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n.git=pin\n").status == "fail"
+    # pin が無い（この対策の前に作った箱）は fail。作り直しを案内する
+    nopin = cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n.git=nopin\n")
+    assert nopin.status == "fail" and "kcage rm" in nopin.detail
+    assert cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n").status == "fail"
     assert cli.judge_git_ro("").status == "fail"
 
 
@@ -304,7 +314,7 @@ def test_selftestは箱の中のexecだけをsudo_nで呼ぶ(capsys):
         if "curl" in joined:
             return cli.Result(0, "rc=7\n")
         if ".git/hooks" in joined:
-            return cli.Result(0, ".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n")
+            return cli.Result(0, ".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n.git=pin\n")
         return res
 
     assert cli.main(["selftest"], runner=run, fs=fs_with()) == 0

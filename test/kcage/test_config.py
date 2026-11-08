@@ -26,12 +26,44 @@ def test_defaults_mounts_and_labels() -> None:
     cfg = _resolve(model.RepoSpec())
     assert cfg.name == "kcage-demo" and cfg.uid == 1000
     rw = [m for m in cfg.mounts if not m.readonly]
-    assert [(m.kind, m.source, m.path) for m in rw] == [("repo", REPO, REPO)]
+    assert [(m.kind, m.source, m.path) for m in rw] == [
+        ("repo", REPO, REPO),
+        ("repo", f"{REPO}/.git", f"{REPO}/.git"),  # pin（.git を自分自身へ rw で bind）
+    ]
     ro = {m.source for m in cfg.mounts if m.readonly}
     assert ro == {f"{REPO}/.git/hooks", f"{REPO}/.git/config", f"{REPO}/.git/commondir"}
     assert cfg.labels[model.LABEL_PREFIX + "repo"] == "demo"
     assert cfg.labels[model.LABEL_PREFIX + "managed"] == "true"
     assert cfg.network == "proxy-only" and cfg.proxy_upstream == "192.0.2.10:3128"
+
+
+def _wipe_git(fs) -> None:
+    for p in [k for k in fs.nodes if k.startswith(REPO + "/.git")]:
+        del fs.nodes[p]
+
+
+def test_pin_は_ro_の子の重ねより前に入る() -> None:
+    mounts = _resolve(model.RepoSpec()).mounts
+    git = f"{REPO}/.git"
+    pin = next(i for i, m in enumerate(mounts) if m.source == git)
+    assert not mounts[pin].readonly and mounts[pin].path == git
+    ro_idx = [i for i, m in enumerate(mounts) if m.readonly]
+    assert ro_idx and all(pin < i for i in ro_idx)
+
+
+def test_pin_は_git_が_symlink_ファイル_無し_のとき入らない() -> None:
+    git = f"{REPO}/.git"
+    fs = demo_fs()
+    _wipe_git(fs)
+    fs.add_link(git, "/tmp/elsewhere")
+    assert all(m.source != git for m in _resolve(model.RepoSpec(), fs).mounts)
+    fs = demo_fs()
+    _wipe_git(fs)
+    fs.add_file(git, "gitdir: /x/.git/worktrees/w\n", uid=1000)  # linked worktree
+    assert all(m.source != git for m in _resolve(model.RepoSpec(), fs).mounts)
+    fs = demo_fs()
+    _wipe_git(fs)
+    assert all(m.source != git for m in _resolve(model.RepoSpec(), fs).mounts)
 
 
 def test_no_git_dir_no_extra_mounts() -> None:

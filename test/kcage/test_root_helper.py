@@ -806,3 +806,33 @@ def test_tty_confirm_は_dev_tty_が開けなければ端末の標準入力へ_�
         is False
     )
     assert "/dev/tty を開けない" in err.getvalue() and "端末ではない" in err.getvalue()
+
+
+def _selftest_descs(cfg: model.BoxConfig) -> list[str]:
+    return [op.desc for op in root_helper._selftest_plan(cfg).steps]
+
+
+def test_selftest_は_pin_があるとき_git_のマウントと_mv_を検査する() -> None:
+    from kcage import config
+    from kcage_fakes import demo_policy
+
+    cfg = config.resolve(demo_policy(), "demo", model.RepoSpec(), demo_fs())
+    plan_ = root_helper._selftest_plan(cfg)
+    descs = [op.desc for op in plan_.steps]
+    assert ".git がマウントポイント（pin）" in descs and ".git を移動できない" in descs
+    pin, mv = plan_.steps[0], plan_.steps[1]
+    assert "mountinfo" in pin.argv[-1] and "/.git" in pin.argv[-1]
+    # mv が成功したら元へ戻して失敗にする
+    assert "mv .git .git.kcage-selftest" in mv.argv[-1]
+    assert "mv .git.kcage-selftest .git; exit 1" in mv.argv[-1]
+
+
+def test_selftest_は_pin_が無い構成では_git_の検査を入れない() -> None:
+    import dataclasses
+
+    from kcage import config
+    from kcage_fakes import demo_policy
+
+    cfg = config.resolve(demo_policy(), "demo", model.RepoSpec(), demo_fs())
+    cfg = dataclasses.replace(cfg, mounts=tuple(m for m in cfg.mounts if m.kind != "repo"))
+    assert not any(".git" in d for d in _selftest_descs(cfg))
