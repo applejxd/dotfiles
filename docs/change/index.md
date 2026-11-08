@@ -4,6 +4,20 @@
 
 [ドキュメント一覧へ戻る](../index.md)
 
+## 今の作業計画（活動中）
+
+利用者が今の作業計画を追うための 1 枚（2026-11-09 時点。節目＝開始・方針の変更・完了・依頼のときだけ更新する。[ADR-0032](../adr/0032-docs-by-audience.md)）。
+
+| 作業 | 何を | 今どこ | 次の一手 | あなたが決めること | 関連 |
+| --- | --- | --- | --- | --- | --- |
+| stock の pi への移行 | 自作基盤を凍結し、公式の pi＋人気の拡張へ | 拡張の導入（permission-system・cc-safety-net・pi-subagents・rpiv-todo・rpiv-ask-user-question・pi-background・pi-plan-mode・pi-goal・pi-rewind）は develop に統合済み。切り替えは検索 MCP の統合後 | `~/.config/chezmoi/pi-profile` に `stock` と書いて `chezmoi apply` | なし（切り替えの操作だけ） | [CHG-0065](0065-agent-stack-freeze.md)・[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md)・[拡張の評価](../research/agents/pi-stock-packages-evaluation-2026-11.md) |
+| 検索 MCP（家の機向けの自作 1 件） | 検索を MCP サーバで提供する | 本体（`core.py`・`mcp_server.py`）は統合済み。stock への登録（`mcp.json` の生成・package の整理）は実装済みで確認待ち | 利用者の実機確認 → スキル `web-search` の廃止 | なし | [web-search 仕様](../spec/web-search.md) |
+| 圧縮（コンパクト化）の方針 | 圧縮の要約を「続きの作業のための brief」にする | 調査済み。案は `@thgilciffart/pi-compaction` の採用（しきい値を早める）。自作は足さない。調査ノートは別の枝で作成中 | 設定の実装 → 実機で確認 | なし | （調査ノートは別の枝のためリンクなし） |
+| 子エージェントの運用（`pi-subagents`） | 子エージェントを拡張だけで運用する | 他の候補は入れず、これだけで足りると評価済み。worktree は、まず拡張ネイティブ（N）で体感し、合わなければ feature worktree（F）へ | 設定の実装 → 実機確認 4 点 | なし | [拡張の評価](../research/agents/pi-stock-packages-evaluation-2026-11.md) |
+| docs の見直し（この変更） | 読み手別に整理する縮小版（D 案）を試作 | 試作を作成済み | 利用者が試作を見て決める | D 案を採るか | [ADR-0032](../adr/0032-docs-by-audience.md) |
+
+凍結した案件・停滞した案件はこの表に入れない（下の「活動中」「保留」に残る。凍結の入口は [CHG-0065](0065-agent-stack-freeze.md)）。
+
 ## 目的
 
 研究開発では、目的は決まっていても方法や仕様が定まっていないことが多い。
