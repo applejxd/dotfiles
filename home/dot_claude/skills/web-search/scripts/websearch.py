@@ -40,6 +40,30 @@ def load_core():
     raise SystemExit(2)
 
 
+def _reexport() -> None:
+    """他のスキル (imozuru の秘匿チェックなど) と試験が、このファイルから核の名前を読めるよう写す。
+
+    核が無ければ何もしない (読み手は自分の代替に落ちる)。スキルの廃止 (S4) で、読み手を核へ向けて外す。
+    """
+    for path in core_candidates():
+        if not path.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location("websearch_core", path)
+        if not (spec and spec.loader):
+            continue
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["websearch_core"] = module  # dataclass が自分のモジュールを引く
+        spec.loader.exec_module(module)
+        for name, value in vars(module).items():
+            if not name.startswith("__"):
+                globals().setdefault(name, value)
+        return
+
+
+if __name__ != "__main__":
+    _reexport()
+
+
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")

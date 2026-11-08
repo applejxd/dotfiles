@@ -1122,5 +1122,6 @@ def test_skill_cli_reports_a_missing_core(tmp_path):
 def test_skill_cli_has_no_provider_logic():
     text = SKILL_CLI.read_text(encoding="utf-8")
 
-    assert len(text.splitlines()) < 60
+    # 薄い入口 (核への委譲と、古い読み手向けの名前の写しだけ)。プロバイダのロジックを持たない
+    assert len(text.splitlines()) < 90
     assert "api.search.brave.com" not in text and "def sync_keys" not in text
