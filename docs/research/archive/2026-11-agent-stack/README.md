@@ -22,3 +22,7 @@
 ## ツール隔離の実現性の原文（`tool-isolation/`）
 
 `pi-api-survey.txt`（pi の公式 API・例）・`harness-local-assumptions.txt`（ハーネスのローカル前提・挿入点）・`spike-brief.txt`（最小プロトタイプの依頼文。未着手）。要約は [実現性](../../agents/tool-isolation-feasibility-2026-11.md)。
+
+## 自作路線の見直しの相談の原文（`consult/`）
+
+`own-first-review.txt`（外部 AI との相談。2026-11-09。利用者名・アカウント名は置換済み）。要点は [ADR-0031](../../../adr/0031-evaluate-existing-extensions-first.md)。外部の内容として扱い、鵜呑みにしない。

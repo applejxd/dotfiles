@@ -3,7 +3,7 @@
 pi など、内蔵の検索ツールが無い AI CLI のための Web 検索・ページ取得・論文検索。**skill + CLI** の形で、標準ライブラリだけの Python
 （`home/dot_claude/skills/web-search/scripts/websearch.py`）を、`python3`（Windows は `uv run --no-project`）で呼ぶ。
 入口を skill + CLI にした理由と、MCP・拡張との比較は [入口の選び方](guard/pi-extensions.md#入口の選び方)、方針は
-[ADR-0016](../adr/0016-pi-extensions-own-first.md)。
+[ADR-0031](../adr/0031-evaluate-existing-extensions-first.md)（既存の評価を先にし、自作は最後の手段。旧 [ADR-0016](../adr/0016-pi-extensions-own-first.md) を置き換え）。
 
 ## 配る範囲
 

@@ -3,7 +3,7 @@
 知らない分野を、用語・人・場から引用と著者を芋づる式にたどり、**原文を要約せずに保存**して、要る主張ごとに原文の行番号を付けるスキル。
 上流は [MaryCache/imozuru](https://github.com/MaryCache/imozuru)（MIT）で、`home/dot_claude/skills/imozuru/` に vendor して調整した。
 検索は、すでにある [web-search](web-search.md) スキルの `websearch.py` を使う（検索役のサブエージェントは使わない）。
-入口を skill + CLI にした理由は [入口の選び方](guard/pi-extensions.md#入口の選び方)、拡張でなくスキルで足りる判断は [ADR-0016](../adr/0016-pi-extensions-own-first.md)。
+入口を skill + CLI にした理由は [入口の選び方](guard/pi-extensions.md#入口の選び方)、拡張でなくスキルで足りる判断は [ADR-0031](../adr/0031-evaluate-existing-extensions-first.md)（旧 [ADR-0016](../adr/0016-pi-extensions-own-first.md) を置き換え）。
 
 - 取り込んだ版: 上流 `ecb82c71b611872a0f49e783eda3bec987c80d91`。取得物の sha256 と原本のハッシュは、スキル内の `references/upstream.md`
 - 調査の日付・確認の範囲（コードは読んだだけで、実際の通信・実機の `pis` では未確認）は [記録](../research/agents/imozuru-spec-notes.md)
