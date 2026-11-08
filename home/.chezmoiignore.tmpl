@@ -255,3 +255,15 @@ orca/**
 # 取り込むと版が固定されて本体の更新に追従しなくなる。see docs/spec/structure.md
 .claude/skills/herdr
 .claude/skills/herdr/**
+{{ if eq (includeTemplate "pi-profile" .) "stock" }}
+# pi の stock プロファイル: 自作の拡張・ハーネス・prompts・broker 用の設定を配らない
+# (settings.json と AGENTS.md は中身をプロファイルで切り替える)。
+# see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
+.pi/agent/extensions
+.pi/agent/extensions/**
+.pi/agent/prompts
+.pi/agent/prompts/**
+.pi/agent/models.json
+.config/pi
+.config/pi/**
+{{ end -}}

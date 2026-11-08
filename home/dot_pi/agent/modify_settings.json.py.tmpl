@@ -1,1 +1,5 @@
+{{ if eq (includeTemplate "pi-profile" .) "stock" -}}
+{{ template "modify_pi_stock_settings.py.tmpl" (dict "packages" (includeTemplate "pi-stock-packages" .)) -}}
+{{ else -}}
 {{ template "modify_json.py.tmpl" (dict "workingTree" .chezmoi.workingTree "common" (includeTemplate "dot_config/agents/common.toml.tmpl" .) "target" "pi-settings") -}}
+{{ end -}}

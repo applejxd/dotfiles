@@ -1,0 +1,11 @@
+# pi の stock プロファイルで入れる package。単一の編集点。
+# 1 行に 1 つ。npm:<名前>@<版> の形 (版を指定した npm は固定され、再取得されない)。
+# 出典: 公式の package カタログ https://pi.dev/packages (npm の月間ダウンロード数が多く用途が合うもの)。
+# 版の調査: `npm view <名前> version` (2026-11-08)。更新するときは版を書き換える。
+npm:pi-mcp-adapter@7.0.1
+npm:pi-subagents@0.87.0
+npm:pi-web-access@0.47.0
+npm:@juicesharp/rpiv-todo@2.15.0
+npm:@juicesharp/rpiv-ask-user-question@2.15.0
+npm:@gotgenes/pi-permission-system@42.0.0
+npm:cc-safety-net@2.7.6
