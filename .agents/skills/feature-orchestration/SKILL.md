@@ -71,6 +71,10 @@ B が、まだ develop に入っていない A の変更を要るとき、A の�
 
 全件検査と「統合する」を 1 回にしたいときは、手で merge せず `python3 scripts/bundle.py start <a> <b> ...` を使う（既存の bundle に枝を足すときは `add`。シェルの `git merge` は対象によらず保護ブランチへの統合と同じ確認が出る。衝突は止まる＝終了コード 3。worker に解消させ、`git add -A` 後に `continue`、最後に `verify`・`summary`）。正本は [統合用の枝](../../../docs/spec/orchestration.md#統合用の枝bundle)。
 
+## stock の pi でのオーケストレーション
+
+stock の pi（拡張 `pi-subagents`）では、`guarded_task`・`bundle.py` ではなく、拡張ネイティブの workflow（`worktree: true`）で子を回す。手順・規則・実機で確かめる点は [references/pi-subagents.md](references/pi-subagents.md)。
+
 ## 落とし穴
 
 - **整形 hook が書き込み直後にファイルを書き換える**。すぐ `git add` すると空のファイルをステージする（工程 4 の `sleep 4` と `--numstat`）。
