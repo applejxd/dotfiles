@@ -160,6 +160,8 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 
 ### 子の文脈 (AGENTS.md) の抜粋 (CHG-0059)
 
+**凍結（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)）。AGENTS.md と共通指示は印なしの平らな文書になった**（印のない文書は未導入として、子に全文を渡す）。印の試験は、固定のサンプル（`test/agents/fixtures/child_context/`。旧文書の写し）に対して検証する。以下は凍結した仕組みの記録。
+
 子に渡す AGENTS.md（グローバルと作業先・祖先）を、全文ではなく**役割ごとの抜粋**にできる。**既定は従来どおりの全文（`inherit`）**。設計と経緯は [CHG-0059](../../change/closed/0059-child-context.md)、実測は [記録](../../research/agents/child-context-probe.md)。
 
 | 項目 | 内容 |

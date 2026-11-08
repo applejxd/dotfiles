@@ -1,4 +1,4 @@
-"""正本 (共通指示・リポジトリの AGENTS.md) の子向けの印が、規則ごとに期待どおりの役割へ渡ることを固定する。
+"""固定サンプル (旧: 共通指示・リポジトリの AGENTS.md の写し) の子向けの印が、規則ごとに期待どおりの役割へ渡ることを固定する。
 
 ``test/agents/pi/child_context_sources_driver.mjs`` が ``resolveContext`` / ``lint`` を実物の 2 ファイルに当てる。
 規則は「原文の箇条書き (継続行を含む) 全体」を切り出して、抜粋に入る / 入らないを役割ごとに確かめる。
@@ -18,7 +18,11 @@ from test_pi_judge_ts import _node
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 DRIVER = HERE / "pi" / "child_context_sources_driver.mjs"
-FILES = {"global": "home/.chezmoitemplates/agent-instructions.md", "repo": "AGENTS.md"}
+# 凍結 (ADR-0030): 実物は印なしの平らな文書になったので、印つきの固定サンプル (旧正本の写し) を検証する
+FILES = {
+    "global": "test/agents/fixtures/child_context/agent-instructions.md",
+    "repo": "test/agents/fixtures/child_context/repo-instructions.md",
+}
 ROLES = ("explore", "review", "plan", "worker")
 
 pytestmark = pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")

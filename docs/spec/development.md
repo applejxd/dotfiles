@@ -1,7 +1,7 @@
 # 開発ガイド
 
 このリポジトリを変更するときの準備と検証の手順。
-各検証のコマンドは [AGENTS.md の検証表](../../AGENTS.md#検証)、テストの種類と入口は
+各検証のコマンドは [dotfiles-conventions スキルの検証表](../../.agents/skills/dotfiles-conventions/SKILL.md#検証)（常時の 3 コマンドは [AGENTS.md](../../AGENTS.md#検証)）、テストの種類と入口は
 [test/README.md](../../test/README.md)、Docker ハーネスと GitHub Actions の仕組みは
 [テストと検証の仕組み](testing.md) にある。dotfiles の編集・反映の手順は
 [README の「設定ファイルの編集」](../../README.md#設定ファイルの編集)。
@@ -45,7 +45,7 @@ Raspberry Pi 4 ではメモリが尽きて SSH も応答しなくなる
 
 ## 変更の種類ごとの検証
 
-「検証表の行」は [AGENTS.md の検証表](../../AGENTS.md#検証) の行で、
+「検証表の行」は [dotfiles-conventions スキルの検証表](../../.agents/skills/dotfiles-conventions/SKILL.md#検証) の行で、
 コマンドはそちらにある。
 
 | 変更したもの | 検証表の行 | 補足 |
