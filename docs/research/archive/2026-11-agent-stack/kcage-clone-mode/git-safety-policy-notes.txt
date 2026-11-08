@@ -1,0 +1,32 @@
+# git の安全方針の整理（私用メモ。利用者の判断待ち）— 2026-11-08
+
+利用者の方針: main・develop などのブランチは、reflog などで戻せる限り保護対象にしない。禁止するのは、.git の削除・push など取り返しのつかないものだけ。
+適用範囲と、二段（フルガード＝ホストの AI の道具呼び出し／箱＝kcage）の分担は、利用者が検討中（Q1 保留）。Q2（箱の中の復元手段の破壊への備え）も保留。
+
+## 原則（案）
+- フルガード = 意図の検査（うっかり防止）。取り返しのつかない操作と外への影響を止める。可逆な操作は止めない。
+- 箱 = 能力の遮断（境界）。認証・ネットワーク・ホストの書き込み先・ホストで実行される経路を渡さない。箱の中にフルガードを作り直さない。
+- 二段で同じ操作を二重に止めない。箱が境界で防げるものは箱、防げないものだけをガードか復元点で補う。
+
+## 担当（案）
+| 種類 | 例 | フルガード | 箱 |
+| --- | --- | --- | --- |
+| 可逆（reflog で戻る） | commit・branch 作成と削除・merge（develop/main 含む）・rebase・reset --soft/--mixed・local tag・worktree add | 許可 | 許可（素の git。git flow は箱では config が ro のため不可） |
+| 未コミット作業の喪失 | reset --hard・checkout -- .・clean -fd・stash drop・rm | 作業ツリーに変更があるときだけ確認 | 許可（共有のためホストにも及ぶ） |
+| 復元手段の破壊 | .git の削除・reflog expire/delete・gc --prune=now・filter-branch・update-ref -d・未マージの branch -D | deny | 保留（rw 共有のため境界では防げない。復元点・規則・許容のどれか） |
+| 外への公開 | push（force 含む）・PR の作成/マージ・パッケージ/image の公開 | deny（人が実行） | 認証を渡さないのでできない（境界） |
+| 秘密・認証 | トークンの読み取り・送信 | 既存どおり | 認証を箱に入れない（境界） |
+| ホストで実行される経路 | hooks・config・commondir・alias | 対象外 | ro で重ねる（commondir は feature/kcage-commondir で修正中） |
+
+## 全リポジトリへ適用する場合に見直すもの（別案件）
+AGENTS.md の「develop/main に直接コミットしない」・フルガードの統合判定（git merge・git flow feature finish を必須確認）・feature worktree での確認なしコミット（自由区）・PR ビューアの統合のボタンと統合前の全件検査・docs（ADR・orchestration・operation-modes）と golden。
+
+## 順序（提案）
+1. 箱の運用だけで採用（箱の中の AI は素の git で develop も動かしてよい。仕様書に書く）。
+2. 復元手段の破壊への備えは、箱を実際に使ってから判断。
+3. dotfiles 自身の開発ルールを緩めるかは、箱の運用の様子を見てから。
+
+## 独立 review（job-4cd36e7d91982b77。全文 .tmp/subagents/51-job-4cd36e7d91982b77.md）の要点
+- 推奨は G（箱では素の git で feature を開始、統合は既存のホスト側承認経路）。案 B（gitflow.* 書き込み補助）は gitflow.path.hooks が実行経路になるため不採用。案 C は検査の網羅が難しく不採用。案 F はあとで UX 改善として。案 E（独立 clone+bundle）は正本を箱から切り離す必要が出たとき。
+- 共有 .git が rw のままなら、A・D・F のどれでも箱は全ブランチを改変できる（develop の保護は境界ではなく process の統制）。
+- .git/commondir で ro の config・hooks を迂回できる（再現済み）→ feature/kcage-commondir で封じる。

@@ -1,0 +1,109 @@
+#57 起動 14:12:33 / 完了 14:16:21
+
+child explore: completed [228s, 26 calls, 2943.3k tokens, $0.996]
+- model: github-copilot/claude-sonnet-5.5, effort: (pi default), role default
+- 文脈: inherit
+warnings (tool errors during the run; the answer below already accounts for them):
+- tool error: guarded_bash: どの規則にも当たらない (役割 'explorer' の既定)
+format check (the answer lacks the standard sections; verify its claims yourself):
+- missing: 根拠, 未確認
+- calls: bash×16 grep×13 read×13 find×8 ls×1
+
+answer:
+## 結論
+
+**coi は、保守が活発で作り込みも厚い OSS。ただし git 履歴の指標は取れておらず、保守の健全性は部分的な評価にとどまる。**
+- **git は使えなかった。** 私の bash は作業ディレクトリが chezmoi で、`cd … && git …` と `git --git-dir=… rev-list` は拒否された。`git -C` は禁止の迂回にあたるので試していない。
+- **取れなかった項目**: 月別コミット数、作者数・bus factor の割合、外部 PR の件数、セキュリティ修正の commit hash。
+- 以下は CHANGELOG、`packed-refs`、`CODEOWNERS`、`LICENSE`、ファイル実体から得た代替の根拠。
+
+**統合の見立ては「参考にするだけ」（部分的に取り込む）。載せる方式も置き換えも合わない。**
+- **(ii) 特権補助による制御面の分離が合わない。** coi は利用者本人が incus-admin に入る前提で、kcage の中核と逆になる。
+- **GPU と WSL2 の記述が coi に無い。**
+- **規模が約 9 倍。** coi の Go は 56k 行、kcage の Python は 6.4k 行。フォークすると保守の負担は kcage より大幅に増える。
+
+## 1. 保守の指標
+
+| 項目 | 事実 |
+| --- | --- |
+| リリース | `packed-refs` のバージョンタグは 20 本。初回リリースは 2025-12-11（0.1.0）。直近の v0.16.0 は 2026-10-23。 |
+| 間隔 | 0.8.0（04-16）〜0.16.0 の間に 13 リリース。0.13.0（09-28）→0.14.0（10-09）→0.15.0（10-12）→0.16.0 と、近年は 3〜11 日間隔。 |
+| 0.x の安定度 | `[Breaking]` が 0.8.0 に 9 件、0.10.0 に 3 件、0.16.0 に 4 件。Unreleased にも 2 件あり、config キー・フラグ・image 名の破壊的変更が続いている。 |
+| CI | `ci.yml` は PR（master/main）と手動で動く。build、golangci-lint、`go test -race`、macOS の unit、**実 Incus の統合テスト 23 レーン**（GitHub の ubuntu-24.04 ランナー）。ほかに `install-flow`（clean Ubuntu）、`release`（sha256 のみで署名・provenance は未確認）、`verify-action-pins`、週次の image mirror がある。 |
+| テスト | Go の `_test.go` は約 279 ファイルで 55,809 行（手で数えた）。名前が `*_integration_test.go` のものは約 37 ファイル。Python の e2e は `tests/` に 87,971 行（実 Incus。約 37 ディレクトリ）。 |
+| Go 本体 | 56,282 行（`internal/`・`cmd/`・`schema/` の `.go` から、テスト行を引いた値）。 |
+| 依存 | `go.mod` は 12 モジュール（直接 8・間接 4）。cobra・toml・miekg/dns・yaml・systemd・uuid・jsonschema・x/sys のみ。 |
+| SECURITY.md | **無い。** |
+
+**bus factor は、実測ではなく推測。** `CODEOWNERS` は `.github` 配下すべてを 1 アカウントに割り当てており、`LICENSE` の著作権者も 1 個人。一方、CHANGELOG が外部貢献者として謝辞を載せるのは延べ 18 件・異なる人 11 人で、外部 PR は取り込まれている。
+
+## 2. セキュリティ修正（日付はリリース日。hash は未取得）
+
+- **0.8.0（04-16）**
+  - 保護パスに host 側で `chattr +i` を付け、`unshare -m` と `umount` の迂回を塞いだ。
+  - 存在しない保護パスを実体化した。
+  - IPv6 経由で隔離ルールを全部迂回できた問題を修正した。
+  - guestapi を既定で無効にした。
+- **0.9.0（06-17）**
+  - `file pull` の symlink 展開による host 改ざんを塞いだ。
+  - DHCP リース再利用による egress 迂回を塞いだ（古い nft ルールを先に除去）。
+  - ICMP トンネルを塞いだ。
+  - git の config/attributes と、workspace の `.coi/` を読み取り専用にした。
+  - untrusted なプロジェクト設定がネットワーク隔離を緩められないようにした。
+  - NIC の spoofing 対策と、IPv6 の host 側強制を入れた。
+- **0.10.0（07-10）**
+  - `secret_paths` による秘密のマスクを入れた。
+  - `.claude/settings.json` を読み取り専用にした。
+  - 保護を弱める設定を trusted scope だけに限定した。
+- **0.11.0（07-29）**: allowlist モードで DNS egress を遮断した。
+- **0.14.0（10-09）**
+  - リポジトリ側 profile の `context_file` による host ファイルの取り込みを塞いだ。
+  - reverse shell の検出回避を直した。
+- **0.15.0（10-12）**: 停止して起動し直した後に新しい veth で IPv6 ブロックが外れ、箱の中の root が IPv6 を再有効化して firewall を迂回できた問題を直した（#891）。
+- **0.16.0（10-23）**: リポジトリ側の config による `forward_env` と ssh-agent の転送を無効にした。
+- **Unreleased（10-23 以降）**
+  - 保護パスの親ディレクトリを rename して迂回できた問題を、親ディレクトリの固定で塞いだ。
+  - submodule や入れ子の git の `config` が `core.fsmonitor` 経由で host 上のコマンド実行に使えた問題を塞いだ。
+
+**成熟度の見立て（推測）**: 脱出・迂回クラスの修正が 0.15 以降も出ており、保護パス方式は穴を継続して塞いでいる段階。kcage の `.git` まわりの既知の限界（submodule、`modules/`、入れ子）は、coi がすでに実装している領域にあたる。
+
+## 3. 拡張点と、kcage の 3 要件の評価
+
+coi の拡張点は、profile の継承、`[container.build] script/commands`、`[tool] pre_launch`、`[defaults] env_commands`、`[[sockets]]`、`[[credentials]]`、`[[mounts]]`、`coi tool spec`、JSON schema。`pre_launch` は箱の中で走り、host 側のライフサイクルフックは見つからなかった。
+
+- **(i) 認証 broker: 設定で可（一部は小さな変更）。**
+  - `[[sockets]]` は Incus の proxy デバイス（`manager.go:236`）で host の unix ソケットを箱へ出す。ダミートークンは `[defaults.environment]` で渡せる。
+  - broker の起動と停止は coi の外（systemd）で行う。
+  - loopback TCP の中継は、coi の機能に無いので build スクリプトで足す。
+- **(ii) 特権補助での制御面分離: 設計が合わない。**
+  - coi は incus-admin の利用者本人を前提にする（`group_reexec.go:70`、`health/checks_system.go:110`、`manager.go:1182`）。
+  - firewall は `sudo nft *` の NOPASSWD ルールで操作する（`ci.yml:341`）。
+  - `incusBinary` は PATH 解決なので shim は技術的には可能。ただし coi の incus 呼び出しは広く（`commands.go` 1,206 行、`manager.go` 1,421 行）、許可表が coi の実装詳細に結合する。
+- **(iii) 許可表＋要求ファイル: 小さな変更で可（許可表は別途必要）。**
+  - 「untrusted なプロジェクト設定は締める方向だけ」は `loader.go:200-602` の sanitizer と `coi trust` で実装済み。
+  - ただし trusted scope は利用者が書き換えられる `~/.coi/config.toml` で、root 所有の許可表や repo ごとの登録は無い。
+- **GPU（kcage の要件）: フォークが要る。** `gpu`・`nvidia`・WSL の記述が coi に見つからなかった。
+
+## 4. 規模の比較
+
+| | 本体 | テスト |
+| --- | --- | --- |
+| coi | Go 56,282 行 | Go 55,809 行、Python 87,971 行（実 Incus） |
+| kcage | `scripts/kcage` の Python 6,373 行 | `test/kcage` の Python 5,721 行 |
+
+## 5. ライセンスと貢献
+
+- ライセンスは MIT（`LICENSE`）。
+- `CONTRIBUTING` は無い。`SECURITY.md` も無い。
+- 外部 PR の件数と作者のメールドメインは、git が使えず**不明**。
+
+## 懸念
+
+- 0.x で破壊的変更が毎リリースにあり、単独の保守者への依存が大きい。
+- 脆弱性報告の窓口（`SECURITY.md`）が無い。
+- リポジトリには仕様の文書（`docs/`）が無い。詳細は GitHub wiki にあるはずだが、手元では未確認。
+
+## 次の候補
+
+- **git の指標を取る。** 親が coi の clone を作業ディレクトリにして `git shortlog -sne --since=2025-11-01` と `git log --format=%ad` を実行する。あるいは cwd を指定できる explore 子で再依頼する。
+- **参考にする点を絞る。** 保護パスの親ディレクトリ固定、submodule と入れ子の git 保護、veth 再生成時の隔離の再適用、untrusted と trusted の sanitizer の網羅性を、kcage の既知の限界と突き合わせる。
