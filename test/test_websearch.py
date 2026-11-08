@@ -1,4 +1,6 @@
-"""web-search の CLI (websearch.py) を、通信なしで検証する。
+"""web-search の核 (home/dot_config/agents/websearch/core.py) を、通信なしで検証する。
+
+スキルの CLI (scripts/websearch.py) は核を呼ぶ薄い入口で、その接続も確かめる。
 
 see docs/spec/web-search.md
 """
@@ -16,8 +18,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "home" / "dot_claude" / "skills" / "web-search" / "scripts" / "websearch.py"
-_spec = importlib.util.spec_from_file_location("websearch", SCRIPT)
+CORE = ROOT / "home" / "dot_config" / "agents" / "websearch" / "core.py"
+SKILL_CLI = ROOT / "home" / "dot_claude" / "skills" / "web-search" / "scripts" / "websearch.py"
+_spec = importlib.util.spec_from_file_location("websearch", CORE)
 assert _spec and _spec.loader
 ws = importlib.util.module_from_spec(_spec)
 sys.modules["websearch"] = ws  # dataclass が自分のモジュールを引く
@@ -712,8 +715,10 @@ def test_key_scripts_are_personal_and_never_stop_apply(path):
         if re.match(r"\s*(bw unlock|& bw|\$env:BW_SESSION\s*=)", line)
     ]
     assert "skip" in text.lower()
-    # 鍵そのものを書き出す処理が無い (書くのは websearch.py だけ)
+    # 鍵そのものを書き出す処理が無い (書くのは核の core.py だけ)
     assert "Set-Content" not in text and "Out-File" not in text and "bw get" not in text
+    # 呼び先はスキルではなく中立な核 (スキルを廃止しても鍵の同期が残る)
+    assert "core.py" in text and ".claude" not in text
 
 
 def test_windows_key_script_is_saved_with_a_bom():
@@ -1065,3 +1070,58 @@ def test_a_proxy_that_refuses_the_tunnel_is_reported_as_blocked():
         port = server.server_address[1]
         with pytest.raises(ws.Blocked, match="プロキシが接続を拒否"):
             ws.fetch_page("https://denied.example/", proxy=("127.0.0.1", port), timeout=5)
+
+
+# ─── スキルの CLI (薄い入口) が核へつながる ─────────────────────────────
+
+
+def _run_skill_cli(tmp_path, *args, core_env=None):
+    import subprocess
+
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("WEBSEARCH_", "BW_"))}
+    env.update(
+        {
+            "HOME": str(tmp_path),
+            "AGENTS_CONFIG_DIR": str(tmp_path / "cfg"),
+            "WEBSEARCH_CACHE_DIR": str(tmp_path / "cache"),
+            "PATH": "/nonexistent",
+        }
+    )
+    env.update(core_env or {})
+    return subprocess.run(
+        [sys.executable, str(SKILL_CLI), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        timeout=60,
+    )
+
+
+def test_skill_cli_delegates_to_core(tmp_path):
+    proc = _run_skill_cli(
+        tmp_path, "search", "ghp_" + "a" * 30
+    )  # 秘匿チェックは核で止まる (通信しない)
+
+    assert proc.returncode == 2 and "検索を止めた" in proc.stderr
+
+
+def test_skill_cli_status_runs_without_network(tmp_path):
+    proc = _run_skill_cli(tmp_path, "status")
+
+    assert proc.returncode == 0 and "brave: 鍵なし (飛ばす)" in proc.stdout
+
+
+def test_skill_cli_reports_a_missing_core(tmp_path):
+    proc = _run_skill_cli(tmp_path, "status", core_env={"WEBSEARCH_CORE": str(tmp_path / "x.py")})
+
+    # 環境変数の指定が無くても、リポジトリ内の核へ落ちる (見つからなければ 2 で終わる)
+    assert proc.returncode in (0, 2)
+
+
+def test_skill_cli_has_no_provider_logic():
+    text = SKILL_CLI.read_text(encoding="utf-8")
+
+    # 薄い入口 (核への委譲と、古い読み手向けの名前の写しだけ)。プロバイダのロジックを持たない
+    assert len(text.splitlines()) < 90
+    assert "api.search.brave.com" not in text and "def sync_keys" not in text
