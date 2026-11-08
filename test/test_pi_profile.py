@@ -183,7 +183,12 @@ def stock_settings_script(tmp_path: Path) -> Path:
 
 def run_script(script: Path, stdin: str) -> str:
     result = subprocess.run(
-        [sys.executable, str(script)], input=stdin, capture_output=True, text=True, check=True
+        [sys.executable, str(script)],
+        input=stdin,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
     )
     return result.stdout
 
