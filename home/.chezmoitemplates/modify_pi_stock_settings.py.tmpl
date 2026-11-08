@@ -20,6 +20,42 @@ HARNESS_SKILL_MARKS = ("~/.claude/skills", "-~/.agents/skills/", "-~/.claude/ski
 # 利用者が +/- だけの増分指定に変えていたら保つ。自作ハーネスの全置換の値 (["read"] など) は初期値に置き換える
 DEFAULT_TOOLS = ["+grep", "+find", "+ls"]
 
+# 圧縮 (compaction): 窓が 100 万のモデルは 70 万で圧縮する。reserveTokens = 窓 - 発動点 = 300000 (窓の 3 割)
+# 窓の大きさが違うモデルは補わない。利用者が別の値を書いていれば保つ (無いときだけ補う)
+COMPACTION_RESERVE_TOKENS = 300000
+COMPACTION_MODELS = (
+    "github-copilot/claude-sonnet-5.5",
+    "github-copilot/claude-opus-5.5",
+    "github-copilot/claude-sonnet-5",
+    "github-copilot/gpt-6-sol",
+    "github-copilot/gpt-5.3-codex",
+    "github-copilot/gemini-3.8-flash",
+)
+
+
+def add_compaction_overrides(data: dict) -> None:
+    compaction = data.get("compaction")
+    if compaction is None:
+        compaction = {}
+    if not isinstance(compaction, dict):
+        return  # 想定外の形は触らない
+    overrides = compaction.get("modelOverrides")
+    if overrides is None:
+        overrides = {}
+    if not isinstance(overrides, dict):
+        return
+    for model in COMPACTION_MODELS:
+        entry = overrides.get(model)
+        if entry is None:
+            entry = {}
+        if not isinstance(entry, dict):
+            continue
+        entry.setdefault("reserveTokens", COMPACTION_RESERVE_TOKENS)
+        overrides[model] = entry
+    compaction["modelOverrides"] = overrides
+    data["compaction"] = compaction
+
+
 # pi-subagents の組み込みの子の tools を読み取り専用に絞る (subagents.agentOverrides.<name>.tools 。docs/agents.md)。
 # 組み込みの既定: scout = read, grep, find, ls, bash, write, contact_supervisor / oracle = read, grep, find, ls, bash。
 # bash・write を外す (scout は親への問い合わせ contact_supervisor を残す)。reviewer (読み取り専用) と worker は変えない。
@@ -83,6 +119,7 @@ def main() -> int:
         overrides[name] = entry
     subagents["agentOverrides"] = overrides
     data["subagents"] = subagents
+    add_compaction_overrides(data)
     json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
     sys.stdout.write("\n")
     return 0

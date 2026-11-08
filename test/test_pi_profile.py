@@ -315,6 +315,7 @@ def test_stock_settings_keeps_user_extension_and_is_idempotent(tmp_path):
 def test_stock_settings_from_empty_input(tmp_path):
     out = json.loads(run_script(stock_settings_script(tmp_path), ""))
     out.pop("subagents")  # agentOverrides は test_pi_subagents_config.py で検査
+    out.pop("compaction")  # modelOverrides は test_pi_compaction_config.py で検査
     assert out == {"defaultTools": ["+grep", "+find", "+ls"], "packages": stock_packages(tmp_path)}
 
 

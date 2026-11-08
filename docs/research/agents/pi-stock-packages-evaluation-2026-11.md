@@ -79,6 +79,11 @@
 | 通知 | `@pi-unipi/notify`（0.6 万）、`@lwlee2608/pi-notify`（0.3 万。スマホ通知）、`@henryqw/pi-bark`（0.2 万。iOS の Bark）、`@narumitw/pi-notify`（0.2 万） | 自作の `notify` の代替。承認待ちや長い作業の完了の知らせ |
 | メモリ | `pi-memory`（6.8 万）、`pi-hermes-memory`（2.7 万）、`gentle-engram`（2.0 万） | これまでの記録に需要は見あたらない。入れるなら鍵・外部送信の評価が要る |
 
+## 圧縮（2026-11-09 の決定）
+
+- `@thgilciffart/pi-compaction@0.3.1` を、**要約の指示（brief）の恒久設定だけ**に使う（`auto` のしきい値は使わない）。しきい値は本体の `compaction.modelOverrides` の `reserveTokens = 300000`（窓 100 万のモデル。70 万で発動）。自作は足さない。
+- 根拠と集計は [長い文脈は要らない（論文）と圧縮の方針](long-context-compaction-paper-2026-11.md)。
+
 ## 未確認
 
 - 検索の MCP（実機）: `uv` が PATH にあること・stdio の起動・pi 組み込みの MCP が `mcp.json` の `websearch` を読むこと・permission-system の `mcp` の allow が探索系（`mcp_status` など）を自動で allow にするか。

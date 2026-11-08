@@ -286,6 +286,8 @@ orca/**
 # pi-subagents の設定 (単数形 subagent/。複数形 subagents/ は自作の拡張) も stock の package の設定なので配らない
 .pi/agent/extensions/subagent
 .pi/agent/extensions/subagent/**
+# 圧縮の設定 (@thgilciffart/pi-compaction) も stock の package の設定なので配らない
+.pi/agent/compaction.json
 # stock の MCP 設定 (~/.pi/agent/mcp.json。generate.py --target pi-mcp) も配らない。custom の MCP は harness の rules.json
 .pi/agent/mcp.json
 {{ end -}}
