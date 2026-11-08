@@ -20,6 +20,15 @@ HARNESS_SKILL_MARKS = ("~/.claude/skills", "-~/.agents/skills/", "-~/.claude/ski
 # 利用者が +/- だけの増分指定に変えていたら保つ。自作ハーネスの全置換の値 (["read"] など) は初期値に置き換える
 DEFAULT_TOOLS = ["+grep", "+find", "+ls"]
 
+# pi-subagents の組み込みの子の tools を読み取り専用に絞る (subagents.agentOverrides.<name>.tools 。docs/agents.md)。
+# 組み込みの既定: scout = read, grep, find, ls, bash, write, contact_supervisor / oracle = read, grep, find, ls, bash。
+# bash・write を外す (scout は親への問い合わせ contact_supervisor を残す)。reviewer (読み取り専用) と worker は変えない。
+# 利用者がすでに同じ役の tools を書いていれば保つ (無いときだけ補う)。
+AGENT_TOOL_OVERRIDES = {
+    "scout": ["read", "grep", "find", "ls", "contact_supervisor"],
+    "oracle": ["read", "grep", "find", "ls"],
+}
+
 
 def is_incremental(value: object) -> bool:
     return (
@@ -60,6 +69,20 @@ def main() -> int:
             else:
                 del data[key]
     data["packages"] = packages()
+    subagents = data.get("subagents")
+    if not isinstance(subagents, dict):
+        subagents = {}
+    overrides = subagents.get("agentOverrides")
+    if not isinstance(overrides, dict):
+        overrides = {}
+    for name, tools in AGENT_TOOL_OVERRIDES.items():
+        entry = overrides.get(name)
+        if not isinstance(entry, dict):
+            entry = {}
+        entry.setdefault("tools", list(tools))
+        overrides[name] = entry
+    subagents["agentOverrides"] = overrides
+    data["subagents"] = subagents
     json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
     sys.stdout.write("\n")
     return 0

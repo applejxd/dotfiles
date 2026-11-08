@@ -151,8 +151,11 @@ def own_extensions() -> list[str]:
 def test_own_extensions_match_source_directories():
     """一覧は dot_pi/agent/extensions/ の直下の自作ディレクトリと一致する (permission-system は package の設定)。"""
     src = HOME_SRC / "dot_pi" / "agent" / "extensions"
+    # pi-permission-system / subagent は package の設定 (自作の拡張ではない)
     actual = sorted(
-        p.name for p in src.iterdir() if p.is_dir() and p.name != "pi-permission-system"
+        p.name
+        for p in src.iterdir()
+        if p.is_dir() and p.name not in ("pi-permission-system", "subagent")
     )
     assert sorted(own_extensions()) == actual
     assert actual, "自作の拡張が 1 つも無い"
@@ -311,6 +314,7 @@ def test_stock_settings_keeps_user_extension_and_is_idempotent(tmp_path):
 
 def test_stock_settings_from_empty_input(tmp_path):
     out = json.loads(run_script(stock_settings_script(tmp_path), ""))
+    out.pop("subagents")  # agentOverrides は test_pi_subagents_config.py で検査
     assert out == {"defaultTools": ["+grep", "+find", "+ls"], "packages": stock_packages(tmp_path)}
 
 

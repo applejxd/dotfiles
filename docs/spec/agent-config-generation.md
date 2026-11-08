@@ -586,3 +586,15 @@ chezmoi apply
 Windows 実機では未検証（`.chezmoiignore.tmpl` の Windows 向けの戻し `!.config/pi/` との兼ね合いを含む）。
 
 試験は `test/test_pi_profile.py`（`chezmoi execute-template` で描画して確かめる。実機の apply は行わない）。
+
+### pi-subagents の設定（stock）
+
+子エージェントは package `pi-subagents`（nicobailon。`pi-stock-packages` で版固定）。評価は [評価の記録](../research/agents/pi-stock-packages-evaluation-2026-11.md) の「オーケストレーションの評価と決定」、運用は `.agents/skills/feature-orchestration/references/pi-subagents.md`。自作のコードは足さない（既存の `modify_` スクリプトと設定だけ）。複数形の `extensions/subagents/` は凍結した自作拡張で、ここの対象ではない。
+
+- **`~/.pi/agent/extensions/subagent/config.json`**（単数形。stock だけ。custom は `.chezmoiignore.tmpl` で除外）: `home/dot_pi/agent/extensions/subagent/modify_config.json.py.tmpl` が配る。
+  - **`forceTopLevelAsync: true` は強制**（利用者が false にしても apply で戻る）。前景の子には親の拡張が載らず permission-system と cc-safety-net が効かないため。
+  - 無いときだけ補う: `worktreeProvider: "native"`・`maxActiveAsyncRunsPerSession: 4`（同時数）・`maxSubagentDepth: 1`（入れ子なし）・`maxSubagentSpawnsPerRun: 32`（1 run の子の累計。既定は 64）。
+  - 利用者が足した他のキーは保つ。壊れた JSON は触らない。何度流しても同じ。
+- **settings の `subagents.agentOverrides`**（`modify_pi_stock_settings.py.tmpl`）: 組み込みの `scout`（`read`・`grep`・`find`・`ls`・`contact_supervisor`）と `oracle`（`read`・`grep`・`find`・`ls`）の `tools` を読み取り専用に絞る（組み込みの既定は `bash`・`write` を持つ）。`reviewer`（読み取り専用）・`worker` は変えない。利用者が同じ役の `tools` を書いていれば保つ（無いときだけ補う）。他の `subagents` のキー・他の役の上書きも保つ。
+- **permission**（`pi-permission-policy.json`）: `subagent_supervisor` は allow、`subagent_launch`（workflow の子の起動ごとの確認）は **ask**。`gate`・`acceptance.verify` のシェルは bash の規則の外なので使わない。
+- 試験は `test/test_pi_subagents_config.py`（描画して確かめる。実機の apply は行わない）。

@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""pi の stock プロファイルの ~/.pi/agent/extensions/subagent/config.json。標準入力の現状を変換して出す。
+
+pi-subagents (nicobailon。home/.chezmoitemplates/pi-stock-packages で版固定) の設定。
+(複数形の extensions/subagents/ は凍結した自作拡張で、ここの対象ではない。)
+- forceTopLevelAsync は true に強制する。前景の子には親の拡張が載らず、permission-system と
+  cc-safety-net が効かないため (背景の子には載る)。利用者が false にしても apply で true に戻る。
+- それ以外 (worktreeProvider・同時数と暴走の上限) は、無いときだけ補う。利用者が変えた値は戻さない。
+- 利用者が足した他のキーは保つ。壊れた入力は触らない。何度流しても同じ結果になる。
+stock でだけ配る (custom は .chezmoiignore.tmpl で除外)。
+see docs/spec/agent-config-generation.md#pi-subagents-の設定stock
+"""
+from __future__ import annotations
+
+import json
+import sys
+
+# 強制する値 (docs/configuration.md の forceTopLevelAsync)
+FORCED = {
+    "forceTopLevelAsync": True,
+}
+
+# 無いときだけ補う値 (docs/configuration.md の各見出し)
+DEFAULTS = {
+    # worktree: true の子の置き場の確保。Worktrunk を使わず pi 本体の Git worktree に固定する
+    "worktreeProvider": "native",
+    # 同時に動かす最上位の背景 run の数
+    "maxActiveAsyncRunsPerSession": 4,
+    # 子が孫を起こす入れ子の深さ。入れ子は使わない
+    "maxSubagentDepth": 1,
+    # 1 回の run (workflow) が起こす子の累計の上限 (既定は 64)
+    "maxSubagentSpawnsPerRun": 32,
+}
+
+
+def main() -> int:
+    raw = sys.stdin.read()
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        sys.stdout.write(raw)  # 壊れた入力は触らない
+        return 0
+    if not isinstance(data, dict):
+        sys.stdout.write(raw)
+        return 0
+    for key, value in DEFAULTS.items():
+        data.setdefault(key, value)
+    data.update(FORCED)
+    json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
