@@ -258,12 +258,22 @@ orca/**
 {{ if eq (includeTemplate "pi-profile" .) "stock" }}
 # pi の stock プロファイル: 自作の拡張・ハーネス・prompts・broker 用の設定を配らない
 # (settings.json と AGENTS.md は中身をプロファイルで切り替える)。
+# 拡張は自作のディレクトリだけ (一覧は pi-own-extensions)。pi-permission-system の設定は配る。
 # see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
-.pi/agent/extensions
-.pi/agent/extensions/**
+{{ range (includeTemplate "pi-own-extensions" . | splitList "\n") -}}
+{{ $name := trim . -}}
+{{ if and $name (not (hasPrefix "#" $name)) -}}
+.pi/agent/extensions/{{ $name }}
+.pi/agent/extensions/{{ $name }}/**
+{{ end -}}
+{{ end -}}
 .pi/agent/prompts
 .pi/agent/prompts/**
 .pi/agent/models.json
 .config/pi
 .config/pi/**
+{{ else }}
+# custom: stock だけが配る permission-system の設定 (modify_ スクリプト) は配らない
+.pi/agent/extensions/pi-permission-system
+.pi/agent/extensions/pi-permission-system/**
 {{ end -}}

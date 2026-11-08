@@ -418,6 +418,10 @@ RULES: tuple[Rule, ...] = (
         (
             "home/.chezmoitemplates/pi-profile",
             "home/.chezmoitemplates/pi-stock-packages",
+            "home/.chezmoitemplates/pi-own-extensions",
+            "home/.chezmoitemplates/pi-permission-policy.json",
+            "home/.chezmoitemplates/modify_pi_permission_config.py.tmpl",
+            "home/dot_pi/agent/extensions/pi-permission-system/*",
             "home/.chezmoitemplates/modify_pi_stock_settings.py.tmpl",
             "home/.chezmoitemplates/agent-instructions-stock.md",
             "home/.chezmoiremove",
