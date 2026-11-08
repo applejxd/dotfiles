@@ -432,3 +432,60 @@ def test_selftest_の環境変数の判定はブローカーのダミーを許�
     assert cli.judge_env(ok).status == "ok"
     real = "GH_TOKEN=ghp_" + "A" * 36 + "\n"
     assert cli.judge_env(real).status == "fail"
+
+
+# ---- コミット者情報の読み取り（up）
+
+_IDENT = ["--git-name", "Alice Example", "--git-email", "alice@example.test"]
+
+
+def _git_answers(name: str | None, email: str | None) -> dict[tuple[str, ...], cli.Result]:
+    def res(v: str | None) -> cli.Result:
+        return cli.Result(0, v + "\n") if v is not None else cli.Result(1)
+
+    return {
+        ("git", "-C", "/work/demo", "config", "--get", "user.name"): res(name),
+        ("git", "-C", "/work/demo", "config", "--get", "user.email"): res(email),
+    }
+
+
+def test_upはリポジトリの実効のgit設定を渡す():
+    runner = FakeRunner(_git_answers("Alice Example", "alice@example.test"))
+    assert cli.main(["up"], runner=runner, fs=fs_with()) == 0
+    assert runner.calls[-1] == ["sudo", "-n", HELPER, "up", "demo", *_IDENT]
+
+
+@pytest.mark.parametrize(
+    "answers",
+    [
+        _git_answers(None, "alice@example.test"),
+        _git_answers("Alice Example", None),
+        _git_answers(None, None),
+        _git_answers("", ""),
+    ],
+)
+def test_git設定が片方でも無ければ渡さず注意だけで続行する(answers, capsys):
+    runner = FakeRunner(answers)
+    assert cli.main(["up"], runner=runner, fs=fs_with()) == 0
+    assert runner.calls[-1] == ["sudo", "-n", HELPER, "up", "demo"]
+    assert "[kcage] コミット者情報なし" in capsys.readouterr().out
+
+
+def test_git設定の取得が例外でもupは続行する(capsys):
+    class Boom(FakeRunner):
+        def __call__(self, argv, *, capture=False):
+            if list(argv)[:2] == ["git", "-C"]:
+                raise FileNotFoundError("git")
+            return super().__call__(argv, capture=capture)
+
+    runner = Boom()
+    assert cli.main(["up"], runner=runner, fs=fs_with()) == 0
+    assert runner.calls[-1] == ["sudo", "-n", HELPER, "up", "demo"]
+    assert "コミット者情報なし" in capsys.readouterr().out
+
+
+def test_up以外はgit設定を読まない():
+    runner = FakeRunner(_git_answers("Alice Example", "alice@example.test"))
+    cli.main(["stop"], runner=runner, fs=fs_with())
+    assert not any(c[:2] == ["git", "-C"] for c in runner.calls)
+    assert runner.calls[-1] == ["sudo", "-n", HELPER, "stop", "demo"]

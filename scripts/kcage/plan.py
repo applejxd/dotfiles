@@ -9,6 +9,7 @@ from __future__ import annotations
 import ipaddress
 import posixpath
 import re
+import unicodedata
 from collections.abc import Mapping, Sequence
 
 from kcage import model
@@ -261,6 +262,34 @@ def _check_net_profiles(net: model.NetPlan) -> None:
             raise PlanError("許可外の profile_ops")
 
 
+GIT_CONFIG_PATH = model.BOX_HOME + "/.config/git/config"
+_GIT_NAME_MAX = 100
+_GIT_EMAIL_MAX = 200
+_GIT_EMAIL_RE = re.compile(r'^[^\s@<>"\\]+@[^\s@<>"\\]+$')
+
+
+def _has_control(s: str) -> bool:
+    return any(unicodedata.category(c) in ("Cc", "Zl", "Zp") for c in s)
+
+
+def _git_quote(s: str) -> str:
+    """git の設定の引用規則（バックスラッシュと二重引用符のエスケープ）。"""
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def git_identity_config(name: str, email: str) -> str:
+    """箱の ~/.config/git/config の内容（[user] の 2 行だけ）。信頼しない値なので検証し、違反は PlanError。"""
+    if not 1 <= len(name) <= _GIT_NAME_MAX or _has_control(name) or not name.strip():
+        raise PlanError("git の user.name が不正（1〜100 文字・制御文字なし）")
+    if (
+        not 1 <= len(email) <= _GIT_EMAIL_MAX
+        or _has_control(email)
+        or not _GIT_EMAIL_RE.fullmatch(email)
+    ):
+        raise PlanError("git の user.email が不正")
+    return f"[user]\n\tname = {_git_quote(name)}\n\temail = {_git_quote(email)}\n"
+
+
 def plan_up(
     cfg: model.BoxConfig,
     net: model.NetPlan,
@@ -270,6 +299,7 @@ def plan_up(
     exists: bool,
     running: bool,
     existing_repo_label: str | None = None,
+    git_identity: tuple[str, str] | None = None,
 ) -> model.Plan:
     if net.mode != cfg.network:
         raise PlanError("NetPlan のモードが設定と一致しない")
@@ -319,6 +349,17 @@ def plan_up(
         device_to_argv(box, d)  # 早期に検査（実行時にもう一度通す）
         steps2.append(d)
     steps2.extend(net.files)
+    if git_identity is not None:
+        # 検証を通した値を 1 つのファイルとして置くだけ（argv には渡さない。docs/spec/sandbox/incus-box.md#箱の中の-git-のコミット者情報）
+        steps2.append(
+            model.FilePut(
+                "box",
+                GIT_CONFIG_PATH,
+                "0644",
+                f"{model.BOX_USER}:{model.BOX_USER}",
+                content=git_identity_config(*git_identity),
+            )
+        )
     for b in active:
         steps2.extend(b.files)
     steps2.extend(broker_start())

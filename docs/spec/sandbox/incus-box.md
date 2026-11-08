@@ -91,6 +91,16 @@ flowchart LR
     - **未確認**: 実機の bind mount・ブローカーの停止 hook・Incus の対象固定は、使い捨て環境での確認が未実施。
 - `kcage exec -- <コマンド>` で箱の中のコマンドを実行する（パスワードなし。`kcage pi` はこれで `pi` を起動する）。実行は箱のユーザー（uid・同じ gid）で行い、補助グループは持たない。
 
+## 箱の中の git のコミット者情報
+
+箱の中の AI が `git commit` できるよう、`kcage up` がコミット者情報を自動で渡す（追加の操作は要らない）。
+
+- **読み取り元**: `kcage up` が、対象リポジトリの実効の git 設定を、利用者の権限で `git -C <リポジトリ> config --get user.name` / `user.email` で読む（`includeIf` などの結果を含む）。`--repo` 指定時は許可表の `path` のリポジトリ。
+- **渡し方**: 両方そろったときだけ `kcage-root up <id> --git-name <値> --git-email <値>` に付ける（片方だけは引数の誤りで終了コード 2。sudoers は `up *` のままで変更不要）。片方でも無い・読めないときは `[kcage] コミット者情報なし（ホストの git の user.name / user.email）` と注意を出すだけで、`up` は続行する。
+- **配置先**: 箱の `/home/ubuntu/.config/git/config`（所有者 `ubuntu:ubuntu`・0644）。内容は `[user]` の `name` / `email` の 2 行だけで、値は git の引用規則（`\` と `"` のエスケープ）で書く。プロキシ専用モードの `/etc/gitconfig`（root 所有）とは別のファイル。親ディレクトリは `incus file push --create-dirs` が作る。
+- **信頼の扱い**: 値は利用者が渡すので信頼せず、root 側（`plan.git_identity_config`）が検証してから 1 行の値としてだけ生成する（名前 1〜100 文字・メール 1〜200 文字で `^[^\s@<>"\\]+@[^\s@<>"\\]+$`・制御文字（改行・タブ・NUL）禁止）。違反は拒否して何も置かない。値は `incus` の引数に渡さず、ファイルの内容（標準入力）だけに使う。`core.sshCommand`・`core.hooksPath`・`alias`・`include` などは生成せず、ホストのパスや他の設定も持ち込まない。
+- **反映のタイミング**: 箱を**新規に作るとき**だけ配置する。起動中の箱は `up` が何もせず、停止中の既存の箱の再開でも置かない（箱の中で利用者が直した設定を上書きしないため）。変更を反映するには `kcage rm` → `kcage up`。
+
 ## 許可表と kcage.toml
 
 ### 許可表（`/etc/kcage/policy.toml`）
