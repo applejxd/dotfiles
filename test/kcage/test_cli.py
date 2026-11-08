@@ -85,7 +85,17 @@ def test_lsはリポジトリidなしでsudo_nを使う():
 def test_piはexecの後ろにダッシュ2つとpiと引数を置く():
     runner = FakeRunner()
     cli.main(["pi", "--", "-p", "hello"], runner=runner, fs=fs_with())
-    assert runner.calls[-1] == ["sudo", "-n", HELPER, "exec", "demo", "--", "pi", "-p", "hello"]
+    assert runner.calls[-1] == [
+        "sudo",
+        "-n",
+        HELPER,
+        "exec",
+        "demo",
+        "--",
+        "/opt/kcage-dist/bin/kcage-pi",
+        "-p",
+        "hello",
+    ]
 
 
 def test_snapは名前を渡せる():
@@ -219,12 +229,22 @@ def test_環境変数の秘密は名前だけを出し値は出さない():
 
 
 def test_gitの読み取り専用の判定():
-    ro = ".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n"
+    ro = ".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n.git=pin\n"
     assert cli.judge_git_ro(ro).status == "ok"
-    assert cli.judge_git_ro(".git/hooks=rw\n.git/config=ro\n.git/commondir=ro\n").status == "fail"
+    assert (
+        cli.judge_git_ro(".git/hooks=rw\n.git/config=ro\n.git/commondir=ro\n.git=pin\n").status
+        == "fail"
+    )
     # commondir が書ける（古い箱）
-    assert cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n.git/commondir=rw\n").status == "fail"
-    assert cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n").status == "fail"
+    assert (
+        cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n.git/commondir=rw\n.git=pin\n").status
+        == "fail"
+    )
+    assert cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n.git=pin\n").status == "fail"
+    # pin が無い（この対策の前に作った箱）は fail。作り直しを案内する
+    nopin = cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n.git=nopin\n")
+    assert nopin.status == "fail" and "kcage rm" in nopin.detail
+    assert cli.judge_git_ro(".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n").status == "fail"
     assert cli.judge_git_ro("").status == "fail"
 
 
@@ -304,7 +324,7 @@ def test_selftestは箱の中のexecだけをsudo_nで呼ぶ(capsys):
         if "curl" in joined:
             return cli.Result(0, "rc=7\n")
         if ".git/hooks" in joined:
-            return cli.Result(0, ".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n")
+            return cli.Result(0, ".git/hooks=ro\n.git/config=ro\n.git/commondir=ro\n.git=pin\n")
         return res
 
     assert cli.main(["selftest"], runner=run, fs=fs_with()) == 0
@@ -489,3 +509,27 @@ def test_up以外はgit設定を読まない():
     cli.main(["stop"], runner=runner, fs=fs_with())
     assert not any(c[:2] == ["git", "-C"] for c in runner.calls)
     assert runner.calls[-1] == ["sudo", "-n", HELPER, "stop", "demo"]
+
+
+def test_registerは上限と_idmap_isolated_を渡す():
+    runner = FakeRunner(top="/work/new-repo")
+    cli.main(
+        ["register", "--cpu", "4", "--memory", "8GiB", "--processes", "4096", "--idmap-isolated"],
+        runner=runner,
+        fs=fs_with(),
+    )
+    argv = runner.calls[-1]
+    assert argv[:5] == ["sudo", HELPER, "register", "new-repo", "--path"]
+    assert "--idmap-isolated" in argv
+    for flag, val in (("--cpu", "4"), ("--memory", "8GiB"), ("--processes", "4096")):
+        assert argv[argv.index(flag) + 1] == val
+
+
+def test_doctorの資源上限の表示は有無だけで_fail_にしない():
+    text = '[repo.demo]\npath = "/work/demo"\ncpu = 2\nmemory = "4GiB"\nidmap_isolated = true\n'
+    c = cli.check_limits(text, "/work/demo", lambda p: p)
+    assert c is not None and c.status == "ok"
+    assert "cpu=2" in c.detail and "memory=4GiB" in c.detail and "idmap_isolated" in c.detail
+    none = cli.check_limits('[repo.demo]\npath = "/work/demo"\n', "/work/demo", lambda p: p)
+    assert none is not None and none.status == "ok" and "上限なし" in none.detail
+    assert cli.check_limits(None, "/work/demo", lambda p: p) is None

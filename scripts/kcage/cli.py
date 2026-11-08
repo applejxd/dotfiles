@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from kcage import gitmeta, model, trust
-from kcage.template import PI_PACKAGE, PI_VERSION_RE
+from kcage.template import PI_LAUNCHER, PI_PACKAGE, PI_VERSION_RE
 
 HELPER = f"{model.ROOT_HELPER_DIR}/kcage-root"
 PASSWORDLESS = frozenset({"up", "stop", "exec", "ls"})
@@ -35,6 +35,9 @@ SECRET_VALUE = re.compile(
 HOME_SECRET_DIRS = ("~/.ssh", "~/.aws", "~/.gnupg", "~/.config/gh", "~/.config/kcage")
 # 箱の中で読み取り専用であるべき .git の中身（config.py の重ねと対応）
 GIT_RO_PATHS = (".git/hooks", ".git/config", ".git/commondir")
+# .git 自体がマウントポイント（pin）であることの判定。cd 済みの作業ディレクトリで評価する
+GIT_PIN_KEY = ".git"
+GIT_PIN_TEST = 'grep -qF " $(pwd)/.git " /proc/self/mountinfo'
 
 
 @dataclass
@@ -102,7 +105,7 @@ def build_argv(
     verb: str, repo_id: str, rest: Sequence[str], toplevel: str | None = None
 ) -> list[str]:
     if verb == "pi":
-        return exec_argv(repo_id, ["pi", *rest])
+        return exec_argv(repo_id, [PI_LAUNCHER, *rest])
     if verb == "exec":
         return exec_argv(repo_id, list(rest))
     if verb == "register":
@@ -174,6 +177,24 @@ def check_policy(
     if rid is None:
         return Check("許可表", "warn", "このリポジトリは未登録（kcage register）")
     return Check("許可表", "ok", f"登録済み: {rid}")
+
+
+def check_limits(text: str | None, toplevel: str, realpath: Callable[[str], str]) -> Check | None:
+    """資源上限と idmap 分離の有無を表示するだけ（fail にしない）。"""
+    if text is None:
+        return None
+    try:
+        repos = parse_policy(text)
+    except ValueError:
+        return None
+    rid = find_repo_id(repos, toplevel, realpath)
+    if rid is None:
+        return None
+    ent = repos[rid]
+    parts = [f"{k}={ent[k]}" for k in ("cpu", "memory", "processes") if k in ent]
+    if ent.get("idmap_isolated") is True:
+        parts.append("idmap_isolated")
+    return Check("資源上限", "ok", ", ".join(parts) if parts else "設定なし（上限なし）")
 
 
 def check_passwordless_sudo(sudo_l_output: str | None) -> Check:
@@ -303,10 +324,19 @@ def judge_env(out: str) -> Check:
 def judge_git_ro(out: str) -> Check:
     state = dict(ln.split("=", 1) for ln in out.splitlines() if "=" in ln)
     bad = [k for k in GIT_RO_PATHS if state.get(k) != "ro"]
+    if state.get(GIT_PIN_KEY) != "pin":
+        return Check(
+            "git の重ね",
+            "fail",
+            ".git がマウントポイントでない（mv .git で ro を迂回できる古い箱）。"
+            "kcage rm のあと kcage up で作り直す",
+        )
     if bad:
         return Check("git の読み取り専用", "fail", "書き込める、または判定不能: " + ", ".join(bad))
     return Check(
-        "git の読み取り専用", "ok", ".git/hooks・.git/config・.git/commondir は書き込み不可"
+        "git の読み取り専用",
+        "ok",
+        ".git/hooks・.git/config・.git/commondir は書き込み不可、.git は pin 済み",
     )
 
 
@@ -326,7 +356,8 @@ def selftest_commands(repo_path: str) -> dict[str, list[str]]:
     quoted = shlex.quote(repo_path)
     git = (
         f"cd {quoted} && for p in {' '.join(GIT_RO_PATHS)}; do "
-        'if [ -w "$p" ]; then echo "$p=rw"; else echo "$p=ro"; fi; done'
+        'if [ -w "$p" ]; then echo "$p=rw"; else echo "$p=ro"; fi; done; '
+        f'if {GIT_PIN_TEST}; then echo "{GIT_PIN_KEY}=pin"; else echo "{GIT_PIN_KEY}=nopin"; fi'
     )
     return {
         "home": ["sh", "-c", f"ls -A {dirs} 2>/dev/null | head -5; true"],
@@ -429,6 +460,9 @@ def cmd_doctor(args: argparse.Namespace, runner: Runner, fs: Fs) -> int:
     checks = [
         check_policy(_read_policy(fs), top, fs.realpath),
     ]
+    limits = check_limits(_read_policy(fs), top, fs.realpath)
+    if limits is not None:
+        checks.append(limits)
     res = runner(["sudo", "-n", "-l"], capture=True)
     checks.append(check_sudoers(res.stdout if res.returncode == 0 else None))
     checks.append(check_passwordless_sudo(res.stdout if res.returncode == 0 else None))
@@ -641,11 +675,16 @@ def register_flags(args: argparse.Namespace) -> list[str]:
         out += ["--broker", broker]
     if args.gpu:
         out.append("--gpu")
+    if args.idmap_isolated:
+        out.append("--idmap-isolated")
     for flag, value in (
         ("--network", args.network),
         ("--proxy-upstream", args.proxy_upstream),
         ("--idmap", args.idmap),
         ("--subnet", args.subnet),
+        ("--cpu", args.cpu),
+        ("--memory", args.memory),
+        ("--processes", args.processes),
     ):
         if value:
             out += [flag, value]
@@ -687,6 +726,14 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--proxy-upstream", help="proxy-only の上流（IP:ポート）")
             sp.add_argument("--idmap", choices=("user", "root"), help="uid の対応")
             sp.add_argument("--subnet", help="incusbr0 のサブネット")
+            sp.add_argument("--cpu", help="CPU 数の上限（1〜1024。省略は上限なし）")
+            sp.add_argument("--memory", help="メモリの上限（例 8GiB / 512MiB）")
+            sp.add_argument("--processes", help="プロセス数の上限（64〜4194304）")
+            sp.add_argument(
+                "--idmap-isolated",
+                action="store_true",
+                help="security.idmap.isolated（未検証。docs を読んでから）",
+            )
     sub.add_parser("ls", parents=[common], help="箱の一覧")
     pi = sub.add_parser("pi", parents=[common], help="箱の中で pi を起動する")
     pi.add_argument("pi_args", nargs=argparse.REMAINDER, help="pi へ渡す引数（-- の後ろ）")

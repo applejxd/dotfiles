@@ -200,3 +200,57 @@ def test_build_proxyはdefaultsから読めてhostpolicyに入る() -> None:
 def test_build_proxyの不正は拒否する(bad: str) -> None:
     with pytest.raises(P):
         policy.parse(f"[defaults]\nbuild_proxy = {bad}\n")
+
+
+# ---- 資源の上限と idmap_isolated
+
+
+def test_上限と_idmap_isolated_の既定は未設定() -> None:
+    r = policy.parse(_repo()).repos["demo"]
+    assert (r.cpu, r.memory_mib, r.processes, r.idmap_isolated) == (None, None, None, False)
+
+
+def test_上限を読む() -> None:
+    r = policy.parse(
+        _repo('cpu = 4\nmemory = "8GiB"\nprocesses = 4096\nidmap_isolated = true\n')
+    ).repos["demo"]
+    assert (r.cpu, r.memory_mib, r.processes, r.idmap_isolated) == (4, 8192, 4096, True)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        "cpu = 0\n",
+        "cpu = 1025\n",
+        "cpu = true\n",
+        'cpu = "4"\n',
+        'memory = "64MiB"\n',
+        'memory = "1025GiB"\n',
+        'memory = "8GB"\n',
+        "memory = 8\n",
+        'memory = "8GiB\\n"\n',
+        'memory = " 8GiB"\n',
+        'memory = "8GiB,x=1"\n',
+        'memory = "08GiB"\n',
+        "processes = 63\n",
+        "processes = 4194305\n",
+        'idmap_isolated = "true"\n',
+    ],
+)
+def test_上限の不正な値は拒否する(extra: str) -> None:
+    with pytest.raises(P):
+        policy.parse(_repo(extra))
+
+
+def test_render_repo_block_は上限を描画して_parse_で通る() -> None:
+    block = policy.render_repo_block(
+        "demo",
+        path="/home/a/demo",
+        cpu=2,
+        memory="512MiB",
+        processes=100,
+        idmap_isolated=True,
+    )
+    r = policy.parse(block).repos["demo"]
+    assert (r.cpu, r.memory_mib, r.processes, r.idmap_isolated) == (2, 512, 100, True)
+    assert "cpu" not in policy.render_repo_block("demo", path="/home/a/demo")

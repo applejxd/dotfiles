@@ -16,6 +16,7 @@ import difflib
 import os
 import posixpath
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -39,7 +40,7 @@ _PORT_RE = re.compile(r"^(\d{1,5})(?:-(\d{1,5}))?$")
 _HOST_FILE_ROOTS = (model.BROKER_HOST_DIR + "/",)
 _MIN_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 _TERM_RE = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
-_REGISTER_FLAGS = {"--gpu"}
+_REGISTER_FLAGS = {"--gpu", "--idmap-isolated"}
 _REGISTER_VALUES = {
     "--path",
     "--data-root",
@@ -49,6 +50,9 @@ _REGISTER_VALUES = {
     "--idmap",
     "--proxy-upstream",
     "--subnet",
+    "--cpu",
+    "--memory",
+    "--processes",
 }
 
 
@@ -114,15 +118,28 @@ def _check_id(s: str) -> str:
     return s
 
 
+def _digits(s: str, what: str) -> int:
+    if not re.fullmatch(r"[1-9][0-9]{0,9}", s):
+        raise UsageError(f"{what} は整数が必要")
+    return int(s)
+
+
 def _parse_register(rest: Sequence[str]) -> dict[str, Any]:
-    opts: dict[str, Any] = {"data_roots": [], "ports": [], "brokers": [], "gpu": False}
+    opts: dict[str, Any] = {
+        "data_roots": [],
+        "ports": [],
+        "brokers": [],
+        "gpu": False,
+        "idmap_isolated": False,
+    }
     single = {"--path": "path", "--network": "network", "--idmap": "idmap"}
     single |= {"--proxy-upstream": "proxy_upstream", "--subnet": "subnet"}
+    single |= {"--cpu": "cpu", "--memory": "memory", "--processes": "processes"}
     i = 0
     while i < len(rest):
         flag = rest[i]
         if flag in _REGISTER_FLAGS:
-            opts["gpu"] = True
+            opts["gpu" if flag == "--gpu" else "idmap_isolated"] = True
             i += 1
             continue
         if flag not in _REGISTER_VALUES or i + 1 >= len(rest):
@@ -145,6 +162,18 @@ def _parse_register(rest: Sequence[str]) -> dict[str, Any]:
             if key in opts:
                 raise UsageError(f"{flag} が重複")
             opts[key] = val
+    # 資源上限は厳密に検証（整数・単位の形・範囲。クエスト・空白・改行を拒否）
+    try:
+        if "cpu" in opts:
+            opts["cpu"] = policy.parse_cpu(_digits(opts["cpu"], "--cpu"), "--cpu")
+        if "processes" in opts:
+            opts["processes"] = policy.parse_processes(
+                _digits(opts["processes"], "--processes"), "--processes"
+            )
+        if "memory" in opts:
+            policy.parse_memory(opts["memory"], "--memory")
+    except PolicyError as e:
+        raise UsageError(str(e)) from e
     if "path" not in opts:
         raise UsageError("register には --path が必要")
     return opts
@@ -338,11 +367,47 @@ def _status(runner: Runner, box: str) -> tuple[bool, bool, str | None]:
 def _selftest_plan(cfg: model.BoxConfig) -> model.Plan:
     """箱の中から、主ディストロ側の管理・秘密に届かないことの最小の確認（実体の確認は親の e2e）。"""
     home = model.BOX_HOME
+    repo = shlex.quote(cfg.repo_path)
+    git = posixpath.join(cfg.repo_path, ".git")
+    # pin を足したとき（.git が実ディレクトのとき）だけ検査する
+    pinned = any(m.source == git and m.path == git and not m.readonly for m in cfg.mounts)
+    # .git が pin（マウントポイント）であること。see docs/spec/sandbox/incus-box.md（.git の差し替え）
+    pin = f'cd {repo} && grep -qF " $(pwd)/.git " /proc/self/mountinfo'
+    # mv が成功してしまったら元へ戻して失敗にする
+    mv = (
+        f"cd {repo} && if mv .git .git.kcage-selftest 2>/dev/null; "
+        "then mv .git.kcage-selftest .git; exit 1; else exit 0; fi"
+    )
+    git_checks = (
+        (("sh", "-c", pin), ".git がマウントポイント（pin）"),
+        (("sh", "-c", mv), ".git を移動できない"),
+    )
+    # WSL・Windows 側へ届かないこと。see docs/spec/sandbox/incus-box.md（selftest）
+    no_mnt = (
+        'for d in /mnt/?; do [ -e "$d" ] || continue; '
+        '[ -n "$(ls -A "$d" 2>/dev/null)" ] && exit 1; done; exit 0'
+    )
+    no_winexe = 'for c in cmd.exe powershell.exe wsl.exe; do command -v "$c" >/dev/null 2>&1 && exit 1; done; exit 0'
+    no_wslenv = '[ -z "${WSL_INTEROP:-}" ] && [ -z "${WSL_DISTRO_NAME:-}" ] && [ -z "$(find /run/WSL -type s 2>/dev/null)" ]'
+    # binfmt_misc はカーネル全体。無い・disabled は pass、enabled は警告を出して pass（実機で未検証のため fail にしない）
+    binfmt = (
+        "f=/proc/sys/fs/binfmt_misc/WSLInterop; "
+        '[ -r "$f" ] && [ "$(head -n1 "$f" 2>/dev/null)" != disabled ] && '
+        'echo "[kcage] 警告: WSLInterop が箱から見える（root 相当が使える可能性）"; exit 0'
+    )
+    wsl_checks = (
+        (("sh", "-c", no_mnt), "/mnt にホストのドライブが重なっていない"),
+        (("sh", "-c", no_winexe), "cmd.exe 等が PATH に無い"),
+        (("sh", "-c", no_wslenv), "WSL の環境変数・ソケットが無い"),
+        (("sh", "-c", binfmt), "WSLInterop の確認（警告のみ）"),
+    )
     checks = (
+        *(git_checks if pinned else ()),
         (("test", "!", "-e", "/var/lib/incus/unix.socket"), "Incus の管理ソケットが見えない"),
         (("test", "!", "-e", f"{home}/.ssh"), "~/.ssh が無い"),
         (("test", "!", "-e", f"{home}/.aws"), "~/.aws が無い"),
         (("test", "!", "-e", f"{home}/.config/kcage"), "~/.config/kcage が無い"),
+        *wsl_checks,
     )
     steps = tuple(model.Op("box", argv, desc) for argv, desc in checks)
     return model.Plan("selftest", cfg.name, steps)
@@ -450,6 +515,10 @@ def _register(
             uid=uid,
             gid=gid,
             subnet=o.get("subnet"),
+            cpu=o.get("cpu"),
+            memory=o.get("memory"),
+            processes=o.get("processes"),
+            idmap_isolated=o.get("idmap_isolated", False),
         )
         new_text = policy.add_repo(text, block)
     except PolicyError as e:

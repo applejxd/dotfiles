@@ -897,3 +897,110 @@ def test_git_identity_は停止中の既存の箱には置かない() -> None:
 def test_sudoers_の_up_は引数つきでも_NOPASSWD_の範囲() -> None:
     text = root_helper.sudoers_snippet("alice")
     assert " up *" in text.split("BOX_FREE = ")[1].split("\n")[0]
+
+
+def _selftest_descs(cfg: model.BoxConfig) -> list[str]:
+    return [op.desc for op in root_helper._selftest_plan(cfg).steps]
+
+
+def test_selftest_は_pin_があるとき_git_のマウントと_mv_を検査する() -> None:
+    from kcage import config
+    from kcage_fakes import demo_policy
+
+    cfg = config.resolve(demo_policy(), "demo", model.RepoSpec(), demo_fs())
+    plan_ = root_helper._selftest_plan(cfg)
+    descs = [op.desc for op in plan_.steps]
+    assert ".git がマウントポイント（pin）" in descs and ".git を移動できない" in descs
+    pin, mv = plan_.steps[0], plan_.steps[1]
+    assert "mountinfo" in pin.argv[-1] and "/.git" in pin.argv[-1]
+    # mv が成功したら元へ戻して失敗にする
+    assert "mv .git .git.kcage-selftest" in mv.argv[-1]
+    assert "mv .git.kcage-selftest .git; exit 1" in mv.argv[-1]
+
+
+def test_selftest_は_pin_が無い構成では_git_の検査を入れない() -> None:
+    import dataclasses
+
+    from kcage import config
+    from kcage_fakes import demo_policy
+
+    cfg = config.resolve(demo_policy(), "demo", model.RepoSpec(), demo_fs())
+    cfg = dataclasses.replace(cfg, mounts=tuple(m for m in cfg.mounts if m.kind != "repo"))
+    assert not any(".git" in d for d in _selftest_descs(cfg))
+
+
+def test_selftest_は_wsl_windows_側へ届かないことを検査する() -> None:
+    import dataclasses
+
+    from kcage import config
+    from kcage_fakes import demo_policy
+
+    cfg = config.resolve(demo_policy(), "demo", model.RepoSpec(), demo_fs())
+    cfg = dataclasses.replace(cfg, mounts=tuple(m for m in cfg.mounts if m.kind != "repo"))
+    steps = root_helper._selftest_plan(cfg).steps
+    scripts = {op.desc: op.argv[-1] for op in steps if op.argv[:2] == ("sh", "-c")}
+    assert "/mnt/?" in scripts["/mnt にホストのドライブが重なっていない"]
+    exe = scripts["cmd.exe 等が PATH に無い"]
+    assert all(x in exe for x in ("cmd.exe", "powershell.exe", "wsl.exe", "command -v"))
+    env = scripts["WSL の環境変数・ソケットが無い"]
+    assert "WSL_INTEROP" in env and "WSL_DISTRO_NAME" in env and "/run/WSL" in env
+    # binfmt_misc は enabled でも fail にせず警告（exit 0）
+    binfmt = scripts["WSLInterop の確認（警告のみ）"]
+    assert "binfmt_misc/WSLInterop" in binfmt and binfmt.rstrip().endswith("exit 0")
+
+
+def test_selftest_の_wsl_検査はシェルとして動く(tmp_path) -> None:
+    import shutil
+    import subprocess
+
+    from kcage import config
+    from kcage_fakes import demo_policy
+
+    cfg = config.resolve(demo_policy(), "demo", model.RepoSpec(), demo_fs())
+    for op in root_helper._selftest_plan(cfg).steps:
+        if op.desc.startswith(("cmd.exe", "WSLInterop")):
+            r = subprocess.run(
+                [shutil.which("sh") or "sh", "-c", op.argv[-1]],
+                capture_output=True,
+                check=False,
+                env={"PATH": "/usr/bin:/bin"},
+            )
+            assert r.returncode == 0
+
+
+def test_register_上限と_idmap_isolated_を書く() -> None:
+    rc, text = _register_text(
+        ENV,
+        ["--cpu", "4", "--memory", "8GiB", "--processes", "4096", "--idmap-isolated"],
+    )
+    assert rc == 0
+    r = policy.parse(text).repos["new1"]
+    assert (r.cpu, r.memory_mib, r.processes, r.idmap_isolated) == (4, 8192, 4096, True)
+
+
+def test_register_既定では上限を書かない() -> None:
+    rc, text = _register_text(ENV)
+    assert rc == 0
+    r = policy.parse(text).repos["new1"]
+    assert (r.cpu, r.memory_mib, r.processes, r.idmap_isolated) == (None, None, None, False)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ["--cpu", "0"],
+        ["--cpu", "4x"],
+        ["--cpu", "04"],
+        ["--cpu", "2000"],
+        ["--memory", "8GB"],
+        ["--memory", "8GiB\n"],
+        ["--memory", "8GiB x=1"],
+        ["--memory", "64MiB"],
+        ["--processes", "10"],
+        ["--processes", "-5"],
+        ["--cpu", "1", "--cpu", "2"],
+    ],
+)
+def test_register_不正な上限は拒否する(extra: list[str]) -> None:
+    rc, text = _register_text(ENV, extra)
+    assert rc != 0 and text == ""

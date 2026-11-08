@@ -37,7 +37,7 @@ def test_devices_for_fixed_generation() -> None:
     disks = [d for d in devs if d.type == "disk"]
     assert all(d.name.startswith("m-") for d in disks)
     assert any(d.config["readonly"] == "false" for d in disks)  # リポジトリだけが rw
-    assert sum(d.config["readonly"] == "false" for d in disks) == 1
+    assert sum(d.config["readonly"] == "false" for d in disks) == 2  # リポジトリと .git の pin
     for d in devs:  # 生成物は必ず関門を通る
         plan.device_to_argv(cfg.name, d)
 
@@ -625,3 +625,69 @@ def test_plan_up_既存の箱には_git_config_を置かない(state: tuple[bool
 def test_plan_up_不正な_git_identity_は計画を作らない() -> None:
     with pytest.raises(plan.PlanError):
         _up(_cfg(), _net(), git_identity=("Alice\nX", "alice@example.test"))
+
+
+# ---- .git の pin（mv .git の迂回の封じ込め）
+
+
+def test_pin_の_device_は親が先に並び_device_to_argv_が通る() -> None:
+    cfg = _cfg()
+    git = "/home/alice/work/demo/.git"
+    devs = plan.devices_for(cfg)
+    pin = next(i for i, d in enumerate(devs) if d.config.get("source") == git)
+    assert devs[pin].config == {"source": git, "path": git, "readonly": "false"}
+    plan.device_to_argv(cfg.name, devs[pin])
+    # Incus が名前順に処理しても、親（repo・pin）が子の ro の重ねより先になる
+    disks = [d for d in devs if d.type == "disk"]
+    names = [d.name for d in disks]
+    assert names == sorted(names)
+    paths = [d.config["path"] for d in disks]
+    for i, p in enumerate(paths):
+        assert not any(q.startswith(p + "/") for q in paths[:i])
+
+
+def test_pin_を許しても無関係な_rw_の_source_は拒否のまま() -> None:
+    with pytest.raises(PE):
+        plan.device_to_argv(
+            "kcage-demo", _dev("disk", source="/home/alice/.ssh", path="/home/alice/.ssh")
+        )
+    with pytest.raises(PE):
+        plan.device_to_argv(
+            "kcage-demo", _dev("disk", source="/var/lib/incus/unix.socket", path="/x/.git")
+        )
+
+
+# ---- 資源の上限と idmap の分離（任意。既定は従来どおり）
+
+
+def test_instance_config_既定では上限も分離も入れない() -> None:
+    c = plan.instance_config(_cfg())
+    assert not any(k.startswith("limits.") for k in c)
+    assert "security.idmap.isolated" not in c
+
+
+def test_instance_config_上限と分離が入る() -> None:
+    c = plan.instance_config(_cfg(cpu=4, memory_mib=8192, processes=4096, idmap_isolated=True))
+    assert c["limits.cpu"] == "4" and c["limits.memory"] == "8192MiB"
+    assert c["limits.processes"] == "4096" and c["security.idmap.isolated"] == "true"
+
+
+@pytest.mark.parametrize(
+    "over", [{"cpu": 0}, {"cpu": True}, {"memory_mib": 64}, {"processes": 10}, {"cpu": "4"}]
+)
+def test_instance_config_範囲外や型違いは拒否する(over) -> None:
+    with pytest.raises(PE):
+        plan.instance_config(_cfg(**over))
+
+
+def test_plan_up_は上限を_incus_init_の_c_へ_1_引数で渡す() -> None:
+    p = _up(_cfg(cpu=2, memory_mib=1024, processes=512, idmap_isolated=True), _net())
+    init = next(s for s in p.steps if isinstance(s, model.Op) and s.argv[:2] == ("incus", "init"))
+    for kv in (
+        "limits.cpu=2",
+        "limits.memory=1024MiB",
+        "limits.processes=512",
+        "security.idmap.isolated=true",
+    ):
+        assert kv in init.argv
+    assert "limits.cpu=2" in init.argv and init.argv[init.argv.index("limits.cpu=2") - 1] == "-c"

@@ -20,7 +20,7 @@ from kcage.cli import main  # noqa: E402
 
 def build_dist(dest: Path) -> object:
     """pi の配布物をホームから作る（dotfiles 固有。cli 本体は adapters を import しない）。"""
-    return dist.build_dist(Path.home(), dest)
+    return dist.build_box_dist(Path.home(), dest)
 
 
 if __name__ == "__main__":

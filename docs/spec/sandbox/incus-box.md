@@ -47,7 +47,7 @@ flowchart LR
 守らないもの（対象外。ADR-0028 の脅威モデルに従う）:
 
 - カーネル・GPU ドライバ・Incus・Docker の脆弱性による脱出。ホストを最新に保つ運用で対処する。
-- 許可した範囲の中の操作の妥当性。リポジトリは rw、データは ro、認証は外部のスコープ（PAT・IAM）が決める範囲で使える。
+- WSL2 では、箱を抜けた場合の到達先（WSL の VM 全体・Windows 側の interop・共有されるネットワーク）が、箱の外にも広い。WSL2 は Microsoft が隔離境界とみなしていない（公開されている WSL の文書による。断定はせず、実機の挙動は未検証）。`kcage selftest` は、箱から `/mnt` のドライブ・`cmd.exe` 等・WSL の環境変数やソケットが見えないことを確かめる（[selftest](#コマンド)）。- 許可した範囲の中の操作の妥当性。リポジトリは rw、データは ro、認証は外部のスコープ（PAT・IAM）が決める範囲で使える。
 - ホストの pi と箱の中の pi は**別物**。ホストの pi には `kcage` の許可された動詞だけを使わせ、`incus`・`kcage-root`・`kcage rm/register/setup` などはフルガードが拒否する（[フルガードの deny](#フルガードの-deny)）。これは「うっかり防止」で、境界ではない。境界は OS の権限（`incus-admin` に入らない・`kcage-root` の許可表）。
 - **`NOPASSWD: ALL` の sudo 規則があると成立しない**。ホストの pi が `sudo incus` や `sudo` での任意の書き換えを通せる。WSL のディストロの既定のユーザーに入っていることがあり（実測。§6）、`kcage doctor` が検出して失敗にする。規則を外す（`/etc/sudoers.d/` の該当行）のは人の作業。
 
@@ -59,7 +59,7 @@ flowchart LR
 | `kcage template` | テンプレートの作成（[テンプレート](#テンプレート)） | 要 |
 | `kcage init [--dry-run]` | 初期化を 1 コマンドで行う: `kcage setup` → `kcage template` の順（setup が失敗したら template は実行しない）。`--dry-run` は setup の手順表示だけ。人だけが実行する | 要（root で実行） |
 | `kcage uninstall [--dry-run] [--keep-policy] [--drop-subid] [--yes]` | 導入の巻き戻し。順序は setup の逆で冪等。箱（接頭辞 `kcage-` かつラベルあり。削除の直前にラベルを再確認）と `kcage-broker-*` のユニット・テンプレートの画像・`kcage-nonet`・`kcage-forward` と `DOCKER-USER` の規則（コメント `incus-kcage`）・`/etc/sudoers.d/kcage-<user>`・`/run/kcage-broker`・許可表 `/etc/kcage`（`--keep-policy` で残す）・最後に root 所有の配備コピー `/usr/local/libexec/kcage` を消す。`subuid`/`subgid` の行は既定で残し、`--drop-subid` のときだけ完全一致の行を消す。`--yes` が無ければ箱の一覧を見せて端末で `yes` を打たせる。人だけが実行する | 要（root で実行） |
-| `kcage register [--data-root P] [--port N\|LO-HI] [--broker K] [--gpu] [--network M] [--proxy-upstream H:P] [--idmap user\|root] [--subnet CIDR]` | カレントの git のリポジトリを許可表へ登録する。追記の差分を表示し、端末で `y/N` を確認してから書く。リポジトリは呼び出し元の所有で、拒否リストに当たらないこと | 要 |
+| `kcage register [--data-root P] [--port N\|LO-HI] [--broker K] [--gpu] [--network M] [--proxy-upstream H:P] [--idmap user\|root] [--subnet CIDR] [--cpu N] [--memory SIZE] [--processes N] [--idmap-isolated]` | カレントの git のリポジトリを許可表へ登録する。追記の差分を表示し、端末で `y/N` を確認してから書く。リポジトリは呼び出し元の所有で、拒否リストに当たらないこと。`--cpu`・`--memory`・`--processes` は資源の上限（任意。形と範囲は [許可表](#許可表etckcagepolicytoml) と同じで、不正な形は拒否）。`--idmap-isolated` は未検証（[資源の上限](#資源の上限と-idmap-の分離任意)） | 要 |
 | `kcage up` | 箱を作って起動する（冪等。同名の別リポジトリの箱は拒否） | 不要 |
 | `kcage stop` | 箱とブローカーを止める | 不要 |
 | `kcage rm` | 箱を消す（ブローカーの後始末を含む） | 要 |
@@ -67,7 +67,7 @@ flowchart LR
 | `kcage ls` | 呼び出し元の箱の一覧（`RUNNING`・`STOPPED`・`-`） | 不要 |
 | `kcage pi [-- 引数]` | 箱の中で pi を起動する（作業ディレクトリはリポジトリ、ユーザーは許可表の uid） | 不要 |
 | `kcage doctor` | 設定の点検（許可表・sudoers・`NOPASSWD: ALL`・kcage.toml・`core.hooksPath`・`extensions.worktreeConfig`・`.git` の metadata（`commondir` など）。`incusbr0` の経路の点検は、`net.doctor_checks` があれば呼ぶ設計だが、現状の `net.py` には無い） | 不要 |
-| `kcage selftest` | 箱の中からの否定試験（ホームの秘密・環境変数の秘密・`.git/hooks`・`.git/config`・`.git/commondir` が書けない・proxy-only で直通できない） | 不要 |
+| `kcage selftest` | 箱の中からの否定試験（ホームの秘密・環境変数の秘密・`.git/hooks`・`.git/config`・`.git/commondir` が書けない・proxy-only で直通できない。root_helper 側では、WSL・Windows 側へ届かない確認も行う: `/mnt/?` に中身つきのドライブが無い・`cmd.exe`/`powershell.exe`/`wsl.exe` が PATH に無い・`WSL_INTEROP`/`WSL_DISTRO_NAME` が無く `/run/WSL` にソケットが無い。`/proc/sys/fs/binfmt_misc/WSLInterop` は、無い・`disabled` なら pass、それ以外は fail にせず警告を出す（カーネル全体の設定で、箱から見えるかは実機で未検証のため）） | 不要 |
 
 - 動詞ごとの sudoers の規則は `scripts/kcage/root_helper.py` の `sudoers_snippet` が作る。パスワードが要る動詞は `timestamp_timeout=0`（直前の認証を使い回さない）。
 - `--repo <id>` で対象を指定できる。省略時は、カレントの git のトップレベルを許可表の `path` と突き合わせて決める（`register` はディレクトリ名から id を作る）。
@@ -126,11 +126,23 @@ idmap = "user"                   # user | root
 uid = 1000                       # 1〜65535（0 は不可）
 gid = 1000                       # 1〜65535（省略時は uid。register は SUDO_GID を書く）
 subnet = "10.77.0.0/24"          # incusbr0 のサブネットを固定
+cpu = 4                          # 任意。1〜1024（省略は上限なし）
+memory = "8GiB"                  # 任意。<整数>MiB / GiB、128MiB〜1024GiB
+processes = 4096                 # 任意。64〜4194304
+idmap_isolated = false           # 任意。既定 false（未検証。下記）
 
 [repo.myrepo.secrets.gh]         # 秘密の出どころ（値は書かない）
 source = "file"                  # file | command | prompt
 path = "/etc/kcage/secret/gh"
 ```
+
+### 資源の上限と idmap の分離（任意）
+
+- `cpu`・`memory`・`processes` は、箱の**新規作成時**（`kcage up` の `incus init`）に `limits.cpu`・`limits.memory`・`limits.processes` として渡す。未設定なら従来どおり上限なし。値は整数・単位の形を `fullmatch` で検証し、`incus init` へは `-c key=value` の 1 引数（argv のリスト）で渡す。既存の箱へは反映されない（`kcage rm` → `up` で作り直す）。ディスクの上限は `dir` ストレージでは設定できない。
+- kcage.toml の `cpu`・`memory`・`processes` は、許可表の値より**小さい値にだけ**効く（大きい要求は許可表の値に切り詰める。許可表が未設定なら要求は無視する）。
+- `kcage doctor` は上限の有無を表示するだけ（fail にしない）。
+- `idmap_isolated = true` は `security.idmap.isolated=true` を渡す。**未検証。`raw.idmap` との併用と `/etc/subuid` の範囲の関係は実機で確かめていない。実機で `kcage up` と `kcage selftest` が通ることを確かめてから使う。**
+- 反映には、配備コピーの更新（`kcage setup --update`）が要る（`kcage-root` は配備コピーから動くため）。
 
 ### kcage.toml（リポジトリのルート。要求）
 
@@ -144,6 +156,7 @@ path = "/etc/kcage/secret/gh"
 | `gpu` | GPU | 許可表で `gpu = true` のときだけ |
 | `network` | 外向き通信のモード | **より厳しい方向だけ**（`nat` < `proxy-only` < `offline`）。緩める要求は無視され、許可表の値になる |
 | `images` | 貼り付け画像 | 未対応（`true` は拒否） |
+| `cpu`・`memory`・`processes` | 資源の上限 | **許可表の値より小さいときだけ**効く。許可表が未設定なら無視 |
 
 未知のキー・64KiB 超・symlink の kcage.toml は拒否する。`up` 以外（`stop`・`rm` など）は、kcage.toml が壊れていても要求なしとして実行する。
 
@@ -154,6 +167,7 @@ path = "/etc/kcage/secret/gh"
 | 種類 | 条件 | 向き |
 | --- | --- | --- |
 | `disk` リポジトリ | 常に。ホストと同じ絶対パス | **rw** |
+| `disk` `.git` の pin | `.git` が実ディレクトリ（symlink でない）のとき、自分自身へ重ねる（下の「`.git` の差し替え」）。ro の子より前 | **rw** |
 | `disk` `.git/hooks`・`.git/config`・`.git/commondir` | 存在し symlink でないとき重ねる（`commondir` は up が先に用意する。既知の限界を参照） | **ro** |
 | `disk` データ | kcage.toml の `data`（許可表の根の下） | ro |
 | `disk` GPU のライブラリ | `gpu`。`/usr/lib/wsl/lib` と `/usr/lib/wsl/drivers`（別々に渡す） | ro |
@@ -206,7 +220,32 @@ path = "/etc/kcage/secret/gh"
 - CDI の定義（`/etc/cdi/nvidia.yaml`）は、ドライバの更新でパスが変わるので、**箱の起動のたびに生成**する（`kcage-cdi.service`。`/dev/dxg` があるときだけ）。docker の `daemon.json` で CDI を有効にする。
 - `build_proxy`（許可表）があれば、ビルド中だけ apt・git・curl・npm に設定し、公開前に消す（テンプレートには残さない）。
 - pi の配布物: `kcage template` がユーザー権限で `~/.cache/kcage/dist`（0700。symlink は拒否）へ許可リスト方式で複製し（`adapters/dotfiles/dist.py`。拡張・prompts・skills・`AGENTS.md` など。認証・履歴・`.env`・`mcp.json`・`settings.json` などは入れない。秘密らしい内容があれば止める）、`kcage-root template --dist` がこれを**もう一度**検証してから `/opt/kcage-dist` へ置く（`distcheck.py`: 絶対パス・symlink なし・呼び出し元の所有・他人から書けない・通常ファイルとディレクトリだけ・ハードリンク拒否・件数と総サイズの上限・拒否名・秘密らしい内容）。
-- 配布物を箱の中の pi がどう読むか（`~/.pi` への展開）は、このテンプレートでは行わない（`/opt/kcage-dist` へ置くだけ）。
+- 配布物を箱の中の pi がどう読むか（起動スクリプトによる配線）は、次の[箱の中のフルガード](#箱の中のフルガード)。テンプレートは `/opt/kcage-dist` へ置くだけで、`~/.pi` へは展開しない。
+
+## 箱の中のフルガード
+
+箱の pi にも、ホストと同じフルガード（判定器 `~/.config/pi/harness`）を持ち込む（第 1 段。最小の変更）。
+
+構成:
+
+- 配布物に、**root 所有の起動スクリプト `/opt/kcage-dist/bin/kcage-pi`** を入れる（`dist.py` の `build_box_dist` が生成する）。`kcage pi` はこれを実行する。中身は `pis` の `BASE_FLAGS` と同じ `--no-approve -nbt -ne -e builtin:mcp` に、自作拡張と判定器を絶対パスの `-e` で足したもの。settings.json の `extensions` には頼らない（読めなかったときに組み込みツールだけが残る fail-open を避ける）。判定器が無ければ起動しない。
+- **箱用の `rules.json`** は、`scripts/agents/generate.py --target pi-harness` を `HOME=/home/ubuntu`・局所設定なし・ホストの描画済み `common.toml` で呼んで作る。ホスト用の `rules.json`（と `*.e2e-bak`）は複製しない。ホストの方針の生成物は変えず、`dist.py` の overlay で次を直す。
+  - `post_edit`・`mcp` を空にする（箱に整形スクリプトと `uv` が無い）。
+  - 役割のツールから `pr_summary`・`work` を外す（箱では PR ビューアと台帳に繋がらない）。
+  - `write_deny_globs` に `/opt/kcage-dist/**`・`~/.pi/agent/models.json`・`~/.pi/agent/auth.json` を足し、`external_read` に `/opt/kcage-dist` を足す。
+  - ホストのホームのパスが残ったら配布物を作らない。生成物も含めて秘密を走査する。
+- 起動スクリプトは `PI_HARNESS_BYPASS=1` を渡す。**ask は許可に落ち、deny と必須確認（`[pi.confirm]`・`[pi.integrate]`）は残る**。境界の証明（canary）は Incus 用には作っていない。ask のまま使うには、`dist.py` の `BOX_ENV` を変えてテンプレートを作り直す。
+- テンプレートは `ripgrep`・`fd-find` を入れ（pi が GitHub から取得しなくて済む）、`/home/ubuntu/.pi/agent` を uid 1000 所有で作る（pi が lock・認証・セッションを書く）。
+- **既存の箱への反映**: `kcage template` でテンプレートを作り直し、箱も作り直す（`kcage rm` → `kcage up`）。
+
+既知の限界（うっかり防止であり、敵対的な迂回への防御ではない）:
+
+- **`kcage exec -- pi` は無ガード**（起動スクリプトを通らない）。`kcage pi` を使う。
+- 箱のユーザーは `docker` グループなので、`docker run -v /opt/kcage-dist:/m` で配布物を書き換えられる。root 所有でも防げない（許容して記録）。
+- 箱の AI は、bash から素の `pi -ne` を起動できる（ホストと同じ。判定器に該当の規則が無い）。
+- project trust: `--no-approve` で作業先の `.pi/` は読まない。ただし起動スクリプトを通らない `pi` は、信頼されると `.pi/extensions` をガード外で読みうる。
+- 判定器が読めない場合の fail-open は、起動スクリプトの存在確認で防ぐ。pi 側が別の理由で拡張を落とす場合は未確認。
+- 実機（Incus の箱の中の pi）での動作は未検証。
 
 ## フルガードの deny
 
@@ -252,8 +291,23 @@ path = "/etc/kcage/secret/gh"
 - **`--dist` の検証後の差し替え（TOCTOU）**: `kcage-root` が検証してから `incus file push` するまでに、呼び出し元が配布物を書き換えられる。配布物は呼び出し元が作る（元から呼び出し元の権限の範囲）ので、**許容**する。
 - **`.git/hooks` の読み取り専用の限界**: `.git/hooks`・`.git/config`・`.git/commondir` は ro で重ねるが、ホストの git の実行経路の一部しか守らない。`core.hooksPath`・`extensions.worktreeConfig`・作業ツリー内のスクリプト（`Makefile` やテストなど）は、箱が書いたコードがホストで実行されうる。`kcage doctor` が前 2 つを警告する。ホストでは、箱が書いたコードを自動で実行しない。
 - **`.git/commondir` の迂回（封じ済み）**: `.git/commondir` に別のディレクトリを書くと、git はそこから config・hooks を読むため、箱が書ける作業ツリー内を指されると `hooks`・`config` の ro を迂回できる。`kcage up`（kcage-root）が、メインの `.git`（実ディレクトリ）に中身 `.` の `commondir` を、無ければ作り、有って無害（`.` または `.git` 自身）なら何もせず、それ以外なら up を拒否する。作成は呼び出し元の uid・gid へ権限を落として `O_CREAT|O_EXCL|O_NOFOLLOW` で行い（root が書くのはこの 1 ファイルだけ）、戻せなければ異常終了する。そのうえで `commondir` を ro で重ねる。この対策の前に作った箱は `commondir` が書けるので、`selftest` が fail する。`kcage rm` のあと `up` し直す。
+- **`.git` の差し替え（`mv .git`）の迂回（封じ済み）**: リポジトリを rw で重ね、その中の `.git/hooks`・`.git/config`・`.git/commondir` だけを ro で重ねるだけだと、`.git` ディレクトリ自体はマウントポイントでないので、箱の中の一般ユーザーが `mv .git .git.old` でき、書き込み可能な `.git` を作り直せる（ro の重ねは移動した側に付いたまま）。ホストの git は新しい `.git/config`（例 `core.fsmonitor`）と `.git/hooks` を読むので、箱から脱出できる（bubblewrap の mount namespace で再現済み）。対策は、`.git` を**自分自身へ rw で bind（pin）してから**子の ro の重ねを付けること（`config.resolve` が ro の前に足す。`device_to_argv` は source と path が同じ rw の disk を、拒否リスト・ソケットの検査を通した上で許す）。pin 済みの `.git` は `mv`・`rm -rf` が EBUSY で失敗し、ro の重ねは保たれ、objects・HEAD などの通常の書き込みはできる（bubblewrap で確認済み）。`.git` が実ディレクトリでない（linked worktree・symlink）ときは適用されない（hooks・config と同じ扱い）。`selftest` が、`.git` がマウントポイントであることと、`mv .git` が失敗すること（成功したら元へ戻して fail）を調べ、`doctor` も pin の有無を fail で報告する。この対策の前に作った箱は pin が無いので、`kcage setup --update`（配備コピーの更新）のあと `kcage rm` → `kcage up` で作り直す。
+  - **未検証**: Incus が disk デバイスを path の浅い順（親が先）にマウントするか、pin が Incus の箱で実際に効くかは実機で未確認（デバイス名は `m-repo-<連番>` で、親を先に足している）。
+  - **未検証の推測（断定しない）**: 箱の中のユーザーは `docker` グループに入っており、入れ子の Docker で箱の root 相当になれる。root 相当は自分のマウント名前空間で ro・pin の重ねを外せる（`umount`）可能性があり、その場合は `.git/config` などの基になるファイルへ書ける。ro・pin の重ねは、箱の root 相当に対する境界ではないかもしれない（未検証。実機で確かめる）。公開されている同種の OSS（coi）も、bind mount の ro は root で外せると述べ、ホスト側の `chattr +i` を併用している。
 - **共有の `.git` に残る信頼の前提**: refs・objects・index・`info/`・`modules/` などは箱から変更できる（箱は develop の ref も動かせる。worktree の約束は process の統制で、機械の強制ではない）。ホストで commit・merge などの git を動かす前に `kcage doctor` を実行する。`doctor` は `commondir` の不審な値（fail）と、`config.worktree`・`info/attributes`・`objects/info/alternates`・`remotes/`・`branches/`・`modules/`（warn）を調べる。`.git` が実ディレクトリでない（linked worktree・symlink）リポジトリには、commondir の封じ込めは適用されない（hooks・config と同じ扱い）。
 - **箱を捨てると失うもの**: 箱の中だけにあるもの（リポジトリ外のファイル、入れ子の Docker のイメージ・ボリューム、箱の中のユーザー設定）。リポジトリとデータはホストにあるので残る。必要ならスナップショット（`kcage snap`）を取る。
-- **GPU の VRAM** は箱どうしで共有される（隔離されない）。CPU・メモリ・ディスクの上限は設定していない。
+- **GPU の VRAM** は箱どうしで共有される（隔離されない）。CPU・メモリ・プロセス数の上限は任意（許可表の `cpu`・`memory`・`processes`。既定は上限なし）。ディスクの上限は `dir` ストレージでは不可。
 - **作業ツリー内の `.env`** などは、リポジトリが rw で見えるので箱から読める。`kcage.toml` の `data` や拒否リストは、リポジトリの中身には効かない。
 - **Windows 側は未検証**。`kcage` は WSL2 の Ubuntu（または Linux）の中で使う。
+
+### 箱に入れないもの（人向けの設定）と、その理由
+
+- 箱は AI の作業台で、人は `kcage pi` の画面とホスト側のエディタから使う。シェル・端末・エディタの設定（`.bashrc`・`.tmux.conf`・`.vimrc` など）と、他の AI ツールの設定は入れない。
+- 箱の中で `chezmoi apply` はしない。dotfiles には無 sudo・無秘密のモード（`CHEZMOI_NO_SUDO=1`・`--skip-secrets`）があり、秘密と sudo の問題は避けられる。それでも個別の配布物（許可リスト）を選ぶ理由は、ガードのコードと方針を root 所有の `/opt/kcage-dist` に置けること、ホストの方針を箱用に描画するための分岐をテンプレートへ足さずに済むこと（箱用の調整は生成した `rules.json` への overlay で行う）、展開された `~/.pi/agent/settings.json` がホスト版の方針を読み込んで起動スクリプトと矛盾しないこと、外部取得（`.chezmoiexternal`）を走らせないこと。
+- 人向けの快適さが要るようになったら、無害な項目だけを対象に限定して `CHEZMOI_NO_SUDO=1 chezmoi apply --skip-secrets --exclude=scripts` を実行する案がある（pi 関連と他の AI ツール関連は対象外にする）。
+- git のコミット者情報（`user.name`・`user.email`）は、ホストの実効の git 設定（リポジトリごと）から `kcage up` が読み取って箱へ渡し、箱の `~/.config/git/config` に生成する（利用者の追加の操作は無し。実装中）。ホストの設定は `~/.config/git/config` と、そこから `include` される `~/.config/git/user`（個人の機だけ・秘密由来）にあり、`~/.gitconfig` はほぼ空なので、`~/.gitconfig` だけを読み取り専用で重ねても入らない。XDG の 2 ファイルを重ねると credential helper や `include` のホスト前提まで持ち込むので、必要な値だけを渡す。
+
+### 同じ WSL に複数のディストロがあるときの注意
+
+- WSL2 のネットワークは、ディストロ間で共有される。主ディストロで Incus（`incusbr0`）を導入済みの間に、別のディストロで Incus を初期化すると、後者の箱が主ディストロのブリッジに繋がって通信できなくなる（実測: `Network is unreachable`）。使い捨てのディストロでの結合試験は、主ディストロに kcage を導入する前にだけ行える。導入後の確認は、導入済みの箱に対して `kcage exec` などで行う。
+- 使い捨てのディストロを作った場合は、終わったら削除する。`kcage-forward` が入れる規則（コメント `incus-kcage`）は共有の nft にあり、ディストロの削除では消えない（主ディストロの導入と同じ規則なので、そのままでよい）。

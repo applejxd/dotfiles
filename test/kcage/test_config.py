@@ -26,12 +26,44 @@ def test_defaults_mounts_and_labels() -> None:
     cfg = _resolve(model.RepoSpec())
     assert cfg.name == "kcage-demo" and cfg.uid == 1000
     rw = [m for m in cfg.mounts if not m.readonly]
-    assert [(m.kind, m.source, m.path) for m in rw] == [("repo", REPO, REPO)]
+    assert [(m.kind, m.source, m.path) for m in rw] == [
+        ("repo", REPO, REPO),
+        ("repo", f"{REPO}/.git", f"{REPO}/.git"),  # pin（.git を自分自身へ rw で bind）
+    ]
     ro = {m.source for m in cfg.mounts if m.readonly}
     assert ro == {f"{REPO}/.git/hooks", f"{REPO}/.git/config", f"{REPO}/.git/commondir"}
     assert cfg.labels[model.LABEL_PREFIX + "repo"] == "demo"
     assert cfg.labels[model.LABEL_PREFIX + "managed"] == "true"
     assert cfg.network == "proxy-only" and cfg.proxy_upstream == "192.0.2.10:3128"
+
+
+def _wipe_git(fs) -> None:
+    for p in [k for k in fs.nodes if k.startswith(REPO + "/.git")]:
+        del fs.nodes[p]
+
+
+def test_pin_は_ro_の子の重ねより前に入る() -> None:
+    mounts = _resolve(model.RepoSpec()).mounts
+    git = f"{REPO}/.git"
+    pin = next(i for i, m in enumerate(mounts) if m.source == git)
+    assert not mounts[pin].readonly and mounts[pin].path == git
+    ro_idx = [i for i, m in enumerate(mounts) if m.readonly]
+    assert ro_idx and all(pin < i for i in ro_idx)
+
+
+def test_pin_は_git_が_symlink_ファイル_無し_のとき入らない() -> None:
+    git = f"{REPO}/.git"
+    fs = demo_fs()
+    _wipe_git(fs)
+    fs.add_link(git, "/tmp/elsewhere")
+    assert all(m.source != git for m in _resolve(model.RepoSpec(), fs).mounts)
+    fs = demo_fs()
+    _wipe_git(fs)
+    fs.add_file(git, "gitdir: /x/.git/worktrees/w\n", uid=1000)  # linked worktree
+    assert all(m.source != git for m in _resolve(model.RepoSpec(), fs).mounts)
+    fs = demo_fs()
+    _wipe_git(fs)
+    assert all(m.source != git for m in _resolve(model.RepoSpec(), fs).mounts)
 
 
 def test_no_git_dir_no_extra_mounts() -> None:
@@ -295,3 +327,40 @@ def test_hf_cache_whole_denied_but_hub_allowed() -> None:
 def test_builtin_credential_paths_denied(p: str) -> None:
     assert config.is_denied(p)
     assert not config.is_denied("/home/alice/.cache/huggingface/hub")
+
+
+# ---- 資源の上限（kcage.toml は許可表より小さい値にだけできる）
+
+
+def _limited_policy(**kw) -> model.HostPolicy:
+    import dataclasses
+
+    pol = demo_policy()
+    repo = dataclasses.replace(pol.repos["demo"], **kw)
+    return dataclasses.replace(pol, repos={"demo": repo})
+
+
+def test_上限は許可表が未設定なら要求を無視する() -> None:
+    cfg = _resolve(model.RepoSpec(cpu=2, memory_mib=256, processes=100))
+    assert (cfg.cpu, cfg.memory_mib, cfg.processes, cfg.idmap_isolated) == (None, None, None, False)
+
+
+def test_上限は小さい要求だけが効く() -> None:
+    pol = _limited_policy(cpu=4, memory_mib=4096, processes=1000, idmap_isolated=True)
+    cfg = _resolve(model.RepoSpec(cpu=2, memory_mib=8192), pol=pol)
+    assert (cfg.cpu, cfg.memory_mib, cfg.processes) == (2, 4096, 1000)  # 大きい要求は切り詰め
+    assert cfg.idmap_isolated is True
+    assert _resolve(model.RepoSpec(), pol=pol).cpu == 4
+
+
+def test_kcage_toml_の上限を読む() -> None:
+    spec = config.parse_spec('cpu = 2\nmemory = "1GiB"\nprocesses = 100\n')
+    assert (spec.cpu, spec.memory_mib, spec.processes) == (2, 1024, 100)
+
+
+@pytest.mark.parametrize(
+    "text", ["cpu = 0\n", 'memory = "1GB"\n', "processes = 1\n", 'cpu = "2"\n']
+)
+def test_kcage_toml_の不正な上限は拒否する(text: str) -> None:
+    with pytest.raises(E):
+        config.parse_spec(text)
