@@ -146,15 +146,16 @@ def test_agentcore_websearch_goes_only_to_pi_on_personal_pcs():
     ids = {
         cli: [name for name, _ in gen.mcp_servers(personal, cli)] for cli in sorted(gen.MCP_CLIS)
     }
-    assert ids["pi"] == ["agentcore-websearch"]
+    # 家の機には自作の検索 MCP (websearch) も入る。pi 限定
+    assert ids["pi"] == ["agentcore-websearch", "websearch"]
     assert ids["claude"] == ids["opencode"] == ids["copilot"] == ids["codex"] == []
 
 
 @pytest.mark.parametrize("username", USERS)
 def test_pi_registers_agentcore_only_where_the_gateway_url_exists(username):
     """pi のフルガードは、AGENTCORE_GATEWAY_URL が空の機では登録しない (requires_env)。"""
-    (entry,) = gen.pi_mcp_servers(load_common(username))
-    assert entry["name"] == "agentcore-websearch"
+    entries = {e["name"]: e for e in gen.pi_mcp_servers(load_common(username))}
+    entry = entries["agentcore-websearch"]
     assert entry["requires_env"] == "AGENTCORE_GATEWAY_URL"
     assert entry["config"]["command"] == "uv" and entry["config"]["exposure"] == "direct"
 
@@ -237,7 +238,10 @@ def test_duplicate_id_stops_generation():
 @pytest.mark.parametrize("username", ["applejxd", "APPLEJXD", "CORP\\applejxd"])
 def test_personal_forms_get_the_personal_cli_list(username):
     assert [name for name, _ in servers_for(username, "claude")] == []
-    assert [name for name, _ in servers_for(username, "pi")] == ["agentcore-websearch"]
+    assert [name for name, _ in servers_for(username, "pi")] == [
+        "agentcore-websearch",
+        "websearch",
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +321,49 @@ def test_copilot_mcp_target_is_registered():
     assert gen.TARGETS["copilot-mcp"] is gen.merge_copilot_mcp
     assert '"target" "copilot-mcp"' in COPILOT_MODIFIER.read_text(encoding="utf-8")
     assert not (ROOT / "home/dot_copilot/mcp-config.json").exists()
+
+
+# --- stock の pi (~/.pi/agent/mcp.json) ---
+
+
+def test_pi_mcp_target_is_registered():
+    assert gen.TARGETS["pi-mcp"] is gen.merge_pi_mcp
+    modifier = ROOT / "home/dot_pi/agent/modify_mcp.json.py.tmpl"
+    assert '"target" "pi-mcp"' in modifier.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("username", USERS)
+def test_pi_mcp_is_generated_from_common(username):
+    common = load_common(username)
+    merged = gen.merge_pi_mcp({}, common)
+    assert merged["mcpServers"] == {
+        name: {"command": s["command"], "args": s["args"]}
+        for name, s in gen.mcp_servers(common, "pi")
+    }
+
+
+def test_pi_mcp_websearch_only_on_personal_machine():
+    assert "websearch" in gen.merge_pi_mcp({}, COMMON)["mcpServers"]
+    assert "websearch" not in gen.merge_pi_mcp({}, TESTER)["mcpServers"]
+    # 定義は pi 限定。他の CLI へは出ない
+    assert "websearch" not in dict(gen.mcp_servers(COMMON, "claude"))
+    assert "websearch" not in dict(gen.mcp_servers(COMMON, "copilot"))
+
+
+def test_pi_mcp_keeps_user_servers_and_keys_and_drops_pi_unknown_keys():
+    declared = {**STDIO, "exposure": "direct", "requires_env": "FOO", "clis": ["pi"]}
+    existing = {
+        "mcpServers": {
+            "mine": {"url": "https://example.com/mcp"},
+            "x": {"url": "u", "enabled": False},
+        },
+        "autoEnableCodemode": False,
+    }
+    merged = gen.merge_pi_mcp(existing, {"mcp": [declared]})
+    assert merged["autoEnableCodemode"] is False
+    assert merged["mcpServers"]["mine"] == {"url": "https://example.com/mcp"}
+    assert merged["mcpServers"]["x"] == {"command": "uvx", "args": ["demo"], "enabled": False}
+    assert gen.merge_pi_mcp(merged, {"mcp": [declared]}) == merged
 
 
 # ---------------------------------------------------------------------------
@@ -546,11 +593,14 @@ def test_requires_env_is_accepted_and_does_not_reach_other_clis():
     assert "requires_env" not in gen.merge_copilot_mcp({}, common)["mcpServers"]["x"]
 
 
-def test_pi_mcp_servers_come_from_rules_json_on_every_os_not_from_mcp_json():
-    """フルガードを載せた pi は、MCP を rules.json から登録する (mcp.json のサーバは判定の外なので配らない)。"""
-    assert not hasattr(gen, "merge_pi_mcp")
-    assert "pi-mcp" not in gen.TARGETS
-    assert not (ROOT / "home/dot_pi/agent/modify_mcp.json.py.tmpl").exists()
+def test_pi_mcp_servers_come_from_rules_json_on_every_os_and_mcp_json_is_stock_only():
+    """custom (フルガードを載せた pi) は MCP を rules.json から登録する (pi-harness は変えない)。
+
+    stock の pi は ~/.pi/agent/mcp.json (pi-mcp)。custom では配らない (.chezmoiignore.tmpl)。
+    """
+    assert gen.TARGETS["pi-mcp"] is gen.merge_pi_mcp
+    ignore = (ROOT / "home/.chezmoiignore.tmpl").read_text(encoding="utf-8")
+    assert ".pi/agent/mcp.json" in ignore
     (entry,) = gen.pi_mcp_servers(TESTER)
     assert entry["name"] == "agentcore-websearch" and entry["config"]["exposure"] == "direct"
 

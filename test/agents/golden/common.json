@@ -515,6 +515,21 @@
    "purpose": "AgentCore Web Search で web 検索する (Gateway の URL がある機だけ)",
    "requires_env": "AGENTCORE_GATEWAY_URL",
    "transport": "stdio"
+  },
+  {
+   "args": [
+    "run",
+    "--no-project",
+    "--quiet",
+    "/home/applejxd/.config/agents/websearch/mcp_server.py"
+   ],
+   "clis": [
+    "pi"
+   ],
+   "command": "uv",
+   "id": "websearch",
+   "purpose": "家の機の web 検索・ページ取得・論文検索 (web_search / fetch_page / search_papers)",
+   "transport": "stdio"
   }
  ],
  "opencode": {

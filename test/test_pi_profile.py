@@ -48,12 +48,17 @@ def chezmoi_bin() -> str:
 
 
 def render(
-    template: str, home: Path, *, profile_env: str | None = None, os_name: str = "linux"
+    template: str,
+    home: Path,
+    *,
+    profile_env: str | None = None,
+    os_name: str = "linux",
+    username: str = "tester",
 ) -> str:
     context = {
         "chezmoi": {
             "os": os_name,
-            "username": "tester",
+            "username": username,
             "kernel": {"osrelease": "Linux"},
             "homeDir": str(home),
             "workingTree": str(ROOT),
@@ -250,8 +255,14 @@ def run_script(script: Path, stdin: str) -> str:
     return result.stdout
 
 
-def stock_packages() -> list[str]:
-    text = (HOME_SRC / ".chezmoitemplates" / "pi-stock-packages").read_text(encoding="utf-8")
+def stock_packages(home: Path, username: str = "tester") -> list[str]:
+    """描画した pi-stock-packages。tester は会社 PC (is-work)、applejxd は家の機。"""
+    text = render(
+        '{{ includeTemplate "pi-stock-packages" . }}',
+        home,
+        profile_env="stock",
+        username=username,
+    )
     return [x.strip() for x in text.splitlines() if x.strip() and not x.startswith("#")]
 
 
@@ -290,7 +301,7 @@ def test_stock_settings_removes_harness_keys_and_sets_packages(tmp_path):
         "lastChangelogVersion",
     ):
         assert out[key] == CUSTOM_SETTINGS[key], key
-    assert out["packages"] == stock_packages()
+    assert out["packages"] == stock_packages(tmp_path)
 
 
 def test_stock_settings_keeps_user_extension_and_is_idempotent(tmp_path):
@@ -304,7 +315,7 @@ def test_stock_settings_keeps_user_extension_and_is_idempotent(tmp_path):
 def test_stock_settings_from_empty_input(tmp_path):
     out = json.loads(run_script(stock_settings_script(tmp_path), ""))
     out.pop("subagents")  # agentOverrides は test_pi_subagents_config.py で検査
-    assert out == {"defaultTools": ["+grep", "+find", "+ls"], "packages": stock_packages()}
+    assert out == {"defaultTools": ["+grep", "+find", "+ls"], "packages": stock_packages(tmp_path)}
 
 
 def test_stock_settings_keeps_user_incremental_default_tools(tmp_path):
@@ -346,17 +357,91 @@ def test_custom_settings_script_uses_generator(tmp_path):
 # --- packages ---------------------------------------------------------
 
 
-def test_stock_packages_are_pinned_npm():
-    pkgs = stock_packages()
+def test_stock_packages_are_pinned_npm(tmp_path):
+    pkgs = stock_packages(tmp_path)
     assert len(pkgs) == len(set(pkgs)) > 0
     for pkg in pkgs:
         assert re.fullmatch(r"npm:(@[a-z0-9._-]+/)?[a-z0-9._-]+@\d+\.\d+\.\d+", pkg), pkg
 
 
-def test_stock_packages_include_background_plan_goal_rewind():
-    pkgs = stock_packages()
+def test_stock_packages_include_background_plan_goal_rewind(tmp_path):
+    pkgs = stock_packages(tmp_path)
     for prefix in NEW_PACKAGES:
         assert any(p.startswith(prefix) for p in pkgs), prefix
+
+
+def test_stock_packages_never_include_pi_web_access(tmp_path):
+    """家の検索は自作の MCP (websearch) に揃えた。どの機でも pi-web-access は入れない。"""
+    for user in ("applejxd", "tester"):
+        assert not any("pi-web-access" in p for p in stock_packages(tmp_path, user)), user
+
+
+def test_stock_packages_pi_mcp_adapter_is_work_pc_only(tmp_path):
+    """pi-mcp-adapter は会社 PC (is-work) だけ。家の機は pi 組み込みの MCP を使う。"""
+    assert any(p.startswith("npm:pi-mcp-adapter@") for p in stock_packages(tmp_path, "tester"))
+    assert not any("pi-mcp-adapter" in p for p in stock_packages(tmp_path, "applejxd"))
+
+
+# --- MCP 設定 (~/.pi/agent/mcp.json) ---------------------------------------
+
+MCP_MODIFY = HOME_SRC / "dot_pi" / "agent" / "modify_mcp.json.py.tmpl"
+MCP_TARGET = ".pi/agent/mcp.json"
+
+
+def mcp_script(tmp_path: Path, username: str) -> Path:
+    script = tmp_path / f"modify_mcp_{username}.py"
+    script.write_text(
+        render(
+            MCP_MODIFY.read_text(encoding="utf-8"),
+            tmp_path,
+            profile_env="stock",
+            username=username,
+        ),
+        encoding="utf-8",
+    )
+    return script
+
+
+def test_mcp_json_is_stock_only(tmp_path):
+    assert MCP_TARGET in lines(render_file(".chezmoiignore.tmpl", tmp_path))
+    stock = lines(render_file(".chezmoiignore.tmpl", tmp_path, profile_env="stock"))
+    assert MCP_TARGET not in stock
+
+
+def test_mcp_json_home_declares_websearch_and_keeps_user_servers(tmp_path):
+    script = mcp_script(tmp_path, "applejxd")
+    existing = {"mcpServers": {"mine": {"command": "x"}}, "autoEnableCodemode": False}
+    out = json.loads(run_script(script, json.dumps(existing)))
+    servers = out["mcpServers"]
+    assert servers["mine"] == {"command": "x"}
+    assert out["autoEnableCodemode"] is False
+    web = servers["websearch"]
+    assert web["command"] == "uv"
+    assert web["args"][:3] == ["run", "--no-project", "--quiet"]
+    assert web["args"][3].endswith("/.config/agents/websearch/mcp_server.py")
+    assert not {"exposure", "requires_env", "transport", "purpose", "clis"} & set(web)
+    again = run_script(script, json.dumps(out))
+    assert json.loads(again) == out
+
+
+def test_mcp_json_work_pc_has_no_websearch(tmp_path):
+    out = json.loads(run_script(mcp_script(tmp_path, "tester"), ""))
+    assert "websearch" not in out["mcpServers"]
+    assert "agentcore-websearch" in out["mcpServers"]
+
+
+def test_mcp_json_keeps_user_keys_of_declared_server_and_broken_input(tmp_path):
+    script = mcp_script(tmp_path, "applejxd")
+    existing = {
+        "mcpServers": {
+            "websearch": {"command": "old", "args": [], "env": {"A": "1"}, "exposure": "deferred"}
+        }
+    }
+    web = json.loads(run_script(script, json.dumps(existing)))["mcpServers"]["websearch"]
+    assert web["command"] == "uv"
+    assert web["env"] == {"A": "1"}
+    assert web["exposure"] == "deferred"
+    assert run_script(script, "{broken") == "{broken"
 
 
 # --- plan mode の設定 ------------------------------------------------

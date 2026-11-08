@@ -2532,6 +2532,23 @@ args = [
   '{{ .chezmoi.homeDir }}/.config/agents/agentcore_websearch_mcp.py',
   "--service", "bedrock-agentcore", "--region", "us-east-1", "--disable-telemetry",
 ]
+{{- if ne (includeTemplate "is-work" .) "true" }}
+
+# 家の機の検索 (web_search / fetch_page / search_papers)。自作の stdio サーバ (鍵は環境変数 → 鍵ファイル → Bitwarden の順で探す)。
+# 検索の送り先が限られる環境 (is-work) では宣言しない。その機の検索は上の agentcore-websearch だけ。
+# stock の pi は ~/.pi/agent/mcp.json (generate.py --target pi-mcp)、custom は harness の rules.json へ出る。
+# see docs/spec/mcp-servers.md#websearch家の機の検索
+[[mcp]]
+id = "websearch"
+purpose = "家の機の web 検索・ページ取得・論文検索 (web_search / fetch_page / search_papers)"
+clis = ["pi"]
+transport = "stdio"
+command = "uv"
+args = [
+  "run", "--no-project", "--quiet",
+  '{{ .chezmoi.homeDir }}/.config/agents/websearch/mcp_server.py',
+]
+{{- end }}
 
 # ---------------------------------------------------------------------------
 # Hooks (pi の編集後の整形)
