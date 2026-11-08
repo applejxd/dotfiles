@@ -552,7 +552,7 @@ cd /abs && git log --oneline | head -3 > /tmp/o
 
 ### 共通の指示
 
-`~/.pi/agent/AGENTS.md` は、Claude Code・Codex・Copilot と同じ共通の指示（`agent-instructions.md`）。
+`~/.pi/agent/AGENTS.md` は、Claude Code・Codex・Copilot と同じ共通の指示（`agent-instructions.md`。平らな 25 行。進め方の詳細はスキル `agent-workflow`）。
 
 ### Orca・Zed
 

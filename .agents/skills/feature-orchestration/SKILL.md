@@ -12,6 +12,8 @@ description: "feature を起票して worker に実装を切り出し、成果�
 
 計画から自走へ移るときの**実行の契約**（雛形・決定ログ）は [references/plan-contract.md](references/plan-contract.md)。
 
+**凍結（[ADR-0030](../../../docs/adr/0030-freeze-agent-stack-return-to-stock-pi.md)）**: 自作基盤（フルガード・`guarded_task` など）が前提の運用。旧 `AGENTS.md` の運用規則（worktree・統合・並列度・完璧より完了・複数会話）は [references/repo-rules.md](references/repo-rules.md)。
+
 ## 使う条件
 
 - 担当ファイルを分けられる実装が 2 件以上ある、または 1 件でも設計が固まっていて指示を完全に書ける。

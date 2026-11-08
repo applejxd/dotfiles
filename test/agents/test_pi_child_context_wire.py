@@ -27,10 +27,10 @@ pytestmark = pytest.mark.skipif(
     PI is None or _node() is None, reason="pi か、型除去に対応した node (22.18 以上) が無い"
 )
 
-REAL_PROJECT = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-REAL_GLOBAL = (ROOT / "home" / ".chezmoitemplates" / "agent-instructions.md").read_text(
-    encoding="utf-8"
-)
+# 凍結 (ADR-0030): 実物は印なしの平らな文書になったので、印つきの固定サンプル (旧正本の写し) を使う
+_FIX = ROOT / "test" / "agents" / "fixtures" / "child_context"
+REAL_PROJECT = (_FIX / "repo-instructions.md").read_text(encoding="utf-8")
+REAL_GLOBAL = (_FIX / "agent-instructions.md").read_text(encoding="utf-8")
 ROLES = ["explore", "review", "plan", "worker"]
 HEADING_HEAD = "【親の指示からの抜粋】あなたは子エージェント ("
 PARENT_WORDS = ["`ask`", "guarded_action", "コミットの承認"]
