@@ -290,7 +290,7 @@ def resolve(
     mounts: list[model.Mount] = [model.Mount("repo", repo, repo, False)]
     git = posixpath.join(repo, ".git")
     if fs.isdir(git) and not fs.islink(git):
-        for sub in ("hooks", "config"):
+        for sub in ("hooks", "config", "commondir"):
             src = posixpath.join(git, sub)
             if fs.islink(src):
                 raise ConfigError(f".git/{sub} が symlink（拒否）")

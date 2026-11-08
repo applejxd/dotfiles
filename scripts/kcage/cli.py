@@ -20,7 +20,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from kcage import model, trust
+from kcage import gitmeta, model, trust
 from kcage.template import PI_PACKAGE, PI_VERSION_RE
 
 HELPER = f"{model.ROOT_HELPER_DIR}/kcage-root"
@@ -33,6 +33,8 @@ SECRET_VALUE = re.compile(
     r"|sk-[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)"
 )
 HOME_SECRET_DIRS = ("~/.ssh", "~/.aws", "~/.gnupg", "~/.config/gh", "~/.config/kcage")
+# 箱の中で読み取り専用であるべき .git の中身（config.py の重ねと対応）
+GIT_RO_PATHS = (".git/hooks", ".git/config", ".git/commondir")
 
 
 @dataclass
@@ -66,6 +68,21 @@ class Fs:
 
     def realpath(self, path: str) -> str:
         return os.path.realpath(path)
+
+    def isdir(self, path: str) -> bool:
+        return Path(path).is_dir() and not Path(path).is_symlink()
+
+    def listdir(self, path: str) -> list[str]:
+        try:
+            return os.listdir(path)
+        except OSError:
+            return []
+
+    def read_bytes(self, path: str) -> bytes | None:
+        try:
+            return Path(path).read_bytes()
+        except FileNotFoundError:
+            return None
 
 
 # ---- 動詞 → kcage-root の argv（純粋） ----
@@ -209,6 +226,25 @@ def _spec_loader() -> Callable[[str], object]:
         return tomllib.loads
 
 
+def check_git_metadata(top: str, fs: Fs) -> list[Check]:
+    """メインの .git の中の、ホストの git が別の場所を参照しうるものを調べる（契約 C14）。"""
+    git = f"{top}/.git"
+    if not fs.isdir(git):
+        if fs.exists(git):
+            return [
+                Check("git の metadata", "warn", ".git が実ディレクトリではない（検査できない）")
+            ]
+        return []
+    try:
+        commondir = fs.read_bytes(f"{git}/commondir")
+    except OSError:
+        commondir = b"?"  # 読めないもの（ディレクトリ等）は不審とみなす
+    present = frozenset(name for name, _ in gitmeta.WARN_ENTRIES if fs.exists(f"{git}/{name}"))
+    return [
+        Check("git の metadata", s, d) for s, d in gitmeta.inspect_metadata(commondir, git, present)
+    ]
+
+
 def check_git_config(hooks_path: str, worktree_config: str) -> list[Check]:
     """契約 C14: .git/hooks の読み取り専用は、ホストの git の実行経路の一部しか守らない。"""
     out: list[Check] = []
@@ -264,10 +300,12 @@ def judge_env(out: str) -> Check:
 
 def judge_git_ro(out: str) -> Check:
     state = dict(ln.split("=", 1) for ln in out.splitlines() if "=" in ln)
-    bad = [k for k in (".git/hooks", ".git/config") if state.get(k) != "ro"]
+    bad = [k for k in GIT_RO_PATHS if state.get(k) != "ro"]
     if bad:
         return Check("git の読み取り専用", "fail", "書き込める、または判定不能: " + ", ".join(bad))
-    return Check("git の読み取り専用", "ok", ".git/hooks と .git/config は書き込み不可")
+    return Check(
+        "git の読み取り専用", "ok", ".git/hooks・.git/config・.git/commondir は書き込み不可"
+    )
 
 
 def judge_direct(out: str, mode: str) -> Check:
@@ -285,7 +323,7 @@ def selftest_commands(repo_path: str) -> dict[str, list[str]]:
     dirs = " ".join(HOME_SECRET_DIRS)
     quoted = shlex.quote(repo_path)
     git = (
-        f"cd {quoted} && for p in .git/hooks .git/config; do "
+        f"cd {quoted} && for p in {' '.join(GIT_RO_PATHS)}; do "
         'if [ -w "$p" ]; then echo "$p=rw"; else echo "$p=ro"; fi; done'
     )
     return {
@@ -361,6 +399,7 @@ def cmd_doctor(args: argparse.Namespace, runner: Runner, fs: Fs) -> int:
             _git_value(runner, "core.hooksPath"), _git_value(runner, "extensions.worktreeConfig")
         )
     )
+    checks.extend(check_git_metadata(top, fs))
     checks.extend(net_hook())
     _out(format_checks(checks))
     return 1 if any(c.status == "fail" for c in checks) else 0
