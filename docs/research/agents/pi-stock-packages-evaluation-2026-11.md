@@ -84,3 +84,22 @@
 - 実機での `chezmoi apply`・package の取得・permission-system の bash パターンの一致・YOLO の動作。
 - `pi-subagents` の前景の子と permission-system の連携。背景の完了通知が親を起こすか。
 - Windows 実機。
+
+## オーケストレーションの評価と決定（2026-11-09）
+
+出典は、`pi-subagents`（nicobailon。0.87.0）の同梱の README・docs・ソース（`npm pack` を展開して読んだだけで、実行なし）と、他の候補の tarball。原文は `.tmp/keep/pi-eval/orchestration-*.md`（archive へは別途）。
+
+- **結論**: 他の package は入れず、`pi-subagents` だけで足りる（条件つき）。実機の確認は、まだしていない。
+  - 子は**全部背景**にする（`forceTopLevelAsync: true`）。前景の子には親の拡張が載らず、permission-system と cc-safety-net が効かないため。背景の子には載る。
+  - 組み込みの `scout` は bash と write を持つので、`agentOverrides` で読み取り専用に絞る。計画役は `oracle` を絞って使う。レビューは組み込みの `reviewer`（読み取り専用）。
+  - permission に足す: `subagent_supervisor`（allow）。`subagent_launch`（workflow の子の起動ごとの確認）は **ask のまま**（allow にすると、`gate`・`acceptance.verify` のシェルコマンドが bash の規則を迂回する。それらは使わない）。
+- **worktree の運用は、利用者の選択で N（拡張ネイティブ）から始める**: トップレベルで 1 回の `async: true` の workflow を呼び、書き込む子に `worktree: true`（使い捨ての worktree と枝 `pi-subagents/…`。patch と handoff の記録）。合わなければ F（親が feature worktree を作り、`subagent({agent, task, cwd, async:true})` で渡す。`cwd` は正規の引数）へ切り替える。比較: N は拡張の意図に沿い、後始末は拡張が行うが、git flow（1 feature = 1 枝）との形が合わず、`subagent_launch` の確認が毎回出る。F は git flow に合い、学習量が小さいが、並列は workflow ではなく複数の独立した呼び出しで、patch・lane の記録は得られない。運用の手順は `.agents/skills/feature-orchestration/references/pi-subagents.md`。
+- **他の候補の判定**: `dynamic-workflows`・`pi-crew`・`agent-fleet` は、子に拡張が載らず permission が効かないので除外。`pi-herdsman` は外部（herdr）依存で除外。`pi-gauntlet` は `pi-subagents` との入れ替え専用で保留（「verify が通るまで review に進まない」の考え方だけ運用に取り込む）。`pi-loop` は `MonitorCreate` だけに関心が残るが `pi-background` で足りる。`@tintinweb/pi-subagents` は入れ替える理由なし。
+- **実機で確かめる 4 点**: idle の親が完了通知で起きること／背景の子の bash が permission-system と cc-safety-net に止められること／**子の ask が親の画面へ転送されること**（最大の不確実性。0.87.0 のコードは `PI_SUBAGENT_PARENT_SESSION` を渡すが、permission-system の docs は別の package にしか触れていない）／`worktree: true` の子の patch を親が適用できること。
+- **設定値（実装済み。仕様は [agent-config-generation](../../spec/agent-config-generation.md#pi-subagents-の設定stock)）**: `subagent/config.json` = `forceTopLevelAsync: true`（強制）・`worktreeProvider: "native"`・`maxActiveAsyncRunsPerSession: 4`・`maxSubagentDepth: 1`・`maxSubagentSpawnsPerRun: 32`（後 4 つは無いときだけ補う）。`agentOverrides.scout.tools` = `read, grep, find, ls, contact_supervisor`、`agentOverrides.oracle.tools` = `read, grep, find, ls`（`tools` は文字列の配列。`+`/`-` の増分指定は不可）。permission は `subagent_supervisor` = allow・`subagent_launch` = ask。
+- **実機で確かめる 4 点（すべて未確認）**:
+  1. idle の親が、完了通知で起きる。
+  2. 背景の子の bash が、permission-system と cc-safety-net に止められる（`/subagents-doctor`）。
+  3. 子の ask（`contact_supervisor`）が親の画面へ転送され、離席から戻って答えられる。
+  4. `worktree: true` の子の patch（`artifactPaths` の handoff の記録）を、親の feature worktree へ適用できる。
+- **そのほかの未確認**: `maxActiveAsyncRunsPerSession` の上限を超えたときの挙動（拒否かキューか）。`subagent_launch` を ask にしたとき、背景の子の起動が確認画面で止まらないか。`worktreeProvider: "native"` で、worktree の置き場（リポジトリの隣の `worktrees/<プロジェクト名>/`）が書き込み境界に入るか。
