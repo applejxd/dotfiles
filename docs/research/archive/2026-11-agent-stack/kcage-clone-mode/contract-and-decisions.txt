@@ -1,0 +1,52 @@
+# 契約: kcage の git の運用設計（clone モード）— 2026-11-08（計画。実装は利用者の「進めて」の後）
+
+目的: 箱の git を「共有 `.git`（M0）」から「箱専用の clone（M1）」へ選べるようにし、箱が書いたデータでホストが自動実行されない（C4）まま、今の feature 開発（起票→実装→commit→PR→統合→掃除・bundle）を成立させる。詳細の計画: `.tmp/subagents/64-job-055ed88339302c8d.md`（plan 役）。調査: `.tmp/keep/research/coi-eval.md`・`isx-eval.md`。
+
+## 守る条件
+- C1: 公開リポジトリ（ホームの絶対パス・個人情報・組織固有の値を書かない。ダミーは example.test）。コメントと docs は日本語。
+- C2: ホスト側の既存の運用（`git flow feature start --worktree`・`.tmp/worktrees/`・PR ビューア・`bundle.py`・全件検査のロック）を、必要がない限り変えない。
+- C3: kcage の現行の要件（GPU・入れ子の Docker・compose・認証 broker・通信モード・許可表・`kcage.toml` は締める方向だけ）を維持する。
+- C4: ホストの git・エディタ・pi が、箱の書いたデータで自動実行されない。
+- C5: push・公開・リポジトリ外の削除など元に戻せない操作を計画に入れない。
+- C6: 実機で確かめていないことは「未検証」と書き、確かめる手順を示す（導入済みの箱への `kcage exec` だけ。使い捨てディストロでの Incus は不可）。
+- **C7（利用者の要求）: 作業の後に、spec を最新にし、ツールの概要・全体像を利用者がわかる形にする。** 具体的には、(a) `docs/spec/sandbox/incus-box.md` を実装と一致させる、(b) **新しい概要文書（案: `docs/spec/sandbox/kcage-overview.md`）**を作る: kcage とは何か・なぜ要るか・全体図（ホスト／箱／inbox／ブローカー）・箱が保証すること（「push させない」）と保証しないこと・動作モード（shared／clone・通信 3 モード・broker）・1 日の流れ（register→up→pi→collect→take→finish→feed）・コマンドの早見表・運用の注意・既知の限界・未検証の一覧、(c) ADR-0029、(d) 索引（`docs/index.md`・`docs/spec/index.md`・`docs/spec/sandbox/index.md`）、(e) スキル `feature-orchestration` と AGENTS.md の参照。docs の変更は、各 S の担当が書き、最後に親が概要文書を通読して整える。
+
+## 決定（利用者との会話で確定）
+- D1: 方式は M1（1 リポジトリ 1 箱＋箱専用の clone）。許可表の `git = "clone" | "shared"`（既定 `shared`＝現行。M0 は撤退先に残す）。M2（1 feature = 1 箱）は必要なときだけ。M3 は採らない。
+- D2: 1 リポジトリ 1 箱で足りる。1 feature = 1 箱が要るのは、compose のポート・DB の衝突、feature ごとの通信モード・data・broker の違い、信頼できない依存の切り離しのとき。
+- D3: **箱の境界は「push させない」（外へ出さない・認証を持たない・ホストで自動実行される設定を触らせない）。ローカルの ref（develop への merge など）の操作は、フルガードの責務**（reflog で戻せる）。**`feature finish` は箱の中で行ってよい**。歯止めは箱の pi のフルガードの必須確認。
+- D4: clone モードでは箱の clone の `.git/config` は箱のものなので、**箱に git-flow-next を入れて `git flow` を使える**（テンプレートの変更と版の固定が要る）。
+- D5: ホストへの反映は `kcage take`（箱の枝を inbox 経由で取り込む。FF のみ・同名衝突は拒否）。**`take develop` を許可（FF のみ・祖先関係を検査）**。push ではなくローカルの ref の更新。
+- D6: 交換は `git bundle`。ホストの git の呼び出しは PR ビューアと同じ硬化（hooks・fsmonitor 無効、`fsckObjects`、`GIT_CONFIG_GLOBAL=/dev/null`）。inbox は bare repo（Q5 確定）。
+- D7: `kcage feed`（ホスト→箱。develop・main と、ホスト作成の枝。FF のみ）。**`feed --wip`**（ホストの未コミットの作業ツリーを一時 index の commit にして `host-wip/<日時>` の枝として箱へ。適用しない。ignore は除外。秘密検出とサイズ上限）。**`collect --wip`**（箱の未コミットを `box-wip/<日時>` の枝としてホストの inbox へ）。**collect は `kcage pi` の終了時と `stop` の前に自動**（Q4 確定）。
+- D8: 検査は、GPU・compose の repo は箱で回す。ホストで回すのは信頼できるコードだけ。`bundle.py`・`wt_clean.py` を箱へ配るのは S2 の後（Q8 確定）。
+- D9: **ホストでのファイル閲覧のために `kcage view` を S1 に含める**（Q2・Q3 の回答）: 箱の作業ツリーを、`.git`（どの深さでも）とホストで自動実行される設定（`.vscode`・`.zed`・`.idea`・`.husky`・`.envrc`・`.pre-commit-config.yaml`・`.claude`・`.pi`・`.codex`・`.mcp.json`・mise の設定など）を除いた**読み取り専用の複製**としてホストの専用ディレクトリへ出す（on-demand。tar をホスト側で安全に展開）。Orca・Zed では「フォルダ」として開く（git の状態は見えない）。直接編集は不可（編集は箱の中、または `feed --wip`）。
+- D10: 戻し方は、許可表を `shared` に戻して `kcage rm` → `kcage up`（戻す前に collect・take）。M0 は S3 まで併存。ADR-0028 の決定 6 は新しい ADR-0029 で置き換える（Q9・Q10 確定）。
+- **D11（Q1・Q3 の回答）: 箱の中の作業ディレクトリは設定できる。** 既定は `/home/ubuntu/work/<id>`、`workdir = "host"` でホストの repo と同じ絶対パス（compose・`.env`・`setup.sh` が絶対パスを持つ場合）。データセットは今までどおり `data`（ホストと同じ絶対パスの ro の重ね）。
+- **D12（Q3 の回答）: 「virtual monorepo」は、親の作業ツリーの下に独立した複数の clone（子 repo）を置く構成で、配置は `setup.sh` などで定義されている（submodule ではない。親子で同時に開発・commit するため、ポインタ更新を避けている）。clone モードは最初から複数 repo に対応する。** 親と子は独立した repo（ポインタは無い）なので、取り込みは repo ごとに独立。ホストが列挙する（ホストの作業ツリーは信頼できるので、入れ子の `.git` を探索するか、許可表の `repos = [...]` で宣言）。箱の中の配置は、ホストの配置を seed の bundle から再現する（箱の中で `setup.sh` を実行しない。ネットワーク・認証が要るため）。
+- D13（Q11 確定）: feature は複数 repo にまたがる。**同じ枝名を関係する各 repo に切る**。`kcage take feature/x` は、その枝を持つ全 repo から取り込む。`collect`・`feed`・`feed --wip`・`view` も repo ごとに繰り返す。inbox は repo ごと。
+- **D15（Q11 確定）: 作業ツリーは、feature ごとに親子を揃えた「ワークスペース worktree」が要る**（複数 feature を並行して進める）。`.tmp/worktrees/<名>/` の下に、親の worktree と、子の各 repo の worktree（または対応する checkout）を、親の配置どおりに揃える。束ねる補助（案: `kcage ws feature start|finish`、箱の中で動く）を設計する。
+- D14: submodule は第 1 の対象ではない（利用者の主な構成は D12）。submodule を使う repo は `shared` のまま（M0 の入れ子の `.git` の ro 重ねは別案件）。LFS は対象外（あまり使わない）。
+
+- **D16（複数 repo 設計と利用者の回答で確定）**: 設計の正本は `.tmp/subagents/65-job-df97409fc0b1b9b5.md`（plan 役）。要点: repo 集合（親＋子）を repo ごとに独立させる（箱専用 clone・inbox（ホスト側 bare）・bundle）。列挙は探索＋宣言（`setup.sh` は解析しない）。箱の配置は `<workdir>` が親、子は相対パス、親の `.git/info/exclude`（箱専用）に子を生成。ワークスペース worktree は `<workdir>/.tmp/worktrees/<名>/`（親）とその下の同じ相対パス（子）。束ねる動詞 `kcage ws start|ls|status|update|merge|finish|rm|path|adopt`（実体は箱の中の単一ファイル helper `kcage-box`）。`take` は全 repo の事前検査が通ったときだけ適用。追加: `kcage take develop|main` を `[pi.confirm]` の確認対象に足す、`kcage.toml` の `repos` を root 側の `_SPEC_KEYS` にも足す。
+- **D17（Q: take develop）**: 追跡ファイルが clean なら `merge --ff-only`、`risk_paths` に当たる差分があれば `--accept-risk-paths` を要求、dirty なら拒否。AI の経路では確認画面。
+- **D18（Q: ws finish）**: 箱の中での finish（経路 B）を v1 に含める。既定は経路 A（箱で commit → take → ホストの PR ビューアで統合 → feed）。経路 B は全 repo の衝突を事前検査（衝突があれば何も変更しない）し、必須確認つき。
+- **D19（Q: git-flow-next）**: **利用者が「独自 clone なので今までどおり git flow next で操作する」を希望。S1 に含める**（D4 の実施。箱のテンプレートへ git-flow-next を入れる: 版を固定し sha256 を検証）。単一 repo では `git flow feature start/finish [--worktree]` をそのまま使う。**複数 repo のワークスペース**は worktree の配置（子の worktree を `<ws>/<rel>` に揃える）が git flow の自動配置と合わないので、`kcage ws` が `git worktree add` で明示パスに作り、git flow の設定（`.gitflow`・枝の base の記録）と整合するように設計する（finish は repo ごとに `git flow feature finish` を使える形を優先）。
+- **D20（Q: 箱で作った新しい子 repo）**: **v1 から対象にする**。ただし「箱起点の列挙」は信頼しないので、`collect` が箱の中の未登録の `.git` を「新しい repo（未登録）」として報告し、**利用者が `kcage adopt <rel>` で明示に承認したときだけ**、ホストがその rel（検証済み。`repo_allow` に合うこと・ホストに無いか空のディレクトリ）を `git init`（ホスト自身が作る安全な .git）し、inbox を作り、manifest に足す（チェックアウトはしない＝箱のファイルをホストの作業ツリーへ書かない）。親の `.gitignore` への追記や `setup.sh` への反映は利用者の作業（ヒントを表示）。
+- 複数 repo 設計の未確認の推奨既定（採用）: 子が feature 枝を切らず develop で直接作業する場合は `ws start --only` で外して detached にする、`kcage.toml` の `git` キーは v1 では持たない、`view` の置き場は `~/.local/share/kcage/view/`（エディタは restricted モードで開く）、`take` の事前検査の失敗時は既定で全 repo を適用しない（`--partial` で通った repo だけ）、浅い clone・partial clone・空白や非 ASCII の rel は v1 で拒否。
+
+## 段階（実装の順。まず S0）
+- S0: コード変更なしの実機確認（導入済みの箱に `kcage exec` だけ）。バイナリ転送・seed と collect の往復・悪性 bundle（`.gitmodules` の symlink・`.git` という名前の tree entry・`..` を含む ref 名）の拒否・take の同名衝突と非 FF の拒否・**wip スナップショット（未追跡・削除・リネーム・実行ビット・大きなファイル・ignore の除外）**・**複数 repo の seed の再現**・**view の除外が効くこと**・性能（seed 5 分／collect 1 分の目安）。撤退条件: 悪性 bundle を 1 つでも受理した、性能が大きく超えた。
+- S1a（policy・model・config: `git`・`workdir`・`repos`）／S1b（plan・root_helper）／S1c（`scripts/kcage/gitsync.py` 新規: 複数 repo の collect・take・feed・wip・硬化した git 実行器）／S1d（cli: 新動詞 `collect`・`take`・`feed`・`view`・`up` の seed・doctor・selftest の clone 版）／S1e（箱のテンプレートに git-flow-next）／S1f（docs: C7）。root 側の新しい権限は要らない（既存の passwordless の `exec` 動詞経由）。
+- S2: 実物 1 repo（virtual monorepo の 1 つ）で 1 週間。S3: 既定の判断。S4（任意）: `kcage get`・PR ビューアの取り込み画面・custom volume（デバイスの関門を動かすので review が要る）。
+
+## 未決
+- Q11（確定。D13・D15）。
+- Q12: `setup.sh` の例（repo 数・相対パス・枝の指定だけ。URL・認証は伏せてよい）。
+
+## 止まる条件
+悪性 bundle の受理・S0 の性能の撤退条件・デバイスの関門や許可表（権限の境界）を動かす変更（S4 の custom volume）・実機で既定が崩れたとき（利用者に聞く）。
+
+## 決定ログ
+- 2026-11-08: 利用者が「箱が保証するのは develop を push しないこと」と訂正→D3・D4・D5 を修正。`feed --wip` の希望→D7。
+- 2026-11-08: Q1〜Q10 の回答（compose・データセットの絶対パスあり→D11。ホストでファイルツリーを見たい→D9。virtual monorepo=入れ子の独立 clone で最初から複数 repo→D12〜D14。collect は自動。残りは推奨どおり）。C7（spec・概要・全体像の最新化）を追加。

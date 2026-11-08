@@ -1,0 +1,104 @@
+#58 起動 14:12:33 / 完了 14:17:00
+
+child explore: completed [267s, 42 calls, 5839.6k tokens, $1.365]
+- model: github-copilot/claude-sonnet-5.5, effort: (pi default), role default
+- 文脈: inherit
+warnings (tool errors during the run; the answer below already accounts for them):
+- tool error: guarded_find: `/home/alice/.local/share/chezmoi/.tmp/research/coi/src/internal/tool/credentials` は [file] read_deny_globs の `**/*credential*` に当たる
+format check (the answer lacks the standard sections; verify its claims yourself):
+- missing: 根拠
+- calls: grep×35 read×30 find×4 ls×4
+
+answer:
+## 結論（coi と比べた kcage）
+
+- **強い点**: kcage は利用者を `incus-admin` に入れず、`kcage-root` と許可表で操作する。coi は利用者が root 相当で直接 `incus` を叩く。また kcage は認証キーを箱に入れず broker で注入する。coi は OAuth トークンなどを箱へコピーする。
+- **弱い点**: kcage には、カーネル攻撃面の削減（seccomp deny）、`.git` の親ディレクトリの rename 防止（pin）、host 側 `chattr +i`、submodule や nested git の保護、ブランチガードが無い。
+- **同等の点**: 非特権コンテナ、`raw.idmap`、`.git/hooks` と `.git/config` の ro 重ね、symlink 拒否、repo 側の設定は強める方向だけ受け付ける。
+
+以下、パスは `.tmp/research/coi/src/` 起点。実行はしておらず、すべてコードを読んだ結果。
+
+## 1. ホストの特権
+
+- **incus 操作**: 利用者が `incus` を直接実行する（`internal/container/commands.go:42`）。`incus-admin` 所属が前提。特権の補助は無い。
+- **`coi health --fix`**（`internal/health/remediation.go`）が書き換えるのは次の 3 件。
+  - `usermod -aG incus-admin`（:140）
+  - `sysctl -w net.ipv4.ip_forward=1`（:152。一時設定）
+  - `/etc/sudoers.d/coi-nft` への `NOPASSWD: nft`（:174, :208。引数制限なし）
+- iptables の sudoers は手動扱い（:185）。subuid/subgid を書き換える fix は無く、診断だけ（`internal/session/subid.go`）。
+- nft/iptables は `sudo -n` で実行する（`internal/network/nft_filter.go:999,1182`）。
+- host 側 `chattr +i` には `setcap cap_linux_immutable` が要る。無いと警告して ro bind だけになる（`internal/session/immutable.go`）。
+
+## 2. コンテナの作り方
+
+- **特権の確認**: 作成時に `security.privileged=true` を検査し、true なら拒否する（`commands.go:761`、`internal/container/security.go`）。
+- **設定キー**: 既定の `docker=true` では次を設定する（`internal/container/hardening.go:145-160`）。
+  - `security.nesting`
+  - `intercept.mknod` と `intercept.setxattr`
+  - `ip_unprivileged_port_start=0`
+- **カーネル攻撃面の削減**: `reduce_kernel_surface`（opt-in）で `security.syscalls.deny` に次を入れ、nesting は無効になる（`hardening.go:56`）。
+  - io_uring、bpf、userfaultfd、keyctl 系
+  - 厳格版は perf_event_open も追加
+- **追加設定**: `security.guestapi=false`（`commands.go:784`）、`security.idmap.isolated=true`（:795）、NIC の `ipv4_filtering`・`mac_filtering`・`port_isolation`（:822）、IPv6 を boot 時に無効化（:849）。
+- **idmap**: uid が一致しなければ `raw.idmap "both <uid> <code_uid>"`。それ以外は disk の `shift=true`（`internal/session/setup_helpers.go:254`）。
+- **GPU**: 未対応（`gpu`・`nvidia`・`dxg` を grep して 0 件）。
+- **マウント**: ホストのパスを `/workspace`（`preserve_workspace_path` ならホストと同じパス）へ rw で重ねる（`internal/session/setup.go:700`）。ほかは次のとおり。
+  - worktree なら、共通 git dir を同一パスで rw（`worktree.go:217`）
+  - `~/.coi/tool-data/<tool>/<hash>/*` を rw（`tool_data.go`）
+  - `[[mounts]]` は利用者指定。ro は任意
+  - `secret_paths` は空の ro で隠す
+  - SSH agent は proxy device（opt-in）
+
+## 3. 保護パス
+
+- **既定一覧**（`profiles/default/config.toml:83`）: `.git/hooks`、`.git/config`、`.git/config.worktree`、`.git/info/attributes`、`.husky`、`.vscode`、`.coi`、`.claude/settings{,.local}.json`、`.codex/config.toml`。
+- **ro の実現**: 各パスに ro の disk device（`protect-*`）を重ねる（`internal/session/security.go:47,336`）。
+  - 無いものは空の placeholder を作る（:423-466）。
+  - 親ディレクトリは自分自身に rw で bind する（pin）。これで `mv .git .git.old` を防ぐ（:253。CHANGELOG:30 付近）。
+- **submodule と nested git**: `.git/modules/**` と深さ 3 までの nested repo に、hooks・config・config.worktree・info/attributes を重ねる（:543,601）。
+- **worktree**（`.git` がファイル）: `.git/*` の既定を外す（`worktree.go:352`、`security.go:194`）。
+  - 代わりに共通 dir の `hooks`、`config`、`info/attributes`、`worktrees/*/config.worktree` を ro にする（`worktree.go:236-243`）。
+- **残っていそうな経路**（読んだ限りの推論。実機では未検証）:
+  1. 通常 repo の `.git/commondir` は未保護（`commondir` を読むのは `worktree.go:154` の host 側の解決だけ）。箱が `.git/commondir` を作り、作業ツリー内の複製 `.git` を指せば、config と hooks をそこから読ませられる。kcage が封じた経路と同じ。
+  2. worktree では、作業ツリーの `.git` ポインタ（ファイル）自体が ro でない。
+  3. worktree では `<common>/worktrees/<name>/commondir` と、共通 dir 直下の `config.worktree` が rw のまま。
+  4. `objects/info/alternates` は未保護（コード実行には直結しない）。
+  5. `.envrc`、`.pre-commit-config.yaml`、`.pi/`、`.opencode/`、`.mcp.json`、Makefile は既定に無い。利用者が足した「存在しないパス」も黙って skip される（`security.go:77,839`）。
+  6. ro は bind mount なので、箱内 root で外せる。coi 自身が「bypassable with root」と書いている（`immutable.go`。CHANGELOG:440 の `unshare -m` + `umount`）。しかも箱内 `code` ユーザーは `NOPASSWD:ALL`（`profiles/default/build.sh:395`）。
+
+## 4. 認証
+
+- **コピー方式**: ホストの tool 設定ディレクトリから、認証ファイルを含めて箱へコピーする。
+  - claude: `~/.claude` の `.credentials.json` と `~/.claude.json`（`internal/tool/tool.go:80-88,319`）
+  - codex: `auth.json`、`config.toml`、`AGENTS.md`（`internal/session/setup_codex_test.go:56-99`）
+  - opencode: `.config/opencode`、omp: `.omp`、pi: `~/.pi/agent`
+- **未確認**: pi・omp・opencode の具体的なファイル一覧。正本の `internal/tool/credentials/catalog.toml` と `setup_credentials.go` は、名前が read_deny_globs（`**/*credential*`）に当たり読めなかった。
+- **`forward_env`**: 変数名を指定すると値をそのまま箱へ渡す。例は `ANTHROPIC_API_KEY` と `GITHUB_TOKEN`（`internal/config/config.starter.toml:40`）。repo 側の設定では無効（CHANGELOG:50）。
+- **SSH agent**: 既定 off。on にするとホストのソケットを proxy device で転送する（`internal/session/setup_ssh.go:193`）。
+- **gh と LLM キー**: 注入する proxy や broker は無い（mitm・envoy・token 注入を grep して 0 件）。
+- **permission_mode 既定**: `bypass`（`tool.go:103,153`）。codex は `--dangerously-bypass-approvals-and-sandbox`（`internal/tool/codex.go`）。
+- **通信**: 既定の network は `restricted`（`profiles/default/config.toml`）。私的網とメタデータ宛を遮断するが、公開網は開いている。箱内の認証情報が外へ出る経路は残る。
+
+## 5. ブランチガード
+
+- 箱内の root 所有 git hook（`/etc/coi/git-hooks`）で実装する。対象は `pre-commit`、`pre-merge-commit`、`pre-push`、`reference-transaction`（`internal/session/git_attribution.go:320`）。
+  - 既定の保護は `main` と `master`。
+  - reference-transaction は、remote に無い commit への移動を拒否する。
+- 回避できる。coi 自身が、`--no-verify`、repo ローカルの `core.hooksPath`、`git branch -M`、`symbolic-ref` を挙げている（:175,241-247）。
+  - 加えて `core.hooksPath` は書き込み可能な `~/.gitconfig` に入る（:472。`[git] readonly` なら固定）。
+  - sudo も使えるので、事故防止であって境界ではない。
+
+## kcage に取り入れる価値のある点
+
+1. **親ディレクトリの pin**（`.git` を自分自身に bind）。`mv .git` で重ねを外す手口を防ぐ。kcage の仕様に記述が無い（`scripts/kcage` で pin・rename を grep して 0 件）。
+2. **箱内 root で ro を外される経路への対策**。kcage の箱の `ubuntu` は `docker` グループ所属（`template.py:203`）。nested docker で root 相当になり、同じ手口が通る可能性がある。coi の `chattr +i`（host 側）と同じ種類の追加の belt が要る。
+3. `reference-transaction` によるブランチガード。事故防止として安い。
+4. `security.syscalls.deny`（opt-in）、`security.guestapi=false`、`security.idmap.isolated`、NIC の anti-spoof。
+5. submodule・nested git の `config` と `hooks` の探索。ただし kcage の worktree は対象外という方針とは別の判断になる。
+6. 作業ツリー内の自動実行設定（`.vscode`、`.husky`、`.claude/settings`、`.codex/config.toml`）を、不在でも placeholder で塞ぐ発想。
+
+## 懸念
+
+- coi の「箱の root は信頼しない」前提は、`NOPASSWD:ALL` で崩れている。kcage も箱内 root 相当への道（docker グループ）を塞ぐか、ro 重ねが外されても困らない設計にするか、決める必要がある。
+- 上記の残る経路（1〜6）は、コード上の推論で実機では未検証。kcage への取り込み前に、使い捨ての環境で `mv .git`、`umount`、`commondir` を確かめるとよい。
+- 次の候補として、実機での上記 3 点の確認に加え、`catalog.toml` を読める経路があれば pi・omp・opencode の認証ファイル一覧を補う。
