@@ -10,10 +10,17 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import os
 import re
+import shlex
 import shutil
-from collections.abc import Iterable, Mapping
+import subprocess
+import sys
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
+from typing import Any
+
+from kcage import model, template
 
 # src_home からの相対パス。ここに無いものは入れない（許可リスト）
 DEFAULT_ALLOW: tuple[str, ...] = (
@@ -43,6 +50,8 @@ DEFAULT_DENY: tuple[str, ...] = (
     "id_rsa*",
     "id_ed25519*",
     ".git",
+    "rules.json",  # ホスト用の生成物。箱用は build_box_dist が作り直す
+    "*.e2e-bak",  # 試験の退避ファイル
 )
 SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"ghp_[A-Za-z0-9]{20,}"),
@@ -162,3 +171,152 @@ def minimal_settings(extra: Mapping[str, object] | None = None) -> dict[str, obj
 
 def settings_json(extra: Mapping[str, object] | None = None) -> str:
     return json.dumps(minimal_settings(extra), ensure_ascii=False, indent=2) + "\n"
+
+
+# ---- 箱の中のフルガード（箱用 rules.json と起動スクリプト）----
+# see docs/spec/sandbox/incus-box.md#箱の中のフルガード
+
+DIST = template.DIST_DEST
+LAUNCHER_REL = "bin/kcage-pi"
+LAUNCHER_PATH = f"{DIST}/{LAUNCHER_REL}"
+HARNESS_REL = ".config/pi/harness"
+BOX_EXT_DIR = ".pi/agent/extensions"
+# pi の起動の基本形（pis の BASE_FLAGS と同じ。project trust は拒否、組み込みツールと自動発見の拡張は無効）
+BOX_BASE_FLAGS = ("--no-approve", "-nbt", "-ne", "-e", "builtin:mcp")
+# 箱では PR ビューアと台帳に繋がらないので、役割のツールから外す
+BOX_DROP_TOOLS = ("pr_summary", "work")
+# 箱の AI が書き換えてはいけないもの（配布物・モデルと認証の設定）
+BOX_WRITE_DENY = (
+    f"{DIST}/**",
+    "~/.pi/agent/models.json",
+    "~/.pi/agent/auth.json",
+)
+BOX_EXTERNAL_READ = (DIST,)
+# 箱の既定: ask は許可に落ちる。deny と必須確認（[pi.confirm]・[pi.integrate]）は残る
+BOX_ENV = (("PI_HARNESS_BYPASS", "1"),)
+# generate.py が読む局所設定を、存在しない場所へ向ける（ホストの局所設定を混ぜない。空文字は既定へ戻るので使えない）
+NO_LOCAL_CONFIG = "/nonexistent/kcage-no-local.toml"
+GENERATE_PY = Path(__file__).resolve().parents[3] / "agents" / "generate.py"
+
+RulesGenerator = Callable[[Path], dict[str, Any]]
+
+
+def generate_rules(common: Path) -> dict[str, Any]:
+    """scripts/agents/generate.py で、箱（HOME=/home/ubuntu）向けの rules.json を dict で作る。
+
+    common はホストの描画済み common.toml。ホストの局所設定は混ぜない。
+    """
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": model.BOX_HOME,
+        "AGENTS_LOCAL_CONFIG": NO_LOCAL_CONFIG,
+    }
+    proc = subprocess.run(
+        [sys.executable, str(GENERATE_PY), "--target", "pi-harness", "--common", str(common)],
+        input="{}",
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise DistError(f"箱用の rules.json を生成できない: {proc.stderr.strip()[-300:]}")
+    data = json.loads(proc.stdout)
+    if not isinstance(data, dict):
+        raise DistError("箱用の rules.json が dict でない")
+    return data
+
+
+def _uniq_add(items: list[Any], extra: Iterable[str]) -> list[Any]:
+    out = list(items)
+    for e in extra:
+        if e not in out:
+            out.append(e)
+    return out
+
+
+def apply_box_overlay(rules: Mapping[str, Any]) -> dict[str, Any]:
+    """ホスト用の rules.json を箱用に直す（ホストの方針の生成物は変えず、ここで調整する）。
+
+    無いキーは作らない。判定の形（judge.common.file・judge.common.pi）が違えば DistError。
+    """
+    out: dict[str, Any] = json.loads(json.dumps(rules))  # 深いコピー
+    out["post_edit"] = []  # 箱に無いスクリプトを実行しない
+    out["mcp"] = []  # 箱に uv が無い
+    tools = out.get("profile_tools")
+    if isinstance(tools, dict):
+        out["profile_tools"] = {
+            role: [t for t in names if t not in BOX_DROP_TOOLS] for role, names in tools.items()
+        }
+    try:
+        common = out["judge"]["common"]
+        file_ = common["file"]
+        file_["write_deny_globs"] = _uniq_add(file_.get("write_deny_globs", []), BOX_WRITE_DENY)
+        ext = common["pi"]["external_read"]
+        ext["paths"] = _uniq_add(ext.get("paths", []), BOX_EXTERNAL_READ)
+    except (KeyError, TypeError) as exc:
+        raise DistError(f"rules.json の形が想定と違う（{exc!r}）") from exc
+    return out
+
+
+def rules_json_text(rules: Mapping[str, Any]) -> str:
+    return json.dumps(rules, indent=2, ensure_ascii=False) + "\n"
+
+
+def launcher_text(extensions: Iterable[str]) -> str:
+    """箱の pi の起動スクリプト（/opt/kcage-dist/bin/kcage-pi）の中身。純粋な関数。
+
+    settings.json の extensions には頼らず、-ne で自動発見を切って、判定器と自作の拡張を絶対パスの -e で渡す
+    （読めなければ pi が止まる。素の settings.json への依存で fail-open にならない）。
+    """
+    harness = f"{DIST}/{HARNESS_REL}"
+    args: list[str] = list(BOX_BASE_FLAGS)
+    for name in extensions:
+        args += ["-e", f"{DIST}/{BOX_EXT_DIR}/{name}/index.ts"]
+    args += ["-e", harness]
+    env = " ".join(f"{k}={shlex.quote(v)}" for k, v in BOX_ENV)
+    cmd = " ".join(shlex.quote(a) for a in args)
+    return (
+        "#!/bin/sh\n"
+        "# kcage の箱の pi をフルガードつきで起動する（kcage pi が実行する。root 所有）。\n"
+        "# see docs/spec/sandbox/incus-box.md#箱の中のフルガード\n"
+        "set -eu\n"
+        f'[ -f {shlex.quote(harness + "/index.ts")} ] || {{ echo "kcage-pi: 判定器が無い" >&2; exit 1; }}\n'
+        f'exec env {env} pi {cmd} "$@"\n'
+    )
+
+
+def build_box_dist(
+    src_home: Path,
+    dest: Path,
+    *,
+    generate: RulesGenerator = generate_rules,
+    allow: tuple[str, ...] = DEFAULT_ALLOW,
+    deny: tuple[str, ...] = DEFAULT_DENY,
+) -> list[str]:
+    """build_dist に、箱用の rules.json と起動スクリプトを足す。複製したファイル（dest からの相対）を返す。"""
+    copied = build_dist(src_home, dest, allow=allow, deny=deny)
+    try:
+        rules = apply_box_overlay(generate(src_home / ".config" / "agents" / "common.toml"))
+        text = rules_json_text(rules)
+        host_home = str(src_home.resolve())
+        if host_home in text or str(src_home) in text:
+            raise DistError("箱用の rules.json にホストのホームのパスが残った")
+        names = [n for n in rules.get("extensions", []) if isinstance(n, str)]
+        present = [n for n in names if (dest / BOX_EXT_DIR / n / "index.ts").is_file()]
+        rules_path = dest / HARNESS_REL / "rules.json"
+        rules_path.parent.mkdir(parents=True, exist_ok=True)
+        rules_path.write_text(text, encoding="utf-8")
+        rules_path.chmod(0o644)
+        launcher = dest / LAUNCHER_REL
+        launcher.parent.mkdir(parents=True, exist_ok=True)
+        launcher.write_text(launcher_text(present), encoding="utf-8")
+        launcher.chmod(0o755)
+        # 生成物を含めて走査する（rules.json は生成物なので拒否名から外す）
+        findings = scan_secrets(dest, tuple(d for d in deny if d != "rules.json"))
+        if findings:
+            raise DistError("配布物に秘密らしいものがある: " + ", ".join(findings))
+    except Exception:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
+    return sorted([*copied, f"{HARNESS_REL}/rules.json", LAUNCHER_REL])

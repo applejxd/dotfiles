@@ -173,3 +173,117 @@ def test_実リポジトリの元ファイルが許可リストに一致する()
     assert (root / "dot_config/pi/harness").is_dir()
     assert ".pi/agent/extensions" in dist.DEFAULT_ALLOW
     assert ".config/pi/harness" in dist.DEFAULT_ALLOW
+
+
+# ---- 箱の中のフルガード（build_box_dist）----
+
+
+def fake_rules(_common: Path) -> dict:
+    """generate.py の出力の形だけを真似た偽物（ホストのパスは含めない）。"""
+    return {
+        "extensions": ["todo", "absent"],
+        "post_edit": [{"runner": "bash", "script": "format-file.sh"}],
+        "mcp": [{"id": "x", "command": "uv"}],
+        "profile_tools": {
+            "implementer": ["bash", "pr_summary", "work", "read"],
+            "reader": ["read"],
+        },
+        "judge": {
+            "common": {
+                "file": {"write_deny_globs": ["**/.env"]},
+                "pi": {"external_read": {"paths": ["~/.agents/skills"]}},
+            }
+        },
+    }
+
+
+@pytest.fixture
+def box_home(home: Path) -> Path:
+    write(home, ".config/pi/harness/index.ts", "harness")
+    write(home, ".config/pi/harness/rules.json", '{"host": "ホスト用"}')
+    write(home, ".config/pi/harness/rules.json.e2e-bak", "bak")
+    write(home, ".config/agents/common.toml", "")
+    return home
+
+
+def test_箱用のrules_jsonを作りホスト用は複製しない(box_home, tmp_path):
+    out = tmp_path / "out"
+    copied = dist.build_box_dist(box_home, out, generate=fake_rules)
+    rules = json.loads((out / ".config/pi/harness/rules.json").read_text(encoding="utf-8"))
+    assert "host" not in rules
+    assert ".config/pi/harness/rules.json" in copied and "bin/kcage-pi" in copied
+    assert not any(f.endswith(".e2e-bak") for f in all_files(out))
+    assert rules["post_edit"] == [] and rules["mcp"] == []
+    assert rules["profile_tools"] == {"implementer": ["bash", "read"], "reader": ["read"]}
+    deny = rules["judge"]["common"]["file"]["write_deny_globs"]
+    assert deny[0] == "**/.env"
+    for g in ("/opt/kcage-dist/**", "~/.pi/agent/models.json", "~/.pi/agent/auth.json"):
+        assert g in deny
+    assert "/opt/kcage-dist" in rules["judge"]["common"]["pi"]["external_read"]["paths"]
+
+
+def test_overlayは冪等で元を壊さない():
+    src = fake_rules(Path())
+    once = dist.apply_box_overlay(src)
+    assert src["post_edit"]  # 元は変わらない
+    assert dist.apply_box_overlay(once) == once
+
+
+def test_overlayは形が違えば止まる():
+    with pytest.raises(dist.DistError):
+        dist.apply_box_overlay({"judge": {}})
+
+
+def test_ホストのホームのパスが残れば止まり配布物を消す(box_home, tmp_path):
+    def leaky(common: Path) -> dict:
+        r = fake_rules(common)
+        r["redact"] = {"deny_path": f"{box_home.resolve()}/.ssh"}
+        return r
+
+    out = tmp_path / "out"
+    with pytest.raises(dist.DistError):
+        dist.build_box_dist(box_home, out, generate=leaky)
+    assert not out.exists()
+
+
+def test_起動スクリプトは実行権限つきで中身が決まった形(box_home, tmp_path):
+    out = tmp_path / "out"
+    write(box_home, ".pi/agent/extensions/todo/index.ts", "export {}")
+    dist.build_box_dist(box_home, out, generate=fake_rules)
+    sh = out / "bin/kcage-pi"
+    assert sh.stat().st_mode & 0o777 == 0o755
+    text = sh.read_text(encoding="utf-8")
+    assert text == dist.launcher_text(["todo"])  # 配られていない拡張（absent）は足さない
+    assert "set -eu" in text and "/home/" not in text
+    assert (
+        "exec env PI_HARNESS_BYPASS=1 pi --no-approve -nbt -ne -e builtin:mcp "
+        "-e /opt/kcage-dist/.pi/agent/extensions/todo/index.ts "
+        '-e /opt/kcage-dist/.config/pi/harness "$@"'
+    ) in text
+
+
+def test_生成物を含めて走査し秘密があれば止まる(box_home, tmp_path):
+    def leaky(common: Path) -> dict:
+        r = fake_rules(common)
+        r["note"] = DUMMY_GH
+        return r
+
+    out = tmp_path / "out"
+    with pytest.raises(dist.DistError):
+        dist.build_box_dist(box_home, out, generate=leaky)
+    assert not out.exists()
+
+
+def test_distcheckを通る(box_home, tmp_path):
+    import os
+
+    from kcage import distcheck
+
+    out = tmp_path / "out"
+    dist.build_box_dist(box_home, out, generate=fake_rules)
+    out.chmod(0o700)
+    assert distcheck.validate_dist(str(out), os.getuid()) == str(out)
+
+
+def test_拒否リストにrules_jsonとe2e_bakがある():
+    assert "rules.json" in dist.DEFAULT_DENY and "*.e2e-bak" in dist.DEFAULT_DENY

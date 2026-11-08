@@ -230,3 +230,17 @@ def test_build_proxyの設定はpublishの前に消す():
 def test_build_proxyの形が不正なら作らない():
     with pytest.raises(ValueError):
         template.build_proxy_steps("http://192.0.2.10:3128")
+
+
+def test_pi用のripgrepとfdを入れ_状態の置き場を箱のユーザー所有で作る():
+    p = build(dist_dir="/tmp/kcage-dist")
+    text = "\n".join(flat(p))
+    assert "ripgrep" in template.APT_PACKAGES and "fd-find" in template.APT_PACKAGES
+    assert "install -d -o 1000 -g 1000 /home/ubuntu/.pi /home/ubuntu/.pi/agent" in text
+    # 起動スクリプトの実行権限は、配布物の所有者変更・権限設定の後に付ける
+    lines = flat(p)
+    chmod_x = lines.index("chmod 0755 /opt/kcage-dist/bin/kcage-pi")
+    assert chmod_x > next(i for i, x in enumerate(lines) if x.startswith("chmod -R go+rX"))
+    assert template.PI_LAUNCHER == "/opt/kcage-dist/bin/kcage-pi"
+    # 配布物が無ければ起動スクリプトの chmod も無い
+    assert "kcage-pi" not in "\n".join(flat(build()))

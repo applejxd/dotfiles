@@ -37,6 +37,8 @@ REPO_LINE = (
     f"deb [signed-by={KEYRING}] https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH) /\n"
 )
 DIST_DEST = "/opt/kcage-dist"
+# kcage pi が実行する、フルガードつきの起動スクリプト（配布物に入る。adapters/dotfiles/dist.py が作る）
+PI_LAUNCHER = f"{DIST_DEST}/bin/kcage-pi"
 PI_PACKAGE = "@earendil-works/pi-coding-agent"
 APT_PACKAGES = (
     "ca-certificates",
@@ -48,6 +50,8 @@ APT_PACKAGES = (
     "docker-buildx",
     "gh",
     "xz-utils",
+    "ripgrep",  # pi の grep・find が GitHub から取得しなくて済むように
+    "fd-find",
 )
 # pi は Node 22.1 以上を要求する（Ubuntu 24.04 の apt の nodejs は 18。e2e で enableCompileCache が無いと判明）。
 # 公式配布（nodejs.org）の最新の LTS 系統を、SHASUMS256 で検証して /usr/local へ展開する
@@ -240,6 +244,28 @@ def plan_build(opts: TemplateOpts) -> model.Plan:
                 "配布物を箱のユーザーが読めるようにする（秘密を含まないことは検査済み）",
             )
         )
+        steps.append(
+            _box(
+                ["chmod", "0755", PI_LAUNCHER],
+                "起動スクリプトに実行権限を付ける（root 所有のまま）",
+            )
+        )
+    steps += [
+        # pi が lock・認証・セッションを書くので、箱のユーザー所有で作る
+        _box(
+            [
+                "install",
+                "-d",
+                "-o",
+                "1000",
+                "-g",
+                "1000",
+                f"{model.BOX_HOME}/.pi",
+                f"{model.BOX_HOME}/.pi/agent",
+            ],
+            "pi の状態の置き場を箱のユーザー所有で作る",
+        ),
+    ]
     steps += [
         *opts.cleanup_steps,
         _box(["apt-get", "clean"], "apt のキャッシュを消す"),
