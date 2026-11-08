@@ -414,6 +414,20 @@ RULES: tuple[Rule, ...] = (
         ("test_generate_*", "test_pi_shared", "test_mcp_servers", "test_claude_mcp_registration"),
     ),
     Rule(
+        "pi プロファイル (custom / stock)",
+        (
+            "home/.chezmoitemplates/pi-profile",
+            "home/.chezmoitemplates/pi-stock-packages",
+            "home/.chezmoitemplates/modify_pi_stock_settings.py.tmpl",
+            "home/.chezmoitemplates/agent-instructions-stock.md",
+            "home/.chezmoiremove",
+            "home/dot_pi/agent/AGENTS.md.tmpl",
+            "home/dot_pi/agent/modify_settings.json.py.tmpl",
+        ),
+        ("test_pi_profile",),
+        ("templates",),
+    ),
+    Rule(
         "chezmoi データ・mise 設定",
         (
             "home/.chezmoiignore.tmpl",
@@ -422,6 +436,7 @@ RULES: tuple[Rule, ...] = (
         ),
         (
             "test_chezmoi_templates",
+            "test_pi_profile",
             "test_raspi_detection",
             "test_python_requirement",
             "test_herdr_integration",

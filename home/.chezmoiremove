@@ -106,3 +106,12 @@
 .config/pi/harness/integrate-exec.ts
 .config/pi/harness/integrate-plan.ts
 .config/pi/harness/exclusive-lock.ts
+{{ if eq (includeTemplate "pi-profile" .) "stock" }}
+# pi の stock プロファイル (CHEZMOI_PI_PROFILE=stock か ~/.config/chezmoi/pi-profile): 配備済みの自作の拡張・ハーネスを片付ける。
+# custom に戻すと chezmoi apply が再配備する。ディレクトリはディレクトリで書く (冒頭の注意)。
+# see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
+.pi/agent/extensions
+.pi/agent/prompts
+.pi/agent/models.json
+.config/pi
+{{ end -}}

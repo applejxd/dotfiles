@@ -476,3 +476,60 @@ feat(opencode): git commit の確認に件名と本文を抜き出して出す  
   引用符や変数で書き換えた形（`g"it" commit` など）はすり抜ける
   （[静的パターンの回避](../research/opencode/permission/shell-allow-and-plugin-gate.md)）。
   確認で「常に許可」を選ぶと `git commit *` がプロジェクトに保存され、以後は確認なしでコミットする
+
+## pi のプロファイル（custom と stock）
+
+pi の設定は 2 つのプロファイルを切り替えられる。既定は `custom`（このリポジトリの自作ハーネス）。
+`stock` は、pi の公式の既定に、人気の拡張（pi の package）だけを入れた構成。
+
+**この切り替えは可逆で、自作部分（拡張・ハーネス・docs・試験）はリポジトリに凍結して残っている。**
+stock にしても何も消えず、`chezmoi apply` が配備しなくなり、配備済みのものを片付けるだけ。
+
+判定は共有テンプレート `home/.chezmoitemplates/pi-profile`（単一ソース）。次のどちらかが `stock` なら stock、
+それ以外（ファイルが無い・空・不正な値）は custom。`chezmoi.toml` の `[data]` には置かない
+（`chezmoi update` は `init` を呼ばないため）。
+
+- 環境変数 `CHEZMOI_PI_PROFILE`
+- ファイル `~/.config/chezmoi/pi-profile` の中身（前後の空白を除く）
+
+| 対象 | custom（既定） | stock |
+| --- | --- | --- |
+| 自作の拡張 `~/.pi/agent/extensions/` | 配る | 配らない・配備済みは削除 |
+| `~/.pi/agent/prompts/` | 配る | 配らない・配備済みは削除 |
+| ハーネス `~/.config/pi/`（harness・commit-confirm） | 配る | 配らない・配備済みは削除 |
+| `~/.pi/agent/models.json`（pis の broker 用） | 配る | 配らない・配備済みは削除（認証は公式の `/login`） |
+| `~/.pi/agent/settings.json` | 生成器が管理 | ハーネスの `extensions`・`skills`・`defaultTools` を取り除き、`packages` を設定。テーマ・既定のモデルなど利用者のキーは触らない |
+| `~/.pi/agent/AGENTS.md` | 全文（`agent-instructions.md`） | ツール非依存の短い版（`agent-instructions-stock.md`） |
+| `~/.pi/agent/keybindings.json` | 配る | 同じ（自作の拡張のキーを含まないため） |
+| 他の CLI（Claude・Codex・OpenCode など）・`pis`・`pk` | そのまま | そのまま（触らない） |
+
+### stock にする（利用者が実行）
+
+```sh
+mkdir -p ~/.config/chezmoi && printf 'stock\n' > ~/.config/chezmoi/pi-profile
+```
+
+```sh
+chezmoi apply
+```
+
+その後 pi を起動すると、`settings.json` の `packages` を pi が取得する。
+
+### custom へ戻す
+
+`~/.config/chezmoi/pi-profile` を消して（環境変数で選んだときは外して）`chezmoi apply`。
+自作の拡張・ハーネス・prompts・`models.json` は `chezmoi apply` が再配備する。
+`settings.json` はハーネスのキーを生成器が書き直す。`packages` は生成器の持ち物ではないので残る
+（不要なら `pi remove` か手で消す）。
+
+### 拡張の追加と削除
+
+`home/.chezmoitemplates/pi-stock-packages` を編集して `chezmoi apply`（1 行に 1 つ、`npm:<名前>@<版>`）。
+版を固定した npm の package は再取得されない。版を上げるときは書き換える。
+
+### Windows
+
+プロファイルの判定は Windows でも同じ（`%USERPROFILE%\.config\chezmoi\pi-profile` か環境変数）。
+Windows 実機では未検証（`.chezmoiignore.tmpl` の Windows 向けの戻し `!.config/pi/` との兼ね合いを含む）。
+
+試験は `test/test_pi_profile.py`（`chezmoi execute-template` で描画して確かめる。実機の apply は行わない）。
