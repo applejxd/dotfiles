@@ -2,7 +2,8 @@
 """pi の stock プロファイルの ~/.pi/agent/extensions/pi-permission-system/config.json。標準入力の現状を変換して出す。
 
 @gotgenes/pi-permission-system (確認画面の役) の設定。リポジトリが持つのは方針
-(permission・commandEffects) だけで、毎回この値で置き換える。yoloMode など実行時の値
+(permission・commandEffects) と shellTools の自分の項目 (bg_run) で、permission・commandEffects は毎回この値で置き換える。
+shellTools は利用者が足した他の項目を保ち、リポジトリが持つ項目だけをこの値にする (マージ)。yoloMode など実行時の値
 (拡張が /permission-system で書き換える) は、既存のファイルの値を保つ。無いものは拡張の既定で補う。
 壊れた入力は触らない。何度流しても同じ結果になる。
 方針の元データは home/.chezmoitemplates/pi-permission-policy.json (単一の編集点)。
@@ -21,6 +22,8 @@ RUNTIME_DEFAULTS = {
     "permissionReviewLog": True,
     "yoloMode": False,
     "doublePressToConfirm": True,
+    # 承認待ちのダイアログが開くときに端末の BEL を鳴らす (Zed・Orca がフォーカス外の端末の BEL を通知にする)。利用者が変えた値は保つ
+    "promptNotifications": ["bell"],
 }
 
 
@@ -36,7 +39,14 @@ def main() -> int:
         return 0
     for key, value in RUNTIME_DEFAULTS.items():
         data.setdefault(key, value)
-    data.update(POLICY)  # permission・commandEffects はリポジトリの値で置き換える
+    policy = dict(POLICY)
+    shell_tools = policy.pop("shellTools", {})
+    data.update(policy)  # permission・commandEffects はリポジトリの値で置き換える
+    if shell_tools:
+        current = data.get("shellTools")
+        merged = dict(current) if isinstance(current, dict) else {}
+        merged.update(shell_tools)  # リポジトリの項目だけ置き換え、利用者の他の項目は保つ
+        data["shellTools"] = merged
     json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
     sys.stdout.write("\n")
     return 0

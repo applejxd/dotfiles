@@ -26,3 +26,7 @@
 ## 自作路線の見直しの相談の原文（`consult/`）
 
 `own-first-review.txt`（外部 AI との相談。2026-11-09。利用者名・アカウント名は置換済み）。要点は [ADR-0031](../../../adr/0031-evaluate-existing-extensions-first.md)。外部の内容として扱い、鵜呑みにしない。
+
+## stock の pi の package 追加分の評価の原文（`pi-eval/`）
+
+`background.txt`（背景シェル実行）・`plan-goal.txt`（plan mode と /goal）・`rewind-notify.txt`（巻き戻しと通知）・`status.txt`（ステータス表示）。通知とステータス表示の節は、利用者と相談中で決定していない。要約は [評価](../../agents/pi-stock-packages-evaluation-2026-11.md)。

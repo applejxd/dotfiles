@@ -20,6 +20,30 @@
 - 3・4・5 は作者が同じ（nicobailon）で、1 人の保守者への依存が増える。版を固定する。
 - 6・7 は作者が別（juicesharp）。日本語の UI 翻訳は無い（英語）。
 
+## 追加の 4 つの評価と決定（2026-11-09）
+
+利用者が確認して決めた。原文の評価は [archive の pi-eval](../archive/2026-11-agent-stack/pi-eval/)（`background.txt`・`plan-goal.txt`・`rewind-notify.txt`。通知・ステータス表示の節は利用者と相談中で、決定していない）。月間 DL は npm の last-month（2026-11-07 まで）。
+
+| # | package（版） | 月間 DL | 役割 | 権限の範囲（ソースの読み） | 決定 |
+| --- | --- | --- | --- | --- | --- |
+| 8 | `pi-background`（0.4.2。MIT） | 3,050 | 背景シェル実行。`bg_run`・`bg_status`・`bg_kill`。bash が 120 秒を超えると自動で背景化。終了で親を起こす | 子プロセスのみ。ネットワーク送信なし。ログは `/tmp/pi-bg/` | 入れる。`shellTools` に `bg_run` を足し、bash と同じ判定に通す |
+| 9 | `@narumitw/pi-plan-mode`（0.60.0。MIT） | 27,893 | `/plan`。`tool_call` の block だけで読み取り専用（`setActiveTools` を呼ばない）。計画の保存・承認・実装 | ネットワーク・子プロセス・環境変数の読みなし。書くのは設定 JSON と export 先の md | 入れる。`defaultPlanTools`・`defaultPlanExportPath` を設定で配る |
+| 10 | `@narumitw/pi-goal`（0.55.0。MIT） | 24,636 | `/goal`。token 予算・自動応答数の上限（25）・無進捗 3 回で停止・`goal_wait` | ネットワーク・子プロセス・環境変数の読みなし。書くのは session と設定 JSON | 入れる。設定は既定のまま。`--tokens` つきで使う運用 |
+| 11 | `@ayulab/pi-rewind`（0.4.6。**GPL-3.0**） | 4,467 | `/rewind`・`/checkpoint`。別の bare repo に外部 index でスナップショットを取り、利用者の `.git` に書かない | ネットワークなし。子プロセスは `git` のみ。復元時に作業ツリーへ `reset --hard`・`clean -fd` | 入れる（npm の参照のみで、コードは取り込まない）。実機の確認が導入の条件 |
+
+- 取り込む版は、tarball（`npm pack` で展開して読むだけ。実行なし）で、ツール名・引数名・設定のキーを確かめた: `bg_run({command, cwd?, wake_on?})`・`bg_status`・`bg_kill`・コマンド `/bg`。`plan_mode_question`・`plan_mode_complete`・コマンド `/plan`。`goal_complete`・`goal_blocked`・`goal_wait`。`/rewind`・`/checkpoint`（ツールは足さない）。`pi-plan-mode.json` のキー `defaultPlanTools`・`defaultPlanExportPath`。`pi-goal.json` の既定（`automaticTurns: 25`・`noProgressTurns: 3`・`rpc.enabled: false`・`retryUsageLimits: false`）。
+- 却下した候補: `pi-background-tasks`（peer が pi 0.81〜0.84 のみ・既定で Anthropic のリクエストを書き換える）・`@agimon-ai/po-*`（BUSL-1.1・alpha・Po 前提）・`pi-patty-bg-tasks`（完了の wake が弱い）・`pi-plan`（`setActiveTools` で他のツールを消す）・`pi-goal-x`（auditor が permission-system を通らない）・`@schovest/pi-goal`（派生で更新が止まっている）・`pi-dev-flow`（feature 運用と二重）・`checkpoint-pi`（利用者の `.git` に書き、`git reset --hard` でブランチの先頭を動かす）。
+- **bash を置き換える拡張を入れない**: pi-background の自動背景化は、pi 組み込みの bash のときだけ包む（`background.ts` の `session_start`）。bash を置き換える拡張（サンドボックス・`pi-patty-bg-tasks`・`@agimon-ai/po-runner` など）を入れると、自動背景化は無効になる（`bg_run` は残る）。
+
+### 未確認（実機。導入の条件）
+
+- pi-rewind: worktree の中で `/rewind` して、`git status`・`git reflog`・`git stash list` が変わらないこと。保存の時間・容量。
+- pi-background: 12 分のコマンドで、終了時に親が起きること（`sendMessage` の `triggerTurn` がアイドル中に新しいターンを始めるか）。pi 1.5.0 との実機の動作。
+- plan と goal: permission-system との `tool_call` の実行順（plan mode が block する呼び出しで ask が先に出ないか）。Workflow Mutex の pi 1.5.0 での保証（README は 0.84.2 で特性確認）。
+- plan mode の `grep`・`find`・`ls` を使うには、pi の settings で有効化が要る（README の注意）。有効化は未実施。
+- 自作の `/plan` を持つ custom プロファイルとのコマンド名の衝突は、stock では起きない（自作の拡張を配らない）。
+- 検索（pi-web-access・pi-mcp-adapter）・通知・ステータス表示は、この決定に含めない（保留）。
+
 ## 検索（決定の経緯）
 
 - 検索の送り先が限られる環境では、検索は agentcore-websearch の MCP だけを使う。`pi-web-access` は、鍵なしだと第三者へクエリが出るので入れない。

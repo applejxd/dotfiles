@@ -432,6 +432,7 @@ RULES: tuple[Rule, ...] = (
             "home/.chezmoiremove",
             "home/dot_pi/agent/AGENTS.md.tmpl",
             "home/dot_pi/agent/modify_settings.json.py.tmpl",
+            "home/dot_pi/agent/modify_pi-plan-mode.json.py.tmpl",
         ),
         ("test_pi_profile",),
         ("templates",),
