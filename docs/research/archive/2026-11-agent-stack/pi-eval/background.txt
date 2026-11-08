@@ -1,0 +1,101 @@
+# 評価: 背景シェル実行（調べた日 2026-11-09）
+
+## 結論
+- 最推し: **`pi-background@0.4.2`**（小さい 37KB・MIT・`bg_run` の引数は `command` だけ・終了で自動 wake）。`shellTools` に `bg_run` を足して bash と同じ判定に通す。
+- 注意: **cc-safety-net は `bash` / `powershell` の tool 名しか見ない**（ソース確認）。`bg_run` は網の外。完全に網に通したいなら、`bg_run` を deny して bash の自動背景化（120 秒）だけで使う案もある（下記）。
+- `pi-background-tasks`（peer が pi 0.81–0.84、6MB、Anthropic 属性付与つき）は保留、`po-runner` は除外、`pi-patty-bg-tasks` は保留（完了通知の wake が弱い）。
+
+## 取得方法
+`npm view` / `npm pack`（`$TMPDIR` に展開して読むだけ。実行なし）。DL は api.npmjs.org の last-month（2026-10-09〜11-07）。実行時の動作は**未確認**（コードを読んだだけ）。
+
+## 比較表
+| 観点 | pi-background 0.4.2 | pi-background-tasks 2.6.10 | @agimon-ai/po-runner 0.0.0-alpha.126 | pi-patty-bg-tasks 1.1.6 |
+|---|---|---|---|---|
+| 最終更新 | 2026-11-03 | 2026-10-13 | 2026-11-08 | 2026-07-08 |
+| 月間 DL | 3,050 | 20,896 | 22,592 | 2,793 |
+| ライセンス | MIT | ISC | **BUSL-1.1** | MIT |
+| unpackedSize | 37,756 | 6,120,193 | 2,577,500 | 219,185 |
+| 依存 | なし（peer: typebox, pi-tui, pi-coding-agent すべて `*`） | turndown | hono, @rmux/sdk, @xterm/headless, po-core 他多数。peer に react-native、pi-coding-agent は **`1.5.0` 固定** | なし（peer `*`） |
+| pi 版の要件 | `*` | **^0.81〜^0.84 のみ**（1.5.0 は範囲外） | 1.5.0 固定 | `*`（README は 0.37+） |
+| (1) 背景実行 | `bg_run`、bash も 120 秒超で自動背景化、ctrl+b | `bg_run`、`/bg` | bash 上書き（`background:true`、60 秒で昇格） | bash 上書き（`run_in_background`、120 秒）、`bash_bg` |
+| (2) ログ | /tmp/pi-bg/<pid>-bgN.log、`bg_status`、`/bg` | .pi/tasks/ に出力、`bg_logs`、`/logs` | セッション temp のログ、`runner.logs` | /tmp/pi-bg/<id>.log、`jobs output/search` |
+| (3) 完了で wake | **あり**: `sendMessage(..., {triggerTurn:true, deliverAs:"steer"})`（background.ts の `wake`）。同じターンの複数 job は最後でまとめて 1 回 | あり（README: 既定で follow-up turn を起こす。`triggerOnCompletion`）。コードは未精読 | 「ネイティブ server セッション」前提の wake。pi stock で動くかは未確認 | **弱い**: 実行中に終わった job はターン終了時に `triggerTurn:false` で積むだけ。アイドル中の終了だけ steer で wake（notify.ts） |
+| (4) 止める | `bg_kill`、pi 終了で全停止 | `bg_kill`、`/kill` | `runner.stop` / CLI（code mode 前提） | `jobs action=kill`、Ctrl+Shift+X |
+| 追加 tool 名 | `bg_run` `bg_status` `bg_kill`（+ `bash` を同名で再登録） | `bg_run` `bg_status` `bg_kill` `bg_logs` `bg_result` `bg_delegate` `bg_run_pi_attested` `fusion_*` | `bash` を上書き | `bash` 上書き `bash_bg` `jobs` `job_decide` `agent_bg` `monitor` |
+| コマンド引数名 | `command`（+ `cwd`, `wake_on`） | `command`（+ `name`, `isAgent` 必須） | **`command` が配列**（permission-system の bash 判定が文字列前提なら壊れる。未確認） | `command` |
+| 権限の範囲 | 子プロセス（pi と同じ環境・shell）、/tmp にログ。ネットワーク送信なし（ソース読了） | 子 pi の起動、**既定で Anthropic リクエストを書き換える ambient attribution**（`PI_BG_FEATURES=process` で無効化）、fusion/delegate は別モデル呼び出し | Po 配布前提（`PO_SESSION_TEMP_DIR`）、バンドルのネイティブバイナリ（RMUX/RTK） | `agent_bg` が **`pi -p` を detached で起動**（agent-bg.ts: 会話の要約を渡す）、`monitor` の WebSocket |
+| OS | Node のみ。Windows は `shellPath` 設定の注意が README/コードにあり（pi 設定の shellPath を使う） | Node ≥22.19 | **macOS/Linux のみ**（Windows 不可） | Node ≥22、/tmp 固定 |
+| 判定 | **推奨** | 保留 | **除外** | 保留 |
+
+## permission-system との関係（観点 5）
+- 前提（`@gotgenes/pi-permission-system@42.0.0` の docs/configuration.md「shellTools」）: `shellTools` は**実行時設定**（グローバル config）。キーが tool 名、値が `{commandArgument, workdirArgument?}`。bash と同じ分解・ラッパー・パス・`bash:` ルールに通る。tool が未登録なら無効（害なし）。プロジェクト側の設定は runtime config として merge されない（0644 migration）ので、**利用者のグローバル config に書く**。
+- pi-background: `bash` は同名で再登録（pi 組み込みのときだけ）→ tool 名は `bash` のままなので判定はそのまま効く。`bg_run` は別経路なので次が要る:
+  ```json
+  "shellTools": { "bg_run": { "commandArgument": "command", "workdirArgument": "cwd" } }
+  ```
+  `bg_status` / `bg_kill` はコマンドを実行しないので allow でよい（方針は利用者が決める）。
+- pi-background-tasks: `bg_run` も `commandArgument: "command"`（workdir 引数なし）。`bg_delegate`/`fusion_*` は別モデル・子 pi を呼ぶので ask 推奨。
+- pi-patty: `bash`（同名上書き、引数 `command`）はそのまま効く。`bash_bg` と `monitor` は `command`。`agent_bg` は子 pi で判定の外。
+
+## cc-safety-net との関係（観点 6）
+- ソース（cc-safety-net@2.7.6 `dist/chunks/index-xavta84c.js`）: pi 用フックは `tool_call` で、shell とみなす tool 名は固定の `bash`→posix、`powershell`→powershell のみ。**`bg_run` などの別名は shellTools のような設定がなく、網の対象外**（確認済み）。
+- 影響: pi-background の `bash` 経由（120 秒で自動背景化）は網に通る。`bg_run` 直接呼びは通らない。permission-system の deny/ask（shellTools 経由）は効くので、「破壊的コマンドの網」だけが抜ける。
+- 対策案: (A) `bg_run` を shellTools に載せ、網の抜けを受け入れる。(B) permission で `bg_run` を deny し、長いコマンドは bash に任せる（120 秒で自動背景化、完了で wake）。(B) は `wake_on` が使えず、モデルへの指示（`bg_run` を使え）と衝突して無駄な試行が出る。12 分の全件検査が主用途なら (B) でも足りる。**推測**: 実機で試すまで (B) の体験は不明。
+
+## pi-subagents との衝突（観点 7）
+- pi-subagents（0.87.0）の tool は `subagent`、`subagents_enable`、`bg_wait`（名前は設定で変更可）。pi-background の `bg_run` / `bg_status` / `bg_kill` とは**名前が重ならない**（grep で確認）。pi-background-tasks も `bg_wait` は使わないが、`bg_` の接頭辞が並び、`/bg` コマンドも持つので紛らわしい。
+- 役割: pi-subagents は「子エージェント」の背景実行、pi-background は「シェルコマンド」の背景実行。重複はない。UI 枠は pi-background が `background-jobs` ウィジェット（入力欄の上）、pi-subagents が FleetView（エディタの下）。衝突は未確認。
+- pi-background-tasks は `bg_delegate`（読み取り専用の子 pi）を持ち、pi-subagents と**機能が重複**。入れるなら `PI_BG_FEATURES=process` に絞る。
+
+## 候補ごとの詳細
+
+### pi-background 0.4.2（推奨）
+- 事実（README・background.ts を全読）:
+  - `bg_run({command, cwd?, wake_on?})`。終了で exit code とログ末尾 20 行を steer で送り、`triggerTurn:true`。失敗は即 wake。kill は wake しない。
+  - bash が 120 秒を超える（または timeout が短ければその時点）と、止めずに背景 job へ移す。→ 前景の `bash` で 12 分のコマンドを回しても、2 分で背景化され、終わったら wake。
+  - `bg_kill`: AbortController で子プロセスごと停止。pi 終了（`session_shutdown`）で実行中 job は全部 abort。
+  - 他の拡張が bash を置き換えている場合（サンドボックスなど）は手を出さない。
+  - ネットワークなし。env は `PYTHONUNBUFFERED=1` を足すだけ。`pi.getSettings()` から shellPath と shellCommandPrefix を使う（Windows で WSL の bash を拾わない配慮）。
+  - ライセンス MIT、依存ゼロ。
+- 弱み / 未確認:
+  - pi を閉じると job が死ぬ（12 分の検査中に pi を閉じない運用が前提）。再開で job は戻らない（コードより）。
+  - 1.5.0 との実機の動作は未確認（peer は `*` で、`createBashToolDefinition` `getSettings` `sendMessage` の API 依存。型は 1.5.0 で確認していない）。
+  - `/tmp/pi-bg/` にログが残る（掃除なし）。Windows では `tmpdir()`。
+  - ctrl+b と pi-polish 連携の `globalThis` フラグ（他の拡張に害はない）。
+  - 作者・Issue 対応は未確認（リポジトリ pringled/pi-extensions）。DL が少ない。
+- 設定:
+  - `pi-stock-packages` に `npm:pi-background@0.4.2`
+  - permission のグローバル config に上の `shellTools`、`bg_status` / `bg_kill` は allow
+  - 利用者の settings.json は任意（`"background": {"jobs": "compact"}`）
+
+### pi-background-tasks 2.6.10（保留）
+- 良い点: 機能が最も豊富（ログ読み取り、`bg_result`、ダッシュボード、reload 越しの生存）。`bg_run` は既定で完了通知＋follow-up turn。
+- 問題: (1) peer が pi 0.81〜0.84 のみ、現在の 1.5.0 は範囲外（本体 latest は 1.5.0 で、更新が 2026-10-13 を最後に止まっている）。(2) 6MB と大きい。(3) 既定で Anthropic のリクエストを書き換える attribution（Claude Code OAuth 属性＋プロンプト整形）が有効。意図しない挙動。(4) `isAgent` と `name` が必須で、モデルの手間が増える。(5) fusion/delegate が pi-subagents と重複。
+- 入れるなら `PI_BG_FEATURES=process`、`PI_BG_DOCK_SHORTCUT=off`（Shift+Down の衝突を避ける）。1.5.0 との互換が確認できてから。
+
+### @agimon-ai/po-runner（除外）
+- BUSL-1.1（非 OSS 扱い）、alpha、Po 配布の一部（セッション ID と `PO_SESSION_TEMP_DIR` が前提）、macOS/Linux のみ（Windows 不可）、peer に react-native、pi 1.5.0 固定。`bash` の `command` が配列で、permission-system の bash 判定との整合が不明。目的（検査を背景で回す）に対して重すぎる。
+
+### pi-patty-bg-tasks 1.1.6（保留）
+- 良い点: 依存ゼロ・MIT。`bash` の同名上書きなので permission-system と cc-safety-net が**そのまま効く**。`jobs` でログ検索、kill。
+- 問題: 完了 wake が弱い（1.1.5 の方針で、ターン中に終わると `triggerTurn:false`。ターンが終わったあとは次のユーザー入力まで気づかない可能性。**アイドル中に終わった場合だけ steer で wake**）。12 分のうち agent が待っているケースに合わない可能性が高い。`agent_bg` が `pi -p` を detached で起動（判定の外、pi-subagents と重複）。`bash` を上書きするので、pi-background と同時には入れられない。最終更新 2026-07（4 か月前）。
+
+## 「どれも入れない」の評価
+- 失うもの: 12 分のコマンド中に別の作業ができない（pi 1.5.0 の bash は前景のみ）、終了通知。代替は pi-subagents の背景 run に `bash` を実行させる子を立てる方法だが、重く、ログの扱いが不明（未確認）。
+- 維持費: pi-background は 600 行・依存ゼロ・設定 1 行で小さい。入れる価値が上回ると判断。
+
+## 未確認
+- 1.5.0 での実機の動作（コードを読んだだけ。`npm install` / `pi -e` は禁止のため実行していない）。特に `sendMessage` の triggerTurn がアイドル中に新ターンを始めるか。
+- pi-background-tasks の wake 実装（README の記述のみ、src は精読していない）と 1.5.0 での peer 不一致の影響。
+- po-runner の bash（配列 command）が permission-system でどう扱われるか。
+- pi-background のリポジトリの Issue 対応・作者の実績。
+- UI 枠（ウィジェット・フッター）の他拡張との衝突。
+- shellTools が `bg_run` のように別の tool 名に実際に効くことは docs の記述で確認（実機は未確認）。
+
+## 判断した点
+- permission-system の `shellTools` で通せるものを「迂回しない」とみなした。cc-safety-net は設定で足せないため、「網に通らない」を明示して残した。
+- 完了で wake の挙動を最重視（利用者の 12 分検査用途）。
+
+## 利用者に聞きたいこと
+1. `bg_run` を shellTools で許可（cc-safety-net の網の外）か、deny して bash の自動背景化だけにするか。推奨: 最初は (A)、実機で問題があれば (B)。
+2. pi を閉じても job を残したいか（pi-background は不可）。必要なら別の仕組み（tmux 等）の検討になる。

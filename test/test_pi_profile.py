@@ -28,6 +28,14 @@ STOCK_ONLY_IGNORES = (
 )
 STOCK_REMOVES = (".pi/agent/prompts", ".pi/agent/models.json", ".config/pi")
 PERMISSION_DIR = ".pi/agent/extensions/pi-permission-system"
+PLAN_MODE_CONFIG = ".pi/agent/pi-plan-mode.json"
+PLAN_MODE_MODIFY = HOME_SRC / "dot_pi" / "agent" / "modify_pi-plan-mode.json.py.tmpl"
+NEW_PACKAGES = (
+    "npm:pi-background@",
+    "npm:@narumitw/pi-plan-mode@",
+    "npm:@narumitw/pi-goal@",
+    "npm:@ayulab/pi-rewind@",
+)
 # stock の AGENTS.md に出してはならない自作ハーネスの語
 HARNESS_WORDS = ("guarded_", "フルガード", "worktree", "pis", "kcage", "feature-orchestration")
 
@@ -159,6 +167,12 @@ def test_custom_ignore_skips_permission_system_config(tmp_path):
     rendered = lines(render_file(".chezmoiignore.tmpl", tmp_path))
     assert PERMISSION_DIR in rendered
     assert f"{PERMISSION_DIR}/**" in rendered
+    assert PLAN_MODE_CONFIG in rendered  # plan mode の設定も stock だけ
+
+
+def test_stock_ignore_keeps_plan_mode_config(tmp_path):
+    rendered = lines(render_file(".chezmoiignore.tmpl", tmp_path, profile_env="stock"))
+    assert PLAN_MODE_CONFIG not in rendered
 
 
 def test_stock_ignore_excludes_own_pi_assets(tmp_path):
@@ -259,8 +273,10 @@ CUSTOM_SETTINGS = {
 
 def test_stock_settings_removes_harness_keys_and_sets_packages(tmp_path):
     out = json.loads(run_script(stock_settings_script(tmp_path), json.dumps(CUSTOM_SETTINGS)))
-    for key in ("defaultTools", "extensions", "skills"):
+    for key in ("extensions", "skills"):
         assert key not in out, key
+    # 自作ハーネスの全置換の defaultTools (["read"]) は、読み取り専用の探索ツールの増分に置き換わる
+    assert out["defaultTools"] == ["+grep", "+find", "+ls"]
     # 利用者のキーと pi 自身のキーは残る
     for key in (
         "theme",
@@ -284,7 +300,15 @@ def test_stock_settings_keeps_user_extension_and_is_idempotent(tmp_path):
 
 def test_stock_settings_from_empty_input(tmp_path):
     out = json.loads(run_script(stock_settings_script(tmp_path), ""))
-    assert out == {"packages": stock_packages()}
+    assert out == {"defaultTools": ["+grep", "+find", "+ls"], "packages": stock_packages()}
+
+
+def test_stock_settings_keeps_user_incremental_default_tools(tmp_path):
+    script = stock_settings_script(tmp_path)
+    src = {**CUSTOM_SETTINGS, "defaultTools": ["+grep", "-ls"]}
+    first = run_script(script, json.dumps(src))
+    assert json.loads(first)["defaultTools"] == ["+grep", "-ls"]  # 利用者の増分指定は保つ
+    assert run_script(script, first) == first
 
 
 def test_stock_settings_leaves_broken_input_alone(tmp_path):
@@ -325,6 +349,48 @@ def test_stock_packages_are_pinned_npm():
         assert re.fullmatch(r"npm:(@[a-z0-9._-]+/)?[a-z0-9._-]+@\d+\.\d+\.\d+", pkg), pkg
 
 
+def test_stock_packages_include_background_plan_goal_rewind():
+    pkgs = stock_packages()
+    for prefix in NEW_PACKAGES:
+        assert any(p.startswith(prefix) for p in pkgs), prefix
+
+
+# --- plan mode の設定 ------------------------------------------------
+
+
+def plan_mode_script(tmp_path: Path) -> Path:
+    script = tmp_path / "modify_plan_mode.py"
+    script.write_text(
+        render(PLAN_MODE_MODIFY.read_text(encoding="utf-8"), tmp_path, profile_env="stock"),
+        encoding="utf-8",
+    )
+    return script
+
+
+def test_plan_mode_config_from_empty_input_has_defaults(tmp_path):
+    out = json.loads(run_script(plan_mode_script(tmp_path), ""))
+    assert out["defaultPlanTools"] == ["read", "bash", "grep", "find", "ls", "ask_user_question"]
+    assert "subagent" not in out["defaultPlanTools"]
+    assert out["defaultPlanExportPath"] == ".tmp/keep/plan/"
+
+
+def test_plan_mode_config_keeps_existing_values(tmp_path):
+    existing = {"defaultPlanExportPath": "x/", "thinkingLevel": "high", "safeSubcommands": {}}
+    out = json.loads(run_script(plan_mode_script(tmp_path), json.dumps(existing)))
+    assert out["defaultPlanExportPath"] == "x/"
+    assert out["thinkingLevel"] == "high"
+    assert out["safeSubcommands"] == {}
+    assert "defaultPlanTools" in out
+
+
+def test_plan_mode_config_is_idempotent_and_leaves_broken_input(tmp_path):
+    script = plan_mode_script(tmp_path)
+    first = run_script(script, "")
+    assert run_script(script, first) == first
+    assert run_script(script, "{broken") == "{broken"
+    assert run_script(script, "[1]") == "[1]"
+
+
 # --- AGENTS.md --------------------------------------------------------
 
 
@@ -352,7 +418,13 @@ PERMISSION_MODIFY = (
     / "pi-permission-system"
     / "modify_config.json.py.tmpl"
 )
-RUNTIME_KEYS = ("debugLog", "permissionReviewLog", "yoloMode", "doublePressToConfirm")
+RUNTIME_KEYS = (
+    "debugLog",
+    "permissionReviewLog",
+    "yoloMode",
+    "doublePressToConfirm",
+    "promptNotifications",
+)
 
 
 def permission_script(tmp_path: Path) -> Path:
@@ -376,6 +448,7 @@ def test_permission_config_from_empty_input_has_policy_and_runtime_defaults(tmp_
     assert out["debugLog"] is False
     assert out["permissionReviewLog"] is True
     assert out["doublePressToConfirm"] is True
+    assert out["promptNotifications"] == ["bell"]  # 承認待ちの BEL (Zed・Orca の通知)
 
 
 def test_permission_config_keeps_runtime_values_and_replaces_policy(tmp_path):
@@ -385,14 +458,29 @@ def test_permission_config_keeps_runtime_values_and_replaces_policy(tmp_path):
         "debugLog": True,
         "permissionReviewLog": False,
         "doublePressToConfirm": False,
+        "promptNotifications": ["osc777"],
         "promptTimeoutMs": 60000,
         "shellTools": {"exec_command": {"commandArgument": "cmd"}},
         "permission": {"*": "allow", "bash": "allow"},
     }
     out = json.loads(run_script(script, json.dumps(existing)))
-    for key in (*RUNTIME_KEYS, "promptTimeoutMs", "shellTools"):
+    for key in (*RUNTIME_KEYS, "promptTimeoutMs"):
         assert out[key] == existing[key], key
+    # shellTools はマージ: 利用者が足した項目を保ち、リポジトリの bg_run を入れる
+    assert out["shellTools"] == {**existing["shellTools"], **policy()["shellTools"]}
     assert out["permission"] == policy()["permission"]  # 手で緩めた値は戻る
+
+
+def test_permission_config_shell_tools_bg_run_replaces_hand_edit(tmp_path):
+    existing = {"shellTools": {"bg_run": {"commandArgument": "cmd"}}}
+    out = json.loads(run_script(permission_script(tmp_path), json.dumps(existing)))
+    assert out["shellTools"]["bg_run"] == {"commandArgument": "command", "workdirArgument": "cwd"}
+
+
+def test_permission_config_from_empty_input_has_shell_tools(tmp_path):
+    out = json.loads(run_script(permission_script(tmp_path), ""))
+    assert out["shellTools"] == policy()["shellTools"]
+    assert out["shellTools"]["bg_run"] == {"commandArgument": "command", "workdirArgument": "cwd"}
 
 
 def test_permission_config_is_idempotent(tmp_path):
@@ -445,8 +533,22 @@ def test_permission_policy_matches_the_contract():
     ):
         assert path[denied] == "deny", denied
     # 入れる拡張の自分のツールは、毎回の確認を出さない (子の起動・ToDo・利用者への質問)
-    for tool in ("todo", "ask_user_question", "subagent", "subagents_enable", "bg_wait"):
+    for tool in (
+        "todo",
+        "ask_user_question",
+        "subagent",
+        "subagents_enable",
+        "bg_wait",
+        "bg_status",
+        "bg_kill",
+        "plan_mode_question",
+        "plan_mode_complete",
+        "goal_complete",
+        "goal_blocked",
+        "goal_wait",
+    ):
         assert perm[tool] == "allow", tool
+    assert "bg_run" not in perm  # bg_run は shellTools で bash と同じ判定に通す (allow にしない)
     assert path["*.env.example"] == "allow"
     assert keys.index("*.env.example") > keys.index("*.env.*")  # 例外は deny より後
 

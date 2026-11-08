@@ -496,10 +496,11 @@ stock にしても何も消えず、`chezmoi apply` が配備しなくなり、�
 | --- | --- | --- |
 | 自作の拡張 `~/.pi/agent/extensions/` の各ディレクトリ（`activity`・`ask`・`btw` など。一覧は `pi-own-extensions`） | 配る | 配らない・配備済みは自作のディレクトリだけ削除（`extensions/` 全体は消さない） |
 | `~/.pi/agent/extensions/pi-permission-system/config.json`（確認画面の方針） | 配らない（拡張が無い） | `modify_` スクリプトで配る（下の「permission-system の設定」） |
+| `~/.pi/agent/pi-plan-mode.json`（plan mode の設定） | 配らない | `modify_` スクリプトで配る（下の「追加の 4 つの package」） |
 | `~/.pi/agent/prompts/` | 配る | 配らない・配備済みは削除 |
 | ハーネス `~/.config/pi/`（harness・commit-confirm） | 配る | 配らない・配備済みは削除 |
 | `~/.pi/agent/models.json`（pis の broker 用） | 配る | 配らない・配備済みは削除（認証は公式の `/login`） |
-| `~/.pi/agent/settings.json` | 生成器が管理 | ハーネスの `extensions`・`skills`・`defaultTools` を取り除き、`packages` を設定。テーマ・既定のモデルなど利用者のキーは触らない |
+| `~/.pi/agent/settings.json` | 生成器が管理 | ハーネスの `extensions`・`skills` を取り除き、`defaultTools` を `["+grep", "+find", "+ls"]`（pi の既定 read・bash・edit・write に読み取り専用の探索ツールを足す増分指定。plan mode の探索にも使う。利用者が `+`/`-` だけの増分指定にしたら保つ）にし、`packages` を設定。テーマ・既定のモデルなど利用者のキーは触らない |
 | `~/.pi/agent/AGENTS.md` | 共通の指示（`agent-instructions.md`。平らな 25 行） | ツール非依存の短い版（`agent-instructions-stock.md`） |
 | `~/.pi/agent/keybindings.json` | 配る | 同じ（自作の拡張のキーを含まないため） |
 | 他の CLI（Claude・Codex・OpenCode など）・`pis`・`pk` | そのまま | そのまま（触らない） |
@@ -510,15 +511,41 @@ stock の確認画面は package `@gotgenes/pi-permission-system`。設定ファ
 方針を `~/.pi/agent/extensions/pi-permission-system/config.json` へ配る。
 
 - **消す範囲**: stock が消す・配らないのは、`home/dot_pi/agent/extensions/` 直下の**自作の拡張のディレクトリだけ**（一覧は `home/.chezmoitemplates/pi-own-extensions`）。`.pi/agent/extensions` を丸ごと消さないので、`pi-permission-system/`・package 由来のもの・利用者が置いた拡張は残る。custom は `pi-permission-system` を無視する（配らない）。
-- **配り方**: `modify_config.json.py.tmpl`（`modify_pi_stock_settings.py.tmpl` と同じ流儀）。リポジトリが持つのは `permission` と `commandEffects` だけで、毎回その値で置き換える。`yoloMode`・`debugLog`・`permissionReviewLog`・`doublePressToConfirm`・`promptTimeoutMs` など実行時の値は**既存のファイルの値を保つ**（無ければ拡張の既定: `yoloMode: false` など）。壊れた JSON はそのまま返す。
+- **配り方**: `modify_config.json.py.tmpl`（`modify_pi_stock_settings.py.tmpl` と同じ流儀）。リポジトリが持つのは `permission`・`commandEffects`・`shellTools` の自分の項目だけで、`permission`・`commandEffects` は毎回その値で置き換える。`yoloMode`・`debugLog`・`permissionReviewLog`・`doublePressToConfirm`・`promptTimeoutMs` など実行時の値は**既存のファイルの値を保つ**（無ければ拡張の既定: `yoloMode: false` など）。壊れた JSON はそのまま返す。
 - **方針 A（元データは `home/.chezmoitemplates/pi-permission-policy.json`）**:
   - 作業ツリーの中の `read`・`write`・`edit`・`grep`・`find`・`ls` は allow。作業ツリーの外（`external_directory`）は ask。
   - `bash` の既定は ask。安全な読み取り系（`git status|diff|log|show`・`ls`・`cat`・`rg`・`mise run`・`uv run`・`pytest`・`pre-commit` など）は allow。`rm -rf`・`sudo`・`git push`・スクリプトをシェルへ渡す形（`sh`・`bash`・`sh -s` など）は deny。それ以外は ask。
   - `path`（全ツール・bash 共通）の deny: `.env`・`*.env.*`（`*.env.example` は allow）・`~/.ssh`・`~/.aws`・`~/.gnupg`・`~/.netrc`・`~/.config/gh`・`~/.config/agents/websearch-keys.json`（検索の鍵ファイル。Bitwarden から同期される）・秘密鍵（`*.pem`・`*.key`・`id_rsa*` など）。
   - `mcp` は ask、`skill` は allow。入れる拡張の自分のツール（`todo`・`ask_user_question`・`subagent`・`subagents_enable`・`bg_wait`）は毎回の確認を出さないよう allow。上のどれにも当たらないツール（`*`）は ask。
+  - 追加の 4 つの package のツール（下の「追加の 4 つの package」）: `bg_status`・`bg_kill`・`plan_mode_question`・`plan_mode_complete`・`goal_complete`・`goal_blocked`・`goal_wait` も allow（状態を記録するだけ、または読み取りのツール）。`bg_run` は allow にしない（`shellTools` で bash と同じ判定に通す）。
+- **`shellTools`（マージ）**: `pi-permission-policy.json` の `shellTools`（`bg_run` の `commandArgument: command`・`workdirArgument: cwd`）を、既存の `shellTools` にマージする。リポジトリが持つキーだけをこの値にし、利用者が足した他のキーは保つ（`permission`・`commandEffects` は従来どおり置き換え）。
 - **YOLO mode**: 拡張の `/permission-system` で ON / OFF できる。ON は ask を自動で承認するだけで、**明示の deny は YOLO でも効く**（上の deny・`path` の deny は残る）。切り替えた `yoloMode` は `chezmoi apply` で戻らない（上の「実行時の値は保つ」）。
+- **承認待ちの通知（BEL）**: 確認ダイアログが開くとき、端末の BEL を鳴らす（`promptNotifications: ["bell"]`。初期値だけで、変えた値は apply で戻らない）。Zed の Terminal Threads や Orca が、フォーカス外の端末の BEL を通知にする。`ask_user_question`（rpiv-ask-user-question）も、質問を待つときに BEL を 1 回鳴らす（拡張の仕様）。**完了時の BEL は、評価した package（pi-notify 系）に無い**。
 - **方針の変え方**: `pi-permission-policy.json` を編集して `chezmoi apply`（書式は拡張の docs の configuration.md。後に書いた規則が勝つので、全許可の `*` は先頭、例外は後ろに置く）。`~/.pi/agent/extensions/pi-permission-system/config.json` を手で書き換えた `permission` は、次の apply でリポジトリの値へ戻る。
 - bash のパターンは 1 コマンドずつ照合される（`curl … | sh` のような連結は書けない）。パイプ先の `sh`・`bash` を deny して防ぐ。
+
+### 追加の 4 つの package（background・plan mode・goal・rewind）
+
+評価と決定は [評価の記録](../research/agents/pi-stock-packages-evaluation-2026-11.md)。いずれも `pi-stock-packages` で版を固定して参照する（コードは取り込まない。自作のコードも足さない）。
+
+| package | 役割 | 設定・permission |
+| --- | --- | --- |
+| `pi-background@0.4.2` | 背景シェル実行。`bg_run`・`bg_status`・`bg_kill`・`/bg`。bash が 120 秒を超えると自動で背景化し、終了で親を起こす | 設定項目は無い。`shellTools` に `bg_run`、`bg_status`・`bg_kill` は allow |
+| `@narumitw/pi-plan-mode@0.60.0` | `/plan`。`tool_call` の block で読み取り専用にし、計画を保存・承認・実装する | `~/.pi/agent/pi-plan-mode.json`（下。stock だけ）。`plan_mode_question`・`plan_mode_complete` は allow |
+| `@narumitw/pi-goal@0.55.0` | `/goal`。目的を自走で続ける。token 予算・自動応答数・無進捗の上限 | 既定のまま（`pi-goal.json` は配らない）。`goal_complete`・`goal_blocked`・`goal_wait` は allow |
+| `@ayulab/pi-rewind@0.4.6` | `/rewind`・`/checkpoint`。ターンごとの作業ツリーのスナップショットを、別の bare repo に保存する（利用者の `.git` には書かない） | ツールを足さないので permission は不要 |
+
+- **plan mode の設定**: `home/dot_pi/agent/modify_pi-plan-mode.json.py.tmpl` が `~/.pi/agent/pi-plan-mode.json` を配る（stock だけ。custom は `.chezmoiignore.tmpl` で除外）。拡張が `/plan settings` で書き換えるので、既存のキーはすべて保ち、次の 2 つだけ無いときに補う。`defaultPlanTools` = `["read","bash","grep","find","ls","ask_user_question"]`（`subagent` は入れない。子は別プロセスで plan mode の block が及ばないため）、`defaultPlanExportPath` = `.tmp/keep/plan/`（既定の `PLAN.md` で作業ツリーを汚さない）。拡張の側で `grep`・`find`・`ls` を使うには pi 本体の settings での有効化が要る（未実施）。
+- **goal の運用**: 設定は拡張の既定（`continuationLimits.automaticTurns` = 25・`noProgressTurns` = 3・`rpc.enabled` = false・`retryUsageLimits` = false）。**`/goal` は必ず `--tokens` つきで使う**（例: `/goal --tokens 500k <目的>`）。**時間の上限は無い**ので、離席中は外側の `timeout` と合わせる。
+- **限界**:
+  - `bg_run` は cc-safety-net の網の**外**。cc-safety-net は tool 名 `bash`・`powershell` だけを見る（設定で足せない）。permission-system の deny・ask は `shellTools` 経由で効くので、抜けるのは「破壊的コマンドの網」だけ。
+  - pi-background の自動背景化は、pi 組み込みの bash のときだけ効く。**bash を置き換える拡張（サンドボックス系・`pi-patty-bg-tasks` など）を入れない**。入れると無効になる。pi を閉じると実行中の job は死ぬ。
+  - `/goal` の完了は同じエージェントの**自己申告**（`goal_complete`）。独立した検証ではない。独立性が要るときは review の子を手順に入れる。
+  - `pi-rewind` は **GPL-3.0**。npm で参照するだけで、このリポジトリにコードを取り込まない。戻せるのは作業ツリーのファイルだけ（`git commit`・ブランチ操作・push は戻らない）。
+- **導入の条件（実機での確認。すべて未確認）**:
+  - pi-rewind: worktree の中で `/rewind` して、`git status`・`git reflog`・`git stash list` が変わらないこと。
+  - pi-background: 12 分のコマンドで、終了時に親が起きること。
+  - plan と goal: permission-system との `tool_call` の実行順（plan mode が block する呼び出しで ask が先に出ないか）。
 
 ### stock にする（利用者が実行）
 

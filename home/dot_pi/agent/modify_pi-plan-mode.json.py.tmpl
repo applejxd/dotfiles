@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""pi の stock プロファイルの ~/.pi/agent/pi-plan-mode.json。標準入力の現状を変換して出す。
+
+@narumitw/pi-plan-mode の設定。拡張が /plan settings で書き換えるので、
+既存のキーはすべて保ち、次の 2 つだけ、無いときに既定を補う (利用者が変えた値は戻さない)。
+- defaultPlanTools: plan mode で使えるツール。subagent は入れない
+- defaultPlanExportPath: 計画の書き出し先。作業ツリーを汚さないよう .tmp/keep/plan/ にする
+壊れた入力は触らない。何度流しても同じ結果になる。
+stock でだけ配る (custom は .chezmoiignore.tmpl で除外)。
+see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
+"""
+from __future__ import annotations
+
+import json
+import sys
+
+DEFAULTS = {
+    "defaultPlanTools": ["read", "bash", "grep", "find", "ls", "ask_user_question"],
+    "defaultPlanExportPath": ".tmp/keep/plan/",
+}
+
+
+def main() -> int:
+    raw = sys.stdin.read()
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        sys.stdout.write(raw)  # 壊れた入力は触らない
+        return 0
+    if not isinstance(data, dict):
+        sys.stdout.write(raw)
+        return 0
+    for key, value in DEFAULTS.items():
+        data.setdefault(key, value)
+    json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
