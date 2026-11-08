@@ -16,6 +16,7 @@ import difflib
 import os
 import posixpath
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -320,7 +321,23 @@ def _status(runner: Runner, box: str) -> tuple[bool, bool, str | None]:
 def _selftest_plan(cfg: model.BoxConfig) -> model.Plan:
     """箱の中から、主ディストロ側の管理・秘密に届かないことの最小の確認（実体の確認は親の e2e）。"""
     home = model.BOX_HOME
+    repo = shlex.quote(cfg.repo_path)
+    git = posixpath.join(cfg.repo_path, ".git")
+    # pin を足したとき（.git が実ディレクトのとき）だけ検査する
+    pinned = any(m.source == git and m.path == git and not m.readonly for m in cfg.mounts)
+    # .git が pin（マウントポイント）であること。see docs/spec/sandbox/incus-box.md（.git の差し替え）
+    pin = f'cd {repo} && grep -qF " $(pwd)/.git " /proc/self/mountinfo'
+    # mv が成功してしまったら元へ戻して失敗にする
+    mv = (
+        f"cd {repo} && if mv .git .git.kcage-selftest 2>/dev/null; "
+        "then mv .git.kcage-selftest .git; exit 1; else exit 0; fi"
+    )
+    git_checks = (
+        (("sh", "-c", pin), ".git がマウントポイント（pin）"),
+        (("sh", "-c", mv), ".git を移動できない"),
+    )
     checks = (
+        *(git_checks if pinned else ()),
         (("test", "!", "-e", "/var/lib/incus/unix.socket"), "Incus の管理ソケットが見えない"),
         (("test", "!", "-e", f"{home}/.ssh"), "~/.ssh が無い"),
         (("test", "!", "-e", f"{home}/.aws"), "~/.aws が無い"),

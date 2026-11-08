@@ -37,7 +37,7 @@ def test_devices_for_fixed_generation() -> None:
     disks = [d for d in devs if d.type == "disk"]
     assert all(d.name.startswith("m-") for d in disks)
     assert any(d.config["readonly"] == "false" for d in disks)  # リポジトリだけが rw
-    assert sum(d.config["readonly"] == "false" for d in disks) == 1
+    assert sum(d.config["readonly"] == "false" for d in disks) == 2  # リポジトリと .git の pin
     for d in devs:  # 生成物は必ず関門を通る
         plan.device_to_argv(cfg.name, d)
 
@@ -539,3 +539,33 @@ def test_gpu_dxg_は_mode_0666_で重ね_他の_mode_は拒否する() -> None:
         plan.device_to_argv("kcage-demo", bad)
     devs = plan.devices_for(_cfg(gpu=True))
     assert any(d.type == "unix-char" and d.config.get("mode") == "0666" for d in devs)
+
+
+# ---- .git の pin（mv .git の迂回の封じ込め）
+
+
+def test_pin_の_device_は親が先に並び_device_to_argv_が通る() -> None:
+    cfg = _cfg()
+    git = "/home/alice/work/demo/.git"
+    devs = plan.devices_for(cfg)
+    pin = next(i for i, d in enumerate(devs) if d.config.get("source") == git)
+    assert devs[pin].config == {"source": git, "path": git, "readonly": "false"}
+    plan.device_to_argv(cfg.name, devs[pin])
+    # Incus が名前順に処理しても、親（repo・pin）が子の ro の重ねより先になる
+    disks = [d for d in devs if d.type == "disk"]
+    names = [d.name for d in disks]
+    assert names == sorted(names)
+    paths = [d.config["path"] for d in disks]
+    for i, p in enumerate(paths):
+        assert not any(q.startswith(p + "/") for q in paths[:i])
+
+
+def test_pin_を許しても無関係な_rw_の_source_は拒否のまま() -> None:
+    with pytest.raises(PE):
+        plan.device_to_argv(
+            "kcage-demo", _dev("disk", source="/home/alice/.ssh", path="/home/alice/.ssh")
+        )
+    with pytest.raises(PE):
+        plan.device_to_argv(
+            "kcage-demo", _dev("disk", source="/var/lib/incus/unix.socket", path="/x/.git")
+        )

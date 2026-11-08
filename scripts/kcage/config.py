@@ -290,6 +290,9 @@ def resolve(
     mounts: list[model.Mount] = [model.Mount("repo", repo, repo, False)]
     git = posixpath.join(repo, ".git")
     if fs.isdir(git) and not fs.islink(git):
+        # .git を自分自身へ rw で bind（pin）。ro の子の重ねより前に置く。
+        # see docs/spec/sandbox/incus-box.md（.git の差し替え）
+        mounts.append(model.Mount("repo", git, git, False))
         for sub in ("hooks", "config", "commondir"):
             src = posixpath.join(git, sub)
             if fs.islink(src):
