@@ -426,11 +426,15 @@ def test_report_lists_each_decision_without_the_body(env):
     report = env["tmp"] / "report.jsonl"
     _child(env, "review", "extract", PI_HARNESS_CHILD_CONTEXT_REPORT=str(report))
     recs = [json.loads(x) for x in report.read_text(encoding="utf-8").splitlines()]
-    kinds = {r["path"].replace("\\", "/").rsplit("/", 2)[-2:][-1]: r for r in recs}
-    assert recs and all(
-        r["kind"] == "extract" and r["blocks"] >= 1 for r in recs if r["path"].endswith("AGENTS.md")
+    # 祖先の AGENTS.md は環境で変わる（平らな実物は抽粋の対象にならない）ので、試験が置いた 2 つだけを見る
+    placed = [r for r in recs if Path(r["path"]).is_relative_to(env["tmp"])]
+    kinds = {r["path"].replace("\\", "/").rsplit("/", 2)[-2:][-1]: r for r in placed}
+    assert placed and all(
+        r["kind"] == "extract" and r["blocks"] >= 1
+        for r in placed
+        if r["path"].endswith("AGENTS.md")
     )
-    assert all(r["after"] < r["before"] for r in recs if r["kind"] == "extract")
+    assert all(r["after"] < r["before"] for r in placed if r["kind"] == "extract")
     assert kinds
     assert "新しい試験ファイルは" not in report.read_text(encoding="utf-8")
 
