@@ -109,8 +109,15 @@
 {{ if eq (includeTemplate "pi-profile" .) "stock" }}
 # pi の stock プロファイル (CHEZMOI_PI_PROFILE=stock か ~/.config/chezmoi/pi-profile): 配備済みの自作の拡張・ハーネスを片付ける。
 # custom に戻すと chezmoi apply が再配備する。ディレクトリはディレクトリで書く (冒頭の注意)。
+# 拡張は自作のディレクトリだけを消す (一覧は pi-own-extensions)。.pi/agent/extensions を丸ごと消さない:
+# package の設定 (pi-permission-system/config.json) や利用者が置いた拡張まで消えるため。
 # see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
-.pi/agent/extensions
+{{ range (includeTemplate "pi-own-extensions" . | splitList "\n") -}}
+{{ $name := trim . -}}
+{{ if and $name (not (hasPrefix "#" $name)) -}}
+.pi/agent/extensions/{{ $name }}
+{{ end -}}
+{{ end -}}
 .pi/agent/prompts
 .pi/agent/models.json
 .config/pi

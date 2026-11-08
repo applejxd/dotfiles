@@ -21,13 +21,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 HOME_SRC = ROOT / "home"
 STOCK_ONLY_IGNORES = (
-    ".pi/agent/extensions",
     ".pi/agent/prompts",
     ".pi/agent/models.json",
     ".config/pi",
     ".config/pi/**",
 )
-STOCK_REMOVES = (".pi/agent/extensions", ".pi/agent/prompts", ".pi/agent/models.json", ".config/pi")
+STOCK_REMOVES = (".pi/agent/prompts", ".pi/agent/models.json", ".config/pi")
+PERMISSION_DIR = ".pi/agent/extensions/pi-permission-system"
 # stock の AGENTS.md に出してはならない自作ハーネスの語
 HARNESS_WORDS = ("guarded_", "フルガード", "worktree", "pis", "kcage", "feature-orchestration")
 
@@ -129,16 +129,50 @@ def test_profile_on_windows_without_file_is_custom(tmp_path):
 # --- 除外と撤去 -------------------------------------------------------
 
 
+def own_extensions() -> list[str]:
+    """pi-own-extensions (自作の拡張ディレクトリ名の一覧)。"""
+    text = (HOME_SRC / ".chezmoitemplates" / "pi-own-extensions").read_text(encoding="utf-8")
+    return [x.strip() for x in text.splitlines() if x.strip() and not x.startswith("#")]
+
+
+def test_own_extensions_match_source_directories():
+    """一覧は dot_pi/agent/extensions/ の直下の自作ディレクトリと一致する (permission-system は package の設定)。"""
+    src = HOME_SRC / "dot_pi" / "agent" / "extensions"
+    actual = sorted(
+        p.name for p in src.iterdir() if p.is_dir() and p.name != "pi-permission-system"
+    )
+    assert sorted(own_extensions()) == actual
+    assert actual, "自作の拡張が 1 つも無い"
+
+
 def test_custom_ignore_has_no_stock_entries(tmp_path):
     rendered = lines(render_file(".chezmoiignore.tmpl", tmp_path))
     for entry in STOCK_ONLY_IGNORES:
         assert entry not in rendered, entry
+    # 自作の拡張は custom では配る (除外しない)
+    for name in own_extensions():
+        if name != "subagents":  # subagents は Unix の custom でも別の理由で除外
+            assert f".pi/agent/extensions/{name}" not in rendered, name
+
+
+def test_custom_ignore_skips_permission_system_config(tmp_path):
+    rendered = lines(render_file(".chezmoiignore.tmpl", tmp_path))
+    assert PERMISSION_DIR in rendered
+    assert f"{PERMISSION_DIR}/**" in rendered
 
 
 def test_stock_ignore_excludes_own_pi_assets(tmp_path):
     rendered = lines(render_file(".chezmoiignore.tmpl", tmp_path, profile_env="stock"))
     for entry in STOCK_ONLY_IGNORES:
         assert entry in rendered, entry
+    # 自作の拡張のディレクトリは、ディレクトリとその配下を除外する
+    for name in own_extensions():
+        assert f".pi/agent/extensions/{name}" in rendered, name
+        assert f".pi/agent/extensions/{name}/**" in rendered, name
+    # 拡張ディレクトリを丸ごと除外しない・permission-system の設定は除外しない
+    assert ".pi/agent/extensions" not in rendered
+    assert ".pi/agent/extensions/**" not in rendered
+    assert not any(e.startswith(PERMISSION_DIR) for e in rendered)
     # pi 以外の設定・実行ファイルは除外しない
     for other in (".claude/settings.json", ".local/bin/pis", ".config/opencode", ".codex"):
         assert other not in rendered
@@ -148,6 +182,7 @@ def test_custom_remove_is_unchanged(tmp_path):
     rendered = lines(render_file(".chezmoiremove", tmp_path))
     for entry in STOCK_REMOVES:
         assert entry not in rendered, entry
+    assert not any(e.startswith(".pi/agent/extensions") for e in rendered)
     # 従来の項目は残る
     assert ".config/agents/critical_deny.py" in rendered
 
@@ -156,8 +191,13 @@ def test_stock_remove_lists_own_pi_assets(tmp_path):
     rendered = lines(render_file(".chezmoiremove", tmp_path, profile_env="stock"))
     for entry in STOCK_REMOVES:
         assert entry in rendered, entry
-    # ディレクトリの配下を並べない
-    assert not any(e.startswith(".pi/agent/extensions/") for e in rendered)
+    # 自作の拡張のディレクトリを 1 つずつ消す。配下のファイルは並べない
+    for name in own_extensions():
+        assert f".pi/agent/extensions/{name}" in rendered, name
+    assert not any(e.startswith(".pi/agent/extensions/") and e.count("/") > 3 for e in rendered)
+    # 拡張ディレクトリを丸ごと消さない・permission-system と利用者の拡張は消さない
+    assert ".pi/agent/extensions" not in rendered
+    assert not any(e.startswith(PERMISSION_DIR) for e in rendered)
     assert ".config/agents/critical_deny.py" in rendered
 
 
@@ -165,8 +205,8 @@ def test_remove_has_no_stock_target_that_source_still_deploys_in_custom(tmp_path
     """stock の撤去対象は、stock では除外されている (同名が管理対象に残ると apply が失敗する)。"""
     ignore = lines(render_file(".chezmoiignore.tmpl", tmp_path, profile_env="stock"))
     remove = lines(render_file(".chezmoiremove", tmp_path, profile_env="stock"))
-    for entry in STOCK_REMOVES:
-        assert entry in ignore and entry in remove
+    for entry in (*STOCK_REMOVES, *(f".pi/agent/extensions/{n}" for n in own_extensions())):
+        assert entry in ignore and entry in remove, entry
 
 
 # --- settings.json ----------------------------------------------------
@@ -299,3 +339,156 @@ def test_custom_agents_md_is_the_full_instructions(tmp_path):
     text = render_file("dot_pi/agent/AGENTS.md.tmpl", tmp_path)
     full = (HOME_SRC / ".chezmoitemplates" / "agent-instructions.md").read_text(encoding="utf-8")
     assert text.rstrip("\n") == full.rstrip("\n")
+
+
+# --- permission-system の設定 ------------------------------------------
+
+PERMISSION_POLICY = HOME_SRC / ".chezmoitemplates" / "pi-permission-policy.json"
+PERMISSION_MODIFY = (
+    HOME_SRC
+    / "dot_pi"
+    / "agent"
+    / "extensions"
+    / "pi-permission-system"
+    / "modify_config.json.py.tmpl"
+)
+RUNTIME_KEYS = ("debugLog", "permissionReviewLog", "yoloMode", "doublePressToConfirm")
+
+
+def permission_script(tmp_path: Path) -> Path:
+    script = tmp_path / "modify_permission.py"
+    script.write_text(
+        render((PERMISSION_MODIFY).read_text(encoding="utf-8"), tmp_path, profile_env="stock"),
+        encoding="utf-8",
+    )
+    return script
+
+
+def policy() -> dict:
+    return json.loads(PERMISSION_POLICY.read_text(encoding="utf-8"))
+
+
+def test_permission_config_from_empty_input_has_policy_and_runtime_defaults(tmp_path):
+    out = json.loads(run_script(permission_script(tmp_path), ""))
+    assert out["permission"] == policy()["permission"]
+    assert out["commandEffects"] == policy()["commandEffects"]
+    assert out["yoloMode"] is False
+    assert out["debugLog"] is False
+    assert out["permissionReviewLog"] is True
+    assert out["doublePressToConfirm"] is True
+
+
+def test_permission_config_keeps_runtime_values_and_replaces_policy(tmp_path):
+    script = permission_script(tmp_path)
+    existing = {
+        "yoloMode": True,
+        "debugLog": True,
+        "permissionReviewLog": False,
+        "doublePressToConfirm": False,
+        "promptTimeoutMs": 60000,
+        "shellTools": {"exec_command": {"commandArgument": "cmd"}},
+        "permission": {"*": "allow", "bash": "allow"},
+    }
+    out = json.loads(run_script(script, json.dumps(existing)))
+    for key in (*RUNTIME_KEYS, "promptTimeoutMs", "shellTools"):
+        assert out[key] == existing[key], key
+    assert out["permission"] == policy()["permission"]  # 手で緩めた値は戻る
+
+
+def test_permission_config_is_idempotent(tmp_path):
+    script = permission_script(tmp_path)
+    first = run_script(script, "")
+    assert run_script(script, first) == first
+
+
+def test_permission_config_leaves_broken_input_alone(tmp_path):
+    script = permission_script(tmp_path)
+    assert run_script(script, "{broken") == "{broken"
+    assert run_script(script, "[1]") == "[1]"
+
+
+def test_permission_policy_does_not_carry_runtime_keys():
+    """実行時の値 (yoloMode など) は拡張が書き換える。リポジトリは方針だけを持つ。"""
+    assert set(policy()) <= {"permission", "shellTools", "commandEffects"}
+
+
+def test_permission_policy_matches_the_contract():
+    perm = policy()["permission"]
+    for tool in ("read", "write", "edit", "grep", "find", "ls"):
+        assert perm[tool] == "allow", tool
+    assert perm["bash"]["*"] == "ask"
+    assert perm["external_directory"] == "ask"
+    assert perm["mcp"]["*"] == "ask"
+    assert perm["skill"]["*"] == "allow"
+
+    def action(value):
+        return value["action"] if isinstance(value, dict) else value
+
+    bash = {k: action(v) for k, v in perm["bash"].items()}
+    for denied in ("rm -rf *", "sudo *", "git push*", "sh", "bash"):
+        assert bash[denied] == "deny", denied
+    for allowed in ("git status *", "git diff *", "mise run *", "uv run *", "pytest *", "rg *"):
+        assert bash[allowed] == "allow", allowed
+    path = perm["path"]
+    assert next(iter(path)) == "*" and path["*"] == "allow"  # 後勝ち: 全許可を先頭に置く
+    keys = list(path)
+    for denied in (
+        "*.env",
+        "*.env.*",
+        "~/.ssh/*",
+        "~/.aws/*",
+        "~/.gnupg/*",
+        "~/.netrc",
+        "~/.config/gh/*",
+        "~/.config/agents/websearch-keys.json",
+        "*.pem",
+    ):
+        assert path[denied] == "deny", denied
+    # 入れる拡張の自分のツールは、毎回の確認を出さない (子の起動・ToDo・利用者への質問)
+    for tool in ("todo", "ask_user_question", "subagent", "subagents_enable", "bg_wait"):
+        assert perm[tool] == "allow", tool
+    assert path["*.env.example"] == "allow"
+    assert keys.index("*.env.example") > keys.index("*.env.*")  # 例外は deny より後
+
+
+def _check_state_map(value, where: str) -> None:
+    states = {"allow", "deny", "ask"}
+    if isinstance(value, str):
+        assert value in states, where
+        return
+    assert isinstance(value, dict) and value, where
+    for pattern, act in value.items():
+        assert pattern, where
+        if isinstance(act, dict):
+            assert set(act) <= {"action", "reason"} and act.get("action") == "deny", (
+                where,
+                pattern,
+            )
+            assert isinstance(act.get("reason", ""), str) and len(act.get("reason", "")) <= 500
+        else:
+            assert act in states, (where, pattern)
+
+
+def test_permission_policy_structure():
+    """同梱のスキーマ (permissions.schema.json) の要点を、外部の依存なしで検査する。"""
+    data = policy()
+    for key, value in data["permission"].items():
+        _check_state_map(value, key)
+    for cmd, entry in data["commandEffects"].items():
+        assert "/" not in cmd and "\\" not in cmd and " " not in cmd
+        assert set(entry) <= {"effects", "unlessOption", "subcommands"}
+        for stem in entry.get("unlessOption", []):
+            assert re.fullmatch(r"-{1,2}[^-=\s][^=\s]*", stem), stem
+        for eff in entry.get("subcommands", {}).values():
+            assert eff in ("read", "write")
+
+
+def test_permission_policy_validates_against_bundled_schema(tmp_path):
+    """環境変数 PI_PERMISSION_SCHEMA に permissions.schema.json のパスがあり、jsonschema が使えるときだけ全検査する。"""
+    schema_path = os.environ.get("PI_PERMISSION_SCHEMA")
+    if not schema_path:
+        pytest.skip("PI_PERMISSION_SCHEMA is not set")
+    jsonschema = pytest.importorskip("jsonschema")
+    schema = json.loads(Path(schema_path).read_text(encoding="utf-8"))
+    out = json.loads(run_script(permission_script(tmp_path), ""))
+    jsonschema.validate(out, schema)

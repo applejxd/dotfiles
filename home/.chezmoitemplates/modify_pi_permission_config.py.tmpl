@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""pi の stock プロファイルの ~/.pi/agent/extensions/pi-permission-system/config.json。標準入力の現状を変換して出す。
+
+@gotgenes/pi-permission-system (確認画面の役) の設定。リポジトリが持つのは方針
+(permission・commandEffects) だけで、毎回この値で置き換える。yoloMode など実行時の値
+(拡張が /permission-system で書き換える) は、既存のファイルの値を保つ。無いものは拡張の既定で補う。
+壊れた入力は触らない。何度流しても同じ結果になる。
+方針の元データは home/.chezmoitemplates/pi-permission-policy.json (単一の編集点)。
+see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
+"""
+from __future__ import annotations
+
+import json
+import sys
+
+POLICY = json.loads({{ .policy | toJson }})
+
+# 拡張の既定 (docs/configuration.md の Runtime Knobs)。既存のファイルに無いときだけ補う
+RUNTIME_DEFAULTS = {
+    "debugLog": False,
+    "permissionReviewLog": True,
+    "yoloMode": False,
+    "doublePressToConfirm": True,
+}
+
+
+def main() -> int:
+    raw = sys.stdin.read()
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        sys.stdout.write(raw)  # 壊れた入力は触らない
+        return 0
+    if not isinstance(data, dict):
+        sys.stdout.write(raw)
+        return 0
+    for key, value in RUNTIME_DEFAULTS.items():
+        data.setdefault(key, value)
+    data.update(POLICY)  # permission・commandEffects はリポジトリの値で置き換える
+    json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
