@@ -500,7 +500,7 @@ stock にしても何も消えず、`chezmoi apply` が配備しなくなり、�
 | `~/.pi/agent/prompts/` | 配る | 配らない・配備済みは削除 |
 | ハーネス `~/.config/pi/`（harness・commit-confirm） | 配る | 配らない・配備済みは削除 |
 | `~/.pi/agent/models.json`（pis の broker 用） | 配る | 配らない・配備済みは削除（認証は公式の `/login`） |
-| `~/.pi/agent/settings.json` | 生成器が管理 | ハーネスの `extensions`・`skills`・`defaultTools` を取り除き、`packages` を設定。テーマ・既定のモデルなど利用者のキーは触らない |
+| `~/.pi/agent/settings.json` | 生成器が管理 | ハーネスの `extensions`・`skills` を取り除き、`defaultTools` を `["+grep", "+find", "+ls"]`（pi の既定 read・bash・edit・write に読み取り専用の探索ツールを足す増分指定。plan mode の探索にも使う。利用者が `+`/`-` だけの増分指定にしたら保つ）にし、`packages` を設定。テーマ・既定のモデルなど利用者のキーは触らない |
 | `~/.pi/agent/AGENTS.md` | 共通の指示（`agent-instructions.md`。平らな 25 行） | ツール非依存の短い版（`agent-instructions-stock.md`） |
 | `~/.pi/agent/keybindings.json` | 配る | 同じ（自作の拡張のキーを含まないため） |
 | 他の CLI（Claude・Codex・OpenCode など）・`pis`・`pk` | そのまま | そのまま（触らない） |

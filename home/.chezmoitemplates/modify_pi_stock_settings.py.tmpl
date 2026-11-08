@@ -16,6 +16,18 @@ PACKAGES_TEXT = {{ .packages | toJson }}
 HARNESS_EXTENSION_MARKS = (".config/pi/harness", "!extensions/**", "+extensions/", "-builtin:")
 HARNESS_SKILL_MARKS = ("~/.claude/skills", "-~/.agents/skills/", "-~/.claude/skills/")
 
+# pi の既定 (read・bash・edit・write) に、読み取り専用の探索ツールを足す (増分指定)。plan mode の探索と通常の探索で使う
+# 利用者が +/- だけの増分指定に変えていたら保つ。自作ハーネスの全置換の値 (["read"] など) は初期値に置き換える
+DEFAULT_TOOLS = ["+grep", "+find", "+ls"]
+
+
+def is_incremental(value: object) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) > 0
+        and all(isinstance(i, str) and i.startswith(("+", "-")) for i in value)
+    )
+
 
 def packages() -> list[str]:
     lines = (line.strip() for line in PACKAGES_TEXT.splitlines())
@@ -38,7 +50,8 @@ def main() -> int:
     if not isinstance(data, dict):
         sys.stdout.write(raw)
         return 0
-    data.pop("defaultTools", None)
+    if not is_incremental(data.get("defaultTools")):
+        data["defaultTools"] = list(DEFAULT_TOOLS)
     for key, marks in (("extensions", HARNESS_EXTENSION_MARKS), ("skills", HARNESS_SKILL_MARKS)):
         if key in data:
             kept = drop_marked(data[key], marks)

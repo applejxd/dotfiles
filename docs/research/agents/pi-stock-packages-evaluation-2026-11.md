@@ -22,7 +22,7 @@
 
 ## 追加の 4 つの評価と決定（2026-11-09）
 
-利用者が確認して決めた。原文の評価は [archive の pi-eval](../archive/2026-11-agent-stack/pi-eval/)（`background.txt`・`plan-goal.txt`・`rewind-notify.txt`。通知・ステータス表示の節は利用者と相談中で、決定していない）。月間 DL は npm の last-month（2026-11-07 まで）。
+利用者が確認して決めた。原文の評価は [archive の pi-eval](../archive/2026-11-agent-stack/pi-eval/)（`background.txt`・`plan-goal.txt`・`rewind-notify.txt`。通知・ステータス表示の節は、下の「通知・ステータス表示の決定」）。月間 DL は npm の last-month（2026-11-07 まで）。
 
 | # | package（版） | 月間 DL | 役割 | 権限の範囲（ソースの読み） | 決定 |
 | --- | --- | --- | --- | --- | --- |
@@ -40,9 +40,17 @@
 - pi-rewind: worktree の中で `/rewind` して、`git status`・`git reflog`・`git stash list` が変わらないこと。保存の時間・容量。
 - pi-background: 12 分のコマンドで、終了時に親が起きること（`sendMessage` の `triggerTurn` がアイドル中に新しいターンを始めるか）。pi 1.5.0 との実機の動作。
 - plan と goal: permission-system との `tool_call` の実行順（plan mode が block する呼び出しで ask が先に出ないか）。Workflow Mutex の pi 1.5.0 での保証（README は 0.84.2 で特性確認）。
-- plan mode の `grep`・`find`・`ls` を使うには、pi の settings で有効化が要る（README の注意）。有効化は未実施。
+- plan mode の `grep`・`find`・`ls` を使うには、pi の settings で有効化が要る（README の注意）。**有効化した**（stock の settings.json の `defaultTools: ["+grep", "+find", "+ls"]`。2026-11-09）。pi は、この 3 つが無いときだけ「ファイル操作は bash で」という規則をシステムプロンプトに入れるので、有効にすると専用ツールの説明に切り替わる（`dist/core/system-prompt.js`）。使われていなければ、セッションの記録を見て外す（設定の 1 行）。
 - 自作の `/plan` を持つ custom プロファイルとのコマンド名の衝突は、stock では起きない（自作の拡張を配らない）。
-- 検索（pi-web-access・pi-mcp-adapter）・通知・ステータス表示は、この決定に含めない（保留）。
+- 検索（pi-web-access・pi-mcp-adapter）は、この決定に含めない（保留）。通知・ステータス表示は次の節。
+
+### 通知・ステータス表示の決定（2026-11-09）
+
+- **ステータス表示は、標準のフッターのまま。** TPS を出すのは、評価した 8 つのうち `@xynogen/pix-footer` だけで、価格・ベンチの取得（`modelgrep.com`・`benchlm.ai` への GET）と pix 系の依存が増えるので見送り。背景ジョブの数は pi-background（入力欄の上の行 `⏵ 5 jobs`）、エージェントの数は pi-subagents のウィジェット・FleetView が出す（フッターで件数を出す拡張は候補の中に無かった）。次点は `@narumitw/pi-statusline`。
+- **通知は、何も足さず、使ってみる。** 利用者の要件: **ask と、ユーザ入力を受け付けられる待機（`agent_settled`）だけ**。流れている最中（子の完了での再起床・背景ジョブ・自動継続）では鳴らさない（前の自作は頑繁でうっとうしかった）。
+  - Orca: 自前の拡張 `orca-agent-status.ts` が `ui_prompt` と最終の idle（子エージェント稼働中は final にしない）を扱うので、追加は不要と見込む（実機で確認）。stock の apply はこのファイルを消さない。
+  - Zed: 承認待ちは permission-system の `promptNotifications: ["bell"]`（初期値）、質問待ちは rpiv-ask-user-question の BEL。Zed の Terminal Threads がフォーカス外の端末の BEL を通知にする。
+  - 完了の BEL は、評価した package に無い（`@yefengr/pi-notify` は Ghostty・WezTerm・kitty・iTerm2 だけを対象にする OSC）。必要になったら、`agent_settled` で BEL を鳴らす最小の自作（ADR-0031 の例外の 2 件目）か、スマホ通知（`@lwlee2608/pi-notify`。評価の推し。外部サービスと手動の `/notify on` が要る）を足す。
 
 ## 検索（決定の経緯）
 

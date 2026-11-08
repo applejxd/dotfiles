@@ -273,8 +273,10 @@ CUSTOM_SETTINGS = {
 
 def test_stock_settings_removes_harness_keys_and_sets_packages(tmp_path):
     out = json.loads(run_script(stock_settings_script(tmp_path), json.dumps(CUSTOM_SETTINGS)))
-    for key in ("defaultTools", "extensions", "skills"):
+    for key in ("extensions", "skills"):
         assert key not in out, key
+    # 自作ハーネスの全置換の defaultTools (["read"]) は、読み取り専用の探索ツールの増分に置き換わる
+    assert out["defaultTools"] == ["+grep", "+find", "+ls"]
     # 利用者のキーと pi 自身のキーは残る
     for key in (
         "theme",
@@ -298,7 +300,15 @@ def test_stock_settings_keeps_user_extension_and_is_idempotent(tmp_path):
 
 def test_stock_settings_from_empty_input(tmp_path):
     out = json.loads(run_script(stock_settings_script(tmp_path), ""))
-    assert out == {"packages": stock_packages()}
+    assert out == {"defaultTools": ["+grep", "+find", "+ls"], "packages": stock_packages()}
+
+
+def test_stock_settings_keeps_user_incremental_default_tools(tmp_path):
+    script = stock_settings_script(tmp_path)
+    src = {**CUSTOM_SETTINGS, "defaultTools": ["+grep", "-ls"]}
+    first = run_script(script, json.dumps(src))
+    assert json.loads(first)["defaultTools"] == ["+grep", "-ls"]  # 利用者の増分指定は保つ
+    assert run_script(script, first) == first
 
 
 def test_stock_settings_leaves_broken_input_alone(tmp_path):
