@@ -197,6 +197,22 @@ def _parse_template(rest: Sequence[str]) -> dict[str, Any]:
     return opts
 
 
+def _parse_up(rest: Sequence[str]) -> dict[str, Any]:
+    """up <id> [--git-name <値>] [--git-email <値>]。両方そろったときだけ有効（値の検証は _run）。"""
+    opts: dict[str, Any] = {}
+    keys = {"--git-name": "git_name", "--git-email": "git_email"}
+    i = 0
+    while i < len(rest):
+        flag = rest[i]
+        if flag not in keys or i + 1 >= len(rest) or keys[flag] in opts:
+            raise UsageError("up の引数が不正")
+        opts[keys[flag]] = rest[i + 1]
+        i += 2
+    if len(opts) == 1:
+        raise UsageError("--git-name と --git-email は両方そろえて渡す")
+    return opts
+
+
 def parse_args(argv: Sequence[str]) -> Request:
     """引数を厳格に解釈する。形違い・未知の引数は UsageError。"""
     args = list(argv)
@@ -218,6 +234,8 @@ def parse_args(argv: Sequence[str]) -> Request:
         return Request(verb, rid, tuple(rest[1:]))
     if verb == "register":
         return Request(verb, rid, options=_parse_register(rest))
+    if verb == "up":
+        return Request(verb, rid, options=_parse_up(rest))
     if rest:
         raise UsageError(f"{verb} に余計な引数がある")
     return Request(verb, rid)
@@ -611,6 +629,16 @@ def _run(
     policy.check_file_safe(policy_path, fs=fs)
     pol = policy.load(policy_path, fs=fs)
 
+    git_identity: tuple[str, str] | None = None
+    if req.verb == "up" and "git_name" in req.options:
+        git_identity = (req.options["git_name"], req.options["git_email"])
+        try:
+            plan.git_identity_config(
+                *git_identity
+            )  # 何も実行する前に検証する（拒否ならファイルを置かない）
+        except PlanError as e:
+            raise HelperError(f"コミット者情報を拒否: {e}") from e
+
     if req.verb == "template":
         return _template(req, pol, uid, runner, out, resolver, sleep, dist_checker)
 
@@ -665,6 +693,7 @@ def _run(
             exists=exists,
             running=running,
             existing_repo_label=label,
+            git_identity=git_identity,
         )
         for r in p.routes:
             print(f"[kcage] 経路: {r.purpose} / {r.path}", file=out)

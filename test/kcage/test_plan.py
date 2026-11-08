@@ -541,6 +541,92 @@ def test_gpu_dxg_は_mode_0666_で重ね_他の_mode_は拒否する() -> None:
     assert any(d.type == "unix-char" and d.config.get("mode") == "0666" for d in devs)
 
 
+# ---- 箱の中の git のコミット者情報
+
+
+def test_git_identity_は_user_の2行だけを生成する() -> None:
+    text = plan.git_identity_config("Alice Example", "alice@example.test")
+    assert text == '[user]\n\tname = "Alice Example"\n\temail = "alice@example.test"\n'
+
+
+def test_git_identity_は引用符とバックスラッシュをエスケープする() -> None:
+    text = plan.git_identity_config('Alice "A" \\ Example', "alice@example.test")
+    assert 'name = "Alice \\"A\\" \\\\ Example"' in text
+    assert text.count("\n") == 3  # 値は 1 行に収まる
+
+
+@pytest.mark.parametrize(
+    ("name", "email"),
+    [
+        ("", "alice@example.test"),
+        ("a" * 101, "alice@example.test"),
+        ("Alice\nExample", "alice@example.test"),
+        ("Alice\tExample", "alice@example.test"),
+        ("Alice\x00", "alice@example.test"),
+        ("Alice\u2028X", "alice@example.test"),
+        ("   ", "alice@example.test"),
+        ("Alice", ""),
+        ("Alice", "alice"),
+        ("Alice", "a b@example.test"),
+        ("Alice", "alice@example.test\n[core]"),
+        ("Alice", 'al"ice@example.test'),
+        ("Alice", "al\\ice@example.test"),
+        ("Alice", "<alice@example.test>"),
+        ("Alice", "a@b@example.test"),
+        ("Alice", "a" * 200 + "@example.test"),
+    ],
+)
+def test_git_identity_の不正な値は拒否する(name: str, email: str) -> None:
+    with pytest.raises(plan.PlanError):
+        plan.git_identity_config(name, email)
+
+
+def test_plan_up_新規の箱だけ_git_config_を置く() -> None:
+    ident = ("Alice Example", "alice@example.test")
+    p = _up(_cfg(), _net(), git_identity=ident)
+    puts = [s for s in p.steps if isinstance(s, model.FilePut)]
+    assert len(puts) == 1
+    fp = puts[0]
+    assert (fp.where, fp.path, fp.mode, fp.owner) == (
+        "box",
+        "/home/ubuntu/.config/git/config",
+        "0644",
+        "ubuntu:ubuntu",
+    )
+    assert fp.content == plan.git_identity_config(*ident)
+    start = next(
+        i
+        for i, s in enumerate(p.steps)
+        if isinstance(s, model.Op) and s.argv[:2] == ("incus", "start")
+    )
+    assert p.steps.index(fp) < start
+    # 値は argv のどこにも出ない
+    assert all("Alice" not in a for s in p.steps if isinstance(s, model.Op) for a in s.argv)
+
+
+def test_plan_up_git_identity_が無ければ置かない() -> None:
+    p = _up(_cfg(), _net())
+    assert not any(isinstance(s, model.FilePut) for s in p.steps)
+
+
+@pytest.mark.parametrize("state", [(True, True), (True, False)])
+def test_plan_up_既存の箱には_git_config_を置かない(state: tuple[bool, bool]) -> None:
+    p = _up(
+        _cfg(),
+        _net(),
+        exists=state[0],
+        running=state[1],
+        existing_repo_label="demo",
+        git_identity=("Alice Example", "alice@example.test"),
+    )
+    assert not any(isinstance(s, model.FilePut) for s in p.steps)
+
+
+def test_plan_up_不正な_git_identity_は計画を作らない() -> None:
+    with pytest.raises(plan.PlanError):
+        _up(_cfg(), _net(), git_identity=("Alice\nX", "alice@example.test"))
+
+
 # ---- .git の pin（mv .git の迂回の封じ込め）
 
 

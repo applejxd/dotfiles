@@ -113,6 +113,8 @@ def build_argv(
         return helper_argv("register", repo_id, "--path", toplevel or "", *rest)
     if verb == "snap":
         return helper_argv("snap", repo_id, *rest)
+    if verb == "up":
+        return helper_argv("up", repo_id, *rest)
     if verb == "ls":
         return helper_argv("ls")
     return helper_argv(verb, repo_id)
@@ -384,6 +386,43 @@ def _toplevel(runner: Runner) -> str | None:
 def _git_value(runner: Runner, key: str) -> str:
     res = runner(["git", "config", "--get", key], capture=True)
     return res.stdout.strip() if res.returncode == 0 else ""
+
+
+def git_identity_flags(runner: Runner, repo_path: str | None) -> list[str]:
+    """対象リポジトリの実効の git 設定から up 用のフラグを作る。両方そろわない・失敗したときは注意だけ出して空。
+
+    仕組みは docs/spec/sandbox/incus-box.md#箱の中の-git-のコミット者情報。
+    """
+    vals: list[str] = []
+    if repo_path:
+        for key in ("user.name", "user.email"):
+            try:
+                res = runner(["git", "-C", repo_path, "config", "--get", key], capture=True)
+            except OSError:
+                break
+            val = res.stdout.strip() if res.returncode == 0 else ""
+            if not val:
+                break
+            vals.append(val)
+    if len(vals) != 2:
+        _out("[kcage] コミット者情報なし（ホストの git の user.name / user.email）")
+        return []
+    return ["--git-name", vals[0], "--git-email", vals[1]]
+
+
+def _repo_path(args: argparse.Namespace, repo_id: str, top: str | None, fs: Fs) -> str | None:
+    """git 設定を読むリポジトリ。--repo 指定時は許可表の path（カレントと違うリポジトリを読まない）。"""
+    if not args.repo:
+        return top
+    text = _read_policy(fs)
+    if text is not None:
+        try:
+            path = parse_policy(text).get(repo_id, {}).get("path")
+        except ValueError:
+            path = None
+        if isinstance(path, str):
+            return path
+    return None
 
 
 def _read_policy(fs: Fs) -> str | None:
@@ -765,6 +804,8 @@ def main(
         rest = [args.name]
     elif args.verb == "register":
         rest = register_flags(args)
+    elif args.verb == "up":
+        rest = git_identity_flags(runner, _repo_path(args, repo_id, top, fs))
     res = runner(build_argv(args.verb, repo_id, rest, top))
     if res.returncode != 0 and args.verb in PASSWORDLESS:
         _out(

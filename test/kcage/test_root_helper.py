@@ -808,6 +808,97 @@ def test_tty_confirm_は_dev_tty_が開けなければ端末の標準入力へ_�
     assert "/dev/tty を開けない" in err.getvalue() and "端末ではない" in err.getvalue()
 
 
+# ---- 箱の中の git のコミット者情報
+
+_IDENT = ["--git-name", "Alice Example", "--git-email", "alice@example.test"]
+
+
+def _puts(r: FakeRunner) -> list[tuple[tuple[str, ...], bytes | None]]:
+    return [c for c in r.calls if c[0][:3] == ("incus", "file", "push")]
+
+
+def test_up_は_git_identity_を設定ファイルとして置く() -> None:
+    rc, runner, o = call(["up", "demo", *_IDENT])
+    assert rc == 0, o.err.getvalue()
+    puts = _puts(runner)
+    assert len(puts) == 1
+    argv, stdin = puts[0]
+    assert f"kcage-demo{plan_path()}" in argv
+    assert stdin == b'[user]\n\tname = "Alice Example"\n\temail = "alice@example.test"\n'
+    assert "--uid" in argv and argv[argv.index("--uid") + 1] == "1000"
+    # 値は argv に出ない（stdin だけ）
+    assert all("Alice" not in a and "alice@" not in a for c in runner.argvs for a in c)
+
+
+def plan_path() -> str:
+    from kcage import plan
+
+    return plan.GIT_CONFIG_PATH
+
+
+def test_up_は_git_identity_が無ければ何も置かない() -> None:
+    rc, runner, _ = call(["up", "demo"])
+    assert rc == 0 and _puts(runner) == []
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["up", "demo", "--git-name", "Alice"],
+        ["up", "demo", "--git-email", "alice@example.test"],
+        ["up", "demo", *_IDENT, "--git-name", "Bob"],
+        ["up", "demo", "--git-name"],
+        ["stop", "demo", *_IDENT],
+    ],
+)
+def test_git_identity_の引数の誤りは_2(argv: list[str]) -> None:
+    rc, runner, _ = call(argv)
+    assert rc == 2 and runner.calls == []
+
+
+@pytest.mark.parametrize(
+    ("name", "email"),
+    [
+        ("Alice\nExample", "alice@example.test"),
+        ("Alice\tX", "alice@example.test"),
+        ("", "alice@example.test"),
+        ("a" * 101, "alice@example.test"),
+        ("Alice", "alice@example.test\n[core]\nsshCommand = x"),
+        ("Alice", 'a"b@example.test'),
+        ("Alice", "a\\b@example.test"),
+        ("Alice", "no-at-sign"),
+    ],
+)
+def test_git_identity_の不正な値は拒否してファイルを置かない(name: str, email: str) -> None:
+    rc, runner, o = call(["up", "demo", "--git-name", name, "--git-email", email])
+    assert rc == 1 and runner.calls == []
+    assert name not in o.err.getvalue() or name == ""
+
+
+def test_git_identity_は引用符をエスケープして置く() -> None:
+    rc, runner, _ = call(["up", "demo", "--git-name", 'Al "X" \\', "--git-email", "a@example.test"])
+    assert rc == 0
+    assert b'name = "Al \\"X\\" \\\\"\n' in _puts(runner)[0][1]
+
+
+def test_git_identity_は起動中の箱には何も置かない() -> None:
+    r = FakeRunner(status="RUNNING", label="demo")
+    rc, _runner, _ = call(["up", "demo", *_IDENT], runner=r)
+    assert rc == 0 and r.calls == []
+
+
+def test_git_identity_は停止中の既存の箱には置かない() -> None:
+    r = FakeRunner(status="STOPPED", label="demo")
+    rc, _runner, _ = call(["up", "demo", *_IDENT], runner=r)
+    assert rc == 0 and _puts(r) == []
+    assert ("incus", "start", "kcage-demo") in r.argvs
+
+
+def test_sudoers_の_up_は引数つきでも_NOPASSWD_の範囲() -> None:
+    text = root_helper.sudoers_snippet("alice")
+    assert " up *" in text.split("BOX_FREE = ")[1].split("\n")[0]
+
+
 def _selftest_descs(cfg: model.BoxConfig) -> list[str]:
     return [op.desc for op in root_helper._selftest_plan(cfg).steps]
 
