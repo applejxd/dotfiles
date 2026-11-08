@@ -31,19 +31,21 @@
 - **背景のシェル実行**: pi 本体の bash は前景のみ（公式の文書は tmux の案内だけ）。`pi-subagents` の背景実行は**エージェント**単位で、ログを残して完了通知で起こす `bg_run` のような機能は無い。背景の成功の通知が親を自動で起こすかは未確認。
 - **plan mode・`/goal`・ステータス表示・通知・メモリ・巻き戻し**: 標準には無い。下の候補を参照。
 
-## 見つけた他の候補（未評価。月間 DL の順。`pi-package` の語での検索）
+## 見つけた他の候補（未評価。月間 DL の順。2026-11-07 時点。`pi-package` の語での npm 検索）
 
 評価の前の一覧で、導入の推奨ではない。導入するときは [探し方と評価](../../../.agents/skills/pi-extension-dev/references/public-research.md) の手順で、README と権限の範囲を読んでから決める。
 
 | 軸 | 候補（月間 DL） | 備考 |
 | --- | --- | --- |
-| オーケストレーション | `@tintinweb/pi-subagents`（6.0 万）、`pi-goal-x`（2.9 万。`/goal`）、`pi-gauntlet`（1.7 万。ゲートつきワークフロー）、`pi-crew`（1.6 万。チーム・worktree・非同期）、`pi-herdsman`（1.0 万）、`pi-maestro-flow`（0.9 万）、`@chankov/agent-fleet`（0.9 万）、`@trevonistrevon/pi-loop`（0.6 万。再起床・背景監視） | 自作の `/goal`・並列 worker・背景実行の代替になりうる |
-| plan mode | `@agimon-ai/po-plan`（2.3 万。編集ツールを外した計画モード。計画を保存） | 自作の `/plan` の代替 |
-| git・worktree | `@agimon-ai/po-git`（2.3 万。worktree ごとのセッション）、`pi-dev-flow`（1.1 万。計画 → 実装 → リリースのゲート）、`@henryqw/pi-deps`（0.2 万） | |
-| メモリ | `pi-memory`（6.8 万）、`pi-hermes-memory`（2.7 万）、`gentle-engram`（2.0 万） | 方針が合うかの評価が要る（鍵・外部送信） |
-| 通知 | `@pi-unipi/notify`（0.6 万）、`@lwlee2608/pi-notify`（0.3 万。スマホ通知）、`@narumitw/pi-notify`（0.2 万） | 自作の `notify` の代替 |
-| 巻き戻し・チェックポイント | `@ayulab/pi-rewind`（0.4 万）、`checkpoint-pi`（0.1 万） | |
-| ステータス表示 | `@xynogen/pix-footer`（0.3 万。モデル・トークン・git・TPS）、`@erichll/pi-statusline`（0.15 万）、`@firstpick/pi-extension-git-footer-status`（0.16 万）、`pi-agent-suite`（0.4 万。フッターと割当の表示を含む多機能） | 自作の `activity` の代替 |
+| 背景のシェル実行 | `pi-background-tasks`（2.1 万。永続の背景シェル・ウォッチャ・ログ）、`@agimon-ai/po-runner`（2.3 万。監視つきのシェル実行・ログ）、`pi-background`（0.3 万。「長いコマンドを背景で実行し、終わったら pi を起こす」）、`pi-patty-bg-tasks`（0.3 万。120 秒で自動の背景化）、`@ian-pascoe/pi-termctrl`（0.15 万。対話端末・背景ジョブ・`/ps` パネル） | pi 本体に無い機能。自作の `bg_run`（ログと完了通知で起こす）の代替になりうる |
+| plan mode | `@narumitw/pi-plan-mode`（2.8 万。Codex 風の読み取り専用 `/plan`）、`@agimon-ai/po-plan`（2.3 万。編集ツールを外し、計画を保存）、`pi-plan`（0.1 万） | 自作の `/plan` の代替 |
+| `/goal` | `pi-goal-x`（2.9 万）、`@narumitw/pi-goal`（2.5 万。自律の単一目的）、`@agimon-ai/po-goal`（2.2 万）、`@schovest/pi-goal`（1.6 万） | 自作の `/goal` の代替。`@narumitw` は plan-mode・goal・notify・sync・statusline の作者で、UX を揃えやすいが保守者が集中する |
+| オーケストレーション | `@quintinshaw/pi-dynamic-workflows`（5.3 万）、`@tintinweb/pi-subagents`（6.0 万）、`pi-gauntlet`（1.7 万。ゲートつきワークフロー）、`pi-crew`（1.6 万）、`pi-herdsman`（1.0 万）、`pi-maestro-flow`（0.9 万）、`@chankov/agent-fleet`（0.9 万）、`@trevonistrevon/pi-loop`（0.6 万。再起床・背景監視） | すでに `pi-subagents` を入れているので、重なるものは外すか入れ替えるかを評価 |
+| git・worktree | `@agimon-ai/po-git`（2.3 万。worktree ごとのセッション）、`pi-dev-flow`（1.1 万。計画 → 実装 → リリースのゲート）、`pi-herdr-agents`（0.9 万。Herdr 上の非同期サブエージェントと、任意の worktree）、`@henryqw/pi-deps`（0.2 万） | Herdr を入れている場合は相性を確かめる |
+| ステータス表示 | `pi-powerline-footer`（4.4 万。Powerline 風）、`pi-cache-optimizer`（1.8 万。キャッシュ率の表示を含む）、`@ravshansbox/pi-statusline`（1.1 万）、`@narumitw/pi-starship`（0.4 万。Starship 風の TOML 設定）、`@narumitw/pi-statusline`（0.3 万）、`@xynogen/pix-footer`（0.3 万。モデル・トークン・git・TPS）、`pi-agent-suite`（0.4 万。フッターと割当の表示を含む多機能）、`pi-harness-runtime`（7.9 万。**BETA。「本番向けではない」と注記**） | 自作の `activity` の代替。種類が多く好みの問題。リポジトリの内容の表示を含むものは権限の範囲を確かめる |
+| 左戻し・チェックポイント | `@ayulab/pi-rewind`（0.4 万。`/rewind`）、`checkpoint-pi`（0.1 万。git ベース） | YOLO mode を使うときの「回復」の網。自作基盤では「戻せるか」を重視していた |
+| 通知 | `@pi-unipi/notify`（0.6 万）、`@lwlee2608/pi-notify`（0.3 万。スマホ通知）、`@henryqw/pi-bark`（0.2 万。iOS の Bark）、`@narumitw/pi-notify`（0.2 万） | 自作の `notify` の代替。承認待ちや長い作業の完了の知らせ |
+| メモリ | `pi-memory`（6.8 万）、`pi-hermes-memory`（2.7 万）、`gentle-engram`（2.0 万） | これまでの記録に需要は見あたらない。入れるなら鍵・外部送信の評価が要る |
 
 ## 未確認
 
