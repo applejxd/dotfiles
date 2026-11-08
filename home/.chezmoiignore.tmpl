@@ -283,4 +283,8 @@ orca/**
 .pi/agent/extensions/pi-permission-system/**
 # plan mode の設定 (@narumitw/pi-plan-mode) も stock の package の設定なので配らない
 .pi/agent/pi-plan-mode.json
+# 圧縮の設定 (@thgilciffart/pi-compaction) も stock の package の設定なので配らない
+.pi/agent/compaction.json
+# stock の MCP 設定 (~/.pi/agent/mcp.json。generate.py --target pi-mcp) も配らない。custom の MCP は harness の rules.json
+.pi/agent/mcp.json
 {{ end -}}

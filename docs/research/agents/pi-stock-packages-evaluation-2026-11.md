@@ -13,7 +13,7 @@
 | 2 | `cc-safety-net`（2.7.6） | 13.6 万 | 破壊的コマンドと秘密へのアクセスを、実行前に解析して拒否（聞かない固定の網）。sandbox ではない | 残す。standard（既定。設定不要） |
 | 3 | `pi-subagents`（nicobailon。0.87.0） | 79.9 万 | 子エージェント（組み込みの scout・reviewer・worker・oracle など）・背景実行・ワークフロー | 入れる。permission-system との連携（前景の子の ask の転送）は未確認。もう 1 つの候補 `@gotgenes/pi-subagents`（1.7 万。連携が文書化）は見送り |
 | 4 | `pi-mcp-adapter`（7.0.1） | 153.8 万 | MCP の接続（遅延起動・MCP UI・OAuth をキーチェーンへ・他の CLI の設定の取り込み）。入れると pi 組み込みの MCP を自動で OFF にする | 検索の送り先が限られる環境の機だけ入れる（利用者の選択）。pi 1.5.0 は組み込みの MCP を持つので、他の機は組み込みで足りる |
-| 5 | `pi-web-access`（0.47.0） | 123.4 万 | Web 検索・ページ取得・GitHub の clone・動画の解析。鍵なしでは第三者（Exa）へクエリが出る | **入れない方向**。家の検索は、自作の MCP（下）に揃える |
+| 5 | `pi-web-access`（0.47.0） | 123.4 万 | Web 検索・ページ取得・GitHub の clone・動画の解析。鍵なしでは第三者（Exa）へクエリが出る | **入れない**（一覧から削除。2026-11-09）。家の検索は、自作の MCP `websearch`（下）に揃える |
 | 6 | `@juicesharp/rpiv-todo`（2.15.0） | 9.6 万 | `todo` ツール・`/todos`・エディタ上のパネル。状態は会話から再構築 | 入れる |
 | 7 | `@juicesharp/rpiv-ask-user-question`（2.15.0） | 17 万 | `ask_user_question`（最大 4 問・選択肢・メモ・プレビュー） | 入れる |
 
@@ -42,7 +42,7 @@
 - plan と goal: permission-system との `tool_call` の実行順（plan mode が block する呼び出しで ask が先に出ないか）。Workflow Mutex の pi 1.5.0 での保証（README は 0.84.2 で特性確認）。
 - plan mode の `grep`・`find`・`ls` を使うには、pi の settings で有効化が要る（README の注意）。**有効化した**（stock の settings.json の `defaultTools: ["+grep", "+find", "+ls"]`。2026-11-09）。pi は、この 3 つが無いときだけ「ファイル操作は bash で」という規則をシステムプロンプトに入れるので、有効にすると専用ツールの説明に切り替わる（`dist/core/system-prompt.js`）。使われていなければ、セッションの記録を見て外す（設定の 1 行）。
 - 自作の `/plan` を持つ custom プロファイルとのコマンド名の衝突は、stock では起きない（自作の拡張を配らない）。
-- 検索（pi-web-access・pi-mcp-adapter）は、この決定に含めない（保留）。通知・ステータス表示は次の節。
+- 検索は決定済み: `pi-web-access` は入れない、`pi-mcp-adapter` は `is-work` の機だけ入れる（一覧は `is-work` で分岐）。`~/.pi/agent/mcp.json` は `generate.py --target pi-mcp` で配る。通知・ステータス表示は次の節。
 
 ### 通知・ステータス表示の決定（2026-11-09）
 
@@ -79,8 +79,14 @@
 | 通知 | `@pi-unipi/notify`（0.6 万）、`@lwlee2608/pi-notify`（0.3 万。スマホ通知）、`@henryqw/pi-bark`（0.2 万。iOS の Bark）、`@narumitw/pi-notify`（0.2 万） | 自作の `notify` の代替。承認待ちや長い作業の完了の知らせ |
 | メモリ | `pi-memory`（6.8 万）、`pi-hermes-memory`（2.7 万）、`gentle-engram`（2.0 万） | これまでの記録に需要は見あたらない。入れるなら鍵・外部送信の評価が要る |
 
+## 圧縮（2026-11-09 の決定）
+
+- `@thgilciffart/pi-compaction@0.3.1` を、**要約の指示（brief）の恒久設定だけ**に使う（`auto` のしきい値は使わない）。しきい値は本体の `compaction.modelOverrides` の `reserveTokens = 300000`（窓 100 万のモデル。70 万で発動）。自作は足さない。
+- 根拠と集計は [長い文脈は要らない（論文）と圧縮の方針](long-context-compaction-paper-2026-11.md)。
+
 ## 未確認
 
+- 検索の MCP（実機）: `uv` が PATH にあること・stdio の起動・pi 組み込みの MCP が `mcp.json` の `websearch` を読むこと・permission-system の `mcp` の allow が探索系（`mcp_status` など）を自動で allow にするか。
 - 実機での `chezmoi apply`・package の取得・permission-system の bash パターンの一致・YOLO の動作。
 - `pi-subagents` の前景の子と permission-system の連携。背景の完了通知が親を起こすか。
 - Windows 実機。

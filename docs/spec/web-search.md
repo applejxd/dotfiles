@@ -49,7 +49,9 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" [-n 
 - 結果は **信頼できない外部の内容**として扱う（各ツールの説明にも書き、出力にも注意書きを付ける）。ツールは読み取り専用（`readOnlyHint`）
 - 入力の誤り・秘匿チェックや SSRF 防止での停止・全プロバイダの失敗は、`isError: true` のテキストで返す（サーバは落ちない）。想定外の例外は型名だけ返し、詳細（鍵を含みうる）は出さない
 - 環境変数は CLI と同じ（`BRAVE_API_KEY` など・`WEBSEARCH_BROKER_URL`・`PIS_FETCH_VIA_PROXY`・`WEBSEARCH_CACHE_DIR`）。`WEBSEARCH_MAILTO` は Crossref の polite pool 用（任意）
-- **検索の送り先が限られる環境では登録しない**（このサーバは外部の検索サービスへ通信する。登録の条件づけは `[[mcp]]` の対象 CLI・条件で行う）。登録は別の段（S2）
+- **検索の送り先が限られる環境では登録しない**（このサーバは外部の検索サービスへ通信する。登録の条件づけは `[[mcp]]` の対象 CLI・条件で行う）
+- **登録**: `common.toml` の `[[mcp]]`（`id = "websearch"`）。`is-work` の機では宣言しない。stock の pi は `~/.pi/agent/mcp.json`（`generate.py --target pi-mcp`）、custom は harness の `rules.json` へ出る。stock の package は `pi-web-access` を入れない（検索はこの MCP に揃えた）。permission は allow。詳細は [MCP サーバの設定](mcp-servers.md#websearch家の機の検索)
+- **未確認**（実機）: `uv` が PATH にあること、stdio の起動、pi 組み込みの MCP が `websearch` を読むこと
 - 配布は `home/.chezmoiignore.tmpl`。個人用の機にだけ配る（skill と同じ条件）。Windows にも配る（鍵の同期 349 が呼ぶため）
 
 ## 検索の鎖

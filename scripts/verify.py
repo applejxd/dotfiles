@@ -263,6 +263,7 @@ _PI_TESTS = (
     "test_pi_plan_*",
     "test_pi_stage_table",
     "test_pi_shadow",
+    "test_pi_compaction_config",
 )
 _OC_TESTS = (
     "test_generate_opencode*",
@@ -433,8 +434,9 @@ RULES: tuple[Rule, ...] = (
             "home/dot_pi/agent/AGENTS.md.tmpl",
             "home/dot_pi/agent/modify_settings.json.py.tmpl",
             "home/dot_pi/agent/modify_pi-plan-mode.json.py.tmpl",
+            "home/dot_pi/agent/modify_compaction.json.py.tmpl",
         ),
-        ("test_pi_profile",),
+        ("test_pi_profile", "test_pi_compaction_config"),
         ("templates",),
     ),
     Rule(
