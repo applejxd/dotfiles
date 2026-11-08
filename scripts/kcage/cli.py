@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from kcage import gitmeta, model, trust
-from kcage.template import PI_PACKAGE, PI_VERSION_RE
+from kcage.template import PI_LAUNCHER, PI_PACKAGE, PI_VERSION_RE
 
 HELPER = f"{model.ROOT_HELPER_DIR}/kcage-root"
 PASSWORDLESS = frozenset({"up", "stop", "exec", "ls"})
@@ -102,7 +102,7 @@ def build_argv(
     verb: str, repo_id: str, rest: Sequence[str], toplevel: str | None = None
 ) -> list[str]:
     if verb == "pi":
-        return exec_argv(repo_id, ["pi", *rest])
+        return exec_argv(repo_id, [PI_LAUNCHER, *rest])
     if verb == "exec":
         return exec_argv(repo_id, list(rest))
     if verb == "register":

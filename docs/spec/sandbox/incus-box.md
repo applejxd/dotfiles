@@ -196,7 +196,32 @@ path = "/etc/kcage/secret/gh"
 - CDI の定義（`/etc/cdi/nvidia.yaml`）は、ドライバの更新でパスが変わるので、**箱の起動のたびに生成**する（`kcage-cdi.service`。`/dev/dxg` があるときだけ）。docker の `daemon.json` で CDI を有効にする。
 - `build_proxy`（許可表）があれば、ビルド中だけ apt・git・curl・npm に設定し、公開前に消す（テンプレートには残さない）。
 - pi の配布物: `kcage template` がユーザー権限で `~/.cache/kcage/dist`（0700。symlink は拒否）へ許可リスト方式で複製し（`adapters/dotfiles/dist.py`。拡張・prompts・skills・`AGENTS.md` など。認証・履歴・`.env`・`mcp.json`・`settings.json` などは入れない。秘密らしい内容があれば止める）、`kcage-root template --dist` がこれを**もう一度**検証してから `/opt/kcage-dist` へ置く（`distcheck.py`: 絶対パス・symlink なし・呼び出し元の所有・他人から書けない・通常ファイルとディレクトリだけ・ハードリンク拒否・件数と総サイズの上限・拒否名・秘密らしい内容）。
-- 配布物を箱の中の pi がどう読むか（`~/.pi` への展開）は、このテンプレートでは行わない（`/opt/kcage-dist` へ置くだけ）。
+- 配布物を箱の中の pi がどう読むか（起動スクリプトによる配線）は、次の[箱の中のフルガード](#箱の中のフルガード)。テンプレートは `/opt/kcage-dist` へ置くだけで、`~/.pi` へは展開しない。
+
+## 箱の中のフルガード
+
+箱の pi にも、ホストと同じフルガード（判定器 `~/.config/pi/harness`）を持ち込む（第 1 段。最小の変更）。
+
+構成:
+
+- 配布物に、**root 所有の起動スクリプト `/opt/kcage-dist/bin/kcage-pi`** を入れる（`dist.py` の `build_box_dist` が生成する）。`kcage pi` はこれを実行する。中身は `pis` の `BASE_FLAGS` と同じ `--no-approve -nbt -ne -e builtin:mcp` に、自作拡張と判定器を絶対パスの `-e` で足したもの。settings.json の `extensions` には頼らない（読めなかったときに組み込みツールだけが残る fail-open を避ける）。判定器が無ければ起動しない。
+- **箱用の `rules.json`** は、`scripts/agents/generate.py --target pi-harness` を `HOME=/home/ubuntu`・局所設定なし・ホストの描画済み `common.toml` で呼んで作る。ホスト用の `rules.json`（と `*.e2e-bak`）は複製しない。ホストの方針の生成物は変えず、`dist.py` の overlay で次を直す。
+  - `post_edit`・`mcp` を空にする（箱に整形スクリプトと `uv` が無い）。
+  - 役割のツールから `pr_summary`・`work` を外す（箱では PR ビューアと台帳に繋がらない）。
+  - `write_deny_globs` に `/opt/kcage-dist/**`・`~/.pi/agent/models.json`・`~/.pi/agent/auth.json` を足し、`external_read` に `/opt/kcage-dist` を足す。
+  - ホストのホームのパスが残ったら配布物を作らない。生成物も含めて秘密を走査する。
+- 起動スクリプトは `PI_HARNESS_BYPASS=1` を渡す。**ask は許可に落ち、deny と必須確認（`[pi.confirm]`・`[pi.integrate]`）は残る**。境界の証明（canary）は Incus 用には作っていない。ask のまま使うには、`dist.py` の `BOX_ENV` を変えてテンプレートを作り直す。
+- テンプレートは `ripgrep`・`fd-find` を入れ（pi が GitHub から取得しなくて済む）、`/home/ubuntu/.pi/agent` を uid 1000 所有で作る（pi が lock・認証・セッションを書く）。
+- **既存の箱への反映**: `kcage template` でテンプレートを作り直し、箱も作り直す（`kcage rm` → `kcage up`）。
+
+既知の限界（うっかり防止であり、敵対的な迂回への防御ではない）:
+
+- **`kcage exec -- pi` は無ガード**（起動スクリプトを通らない）。`kcage pi` を使う。
+- 箱のユーザーは `docker` グループなので、`docker run -v /opt/kcage-dist:/m` で配布物を書き換えられる。root 所有でも防げない（許容して記録）。
+- 箱の AI は、bash から素の `pi -ne` を起動できる（ホストと同じ。判定器に該当の規則が無い）。
+- project trust: `--no-approve` で作業先の `.pi/` は読まない。ただし起動スクリプトを通らない `pi` は、信頼されると `.pi/extensions` をガード外で読みうる。
+- 判定器が読めない場合の fail-open は、起動スクリプトの存在確認で防ぐ。pi 側が別の理由で拡張を落とす場合は未確認。
+- 実機（Incus の箱の中の pi）での動作は未検証。
 
 ## フルガードの deny
 

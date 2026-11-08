@@ -85,7 +85,17 @@ def test_lsはリポジトリidなしでsudo_nを使う():
 def test_piはexecの後ろにダッシュ2つとpiと引数を置く():
     runner = FakeRunner()
     cli.main(["pi", "--", "-p", "hello"], runner=runner, fs=fs_with())
-    assert runner.calls[-1] == ["sudo", "-n", HELPER, "exec", "demo", "--", "pi", "-p", "hello"]
+    assert runner.calls[-1] == [
+        "sudo",
+        "-n",
+        HELPER,
+        "exec",
+        "demo",
+        "--",
+        "/opt/kcage-dist/bin/kcage-pi",
+        "-p",
+        "hello",
+    ]
 
 
 def test_snapは名前を渡せる():
