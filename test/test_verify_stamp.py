@@ -358,3 +358,14 @@ def test_check_push_command_always_returns_zero(repo, capsys, monkeypatch):
     monkeypatch.setenv("PRE_COMMIT_TO_REF", "no-such-ref")
     assert stamp.main(["check-push"]) == 0
     assert capsys.readouterr().err == ""
+
+
+def test_stamp_records_scope_and_check_ignores_it(repo, capsys):
+    (repo / "a.txt").write_text("two\n")
+    data = json.loads(stamp.write_stamp(repo).read_text())
+    assert data["scope"] == "full"  # 既定は従来の全件
+    dest = stamp.write_stamp(repo, scope="closed:kcage")
+    assert json.loads(dest.read_text())["scope"] == "closed:kcage"
+    git(repo, "add", "a.txt")
+    code, err = run_check(repo, capsys)  # T2 を省いた印でも、警告は出ない (従来の印と同じ意味)
+    assert code == 0 and err == ""

@@ -69,6 +69,20 @@ Raspberry Pi 4 ではメモリが尽きて SSH も応答しなくなる
 - **T1**: 変更に当たる試験（規則・試験が読むファイル・試験ファイル自身。`verify:all` でも先に回す）
 - **T2**: 残りの全件。T0 と T1 の試験（pre-push の hook が走らせる `test_raspi_detection` を含む）を `--ignore` した補集合。補集合が空なら省く
 
+#### 閉じたモジュールの規則
+
+依存が閉じたモジュール（初期は kcage だけ。正本は `scripts/verify.py` の `CLOSED_MODULES`）だけを変えたときは、`verify:all` が **T0 + そのモジュールの T1 で終わる**（T2 を省く。約 11 分 → 約 1 分）。
+省くのは、変更パス（merge-base との差分。`--changed` と同じ）が**すべて**モジュールの範囲（コードと、モジュールの文書 `docs`。文書の lint は T0 が全件で回す）に入り、他の規則・全件領域に当たらず、削除もなく、モジュール外の試験が読むパスでもないときだけ。
+merge-base を決められない・git でないときは全件。省いたときは実行前に「閉じたモジュール (kcage) だけの変更のため T2 を省略」と表示する（`--dry-run` でも同じ）。
+
+- **必ず全件を回す手段**: `mise run verify:full`（= `verify.py --all --full`。省略を一切しない）。**`main` への統合の前（`git flow integrate develop` の前）はこれを使う**
+- 印（`verify-stamp`）: T2 を省いた成功も、従来の `--all` と同じ意味で書く。省いた分は変更の範囲外で、基準の内容は統合時に検査済みなので、pre-commit の警告は出なくてよい。省いた実行は印の `scope`（`closed:kcage`。全件は `full`）で追える（照合は `scope` を見ない）
+- 閉じていることの機械検査（`test/test_verify.py`）: モジュールの試験が読むパスがモジュールの範囲（と `shared_reads`）に収まる・モジュール外の試験がモジュールのパスを読まない（`ignored_readers` は文字列で名指すだけの偽陽性に限る。`scanners` はリポジトリ全体を走査する試験で、モジュールの変更では必ず T1 で回す）・表の glob が実在のパスに当たる
+- 実測（2026-11-08、監査つきの全件、試験 12847 件）: kcage のファイルを開いたモジュール外の試験は、`test_bootstrap_scripts`・`test_windows_assets`（どちらもリポジトリ全体の走査）と、`test_pi_boundary`・`test_imozuru`（`test/kcage` のディレクトリの参照だけ）と、検証の入口の試験（常に回る）だけだった。前の 4 つを `scanners` に宣言している（合計約 5 秒）。この監査が無ければ、kcage の変更がリポジトリ全体の走査の試験を壊すことを見落とすところだった
+- 限界: 静的な走査は、subprocess の中・実行時に組み立てるパスの参照を見ない。実測は監査プラグイン `scripts/verify_audit.py` で行う（`open` と `scandir`/`listdir` の audit hook。subprocess の中は拾えない）:
+  `VERIFY_AUDIT_OUT=<ログ> PYTHONPATH=scripts uv run --with pytest --with pytest-xdist --with pyyaml --no-project pytest -p verify_audit test/ -n 8` のあと、`python3 scripts/verify_audit.py report <ログ>` でモジュール外の試験が開いたものを一覧する（あれば終了コード 1）。`-p` で明示したときだけ有効
+- モジュールの追加: `CLOSED_MODULES` に足し、上の機械検査を通す（閉じていなければ足さない）
+
 前の段で失敗したら次の段を始めない（`--keep-going` で続行）。並列度の既定はコア数の半分で、`VERIFY_JOBS` や `--jobs` で変えられる。
 `nice` で低優先度にする。全件の印は、開始時の作業ツリーを記録し、終わりに同じ状態のときだけ書く（開始と終了の 2 点の比較で、実行中に編集して元に戻す変更は見つけられないので、検証中は編集しない）。実測は
 [開発ガイドの実測メモ](../research/testing/development-timing-notes.md)。
@@ -78,7 +92,7 @@ CI の範囲は [テストと検証の仕組み](testing.md#いつ回すか)。
 **「いつ・何を回すか」の選択規則の正本はこの節**で、Docker ハーネスの契約は testing.md が正本。
 
 ```text
-python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
+python3 scripts/verify.py [--changed | --all [--full]] [--dry-run] [--list]
 ```
 
 - `--changed`（既定。`mise run verify`）: 変更したパスを、**統合先（git-flow の startpoint → develop → main → master の順に存在するもの）との merge-base** から数える（commit 済みの差分 ∪ 作業ツリーの差分 ∪ 未追跡）。
@@ -88,7 +102,8 @@ python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
   - 対象 0 件は、HEAD が基準と同一なら「変更なし (基準と同一)」（exit 0）。commit があるのに 0 件なら警告つき
   - 選んだ試験に PR ビューアの試験（`test_pr_viewer_*`）があり、`node`（22.18 以上）が使えないときは、skip で通ったように見えるため、**「未検証（前提不足: node）」として失敗**にする。
     `VERIFY_ALLOW_SKIP=1` で警告に下げられる。意図的に skip される試験（ブラウザ smoke など）は対象にしない
-- `--all`（`mise run verify:all`）: 全件
+- `--all`（`mise run verify:all`）: 全件（閉じたモジュールだけの変更は [T2 を省く](#閉じたモジュールの規則)）
+- `--all --full`（`mise run verify:full`）: 省略なしの全件。`main` への統合の前はこれ
 - `--dry-run`: 実行せずコマンドを列挙する
 - `--list`: 変更パスごとの対応を表示する
 
