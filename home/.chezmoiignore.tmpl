@@ -13,6 +13,9 @@
 !.config/agents/command_policy.py
 !.config/agents/common.toml
 !.config/agents/agentcore_websearch_mcp.py
+# 検索の核と MCP サーバ (スキル web-search の外の中立な場所)。鍵の同期 (349) も呼ぶので Windows にも配る
+!.config/agents/websearch/
+!.config/agents/websearch/**
 # Git の user (Bitwarden 由来) と global ignore。~/.config/git/config が [include] で読む。
 # ディレクトリだけを戻す。/** で戻すと、下の「一度だけ展開する」除外まで打ち消す
 !.config/git/
@@ -156,6 +159,8 @@ Documents/**
 {{- if eq (includeTemplate "is-work" .) "true" }}
 .claude/skills/web-search/
 .claude/skills/web-search/**
+.config/agents/websearch/
+.config/agents/websearch/**
 .claude/skills/imozuru/
 .claude/skills/imozuru/**
 {{- end }}

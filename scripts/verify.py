@@ -341,6 +341,11 @@ RULES: tuple[Rule, ...] = (
         ("test_herdr_integration",),
     ),
     Rule(
+        "websearch の核と MCP サーバ",
+        ("home/dot_config/agents/websearch/**",),
+        ("test_websearch", "test_websearch_mcp"),
+    ),
+    Rule(
         "websearch の鍵スクリプト",
         ("home/.chezmoiscripts/*_websearch_keys.*",),
         ("test_websearch",),

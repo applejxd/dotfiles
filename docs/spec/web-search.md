@@ -18,11 +18,15 @@ pi など、内蔵の検索ツールが無い AI CLI のための Web 検索・�
 
 ## 構成
 
+**核は中立な場所に 1 本だけ置く**（スキルの外。スキルを廃止しても、核と鍵の同期が残るため）。スキルの CLI と MCP サーバは、どちらも核を呼ぶだけで、コードをコピーしない。
+
 | 場所 | 役割 |
 | --- | --- |
+| `home/dot_config/agents/websearch/core.py`（配備先 `~/.config/agents/websearch/core.py`） | **核**。検索・取得・論文・鍵の探し方と同期（`sync-keys`）・秘匿チェック・SSRF 防止・キャッシュ・CLI の `main` |
+| `home/dot_config/agents/websearch/mcp_server.py` | MCP サーバ（stdio）。ツール `web_search` / `fetch_page` / `search_papers`。核を読み込んで呼ぶ |
 | `home/dot_claude/skills/web-search/SKILL.md` | 名前と説明だけが常駐し、本文は必要時に読まれる。pi は `[pi.settings] skills = ["~/.claude/skills"]` で拾う |
-| `home/dot_claude/skills/web-search/scripts/websearch.py` | CLI の本体。`search` / `fetch` / `papers` / `status` |
-| `test/test_websearch.py` | 通信なしの試験（偽の HTTP・偽の名前解決） |
+| `home/dot_claude/skills/web-search/scripts/websearch.py` | 核の `main` を呼ぶ**薄い CLI**（挙動は核と同じ）。`search` / `fetch` / `papers` / `status` / `sync-keys` |
+| `test/test_websearch.py`・`test/test_websearch_mcp.py` | 通信なしの試験（偽の HTTP・偽の名前解決）。MCP は stdio のプロトコル・fallback・安全策 |
 
 ```bash
 python3 ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" [-n 8] [--json] [--no-cache]
@@ -30,6 +34,23 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" [-n 
 … papers "クエリ" [-n 8] [--from-year 2024]
 … status
 ```
+
+### MCP サーバ
+
+起動は `uv run --no-project --quiet ~/.config/agents/websearch/mcp_server.py`（Windows は `$HOME\.config\agents\websearch\mcp_server.py`）。
+追加の依存は無い（標準ライブラリだけ）。プロトコルは 1 行 1 メッセージの JSON-RPC で、`initialize` / `tools/list` / `tools/call` / `ping` に答える。
+
+| ツール | 引数 | 返すもの |
+| --- | --- | --- |
+| `web_search` | `query`、`n`（1〜20。既定 8） | 出典 URL・要約・答えたプロバイダ・`[経過]`（鎖の鍵なし・失敗・休止の記録）。キャッシュ 1 時間 |
+| `fetch_page` | `url`、`max_chars` | 本文のテキスト（SSRF 防止つき） |
+| `search_papers` | `query`、`n`、`from_year` | 題名・著者・年・被引用・要約・URL と、答えた API |
+
+- 結果は **信頼できない外部の内容**として扱う（各ツールの説明にも書き、出力にも注意書きを付ける）。ツールは読み取り専用（`readOnlyHint`）
+- 入力の誤り・秘匿チェックや SSRF 防止での停止・全プロバイダの失敗は、`isError: true` のテキストで返す（サーバは落ちない）。想定外の例外は型名だけ返し、詳細（鍵を含みうる）は出さない
+- 環境変数は CLI と同じ（`BRAVE_API_KEY` など・`WEBSEARCH_BROKER_URL`・`PIS_FETCH_VIA_PROXY`・`WEBSEARCH_CACHE_DIR`）。`WEBSEARCH_MAILTO` は Crossref の polite pool 用（任意）
+- **検索の送り先が限られる環境では登録しない**（このサーバは外部の検索サービスへ通信する。登録の条件づけは `[[mcp]]` の対象 CLI・条件で行う）。登録は別の段（S2）
+- 配布は `home/.chezmoiignore.tmpl`。個人用の機にだけ配る（skill と同じ条件）。Windows にも配る（鍵の同期 349 が呼ぶため）
 
 ## 検索の鎖
 
@@ -41,9 +62,25 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" [-n 
 | Exa | `POST /search`（`x-api-key`、`contents.highlights`） | 要 | 意味検索 |
 | Tavily | `POST /search`（`Authorization: Bearer`、`search_depth: basic`） | 要 | |
 | DuckDuckGo | HTML 版の検索フォームへ `POST` | 不要 | 最後の砦。`GET` は bot の確認（HTTP 202）になりやすいので `POST` を使う（実測は [記録](../research/agents/web-search-spec-notes.md)）。ブラウザの UA は偽装しない |
-| OpenAlex | `GET /works`（`search=`、`api_key` は任意） | 任意 | **鎖に入れない。** `papers` の専用。論文のメタデータで、一般の Web 検索の代替にならない |
+| OpenAlex | `GET /works`（`search=`、`api_key` は任意） | 任意 | **汎用の鎖には入れない。** 論文検索の最初の経路（下の「論文の fallback」）。論文のメタデータで、一般の Web 検索の代替にならない |
 
 順位の根拠と各社の無料枠は[記録](../research/agents/web-search-spec-notes.md)にある。**品質・鮮度の優劣は未実測**なので、固定順で始め、実際のクエリで比べて入れ替える。
+
+### 論文の fallback
+
+MCP の `search_papers` は、`OpenAlex → Semantic Scholar → Crossref → arXiv` の順に試し、最初に結果を返した API を使う。**4 つとも鍵なしで使える**
+（2026-11-09 に公式の文書と実測で確認）。失敗（429・5xx・通信エラー）・休止中・0 件は次へ回す。401 / 403 は 1 時間、402 は 24 時間休止する（汎用の鎖と同じ）。
+
+| API | 鍵 | 制限・規約 | 備考 |
+| --- | --- | --- | --- |
+| OpenAlex（`/works`） | 任意（無料。あると日次の枠が 10 倍） | 鍵なしは基本利用向け | [認証の文書](https://developers.openalex.org/api-reference/authentication) |
+| Semantic Scholar（`/graph/v1/paper/search`） | 任意（`x-api-key`。環境変数 `SEMANTICSCHOLAR_API_KEY` か鍵ファイルの `semanticscholar`） | 鍵なしは全利用者で共有の枠（実測で 429 になることがある）。鍵ありは 1 rps | [API の案内](https://www.semanticscholar.org/product/api)。429 は次へ回す |
+| Crossref（`/works`） | 不要 | public は無認証。`WEBSEARCH_MAILTO` を付けると polite pool | [認証の文書](https://www.crossref.org/documentation/retrieve-metadata/rest-api/access-and-authentication/) |
+| arXiv（`export.arxiv.org/api/query`） | 不要 | 3 秒に 1 回・単一接続（利用規約）。鎖の最後なので頻度は低い | [利用規約](https://info.arxiv.org/help/api/tou.html)。年の絞り込みは取得後に手元で行う |
+
+- 鎖の記録（`[経過]`）に、飛ばした・失敗した API が残る。全部だめなら `isError`
+- ブローカー（`WEBSEARCH_BROKER_URL`）の内側では、ブローカーが中継する OpenAlex だけを試す（他は `no-broker` で飛ばす）
+- **CLI の `papers` は従来どおり OpenAlex だけ**（挙動を変えない。fallback は MCP の `search_papers` が持つ。核の `run_papers` が実体で、CLI へ載せる判断は後）
 
 ### 次へ回す条件
 
@@ -65,8 +102,8 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" [-n 
 
 - Bitwarden の項目は **Login 種別**、項目名は `websearch-brave` / `websearch-exa` / `websearch-tavily` / `websearch-openalex`、鍵は **Password 欄**
 - 鍵は出力・例外・ログに出さない（`status` は有無だけ、`--json` にも入れない。試験で確かめている）
-- **鍵ファイルの作成**: `chezmoi apply` が、`applejxd` の機械で、`BW_SESSION` があるときだけ `websearch.py sync-keys` を呼ぶ
-  （`400_unix/run_after_441_websearch_keys.sh.tmpl`、`300_windows/run_after_349_websearch_keys.ps1.tmpl`）。Bitwarden の各項目を `bw get password` で引き、
+- **鍵ファイルの作成**: `chezmoi apply` が、`applejxd` の機械で、`BW_SESSION` があるときだけ核の `sync-keys`（`~/.config/agents/websearch/core.py sync-keys`）を呼ぶ
+  （`400_unix/run_after_441_websearch_keys.sh.tmpl`、`300_windows/run_after_349_websearch_keys.ps1.tmpl`）。**スキルの `websearch.py` ではなく核を直接呼ぶ**ので、スキルを廃止しても残る。Bitwarden の各項目を `bw get password` で引き、
   `~/.config/agents/websearch-keys.json` に書く（POSIX は mode 600、Windows はプロファイルの ACL）。
   - **既にある値は残す**。取れた名前だけ足す（項目が無い名前は飛ばす。無ければファイルも作らない）。取り直すときは `DOTFILES_RESYNC_WEBSEARCH_KEYS=1`（`--force`）
   - `BW_SESSION`・`bw`・`uv` が無いときは何もせず 0 で終わる（`apply` を止めない・入力待ちにしない）。`chezmoi` のテンプレート関数 `bitwarden` は使わない
@@ -81,7 +118,7 @@ python3 ~/.claude/skills/web-search/scripts/websearch.py search "クエリ" [-n 
 
 ```bash
 mise run websearch:keys      # このリポジトリで。= sync-keys --force --unlock
-python3 ~/.claude/skills/web-search/scripts/websearch.py sync-keys --force --unlock   # どこからでも (Windows は uv run --no-project)
+python3 ~/.config/agents/websearch/core.py sync-keys --force --unlock   # どこからでも (Windows は uv run --no-project)
 ```
 
 - `--unlock` は対話で使う。`chezmoi apply` の呼び出し（441 / 349）は付けない（`BW_SESSION` が無ければ飛ばし、入力待ちにしない）。Windows では端末の判定が当てにならない

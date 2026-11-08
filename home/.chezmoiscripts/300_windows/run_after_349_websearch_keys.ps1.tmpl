@@ -1,5 +1,5 @@
 ﻿{{- /*
-  Bitwarden の Login 項目 websearch-<名前> から、web-search skill の鍵ファイル (~/.config/agents/websearch-keys.json) を作る。
+  Bitwarden の Login 項目 websearch-<名前> から、検索の核 (~/.config/agents/websearch/core.py) の sync-keys で鍵ファイル (~/.config/agents/websearch-keys.json) を作る。
   applejxd の機械だけ。BW_SESSION が無い・bw / uv が無い・項目が無いときは何もせず 0 で終わる (apply を止めない)。
   鍵は出力に出さない。既にある値は残す。取り直すときは DOTFILES_RESYNC_WEBSEARCH_KEYS=1。
   Unix 版: .chezmoiscripts/400_unix/run_after_441_websearch_keys.sh.tmpl
@@ -15,8 +15,8 @@ function Skip {
   exit 0
 }
 
-$script = Join-Path $HOME '.claude\skills\web-search\scripts\websearch.py'
-if (-not (Test-Path -LiteralPath $script -PathType Leaf)) { Skip 'websearch.py が無い' }
+$script = Join-Path $HOME '.config\agents\websearch\core.py'
+if (-not (Test-Path -LiteralPath $script -PathType Leaf)) { Skip 'websearch の核 (core.py) が無い' }
 if (-not (Get-Command bw -ErrorAction Ignore)) { Skip 'bw が無い' }
 if (-not (Get-Command uv -ErrorAction Ignore)) { Skip 'uv が無い' }
 # 認証は求めない (apply を入力待ちにしない)。有効にするには:
