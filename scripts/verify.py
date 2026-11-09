@@ -437,8 +437,16 @@ RULES: tuple[Rule, ...] = (
             "home/dot_pi/agent/modify_pi-plan-mode.json.py.tmpl",
             "home/dot_pi/agent/modify_compaction.json.py.tmpl",
             "home/dot_pi/agent/extensions/subagent/*",
+            "home/dot_cc-safety-net/**",
+            "test/agents/pi/permission_check.mjs",
+            "test/agents/pi/permission_cases.json",
         ),
-        ("test_pi_profile", "test_pi_compaction_config", "test_pi_subagents_config"),
+        (
+            "test_pi_profile",
+            "test_pi_compaction_config",
+            "test_pi_subagents_config",
+            "test_pi_permission_decisions",
+        ),
         ("templates",),
     ),
     Rule(

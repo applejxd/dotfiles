@@ -34,7 +34,7 @@ return { api: api.artifactPaths, ui: ui.artifactPaths };
 2. **verify が通るまで review に進まない。** review の修正で、通った verify を無効にしたら、verify からやり直す（`pi-gauntlet` の考え方。package は入れない）。
 3. **同時数の上限**: 設定の `maxActiveAsyncRunsPerSession`（既定の案は 4）。空きが出たら、親が通知を見て次を起動する。上限を超えたときの挙動（拒否かキューか）は実機で確認する。
 4. **統合は利用者が行う。** 親は、commit・サマリーまで。
-5. **子が使うツール名**（permission の許可）: `subagent`・`subagents_enable`・`bg_wait`・`subagent_supervisor`。`subagent_launch`（workflow の子の起動ごとの確認）は **ask のまま**にして、最初は内容（担当・`cwd`・`worktree`・`commands`）を見ながら使う。ダイアログの `s`（セッション中は許可）で、確認を省ける。
+5. **子が使うツール名**（permission の許可）: `subagent`・`subagents_enable`・`bg_wait`・`subagent_supervisor`・`subagent_launch`。`subagent_launch`（workflow の子の起動）は、2026-11-09 に当面の運用として **allow** にした（確認は出ない）。内容（担当・`cwd`・`worktree`・`commands`）を毎回見たいときは、方針の `subagent_launch` を `ask` へ戻す（`s` でセッション中は許可できる）。`gate`・`acceptance.verify` を使わない運用（上）なので、`commands` が検査されない点は実害が出にくい。
 
 ## 実機で確かめる 4 点（初回）
 
@@ -53,7 +53,7 @@ Ralph Wiggum ループ＝同じ依頼を、**新しい文脈で繰り返し**、
 
 - **使うとき**: 文脈の肥大が実際に作業の質を落としていると分かったとき。利用者の過去のセッションの集計では、長い文脈による質の低下の兆候は見つからなかった（[圧縮の方針](../../../../docs/research/agents/long-context-compaction-paper-2026-11.md)）ので、**今は `/goal` で足りる見込み**。
 - **前提（未確認。最初に確かめる）**: 背景の子に permission-system と cc-safety-net が載ること（上の「実機で確かめる 4 点」の 2）。載らなければ、この方式は判定の迂回になる。確かめるまで、離席中には使わない。
-- **permission**: workflow の子の起動は `subagent_launch` の確認が毎回出る（ask のまま。`s` でセッション中は許可できる）。
+- **permission**: workflow の子の起動（`subagent_launch`）は allow にしてある（2026-11-09。確認は出ない。`ask` へ戻せば毎回出る）。
 - **完了の判定は独立させる**: 子の自己申告（`STATUS: DONE`）だけで終えず、別の `reviewer` の子が「全項目が満たされ、検査が通る」を確かめて `PASS` を返したときだけ終える。**`gate`・`acceptance.verify` は使わない**（上の規則）。検査のコマンドは reviewer の子が、`bash`（permission の方針が効く）で実行する。
 - **上限**: 反復数（`maxIterations`）・`timeoutMs`・`usageBudget`・`toolBudget` を必ず付ける。無進捗の検出は書いていない（`PROGRESS.md` の更新の有無を、reviewer に見させる）。
 

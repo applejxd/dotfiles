@@ -195,6 +195,16 @@ A. [AgentCore Web Search](docs/spec/mcp-servers.md#agentcore-web-search) を参�
 A. 以前「常に許可」した承認が残っている。
 [保存した承認の確認とリセット](docs/spec/agent-permissions.md#保存した承認の確認とリセット) を参照。
 
+### Q. pi（stock）で確認（ask）が出ない・出してほしい確認が出ない
+
+A. YOLO が入っていると、確認は全部自動で承認される（deny だけが効く）。`/permission-system` で YOLO を OFF にする
+（[YOLO mode](docs/spec/agent-config-generation.md#permission-system-の設定stock)。機械ごとの設定で、apply では戻らない）。
+
+### Q. pi（stock）が作業ツリー外のデータセットを読むたびに確認される
+
+A. プロジェクトごとに、読み取りだけを事前許可できる（`/tmp` はグローバルで許可済み）。手順は
+[プロジェクト単位でデータセットを読み取り専用にする](docs/spec/agent-config-generation.md#プロジェクト単位でデータセットを読み取り専用にする)。
+
 ### Q. 外出先から WSL に SSH したい
 
 A. Tailscale 経由で、Windows で `tailscale serve --bg --tcp 50022 tcp://localhost:50022` を 1 回実行する

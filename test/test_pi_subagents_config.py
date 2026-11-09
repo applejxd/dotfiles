@@ -223,6 +223,6 @@ def test_settings_is_idempotent(settings_script):
 def test_permission_policy_for_subagents():
     permission = json.loads(POLICY.read_text(encoding="utf-8"))["permission"]
     assert permission["subagent_supervisor"] == "allow"
-    assert permission["subagent_launch"] == "ask"  # workflow の子の起動ごとの確認
+    assert permission["subagent_launch"] == "allow"  # workflow の子の起動。当面は許可 (ask へ戻せば、子ごとに内容を見られる)
     for name in ("subagent", "subagents_enable", "bg_wait"):
         assert permission[name] == "allow"
