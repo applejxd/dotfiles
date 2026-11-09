@@ -10,7 +10,7 @@
 // path / external_directory のゲート (bash のトークンの投影) は含めない。surface の照合は規則の評価だけ。
 // see docs/spec/agent-config-generation.md#permission-system-の設定stock
 import { createRequire } from "node:module";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -39,6 +39,10 @@ if (input.project) {
   mkdirSync(join(cwd, ".pi/extensions/pi-permission-system"), { recursive: true });
   writeFileSync(join(cwd, ".pi/extensions/pi-permission-system/config.json"), JSON.stringify(input.project));
 }
+const cleanup = () => {
+  for (const d of [agentDir, cwd]) rmSync(d, { recursive: true, force: true });
+};
+process.on("exit", cleanup);
 const manager = new PermissionManager({ agentDir, isYoloEnabled: () => false, flavor: posixPathFlavor });
 manager.configureForCwd(cwd);
 const resolver = new PermissionResolver(manager, { getRuleset: () => [] });
