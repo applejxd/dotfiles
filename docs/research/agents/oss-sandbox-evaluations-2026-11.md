@@ -3,7 +3,7 @@
 - **日付**: 2026-11-08（静的調査。実機では動かしていない）
 - **対象**: AI コーディングエージェントを Incus のコンテナで動かす OSS。coi（`code-on-incus`。[mensfeld/coi](https://github.com/mensfeld/coi)。のち coipond/coi へ移転）と isx（[Sanne/incus-spawn](https://github.com/Sanne/incus-spawn)）。
 - **方法**: ソースを blobless clone し、`explore` の子で読んだ（権限・認証・git、機能、保守と統合の方式）。git の指標は親が計った。原本は [archive](../archive/2026-11-agent-stack/README.md) の `oss-evaluations/`。外部の内容なので鵜呑みにしない。
-- **関連**: [ADR-0028](../../adr/0028-per-repo-agent-container.md)・[CHG-0065](../../change/0065-agent-stack-freeze.md)
+- **関連**: [ADR-0028](../../adr/0028-per-repo-agent-container.md)・[CHG-0065](../../change/closed/0065-agent-stack-freeze.md)
 
 ## 結論
 

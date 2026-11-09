@@ -13,8 +13,8 @@
 
 | 機能 | 状態 | 内容 | 正本 |
 | --- | --- | --- | --- |
-| 親と子の分担 | 運用 | 親は対話・判断・委譲・承認・ToDo の管理。調査・計画・実装・検証は子へ（全体の指示は `agent-instructions.md`。親の文脈を重い読み物で占めない） | [CHG-0045](../change/0045-orchestrator-parent.md) |
-| 子が止まらない条件 | 実装済（判定器の決定表で確認。実際の子の RPC 起動での再確認は未） | 子が確認なしで動けるのは、親の bypass を継ぐか、証明済みの境界（`pis`）の内側のとき。`mustConfirm` は常に確認 | [CHG-0045](../change/0045-orchestrator-parent.md)、[判定器](guard/pi-decide.md) |
+| 親と子の分担 | 運用 | 親は対話・判断・委譲・承認・ToDo の管理。調査・計画・実装・検証は子へ（全体の指示は `agent-instructions.md`。親の文脈を重い読み物で占めない） | [CHG-0045](../change/closed/0045-orchestrator-parent.md) |
+| 子が止まらない条件 | 実装済（判定器の決定表で確認。実際の子の RPC 起動での再確認は未） | 子が確認なしで動けるのは、親の bypass を継ぐか、証明済みの境界（`pis`）の内側のとき。`mustConfirm` は常に確認 | [CHG-0045](../change/closed/0045-orchestrator-parent.md)、[判定器](guard/pi-decide.md) |
 | `/fleet` | 実装済 | 依頼を、並列に動かせる作業に分け、`worker` を 1 回の応答に並べて起動させる | [fleet](guard/pi-extensions.md#fleet) |
 | feature の並列実装の手順（起票 → worker → 確認 → 取り込み） | 運用（スキルとして工程化） | チェックリストと落とし穴をスキル `feature-orchestration` に、worker 共通の約束を `references/worker-common.md` に置く。依頼文の雛形と手順の正本は「並列実装の運用」 | [pi-subagents](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
 | 委譲の統計（`delegate-nudge`） | 試作 | 読み取り系ツールの回数と、子の起動数だけを、セッションに記録する（通知しない。子では動かない） | [自作の拡張](guard/pi-extensions.md#自作の拡張-todo--plan--btw) |
@@ -37,22 +37,22 @@
 | 機能 | 状態 | 内容 | 正本 |
 | --- | --- | --- | --- |
 | 役割 `explore` / `review` | 実装済 | 読み取り専用（`wc` と読み取りの git）。`review` は別系統のモデル（`second_opinion`） | [pi の子エージェント](guard/pi-subagents.md#子エージェント) |
-| 役割 `plan` | 実装済（`/plan` での深い計画への切替は未） | bash なしの読み取り専用。深く考える階層。大きな変更の計画を作る | [CHG-0044](../change/0044-plan-agent.md) |
+| 役割 `plan` | 実装済（`/plan` での深い計画への切替は未） | bash なしの読み取り専用。深く考える階層。大きな変更の計画を作る | [CHG-0044](../change/closed/0044-plan-agent.md) |
 | 役割 `commit` | 実装済 | コミットの計画（対象ファイルとメッセージ）を返すだけ。ステージもコミットもしない | [pi の子エージェント](guard/pi-subagents.md#子エージェント) |
 | 役割 `worker` | 実装済 | 実装役。`git add`/`commit`/`checkout`/`reset`/`stash` は deny。`git status`・`git diff` は通常は ask（bypass か境界で通る。許可を足す案は保留） | [pi の子エージェント](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
 | bypass の継承 | 実装済 | 役割ごとの `inherit_bypass`。`/bypass` の切替で、動いている子は止まる | [pi の子エージェント](guard/pi-subagents.md#子エージェント) |
 | 既定が deny の役割の扱い | 実装済 | `explorer`・`reader`・`committer` は、`[bash] ask` に当たる操作も、bypass で通さず deny にする | [判定器](guard/pi-decide.md#既定が-deny-の役割の-ask) |
 | 計画モード中の子の制限 | 実装済 | `/plan` の間は、書き込む役割の子の起動・追加依頼・steer を拒否する | [pi の子エージェント](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
-| 入れ子 | しない | 子から子は作れない（指揮役の工程は親に残る） | [CHG-0045](../change/0045-orchestrator-parent.md) |
+| 入れ子 | しない | 子から子は作れない（指揮役の工程は親に残る） | [CHG-0045](../change/closed/0045-orchestrator-parent.md) |
 
 ## 4. 作業場所の分離とブランチ（gitflow）
 
 | 機能 | 状態 | 内容 | 正本 |
 | --- | --- | --- | --- |
-| ブランチモデル | 運用 | main / develop / feature（squash。release・hotfix なし）。リポジトリごとに `.gitflow` で決める。feature の起票は親が行い、feature の linked worktree の `git_commit` は確認なしで実行される（自由区）。統合は利用者（TUI の必須確認・`merge-cli`・ビューアのボタン。[運用モード](operation-modes.md)）、`main` への取り込み・push は利用者が自分のシェルで行う | [CHG-0047](../change/0047-gitflow.md)、[開発](development.md#ブランチモデルgitflow-lite)、[CHG-0050](../change/0050-slim-guarded-action.md) |
-| develop / main の直接編集・コミット | 機械では止めない（指示で運用） | `edit` / `write` / `git_commit` の gate と `/gitflow-allow`、`gitflow_feature_*` の 4 操作、`git flow` の bash 拒否は 2026-10-31 に撤去 | [CHG-0050](../change/0050-slim-guarded-action.md)、[ADR-0021](../adr/0021-conventions-as-instructions-slim-guarded-action.md) |
+| ブランチモデル | 運用 | main / develop / feature（squash。release・hotfix なし）。リポジトリごとに `.gitflow` で決める。feature の起票は親が行い、feature の linked worktree の `git_commit` は確認なしで実行される（自由区）。統合は利用者（TUI の必須確認・`merge-cli`・ビューアのボタン。[運用モード](operation-modes.md)）、`main` への取り込み・push は利用者が自分のシェルで行う | [CHG-0047](../change/0047-gitflow.md)、[開発](development.md#ブランチモデルgitflow-lite)、[CHG-0050](../change/closed/0050-slim-guarded-action.md) |
+| develop / main の直接編集・コミット | 機械では止めない（指示で運用） | `edit` / `write` / `git_commit` の gate と `/gitflow-allow`、`gitflow_feature_*` の 4 操作、`git flow` の bash 拒否は 2026-10-31 に撤去 | [CHG-0050](../change/closed/0050-slim-guarded-action.md)、[ADR-0021](../adr/0021-conventions-as-instructions-slim-guarded-action.md) |
 | 隔離なしの worktree | 運用 | 親が feature の分割を決め、子には worktree の中だけで作業させる。起票は利用者。強制の囲いではない | [並列実装の運用](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
-| 子の隔離（`isolation: "worktree"`） | 保留（素の `pi` では認証のロックの書き込みが拒否される） | Landlock で書き込みを狭める。`pis` では認証の写しが既にある | [CHG-0029](../change/0029-worktree-isolation.md) |
+| 子の隔離（`isolation: "worktree"`） | 保留（素の `pi` では認証のロックの書き込みが拒否される） | Landlock で書き込みを狭める。`pis` では認証の写しが既にある | [CHG-0029](../change/closed/0029-worktree-isolation.md) |
 
 ### worktree の所有の表明
 
@@ -87,7 +87,7 @@ CLI の終了コード: 0 = 全て処理、3 = 一部を残した・拒否、2 =
 | --- | --- | --- | --- |
 | `guarded_action` | 実装済 | `git commit` と `gh` の書き込みなどを、固定の引数と確認つきで実行する。親だけが持つ（子には登録されない） | [guarded_action](guard/pi-extensions.md#guarded_action承認つきの外部操作) |
 | bypass でも確認する操作 | 実装済 | 外部への送信・公開と、元に戻せないローカルの git 操作（`branch -D`・`clean`・`tag -d` など）。子では UI が無いので拒否される | [判定器](guard/pi-decide.md#confirm) |
-| 承認の時間切れ | 実装済（実機で動作確認。実 TUI・Windows は未） | 時間切れ・不在・UI なしのとき、実行せず内容を `refs/pi/pending/…` に退避して作業を続ける。利用者が `/pending` で確認・破棄 | [CHG-0046](../change/0046-guarded-action-timeout.md) |
+| 承認の時間切れ | 実装済（実機で動作確認。実 TUI・Windows は未） | 時間切れ・不在・UI なしのとき、実行せず内容を `refs/pi/pending/…` に退避して作業を続ける。利用者が `/pending` で確認・破棄 | [CHG-0046](../change/closed/0046-guarded-action-timeout.md) |
 | 保留の自動片付け | 実装済 | 取り込み済み・重複・30 日を超えた退避を、コミットの成功後と `session_start` で消す | 同上 |
 
 ## 6. 検査と検証
@@ -114,9 +114,9 @@ CLI の終了コード: 0 = 全て処理、3 = 一部を残した・拒否、2 =
 | `/agents`・`/agent <名前> <依頼>` | 子の一覧と、子の直接の起動（モデルは呼べない） | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
 | `/bypass` | ask を確認なしで通す。切替で、動いている子は止まる | [pi のガード](guard/pi-guard.md) |
 | `/orchestrate` | 親を計画・判断・委譲に絞る（作業のツールを隠す）。`on`・`off`・`status` | [pi の子エージェント](guard/pi-subagents.md) |
-| `/plan` | 計画モード（書き込む役割の子を止める） | [CHG-0044](../change/0044-plan-agent.md) |
-| `/pending` | 退避したコミットの一覧・表示・破棄（利用者専用）。非同期承認の `approve` などは撤去済み（[履歴](guard/pi-pending.md)） | [CHG-0046](../change/0046-guarded-action-timeout.md) |
-| `/board` | **盤面**（読み取り専用・利用者専用）。feature ごとの `↑`（統合先に無い commit）・`↓`（統合先にあって無い）・`dirty`・最後の commit からの経過、保留（旧形式の退避の件数）・子・隔離 worker・モード。44 桁の 1 行で、状態の側を欠かさず名前の側を先に切る。集めるのは読み取りの git だけ（`runGit`。hook・外部 diff を無効にし、`status` は index を更新させない）。リポジトリの設定に外部 filter（clean・smudge・process）があるときは、`status` を実行せず `dirty` を出さない。bg ジョブは見られないので行を出さない。承認・操作の入口は持たない） | [CHG-0056](../change/0056-orchestrator.md#10-実施計画) |
+| `/plan` | 計画モード（書き込む役割の子を止める） | [CHG-0044](../change/closed/0044-plan-agent.md) |
+| `/pending` | 退避したコミットの一覧・表示・破棄（利用者専用）。非同期承認の `approve` などは撤去済み（[履歴](guard/pi-pending.md)） | [CHG-0046](../change/closed/0046-guarded-action-timeout.md) |
+| `/board` | **盤面**（読み取り専用・利用者専用）。feature ごとの `↑`（統合先に無い commit）・`↓`（統合先にあって無い）・`dirty`・最後の commit からの経過、保留（旧形式の退避の件数）・子・隔離 worker・モード。44 桁の 1 行で、状態の側を欠かさず名前の側を先に切る。集めるのは読み取りの git だけ（`runGit`。hook・外部 diff を無効にし、`status` は index を更新させない）。リポジトリの設定に外部 filter（clean・smudge・process）があるときは、`status` を実行せず `dirty` を出さない。bg ジョブは見られないので行を出さない。承認・操作の入口は持たない） | [CHG-0056](../change/closed/0056-orchestrator.md#10-実施計画) |
 | `/worktrees` | 隔離の worktree の掃除・回収のやり直し（利用者専用） | [pi の子エージェント](guard/pi-subagents.md#worktree-隔離の場所と承認) |
 | フッター | 動いている子の数・経過時間（3 件以下は名前つき） | [子の操作](guard/pi-subagents.md#子の操作-バックグラウンド状態steer並列モデルtodo) |
 
@@ -180,14 +180,14 @@ AI のガードが `git merge` を直接は通さない場合に備え、`python
 
 | 項目 | 状態 | 案件 |
 | --- | --- | --- |
-| 親の道具を絞る（orchestrator ロール） | **実装済み**（`/orchestrate`）。段 3・4・5・7 は未着手 | [CHG-0045](../change/0045-orchestrator-parent.md) 段 6 |
-| スキルの工程化（親の判断 → 子の成果物 → 次へ進む条件） | 未着手 | [CHG-0045](../change/0045-orchestrator-parent.md) 段 3・5 |
-| 待ち合わせ・DAG・予算 | 未着手 | [CHG-0045](../change/0045-orchestrator-parent.md) 段 7、[調査 O1](../research/agents/pi-orchestrator-survey.md) |
-| 子の質問・承認の中継 | 未着手 | [CHG-0045](../change/0045-orchestrator-parent.md) 段 4 |
+| 親の道具を絞る（orchestrator ロール） | **実装済み**（`/orchestrate`）。段 3・4・5・7 は未着手 | [CHG-0045](../change/closed/0045-orchestrator-parent.md) 段 6 |
+| スキルの工程化（親の判断 → 子の成果物 → 次へ進む条件） | 未着手 | [CHG-0045](../change/closed/0045-orchestrator-parent.md) 段 3・5 |
+| 待ち合わせ・DAG・予算 | 未着手 | [CHG-0045](../change/closed/0045-orchestrator-parent.md) 段 7、[調査 O1](../research/agents/pi-orchestrator-survey.md) |
+| 子の質問・承認の中継 | 未着手 | [CHG-0045](../change/closed/0045-orchestrator-parent.md) 段 4 |
 | 子へ feature のコミットを許す（`guarded_action` を子へ） | 見送り（親の手数が許容できないと分かるまで作らない） | [並列実装の運用](guard/pi-subagents.md#並列実装の運用隔離なしの-worktree) |
-| 素の `pi` での子の隔離 | 保留 | [CHG-0029](../change/0029-worktree-isolation.md) |
-| `pis` での gitflow の片付けと `abort` | 撤去（AI の `git flow` 操作をやめたため。CHG-0050） | [CHG-0050](../change/0050-slim-guarded-action.md) |
-| 保留したコミットの取り込み（`/pending` から） | 未着手 | [CHG-0046](../change/0046-guarded-action-timeout.md) 段 4 |
+| 素の `pi` での子の隔離 | 保留 | [CHG-0029](../change/closed/0029-worktree-isolation.md) |
+| `pis` での gitflow の片付けと `abort` | 撤去（AI の `git flow` 操作をやめたため。CHG-0050） | [CHG-0050](../change/closed/0050-slim-guarded-action.md) |
+| 保留したコミットの取り込み（`/pending` から） | 未着手 | [CHG-0046](../change/closed/0046-guarded-action-timeout.md) 段 4 |
 | `docker rm` などが、ask 既定の役割（親・`worker`）の bypass で通る | 範囲外として残す | [判定器](guard/pi-decide.md#既定が-deny-の役割の-ask) |
 
 ## リポジトリのプロファイルの検出（`orch.py profile`）

@@ -100,4 +100,4 @@
 
 ## 参考
 
-[ADR-0016](0016-pi-extensions-own-first.md)・[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)・[CHG-0065](../change/0065-agent-stack-freeze.md)・[独立 review（2026-11）](../research/agents/arch-review-2026-11.md)・[外部 AI との相談（原文）](../research/archive/2026-11-agent-stack/consult/own-first-review.txt)
+[ADR-0016](0016-pi-extensions-own-first.md)・[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)・[CHG-0065](../change/closed/0065-agent-stack-freeze.md)・[独立 review（2026-11）](../research/agents/arch-review-2026-11.md)・[外部 AI との相談（原文）](../research/archive/2026-11-agent-stack/consult/own-first-review.txt)

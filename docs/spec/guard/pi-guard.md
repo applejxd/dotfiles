@@ -2,14 +2,14 @@
 
 pi（earendil-works/pi）の拡張として、ツールの実行を判定器（TypeScript の `judge/`。[`decide`](pi-decide.md)）に通す仕組み。
 OpenCode のガード（permission の生成・guide plugin）の後継で、移行の計画と経緯は
-[CHG-0020](../../change/0020-pi-migration.md)、設計の根拠になった試作の観測は
+[CHG-0020](../../change/closed/0020-pi-migration.md)、設計の根拠になった試作の観測は
 [pi のハーネスの試作（旧称。現在のフルガード）](../../research/agents/pi-harness-spike.md)（E1〜E4）。
 
 > **位置づけ**: **Unix（Ubuntu・WSL・macOS）では、素の `pi` もフルガード付きで起動する**（`~/.pi/agent/settings.json` が読み込む。
 > [pi の設定](#pi-の設定)）。Orca・Zed が呼ぶ `pi` も同じ。`pis` は「`pi` を Fence のサンドボックスの中で起動する」ものに絞る（標準）。
 > `pis --no-sandbox` は、素の `pi` との差（下の表）を解消するまでの移行用に残す。
 > **Windows ネイティブの `pi` も、設定でフルガード（判定・ガードツール・伏字化）付きで起動する**。ただし**境界（Fence）は無く、実機は未検証**（[Windows](#windows)）。`pis` と ocs は Windows に配らない。
-> 経緯は [CHG-0040](../../change/0040-pi-guard-by-settings.md)。
+> 経緯は [CHG-0040](../../change/closed/0040-pi-guard-by-settings.md)。
 
 ## 話題別の文書
 
@@ -25,7 +25,7 @@ OpenCode のガード（permission の生成・guide plugin）の後継で、移
 
 このリポジトリでは、pi 本体を含む仕組み全体を「ハーネス」と呼ぶ（一般の用法と同じ）。
 pi に足す判定の層、および起動の形を、次のように呼び分ける
-（旧称は過去の案件・調査記録・ADR に残り、それらは書き換えない。[CHG-0023](../../change/0023-guard-terminology.md)）。
+（旧称は過去の案件・調査記録・ADR に残り、それらは書き換えない。[CHG-0023](../../change/closed/0023-guard-terminology.md)）。
 
 | 用語 | 指すもの | 旧称 |
 | --- | --- | --- |
@@ -53,8 +53,8 @@ pis --new           # 新しいセッションで始める (既定は、この�
 - **サンドボックスが標準**。サンドボックスを張れない OS（macOS）では、`pis` は起動せず `--no-sandbox` を案内する（Windows ネイティブには `pis` を配らない）（黙って弱い守りに落とさない）。
   `--boundary` は互換の別名（標準と同じ意味）
 - サンドボックスの検査に落ちたとき・起動場所が危険なときも起動しない。制御ファイル・フルガードの編集、復旧、Orca・Zed は `--no-sandbox` で行う
-- **検討中の方針**: ask 層と bypass モードをなくし、境界で守る方向（[ADR-0022](../../adr/0022-containment-first-minimal-approvals.md)、Proposed）。結論が出るまで、`--bypass` / `--no-bypass` は現行の仕様のまま。実際の運用は、素の `pi` でも常に bypass（境界なし）。**素の `pi` の扱いは決定済み（2026-11-02。利用者）: 今のまま**。素の `pi` には境界が無く、拒否（`git push` など。常時禁止）と必須確認（bypass でも省略できない確認。保護ブランチへの統合など）だけが効く。`pis` への一本化も、必須確認の自動の拡大もしない（ガードは境界ではなく、うっかり防止。[CHG-0054](../../change/0054-containment-and-async-approval.md) 未解決点 1）
-- 設計の根拠は [CHG-0023](../../change/0023-guard-terminology.md#設計原則決定2026-10-14利用者)
+- **検討中の方針**: ask 層と bypass モードをなくし、境界で守る方向（[ADR-0022](../../adr/0022-containment-first-minimal-approvals.md)、Proposed）。結論が出るまで、`--bypass` / `--no-bypass` は現行の仕様のまま。実際の運用は、素の `pi` でも常に bypass（境界なし）。**素の `pi` の扱いは決定済み（2026-11-02。利用者）: 今のまま**。素の `pi` には境界が無く、拒否（`git push` など。常時禁止）と必須確認（bypass でも省略できない確認。保護ブランチへの統合など）だけが効く。`pis` への一本化も、必須確認の自動の拡大もしない（ガードは境界ではなく、うっかり防止。[CHG-0054](../../change/closed/0054-containment-and-async-approval.md) 未解決点 1）
+- 設計の根拠は [CHG-0023](../../change/closed/0023-guard-terminology.md#設計原則決定2026-10-14利用者)
 
 **素の `pi`（Unix）**は、`settings.json` の設定だけで、下の `pis` と同じツール構成になる（`extensions` にフルガードと自作の拡張を足し、自動検出の拡張を外し、`defaultTools = []`）。
 役割・bypass・orchestrate は環境変数 `PI_HARNESS_ROLE` / `PI_HARNESS_BYPASS` / `PI_HARNESS_ORCHESTRATE` で変えられる（既定: 実装役、bypass なし、orchestrate なし）。
@@ -113,7 +113,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - 効くのは判定器の ask だけで、deny・誘導・秘密の保護は変わらない（[評価順](pi-decide.md)）。切り替え時は、`tool_call` で下した判定の使い回し（`decided`）を捨てる
 - 子エージェントへは、**起動した時点の値**を `inherit_bypass` の子にだけ渡す。動いている子には後からの切り替えが届かない
 - サンドボックスの切り替えはできない（Fence は外側から囲うので、内側から外せない。再起動する）
-- 関連: gitflow-lite の develop / main での直接作業を止める制限（`/gitflow-allow` による逃がし口を含む）は、2026-10-31 に撤去した。今は指示だけで運用する（[CHG-0050](../../change/0050-slim-guarded-action.md)、[ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md)）
+- 関連: gitflow-lite の develop / main での直接作業を止める制限（`/gitflow-allow` による逃がし口を含む）は、2026-10-31 に撤去した。今は指示だけで運用する（[CHG-0050](../../change/closed/0050-slim-guarded-action.md)、[ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md)）
 - 試験: `test_pi_harness.py` の `test_bypass_command_*`（RPC で `/bypass` を送る。TUI の表示そのものは未確認）
 
 ### confirm の確認
@@ -136,7 +136,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 
 ## Windows
 
-Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）だけで**フルガード（判定・ガードツール・伏字化）を載せる（[CHG-0040](../../change/0040-pi-guard-by-settings.md)）。
+Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）だけで**フルガード（判定・ガードツール・伏字化）を載せる（[CHG-0040](../../change/closed/0040-pi-guard-by-settings.md)）。
 **境界（Fence）は Windows に無い**ので、サンドボックスの保護は付かない。`pis` と ocs は Windows に配らない。**Windows 実機は未検証**（WSL からは `chezmoi` の描画・静的な試験・Node でのドライバ試験だけ）。
 
 | 配るもの | 方法 |
@@ -156,7 +156,7 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 - **MCP は Unix と同じく `rules.json` から**（フルガードが `registerMcpServer` で登録する）。`~/.pi/agent/mcp.json` へ書く経路（`generate.py --target pi-mcp`）は廃止した（[MCP](#mcp)）
 - **自作の拡張の `activity`**: `bg_run` は `spawn(shell:true)`（Windows では cmd）で、`taskkill` で止める。実機は未確認
 - **フルガードを欠いた起動では実行しない**: フルガードは起動時に印 `globalThis.__PI_FULL_GUARD__` を立てる。`bg_run`（`activity`）と `task`（`subagents`）は、印が無いと実行しない（[判定の外で動くもの](#判定の外で動くもの)）
-- **残る限界**: 境界が無い（Fence・Landlock の代わりは無い）、Git Bash というシェルを経由する、`guarded_task` が無い（次の段）、実機未検証。守りが強く要る作業は WSL の `pis` で行う。PowerShell が必須のプロジェクトで、境界なしの運用をどこまで許すかは未決（[CHG-0034](../../change/0034-windows-native-pi-boundary.md)、[CHG-0054](../../change/0054-containment-and-async-approval.md)）
+- **残る限界**: 境界が無い（Fence・Landlock の代わりは無い）、Git Bash というシェルを経由する、`guarded_task` が無い（次の段）、実機未検証。守りが強く要る作業は WSL の `pis` で行う。PowerShell が必須のプロジェクトで、境界なしの運用をどこまで許すかは未決（[CHG-0034](../../change/closed/0034-windows-native-pi-boundary.md)、[CHG-0054](../../change/closed/0054-containment-and-async-approval.md)）
 - 調査記録: [pi-isolation-options](../../research/agents/pi-isolation-options.md)（過去の判断。Windows に載せる前の記録）
 
 **Windows 実機で確認する項目**は、[実機で確認する項目](#実機で確認する項目)の Windows の節にまとめた。
@@ -300,7 +300,7 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 
 ## 実機で確認する項目
 >
-> 確認項目の一覧は [CHG-0040](../../change/0040-pi-guard-by-settings.md#実機で確認する項目旧-pi-guardmd-から移設) へ移した（チェックの進捗は案件で管理する）。**Windows 実機の確認項目は、現行の確認先として CHG-0040 を見る**。
+> 確認項目の一覧は [CHG-0040](../../change/closed/0040-pi-guard-by-settings.md#実機で確認する項目旧-pi-guardmd-から移設) へ移した（チェックの進捗は案件で管理する）。**Windows 実機の確認項目は、現行の確認先として CHG-0040 を見る**。
 
 ## 未対応
 

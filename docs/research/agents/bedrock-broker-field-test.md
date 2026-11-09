@@ -1,6 +1,6 @@
 # Bedrock ブローカーの実機確認（段 U7b）
 
-<!-- 現在の総合判断は docs/change/0037-pis-usability-and-telemetry.md の候補比較と段 U7b が正本。
+<!-- 現在の総合判断は docs/change/closed/0037-pis-usability-and-telemetry.md の候補比較と段 U7b が正本。
      ここは「手順」と「いつ何を観測したか」を積む場所 -->
 
 > **結論（2026-10-26）**: 実機（制約のある環境の機）で、**スクリプトを 2 回実行して、最後の 1 行を手で打って返す**だけにした（約 10 分）。
@@ -152,7 +152,7 @@ Copilot ブローカーは実装・実機確認済み（[broker.md](../../spec/s
 | 文書 | 内容 |
 | --- | --- |
 | [認証ブローカー](../../spec/sandbox/broker.md) | Copilot・GitHub・検索の各ブローカーの仕様と、未対応・未検証 |
-| [CHG-0037](../../change/0037-pis-usability-and-telemetry.md) | 段 U7b と、これまでの経緯 |
+| [CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md) | 段 U7b と、これまでの経緯 |
 | [記録 D5](agent-auth-delegation.md) | 既製の署名プロキシの実用性（`aws-sigv4-proxy` はストリーミングがバッファされる、Envoy の `aws_request_signing`） |
 | [Envoy `aws_request_signing`](https://www.envoyproxy.io/docs/envoy/v1.40.1/configuration/http/http_filters/aws_request_signing_filter) | 2026-10-26 に取得。`credential_provider` の `credentials_file_provider`（`watched_directory` つき）で、鍵ファイルの読み直しができる |
 | [Envoy `Http11ProxyUpstreamTransport`](https://www.envoyproxy.io/docs/envoy/v1.40.1/api-v3/extensions/transport_sockets/http_11_proxy/v3/upstream_http_11_connect.proto) | 2026-10-26 に取得。`default_proxy_address` で、上流への接続を、プロキシへの `CONNECT` にする |

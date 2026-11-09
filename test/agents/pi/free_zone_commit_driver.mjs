@@ -4,7 +4,7 @@
 //    "rules": {...}?, "answers": ["承認して実行"]?, "flip": false?, "child": false?}
 //
 // flip を真にすると、自由区の判定の 2 回目 (実行直前の再判定) だけ free でなくする。
-// see docs/change/0053-worktree-integration-gate.md
+// see docs/change/closed/0053-worktree-integration-gate.md
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";

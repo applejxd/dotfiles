@@ -1,6 +1,6 @@
 # CHG-0049: gitflow-lite の規約（develop / main を直接編集しない）を、pi のガードで強制する
 
-> この文書は当時の記録。実装は 2026-10-31 に撤去した（規約はコードで強制せず、指示で運用する）。経緯・理由は [CHG-0050](../0050-slim-guarded-action.md)、[ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md)。現在の仕様は [pi の拡張](../../spec/guard/pi-extensions.md#guarded_action承認つきの外部操作)。以下の「現在地」「実施計画」は撤去前の時点（2026-10-30）のもの。
+> この文書は当時の記録。実装は 2026-10-31 に撤去した（規約はコードで強制せず、指示で運用する）。経緯・理由は [CHG-0050](0050-slim-guarded-action.md)、[ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md)。現在の仕様は [pi の拡張](../../spec/guard/pi-extensions.md#guarded_action承認つきの外部操作)。以下の「現在地」「実施計画」は撤去前の時点（2026-10-30）のもの。
 
 - **状態**: Abandoned
 - **更新日**: 2026-10-31
@@ -54,7 +54,7 @@ CHG-0047 は、素の git のブランチ操作を共通の規則では deny に
 
 | 日付 | 変更 | 理由 |
 | --- | --- | --- |
-| 2026-10-31 | **実装を撤去し、案件を Abandoned で閉じた**（段 1a・1b・2b の実装、`/gitflow-allow`、試験、仕様の `pi-gitflow-guard.md`） | git の状態を読めないとき（入れ子リポジトリ・仮想 monorepo など）に、bypass でも外れない確認が出る副作用があった。運用の規約を、境界（deny）と同じ強さで強制していた設計の食い違いも大きかった。[CHG-0050](../0050-slim-guarded-action.md)、[ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md) |
+| 2026-10-31 | **実装を撤去し、案件を Abandoned で閉じた**（段 1a・1b・2b の実装、`/gitflow-allow`、試験、仕様の `pi-gitflow-guard.md`） | git の状態を読めないとき（入れ子リポジトリ・仮想 monorepo など）に、bypass でも外れない確認が出る副作用があった。運用の規約を、境界（deny）と同じ強さで強制していた設計の食い違いも大きかった。[CHG-0050](0050-slim-guarded-action.md)、[ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md) |
 
 ## 終了結果
 
@@ -82,4 +82,4 @@ CHG-0047 は、素の git のブランチ操作を共通の規則では deny に
 
 | 内容 | 移管先 |
 | --- | --- |
-| 誘導（止めずに案内する層）の再分類 | 未起票（[CHG-0050](../0050-slim-guarded-action.md)「残る課題」） |
+| 誘導（止めずに案内する層）の再分類 | 未起票（[CHG-0050](0050-slim-guarded-action.md)「残る課題」） |

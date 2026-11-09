@@ -160,7 +160,7 @@ S4 まで進む場合は `scripts/kcage/template.py` と `scripts/kcage/adapters
 # 根拠
 - 現行の重ね: `scripts/kcage/config.py:290-299`（repo rw と `.git` の ro 3 つ）。pin は未取り込みの `.tmp/worktrees/kcage-git-pin/scripts/kcage/config.py:293`、`root_helper.py:326-340`。
 - 穴の経緯: `.tmp/keep/research/coi-eval.md` の「kcage の欠陥」「推測（未検証）」節。`docs/spec/sandbox/incus-box.md:243-248`。
-- 過去の検討: `docs/research/agents/isolation-reselection-2026-11.md:46`（独立 clone は合格。取り込みは host の `git fetch`）。`docs/change/0029-worktree-isolation.md` の W0b は「子の書込境界」の話で、host 保護とは目的が違う。`docs/research/agents/incus-dev-environment.md:73`（push は箱の外で人が行う）。
+- 過去の検討: `docs/research/agents/isolation-reselection-2026-11.md:46`（独立 clone は合格。取り込みは host の `git fetch`）。`docs/change/closed/0029-worktree-isolation.md` の W0b は「子の書込境界」の話で、host 保護とは目的が違う。`docs/research/agents/incus-dev-environment.md:73`（push は箱の外で人が行う）。
 - 流れ: `.agents/skills/feature-orchestration/SKILL.md`。`docs/spec/orchestration.md:157-175`（bundle）、同 `### worktree の掃除の規則`。`docs/spec/operation-modes.md:27・41-57`。`docs/spec/guard/pi-subagents.md:237-257・293-312`。
 - ホスト側の硬化の先例: `home/dot_config/pi/harness/pr-review.ts:10・16-40`、`apps/pr-viewer/git-view.ts:37-87`、`merge-git.ts:38-45・240-242`、`merge.ts:387・702`（plumbing の統合）、`docs/spec/pr-viewer.md:149・288`。
 - 検査の印: `scripts/verify_stamp.py:64-97`（blob の hash、worktree ごと）、`docs/spec/development.md` の「コミット前の検証の印」「全件検査の排他」。

@@ -9,7 +9,7 @@
   動作・障害は、コードを読んだ上での推測と、公開リポジトリの試験の題名からの推定。推測は「推測」と書く
 - **原文の保存先**: `.tmp/research/pi-goal-x/`（`sources/SOURCES.md` に一覧。clone は `repo/`）。コードの引用は MIT で、1 か所 15〜40 行まで
 - **先行調査**: 約 20 件の比較は `goal-command-survey.md`（別 feature の worktree にあり、まだ develop に無い）。案件は
-  [CHG-0025](../../change/0025-goal-autonomous-loop.md)。方針は [ADR-0016](../../adr/0016-pi-extensions-own-first.md)（公開拡張は導入せず自作）
+  [CHG-0025](../../change/closed/0025-goal-autonomous-loop.md)。方針は [ADR-0016](../../adr/0016-pi-extensions-own-first.md)（公開拡張は導入せず自作）
 
 ## 結論
 
@@ -450,5 +450,5 @@ if (!freshDisk || (freshDisk.revision ?? 0) !== (expected.revision ?? 0)) {
 - 主な issue: [#30](https://github.com/tmonk/pi-goal-x/issues/30)・[#53](https://github.com/tmonk/pi-goal-x/issues/53)・[#55](https://github.com/tmonk/pi-goal-x/issues/55)・
   [#73](https://github.com/tmonk/pi-goal-x/issues/73)・[#100](https://github.com/tmonk/pi-goal-x/issues/100)・[#108](https://github.com/tmonk/pi-goal-x/issues/108)・
   [#122](https://github.com/tmonk/pi-goal-x/issues/122)・[#125](https://github.com/tmonk/pi-goal-x/issues/125)・[#126](https://github.com/tmonk/pi-goal-x/issues/126)
-- このリポジトリ: `home/dot_pi/agent/extensions/todo/index.ts`・`home/dot_config/pi/harness/index.ts`・[CHG-0025](../../change/0025-goal-autonomous-loop.md)
+- このリポジトリ: `home/dot_pi/agent/extensions/todo/index.ts`・`home/dot_config/pi/harness/index.ts`・[CHG-0025](../../change/closed/0025-goal-autonomous-loop.md)
 - 原文の保存: `.tmp/research/pi-goal-x/`（`sources/SOURCES.md`）。ライセンス: MIT

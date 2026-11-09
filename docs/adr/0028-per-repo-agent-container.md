@@ -1,7 +1,7 @@
 # エージェントの隔離は、リポジトリごとの箱にする（コンテナ開発は WSL2 の Incus の箱、それ以外はホスト）。汎用サンドボックスは目指さない
 
 - **ステータス**: Proposed（方針。2026-11-07 に利用者が方向を確認した。実物 1 つでの試験の待ち）
-- **2026-11-08 の注記**: 自作の基盤を全面凍結した（[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)、[CHG-0065](../change/0065-agent-stack-freeze.md)）。kcage は develop に統合済みだが動かさない。この ADR は再開のときの出発点として残す。
+- **2026-11-08 の注記**: 自作の基盤を全面凍結した（[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)、[CHG-0065](../change/closed/0065-agent-stack-freeze.md)）。kcage は develop に統合済みだが動かさない。この ADR は再開のときの出発点として残す。
 - **日付**: 2026-11-06（2026-11-07 に、Incus の箱を主役とする形へ全面改訂）
 - **決定者**: applejxd
 - **関係**: [ADR-0027](0027-isolation-unit-is-environment.md)（隔離の単位は環境）の P2・P3 の**実現方法**を置き換える。「隔離の単位は環境」と P1（フルガードのみ）は変えない。
@@ -59,7 +59,7 @@
    | aws | relay | 最大 1 時間の、専用ロールの認証情報（コンテナ認証情報エンドポイント） | 箱のロールは**読み取り専用**（Bedrock の使用状況・料金・AgentCore の一覧）。**キーの発行・IAM の変更は外（人）だけ**。AgentCore の gateway 設定は、コードは箱で書き、反映は外。Bedrock を使う鍵は、ホストが作る短期の API key（最大 12 時間） |
    | az | offline（必要になったら relay） | 短命のトークンだけ | refresh token は箱に入れない。実測は必要になってから |
    | hf | simple | 専用の fine-grained 読み取りトークン（`HF_TOKEN`） | キャッシュは箱ごとの領域 |
-   | pi の LLM | 既存どおり | Copilot は pi 自前（長期トークンは `read:user` だけ）。Bedrock は短期キー | [CHG-0037](../change/0037-pis-usability-and-telemetry.md) の G8・G1 |
+   | pi の LLM | 既存どおり | Copilot は pi 自前（長期トークンは `read:user` だけ）。Bedrock は短期キー | [CHG-0037](../change/closed/0037-pis-usability-and-telemetry.md) の G8・G1 |
 
    **LLM ゲートウェイ（LiteLLM など）は使わない**（サプライチェーン事件が 2 回、仮想キーに DB が必須で長期キーが集まる。[調査記録 D4](../research/agents/agent-auth-delegation.md)）。開発中のアプリが複数のプロバイダーや予算の上限を要するときだけ、その repo の compose で再検討する。
 8. **git のフックと設定**: `.git/hooks` と `.git/config` は**既定で読み取り専用**（フックの実行は妨げない。書き換えだけを防ぐ。ホストの git が、書き換えられたフックを実行するのを避ける）。必要なリポジトリは、オプションで書き込み可にできる（信頼するリポジトリ）。

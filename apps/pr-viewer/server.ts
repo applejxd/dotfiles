@@ -1,7 +1,7 @@
 // PR ビューアのサーバ（段 1: 読み取り専用、段 2: レビューの書き込み、段 A2: 統合）。
 // 起動: node apps/pr-viewer/server.ts --repo <パス> [--repo <パス>…] [--port <N>] [--allow-host <名前>…] [--web-dir <パス>]
 //       [--allow-merge] [--rules-file <パス>] [--state-dir <パス>]
-// 設計: docs/change/0060-local-pr-viewer.md・docs/change/0062-pr-hub-simplify.md。契約: .tmp/keep/prv-app/api-contract.md
+// 設計: docs/change/closed/0060-local-pr-viewer.md・docs/change/closed/0062-pr-hub-simplify.md。契約: .tmp/keep/prv-app/api-contract.md
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { lstat, readFile } from "node:fs/promises";

@@ -2,7 +2,7 @@
 //
 //   node test/agents/pi/plan_role_driver.mjs
 //
-// see docs/change/0044-plan-agent.md
+// see docs/change/closed/0044-plan-agent.md
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 

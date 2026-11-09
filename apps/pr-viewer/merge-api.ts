@@ -1,5 +1,5 @@
 // PR ビューアの統合 API（段 A2 の S）。人がブラウザで押した「統合する」の POST で、アプリが develop への統合を同期実行する。
-// 設計: docs/change/0062-pr-hub-simplify.md §3.5・契約: .tmp/keep/prv-app/api-contract-merge.md。
+// 設計: docs/change/closed/0062-pr-hub-simplify.md §3.5・契約: .tmp/keep/prv-app/api-contract-merge.md。
 // 統合の権限は live の HTTP リクエスト（Origin・ヘッダー・expect を満たす POST）だけ。ref の承認・保留・merge_request は権限として読まない。
 // ここは git を直接動かさない（読み取りは git-view.ts、統合は merge.ts、レビュー記録は review-api.ts を通す）。
 import { randomUUID } from "node:crypto";

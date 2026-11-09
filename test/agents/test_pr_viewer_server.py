@@ -4,7 +4,7 @@
 (node 22.18 未満では飛ばす)。確かめるのは、承認の前に外部のコードを動かさないこと (敵対的な設定のリポジトリ)、
 読み取り専用であること、契約 (``.tmp/keep/prv-app/api-contract.md``) どおりの応答、入力・Host の検査、パスを漏らさないこと。
 
-see docs/change/0060-local-pr-viewer.md
+see docs/change/closed/0060-local-pr-viewer.md
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@
 **既定の web ディレクトリから、画面が読み込むファイルを全部配信できる**ことを確かめる
 (片方だけ契約からずれても、それぞれの試験は通ってしまうため)。
 
-see docs/change/0060-local-pr-viewer.md
+see docs/change/closed/0060-local-pr-viewer.md
 """
 
 from __future__ import annotations

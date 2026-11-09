@@ -1,7 +1,7 @@
 # ホスト（Orca・Zed・Herdr）の調査と、pi との分担
 
 場所ごとに使うホスト（エージェントを置く端末・エディタ・IDE）が違っても、同じ pi を使うために、各ホストの機能と、pi が受け持つ範囲を調べた記録。
-[CHG-0054](../../change/0054-containment-and-async-approval.md) の段 8 の根拠にする。
+[CHG-0054](../../change/closed/0054-containment-and-async-approval.md) の段 8 の根拠にする。
 
 > 現在の総合判断は案件（CHG-0054）の候補比較表が正本。ここは、時点の事実と、それに対する推測を分けて残す。
 

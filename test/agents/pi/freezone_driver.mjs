@@ -7,7 +7,7 @@
 //       → 順に実行して、classify の結果の配列を返す (git は cwd を変えずに実行。同じプロセスでの判定の変化を見る)
 //
 // env を渡すと process.env を置き換える (PATH を空にする試験用)。
-// see docs/change/0053-worktree-integration-gate.md
+// see docs/change/closed/0053-worktree-integration-gate.md
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";

@@ -2,7 +2,7 @@
 // 承認が取れず退避した git commit (旧形式) の list / show / drop と、フッターの件数表示だけを持つ。
 // 承認・巡回・resolve・unlock・設定は、旧い統合経路の撤去 (CHG-0062 の A5) で外した。
 // pi の API (pi・ctx) は注入する (試験できるように。接続は index.ts)。
-// see docs/change/0062-pr-hub-simplify.md
+// see docs/change/closed/0062-pr-hub-simplify.md
 import { PENDING_PREFIX, dropPending, isLegacyEntry, listPending, showPending } from "./pending-store.ts";
 
 export type Reply = { text: string; level: "info" | "warning" | "error" };

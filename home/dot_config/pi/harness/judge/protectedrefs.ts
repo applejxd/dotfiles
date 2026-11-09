@@ -1,5 +1,5 @@
 // 保護 ref の判定 (純関数)。`refs/heads/` 付きでも省略形でも受け、大文字小文字は区別しない。
-// see docs/change/0053-worktree-integration-gate.md
+// see docs/change/closed/0053-worktree-integration-gate.md
 
 const HEADS = "refs/heads/";
 

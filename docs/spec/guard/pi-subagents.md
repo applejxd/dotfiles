@@ -49,12 +49,12 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 
 > OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。最右列「今の OpenCode での相当」が対象。pi の仕様は表の左の列と [判定 API](pi-decide.md)。
 
-**`plan`（計画役。[CHG-0044](../../change/0044-plan-agent.md)）**: 大きく複雑な変更・曖昧な要件・移行の、実装の計画を、読み取り専用（`read`・`grep`・`find`・`ls`）で調べて作る。
+**`plan`（計画役。[CHG-0044](../../change/closed/0044-plan-agent.md)）**: 大きく複雑な変更・曖昧な要件・移行の、実装の計画を、読み取り専用（`read`・`grep`・`find`・`ls`）で調べて作る。
 `reader` にするのは、`explorer` の bash では共通の `skill_scripts` の許可が通り、読み取り専用を指示だけでは強制できないため。Git の差分や履歴は見られないので、要るなら親が依頼文に載せる（返答には、確かめていない範囲を書かせる）。
 階層は `deep`（Copilot は Sonnet 5.5 の `xhigh`、Bedrock は Opus 5.5 の `high`）で、`bypass` は継がない。`effort` は、ユーザが指示したときだけ変える（`max` は 17〜18 分かかるので、`plan` だけ 1 往復の上限を 30 分にしている）。
 依頼文は自己完結で、**目的・前提・守る条件（`C1: …` と番号つき）・対象のパス・必要な Git の情報・返答の形式**を書く。返答は、結論・手順・変更するファイルの一覧・守る条件の突き合わせ・根拠・リスク・検証の方法・利用者に確認すべき点・未確認・次の候補の順。
 **番号の検査（警告だけ）**: `check_conditions` の役割の結果で、依頼の番号が、見出しに「守る条件」を含む節（次の見出しまで）に全部あるかを見る。節が無い・番号が欠けていれば、`conditions check (…)` を結果に足す。**番号の一致は、条件を満たす証明ではない**（内容は親が確かめる）。`C1` と `C10` は取り違えない。依頼に番号が無ければ検査しない。
-測定は [CHG-0044](../../change/0044-plan-agent.md)（`medium` は存在しない関数名などの誤りが多く、`xhigh` 以上で質が上がる。独立した採点で 15.0 対 20.5〜21.5 点）。
+測定は [CHG-0044](../../change/closed/0044-plan-agent.md)（`medium` は存在しない関数名などの誤りが多く、`xhigh` 以上で質が上がる。独立した採点で 15.0 対 20.5〜21.5 点）。
 
 `explore` に `tier` は付けない。`tier` が無いと生成される `model` が `null` になり、フルガードは親の現在のモデル（`ctx.model`）で子を起動する（`index.ts` の `agent.model ??`）。`/model` で親を変えると `explore` も追従する。
 
@@ -155,7 +155,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 - **利用者コマンド**: `/agents`（一覧）、`/agent <名前> <依頼>`（子を直接起動。完了はチャットに表示するだけで、モデルのターンは起こさない）。モデルは呼べない
 - **フッター**: `activity` が、動いている子が 3 件以下なら `🤖 explore 12s, review 40s`、それより多ければ件数
 - **やらないこと**: プロジェクト内の定義ファイルからの役割（`--no-approve` と衝突）、子から子（入れ子）
-- **worktree 隔離**: `guarded_task` の `isolation: "worktree"`（opt-in。単独の新規 `worker` のみ）。仕様は [CHG-0029](../../change/0029-worktree-isolation.md)。
+- **worktree 隔離**: `guarded_task` の `isolation: "worktree"`（opt-in。単独の新規 `worker` のみ）。仕様は [CHG-0029](../../change/closed/0029-worktree-isolation.md)。
 - **子の実行場所（`cwd`）**: `guarded_task` の新規と `tasks` の各要素に任意の `cwd`（絶対パス）。親（`ctx.cwd`）のリポジトリの `git worktree list --porcelain` に載る worktree（主・linked）と realpath が完全に一致するときだけ許可し、シンボリックリンク・`..`・`.git`・相対・存在しない・別リポジトリは理由つきで拒否する（fail closed）。`isolation` とは併用不可。子のサンドボックス・役割は変えない。**`cwd` つきの子にだけ環境変数 `PI_HARNESS_WRITE_ROOT`（検証済み cwd の realpath）を渡し**（`cwd` なしの子・親には渡さない。子が自分の担当の外を `cwd` にして範囲を広げることも拒否する）、判定器（`judge/decide.ts` の `decideFile`）は **edit / write の書込み先が、pi が行いうる解釈（先頭の `@`・`file://`・`~`・Unicode 空白の正規化の全組み合わせ）のどれか 1 つでも、厳格な解決（存在するシンボリックリンクは対象が無くても置き換えて追う。深さ 40 まで。`..`・リンクで外へ出るものも外）で WRITE_ROOT の中でも一時の置き場（`TMPDIR`・`/tmp`・`~/.cache`。WRITE_ROOT を含むものは除く）の中でもないなら、bypass でも deny** する（共通の禁止と同じ、bypass より前に効く）。**強制するのは edit / write だけで、shell・試験・hook からの書き込みは未強制**（bash 経由で本体を変えられる。下の警告と `parallel_check.py` が見つける）。`cwd` つきの子が終わったとき、本体の `git status --porcelain` が起動前から変わっていれば、結果に `⚠ 本体の作業ツリーに…` の行（最大 5 件）を付ける（本体そのものを指定した場合と、git の失敗時は省く。起動は止めない）。worker は担当の worktree を `cwd` に指定して起動する。
 
 ### 子の文脈 (AGENTS.md) の抜粋 (CHG-0059)
@@ -238,7 +238,7 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 
 ### 並列実装の運用（隔離なしの worktree）
 
-複数の独立した実装を、**子（`worker`）を並べて**進める手順。素の `pi` では、子の強制の囲い（`isolation: "worktree"`）が使えない（認証のロックの書き込みが拒否される。[CHG-0029](../../change/0029-worktree-isolation.md) の E6。保留）ので、
+複数の独立した実装を、**子（`worker`）を並べて**進める手順。素の `pi` では、子の強制の囲い（`isolation: "worktree"`）が使えない（認証のロックの書き込みが拒否される。[CHG-0029](../../change/closed/0029-worktree-isolation.md) の E6。保留）ので、
 **隔離なし**で、feature ごとの worktree（`.tmp/worktrees/<名前>/`。作業ツリーの中なので書き込みは allow）に作業場所を分け、**指示と取り込み前の検査**で混線を防ぐ。囲いではない（下の「限界」）。
 
 **前提**: 子が止まらずに動くには、**親の bypass の継承**か、`pis` の境界が要る（無いと、日常の shell の ask で止まる）。bypass でも、`mustConfirm`・deny（`git add`/`commit`/`checkout`/`reset`/`stash`、元に戻せない git 操作）は残る。**子の `git status`/`git diff` は、通常は ask（`[pi.shell] allow` に無い）で、bypass か境界で通る**（子に許可を足す案は、引用で `--output` の検査を回避できる穴と、`cd` で別リポジトリへ行く形の信頼の範囲が指摘され、保留）。
@@ -246,11 +246,11 @@ Windows の `task`（`subagents` 拡張）とフルガードの `guarded_task`�
 **手順**（親が行う。チェックリストと踏みやすい落とし穴は、スキル `feature-orchestration`）:
 
 1. 作業を、**ファイルの範囲が重ならない**単位に分ける（同じファイルを 2 つの単位が触ると、`finish` で衝突する）。単位ごとに、変更してよいパス（`--owned` に渡す glob）を決める。
-2. 単位ごとの feature と worktree（`name` は小文字・数字・`.`・`_`・`-`）は、**親が** `git flow feature start <name> --worktree --no-fetch` で起票する（起票は機械では止めない。[CHG-0050](../../change/0050-slim-guarded-action.md)）。
+2. 単位ごとの feature と worktree（`name` は小文字・数字・`.`・`_`・`-`）は、**親が** `git flow feature start <name> --worktree --no-fetch` で起票する（起票は機械では止めない。[CHG-0050](../../change/closed/0050-slim-guarded-action.md)）。
 3. 単位ごとに `guarded_task`（`agent: "worker"`、`background: true`。同時に 6 本まで）で子を起動する。依頼文は下の雛形。`isolation` は付けない。
 4. 子の完了の通知ごとに、**取り込み前の検査**: `python3 scripts/parallel_check.py --owned <名前>=<glob>,… …`（本体の変更・範囲の外・重複を見る。終了コード 1 なら、原因を確かめるまでコミットしない）。あわせて、その worktree の差分を確かめる（親が `cd <wt> && git diff --stat`・`git diff`）。
-5. 検査を通った単位だけ、親が `git add` する（**整形 hook の直後は数秒待ち**、`git diff --cached --numstat` で空のファイルや行数の急減がないか見る）。続けて `git_commit`（`dir` に worktree。`message` は 1200 字以下。feature の linked worktree は確認なし。[CHG-0053](../../change/0053-worktree-integration-gate.md)）。子は `git add`/`commit` できない（deny）。新しい試験ファイルは `scripts/verify.py` の `_PI_TESTS` へ、`index.ts` から import される新しい `.ts` は試験用のコピー一覧へ、親が登録する（登録漏れは全件検査の後で落ちる。`test/test_verify.py` が 2 秒で先に見つける）。
-6. 全件検査（`mise run verify:all`）は親が 1 回（`bg_run`。同時に 1 本。同じリポジトリの全 worktree・全会話で、排他ロックが機械的に保証する。[検証の方針](../development.md#全件検査の排他)）。通ったら、単位ごとに `guarded_pr_summary` で PR に要約（`mergeMessage` の下書き）を出し、**利用者が PR ビューアの「統合する」ボタンを押して**取り込む（アプリが merge commit で同期統合する。[CHG-0062](../../change/0062-pr-hub-simplify.md)）。AI が `git flow feature finish`・`git merge` を実行するときは、素の pi の必須確認のまま（`integration-gate`。**`bypass` でも必須確認**。承認が時間切れなら、再試行せず利用者の指示を待つ）。先に統合した単位の後で残りが衝突するなら、止めて報告する。
+5. 検査を通った単位だけ、親が `git add` する（**整形 hook の直後は数秒待ち**、`git diff --cached --numstat` で空のファイルや行数の急減がないか見る）。続けて `git_commit`（`dir` に worktree。`message` は 1200 字以下。feature の linked worktree は確認なし。[CHG-0053](../../change/closed/0053-worktree-integration-gate.md)）。子は `git add`/`commit` できない（deny）。新しい試験ファイルは `scripts/verify.py` の `_PI_TESTS` へ、`index.ts` から import される新しい `.ts` は試験用のコピー一覧へ、親が登録する（登録漏れは全件検査の後で落ちる。`test/test_verify.py` が 2 秒で先に見つける）。
+6. 全件検査（`mise run verify:all`）は親が 1 回（`bg_run`。同時に 1 本。同じリポジトリの全 worktree・全会話で、排他ロックが機械的に保証する。[検証の方針](../development.md#全件検査の排他)）。通ったら、単位ごとに `guarded_pr_summary` で PR に要約（`mergeMessage` の下書き）を出し、**利用者が PR ビューアの「統合する」ボタンを押して**取り込む（アプリが merge commit で同期統合する。[CHG-0062](../../change/closed/0062-pr-hub-simplify.md)）。AI が `git flow feature finish`・`git merge` を実行するときは、素の pi の必須確認のまま（`integration-gate`。**`bypass` でも必須確認**。承認が時間切れなら、再試行せず利用者の指示を待つ）。先に統合した単位の後で残りが衝突するなら、止めて報告する。
 7. 失敗した単位は、`git flow feature delete <name>`（必須確認）で捨てる。
 
 **取り込み前の関門 `scripts/feature_gate.py`**: `python3 scripts/feature_gate.py check <feature> --owned <glob,glob>` は読み取り専用の関門で、scope（担当外の変更）・numstat_drop（行数の急減）・register_tests（試験の登録漏れ）・register_harness_copy（試験用コピー一覧の登録漏れ）を見る。実 index・ref・作業ツリーは変えない（git のオブジェクトは書く）。
@@ -287,9 +287,9 @@ feature B が、まだ `develop` に入っていない feature A の変更を要
 - **許可の状況**: feature の worktree の中の `git merge feature/<A>`、A の先頭からの起票（`git flow feature start <B> feature/<A>`・`git switch -c`）は、保護ブランチを動かさないので、統合の必須確認にはならない。判定器の結果は、通常モードで確認（`ask`）、bypass で許可。`git rebase` は共通の deny のまま（履歴を書き換えない）。保護ブランチへの統合は、PR ビューアの「統合する」。AI が行う `finish`・`merge` は必須確認。
 - **依存は宣言しない**: git の祖先関係から導く。B の先頭が、他のローカルの feature ブランチ G の先頭を祖先に持ち、G が `develop` に統合されていないとき、G は B の依存。G を足しても `develop` の内容が変わらないもの（squash で統合済みで、ブランチだけ残っている）は除く。宣言ファイルは古くなるので作らない。
 - **関門**: `parallel_check.py`・`feature_gate.py` は、依存 G の `develop...G` の変更パスを、B の変更から引く（担当外・重複の誤検知を防ぐ）。出力に `depends on:`。B の未コミットの変更は引かない。限界: B が G のファイルを**コミットで**さらに編集しても検知されない。先頭が同じ 2 つのブランチは、互いを依存に数えない。
-- **統合の形**: PR ビューアは merge commit で統合するので、元のコミットとの祖先関係が保たれる（squash では A を先に統合すると B が衝突した。[CHG-0062](../../change/0062-pr-hub-simplify.md) の R5）。積み重ねは下から順に統合してよい。先に統合した後で衝突するときは、止めて報告する。
+- **統合の形**: PR ビューアは merge commit で統合するので、元のコミットとの祖先関係が保たれる（squash では A を先に統合すると B が衝突した。[CHG-0062](../../change/closed/0062-pr-hub-simplify.md) の R5）。積み重ねは下から順に統合してよい。先に統合した後で衝突するときは、止めて報告する。
 - **規則**: マージは親だけ（子は git を書けない）。衝突は止めて報告する（LLM に直させない）。
-- **見送り**: 依存の宣言ファイル・汎用 DAG。配車（[CHG-0056](../../change/0056-orchestrator.md)）の `needs` は「統合済みを待つ」計画上の前提で、積み重ね（コミット済みの先頭から始める）とは別のもの。
+- **見送り**: 依存の宣言ファイル・汎用 DAG。配車（[CHG-0056](../../change/closed/0056-orchestrator.md)）の `needs` は「統合済みを待つ」計画上の前提で、積み重ね（コミット済みの先頭から始める）とは別のもの。
 - **試験**: `test_parallel_check.py`・`test_feature_gate.py`（関門）。
 
 ### 複数の会話を並行して使う運用
@@ -310,11 +310,11 @@ feature B が、まだ `develop` に入っていない feature A の変更を要
 6. **会話の切り替え・再起動・終了は、動いている子と `bg_run` のジョブが無いときに行う**。pi が終われば、その pi の子とジョブも止まる前提で運用する（止まった検査は、最初からやり直す）。
 7. **新しい会話の始め方**: 最初に、その話題の案件の docs（`docs/change/`）と引き継ぎのファイルを読ませ、「取り込みはしない。コミットまでで窓口に渡す」と伝える。設計・決定は、会話の中ではなく docs に残す（会話は圧縮で細部が落ちる）。
 
-**限界**: 規則 1〜3・5〜7 は指示で守る（機械では止めない。[CHG-0050](../../change/0050-slim-guarded-action.md) と同じ方針）。窓口の会話が不在でも、ほかの会話は取り込めてしまう（`finish` の承認は利用者が見る 1 回だけが砦）。
+**限界**: 規則 1〜3・5〜7 は指示で守る（機械では止めない。[CHG-0050](../../change/closed/0050-slim-guarded-action.md) と同じ方針）。窓口の会話が不在でも、ほかの会話は取り込めてしまう（`finish` の承認は利用者が見る 1 回だけが砦）。
 
 ### 親の絞り込み（orchestrate）
 
-親を「計画・判断・委譲・承認」に絞り、作業（実装・コマンドの実行）を子へ寄せる仕組み。**命令（プロンプト）ではなく、ツールと判定で強制する**（[CHG-0045](../../change/0045-orchestrator-parent.md) 段 6。設計の経緯は [調査記録](../../research/agents/orchestrator-role-plan.md)）。
+親を「計画・判断・委譲・承認」に絞り、作業（実装・コマンドの実行）を子へ寄せる仕組み。**命令（プロンプト）ではなく、ツールと判定で強制する**（[CHG-0045](../../change/closed/0045-orchestrator-parent.md) 段 6。設計の経緯は [調査記録](../../research/agents/orchestrator-role-plan.md)）。
 **今の範囲は、役割と切り替えまで**（段 1〜2）。親専用の検査操作（`check_*`）と、親の読み取りの制限は、まだ無い。
 
 - **役割 `orchestrator`**（`[pi.profiles.orchestrator]`）: `tools = ["read", "grep", "find", "ls", "task", "todo", "ask", "action"]`、`default = "deny"`（許可リスト）。`bash`・`edit`・`write`・`bg_*`・MCP を持たない。

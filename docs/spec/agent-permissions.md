@@ -41,7 +41,7 @@ sandbox が **何を提供しているか** (採用していない機能も含�
 | ガード | ツール呼び出しを実行前に判定し（deny / confirm / ask / allow）、必要なら確認を出す。迂回できるので境界ではなく「うっかり防止」 | [ガード（総覧）](guard/index.md) |
 | 設定の生成 | `common.toml` から pi のガード・サンドボックスの設定（`rules.json` など）と、各 CLI の設定を作る | [設定の生成と所有権](agent-config-generation.md) |
 
-Claude Code / Copilot CLI の判定 hook（`check_bash.py` など）の登録は外れ、規則は pi の TS の判定器が引き継いだ（`common.toml.tmpl` の `[retired_hooks]`、[CHG-0035](../change/0035-retire-python-judge-oracle.md)）。
+Claude Code / Copilot CLI の判定 hook（`check_bash.py` など）の登録は外れ、規則は pi の TS の判定器が引き継いだ（`common.toml.tmpl` の `[retired_hooks]`、[CHG-0035](../change/closed/0035-retire-python-judge-oracle.md)）。
 以下の「3 層構成」は、Claude Code / Copilot CLI の permission・sandbox の層を書く。
 
 ## 3 層構成

@@ -9,7 +9,7 @@
 ## コンテキスト
 
 このリポジトリは、Claude Code・Copilot CLI・OpenCode・pi の 4 つの AI CLI の権限・hook・sandbox を、
-`common.toml` から生成して配っている。pi への移行（[CHG-0020](../change/0020-pi-migration.md)）は進んでいて、
+`common.toml` から生成して配っている。pi への移行（[CHG-0020](../change/closed/0020-pi-migration.md)）は進んでいて、
 段 1〜5（判定 API・ハーネス・配布・境界・ハーネス以外の機能）は終えた。残りは段 6（OpenCode の撤去、任意・優先度低）だった。
 
 2026-10-09 に、利用者は「判定器を Claude Code / Copilot CLI と共有する」と決めていた。判定器（`decide.py`、
@@ -79,7 +79,7 @@ Claude Code と Copilot CLI の hook は、外部コマンドに標準入力で 
 ## 結果
 
 - **得るもの**: 保守の対象が減る（OpenCode の plugin・生成、Claude / Copilot の判定の共有）。判定が速く単純になり、Windows の壁が減る
-- **払うもの**: 単一のツール（pi）への依存。pi は 1.x で若く、ハーネスが内部の挙動 4 点に頼る（[CHG-0020](../change/0020-pi-migration.md) の「引き継ぐ前提」）。
+- **払うもの**: 単一のツール（pi）への依存。pi は 1.x で若く、ハーネスが内部の挙動 4 点に頼る（[CHG-0020](../change/closed/0020-pi-migration.md) の「引き継ぐ前提」）。
   版の固定と、更新のときの試験で抑える。移植の工数（約 5,600 行、数日規模）
 - **進め方**: [仕様: TS 版への移植](../spec/guard/pi-decide.md#ts-版への移植)。層ごとに正解データとの一致で進捗を測る
 - **見直す条件**: pi が止まる・方針が大きく変わる、移植が全件一致に届かない、Windows でガード付きで使う需要が増える、Claude / Copilot を再び使う（TS の判定器を呼ぶ薄い CLI を足す。上の選択肢）

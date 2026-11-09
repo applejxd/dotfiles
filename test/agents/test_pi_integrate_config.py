@@ -1,7 +1,7 @@
 """``[pi.integrate]`` の検証 (生成器) と、judge/protectedrefs.ts の表試験。
 
 足場だけの段なので、どのキーも既定 (無効) のまま挙動は変わらない。
-see docs/change/0053-worktree-integration-gate.md
+see docs/change/closed/0053-worktree-integration-gate.md
 """
 
 from __future__ import annotations

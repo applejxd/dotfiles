@@ -1,5 +1,5 @@
 // PR レビュー状態のイベントログ (純粋関数。I/O なし)。app (別プロセス) と pi の両方が使う共有ライブラリ。
-// スキーマの正本: docs/change/0060-local-pr-viewer.md と .tmp/keep/pr-viewer/design-decisions.md §2。
+// スキーマの正本: docs/change/closed/0060-local-pr-viewer.md と .tmp/keep/pr-viewer/design-decisions.md §2。
 // import は node:crypto だけ (app が pending-*.ts などに依存しないため)。
 import { createHash, randomUUID } from "node:crypto";
 

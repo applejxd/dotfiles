@@ -4,7 +4,7 @@ bash の完全な文法ではない。規則が要る範囲 (区切り・引用�
 ``cd`` の除去や ``bash -c`` の展開は ``command_policy.normalize`` が担うので、ここは
 正規化済みのセグメント (``_shared._segments``) に当てる。ヒアドキュメントの本文は
 読み飛ばさない (実行されない本文は ``split_heredoc_body`` が先に取り除く)。
-see docs/change/0012-bash-hook-shared-parser.md
+see docs/change/closed/0012-bash-hook-shared-parser.md
 """
 
 from __future__ import annotations

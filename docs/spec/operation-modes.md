@@ -1,7 +1,7 @@
 # 運用モード（pi 単独と PR ビューア併用）
 
 pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結）と、**PR ビューア併用**（人の操作盤を足す）。
-どちらでも同じ層 0・1 が動き、ビューアは任意で足すだけ。背景は [CHG-0062](../change/0062-pr-hub-simplify.md) の D5（アプリへ切り出し、pi を通常のコーディングエージェントへ戻す）。
+どちらでも同じ層 0・1 が動き、ビューアは任意で足すだけ。背景は [CHG-0062](../change/closed/0062-pr-hub-simplify.md) の D5（アプリへ切り出し、pi を通常のコーディングエージェントへ戻す）。
 
 入口は [pi / pis マニュアル](pi-manual.md)。機能の一覧は [オーケストレーション](orchestration.md)、ガードの総覧は [guard/index.md](guard/index.md)、ビューアの設計は [pr-viewer.md](pr-viewer.md)。
 

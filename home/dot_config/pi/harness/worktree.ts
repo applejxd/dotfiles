@@ -3,7 +3,7 @@
 // 依存は node の標準モジュールと judge/policy.ts だけ。import しただけでは何も実行しない。
 // 子の起動・停止の確認は呼び出し側 (S3) の仕事で、ここでは扱わない。
 // node の型除去 (strip-types) でそのまま動く書き方だけを使う (enum・namespace・parameter property・`import =` を使わない)。
-// 契約・順序・上限の根拠は docs/change/0029-worktree-isolation.md の「W1 の実装計画」と「W1 の前に決める仕様案」。
+// 契約・順序・上限の根拠は docs/change/closed/0029-worktree-isolation.md の「W1 の実装計画」と「W1 の前に決める仕様案」。
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import * as fs from "node:fs";
@@ -137,7 +137,7 @@ export function gitEnv(extra: Record<string, string> = {}): Record<string, strin
 	return { ...env, ...extra };
 }
 
-// ハーネス自身の plumbing 用 (利用者のコミットの検証を飛ばすものではない)。see docs/change/0029-worktree-isolation.md の「git の実行」
+// ハーネス自身の plumbing 用 (利用者のコミットの検証を飛ばすものではない)。see docs/change/closed/0029-worktree-isolation.md の「git の実行」
 const SAFE_GIT_ARGS = [
 	"-c",
 	"core.hooksPath=/dev/null",
@@ -910,7 +910,7 @@ function patchReferencedByOthers(root: string, jobId: string, patchFile: string)
 	return listRecords(root).some((r) => !("broken" in r) && r.jobId !== jobId && r.patch?.path === patchFile);
 }
 
-/** 呼び出し側が子のプロセスグループの停止を確認した後にだけ呼ぶ。see docs/change/0029-worktree-isolation.md の「子の停止の確認」 */
+/** 呼び出し側が子のプロセスグループの停止を確認した後にだけ呼ぶ。see docs/change/closed/0029-worktree-isolation.md の「子の停止の確認」 */
 export function collect(repo: string, jobId: string, patchName: string, readDeny: ReadDeny, limits: Limits = DEFAULT_LIMITS): CollectResult {
 	validateJobId(jobId);
 	validatePatchName(patchName, jobId);

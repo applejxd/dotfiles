@@ -149,7 +149,7 @@ Claude Code / OpenCode
 起動の失敗が毎回の通知になるのを避け、「家で設定されても、認証しなければ何も起きない」を実現する。空になるのは、`AGENTCORE_GATEWAY_URL` が無い・`https://` でないとき、
 pi のサンドボックスの内側（`PI_HARNESS_BOUNDARY=1`。内側では AWS の認証情報を使えない）のとき。
 Unix の pi のフルガードは、`[[mcp]]` の `requires_env`（`AGENTCORE_GATEWAY_URL`）が空の機では、そもそも登録しない（プロセスも起動しない）。
-**`pis` の内側で AgentCore を使うには、ブローカーでの中継が要る**（Bedrock のブローカー（段 U7b）の後。[CHG-0037](../change/0037-pis-usability-and-telemetry.md)）。
+**`pis` の内側で AgentCore を使うには、ブローカーでの中継が要る**（Bedrock のブローカー（段 U7b）の後。[CHG-0037](../change/closed/0037-pis-usability-and-telemetry.md)）。
 それまで、会社 PC の `pis` の内側では使えない（境界なしの `pi` か、Windows の素の `pi` では使える）。**未確認**: 起動失敗時の pi の挙動、Windows の `uvx`、内側の環境変数に `PI_HARNESS_BOUNDARY` が伝わるか。
 
 **ラッパーを挟む理由**: proxy は Gateway の URL を位置引数でしか受け取らない。

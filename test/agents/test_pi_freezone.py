@@ -1,7 +1,7 @@
 """自由区の判定 (harness/freezone.ts, gitrun.ts) の表試験。使い捨ての実 git リポジトリで確かめる。
 
 迷ったら free:false に倒す判定なので、free になる表は狭く、それ以外は広く確かめる。
-see docs/change/0053-worktree-integration-gate.md
+see docs/change/closed/0053-worktree-integration-gate.md
 """
 
 from __future__ import annotations

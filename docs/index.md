@@ -66,7 +66,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 ### 凍結した自作基盤（保存のみ・開発しない）
 
-[ADR-0030](adr/0030-freeze-agent-stack-return-to-stock-pi.md) で凍結した領域（フルガード・`pis`・kcage・PR ビューア・作業台帳）。再開の入口は [CHG-0065](change/0065-agent-stack-freeze.md#再開の手引き)。
+[ADR-0030](adr/0030-freeze-agent-stack-return-to-stock-pi.md) で凍結した領域（フルガード・`pis`・kcage・PR ビューア・作業台帳）。再開の入口は [CHG-0065](change/closed/0065-agent-stack-freeze.md#再開の手引き)。
 
 | 目的 | 文書 |
 | --- | --- |
@@ -77,16 +77,16 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | （凍結）pi 単独と PR ビューア併用の、運用の違い・手順・旗の使い分けを知る | [運用モード](spec/operation-modes.md) |
 | （凍結）pi のガード（`pis`）を起動する・変える | [pi のガード](spec/guard/pi-guard.md) |
 | （凍結）リポジトリごとの Incus の箱（`kcage`）の仕組み・コマンド・許可表・信頼境界・限界を知る | [箱（Incus）](spec/sandbox/incus-box.md)、方針は [ADR-0028](adr/0028-per-repo-agent-container.md) |
-| （凍結）確認（承認）と封じ込めの設計方針を知る・変える（ask 層と bypass モードの廃止、非同期の承認、複数エージェントの束ね） | [ADR-0022](adr/0022-containment-first-minimal-approvals.md)、[CHG-0054](change/0054-containment-and-async-approval.md)、[調査記録 AC1](research/agents/approval-containment-survey.md) |
+| （凍結）確認（承認）と封じ込めの設計方針を知る・変える（ask 層と bypass モードの廃止、非同期の承認、複数エージェントの束ね） | [ADR-0022](adr/0022-containment-first-minimal-approvals.md)、[CHG-0054](change/closed/0054-containment-and-async-approval.md)、[調査記録 AC1](research/agents/approval-containment-survey.md) |
 | （凍結）確認が取れない操作の保留と、利用者が後から承認して実行する仕組み（非同期の承認。**撤去済み**。統合は PR ビューアの押下へ）を知る | [ADR-0024](adr/0024-human-press-merges-in-app.md)、[ADR-0023](adr/0023-pending-approval.md)（Superseded）、[CHG-0055](change/closed/0055-async-approval.md) |
 | （凍結）dotfiles の開発でサンドボックス（pis の既定）を使うか・使わない理由を知る | [ADR-0025](adr/0025-dotfiles-dev-without-os-sandbox.md)、[ADR-0018](adr/0018-pis-sandbox-default-relax-only-when-proven.md)、[症状と対処](spec/troubleshooting-agents.md#pis-の内側で本体の-git-status-が-dirty-に見える) |
-| （凍結）並列実装の配車・関門・承認パケット・標的レビュー（利用者が本質的な承認に集中する自動化）を知る・変える | [CHG-0056](change/0056-orchestrator.md) |
+| （凍結）並列実装の配車・関門・承認パケット・標的レビュー（利用者が本質的な承認に集中する自動化）を知る・変える | [CHG-0056](change/closed/0056-orchestrator.md) |
 | （凍結）保留の承認を、巡回・一括で少ない操作にする設計（見送り・撤去済み）を知る | [CHG-0058](change/closed/0058-batch-approval.md) |
-| （凍結）GitHub をリモートに持たない開発向けの、PR 風のローカルのレビュー画面（ref のスキーマ・レビューコメント送信の撤去・アプリの安全規則・統合）を知る・変える | [ローカル PR ビューアの設計](spec/pr-viewer.md)、[CHG-0060](change/0060-local-pr-viewer.md) |
+| （凍結）GitHub をリモートに持たない開発向けの、PR 風のローカルのレビュー画面（ref のスキーマ・レビューコメント送信の撤去・アプリの安全規則・統合）を知る・変える | [ローカル PR ビューアの設計](spec/pr-viewer.md)、[CHG-0060](change/closed/0060-local-pr-viewer.md) |
 | （凍結）PR ビューアと pi の非同期のメッセージ・キュー（受信箱。見送り・撤去済み）の経緯を知る | [CHG-0061](change/closed/0061-pr-inbox.md) |
-| （凍結）PR の管理・統合を、人が操作するアプリへ移す（保留・受信箱の撤去、merge commit、押下契機の `pis -p`、pi を通常のコーディングへ戻す）を知る・変える | [CHG-0062](change/0062-pr-hub-simplify.md) |
+| （凍結）PR の管理・統合を、人が操作するアプリへ移す（保留・受信箱の撤去、merge commit、押下契機の `pis -p`、pi を通常のコーディングへ戻す）を知る・変える | [CHG-0062](change/closed/0062-pr-hub-simplify.md) |
 | （凍結）親と子で文脈（AGENTS.md）を分ける（子に必要な規則だけを渡す） | [CHG-0059](change/closed/0059-child-context.md) |
-| （凍結）フルガードの統合先・作業ブランチの接頭辞を、リポジトリ内の `pi.json` でプロジェクトごとに変える | [CHG-0057](change/0057-per-project-integrate.md)、[利用者マニュアル 7.6](spec/pi-manual.md#76-プロジェクトごとの設定pijson) |
+| （凍結）フルガードの統合先・作業ブランチの接頭辞を、リポジトリ内の `pi.json` でプロジェクトごとに変える | [CHG-0057](change/closed/0057-per-project-integrate.md)、[利用者マニュアル 7.6](spec/pi-manual.md#76-プロジェクトごとの設定pijson) |
 
 ### 案件と根拠
 

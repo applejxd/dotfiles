@@ -67,4 +67,4 @@ B・C は、利用者が読む change と spec の入口を改善できない（
 
 ## 関連
 
-[ADR-0010](0010-exploratory-spec-driven-docs.md)・[ADR-0011](0011-close-change-records-into-subdirectory.md)・[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)・[ADR-0031](0031-evaluate-existing-extensions-first.md)・[CHG-0065](../change/0065-agent-stack-freeze.md)
+[ADR-0010](0010-exploratory-spec-driven-docs.md)・[ADR-0011](0011-close-change-records-into-subdirectory.md)・[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)・[ADR-0031](0031-evaluate-existing-extensions-first.md)・[CHG-0065](../change/closed/0065-agent-stack-freeze.md)

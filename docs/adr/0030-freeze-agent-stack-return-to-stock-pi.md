@@ -3,7 +3,7 @@
 - **ステータス**: Accepted（2026-11-08。可逆。再開の条件は下に書く）
 - **日付**: 2026-11-08
 - **決定者**: applejxd
-- **関係**: [ADR-0017](0017-pi-only-and-ts-judge.md)・[0018](0018-pis-sandbox-default-relax-only-when-proven.md)・[0022](0022-containment-first-minimal-approvals.md)・[0024](0024-human-press-merges-in-app.md)・[0026](0026-work-ledger-integrated-architecture.md)・[0027](0027-isolation-unit-is-environment.md)・[0028](0028-per-repo-agent-container.md) で作ってきた自作の基盤を**凍結する**（置き換えるのではなく、動かさず残す）。記録と再開の手引きは [CHG-0065](../change/0065-agent-stack-freeze.md)。番号 0029 は、凍結した枝（`feature/kcage-clone-docs`）の「kcage の clone モード」の ADR が持っているので、使わない。
+- **関係**: [ADR-0017](0017-pi-only-and-ts-judge.md)・[0018](0018-pis-sandbox-default-relax-only-when-proven.md)・[0022](0022-containment-first-minimal-approvals.md)・[0024](0024-human-press-merges-in-app.md)・[0026](0026-work-ledger-integrated-architecture.md)・[0027](0027-isolation-unit-is-environment.md)・[0028](0028-per-repo-agent-container.md) で作ってきた自作の基盤を**凍結する**（置き換えるのではなく、動かさず残す）。記録と再開の手引きは [CHG-0065](../change/closed/0065-agent-stack-freeze.md)。番号 0029 は、凍結した枝（`feature/kcage-clone-docs`）の「kcage の clone モード」の ADR が持っているので、使わない。
 
 ## コンテキスト
 
@@ -17,7 +17,7 @@
 どれも「守る」という目的には筋が通っていたが、次の問題が出た。
 
 - **部品が多く、保守の負担が実装の価値を上回った。** 層を足すたびに別の層との接続（権限・認証・git・worktree・ポート）が増える。
-- **守りの穴が次々に見つかった**（kcage だけで、制限つきプロジェクトの脱出、`commondir` の迂回、`mv .git` の迂回、bundle の fetch が fsck しないこと、など。詳細は [CHG-0065](../change/0065-agent-stack-freeze.md) の「学び」）。穴を塞ぐ作業が、本来の開発を圧迫した。
+- **守りの穴が次々に見つかった**（kcage だけで、制限つきプロジェクトの脱出、`commondir` の迂回、`mv .git` の迂回、bundle の fetch が fsck しないこと、など。詳細は [CHG-0065](../change/closed/0065-agent-stack-freeze.md) の「学び」）。穴を塞ぐ作業が、本来の開発を圧迫した。
 - **公式の pi と、コミュニティの package が成熟した。** 権限の確認・子エージェント・MCP・todo・利用者への質問・Web 検索などは、人気の package で足りる（[pi の package カタログ](https://pi.dev/packages)）。pi の公式文書にも、隔離の標準的な構成（Docker・Docker Sandboxes・OpenShell・ツールだけの隔離）が載っている。
 
 ## 決定
@@ -25,7 +25,7 @@
 1. **自作のエージェント基盤を全面凍結する。** ソース・docs・試験は消さず、これ以上は開発しない。未完の作業（kcage の clone モードなど）は枝に残す。
 2. **pi は、公式の既定の構成に戻し、人気の拡張（package）をそのまま入れる**（stock プロファイル。初期の一覧は `home/.chezmoitemplates/pi-stock-packages`）。切り替えは**可逆な旗**（`~/.config/chezmoi/pi-profile` か環境変数 `CHEZMOI_PI_PROFILE`）で行い、リポジトリの既定は custom のままにする（自作の配備に戻せる）。
 3. **他の CLI（Claude Code・Codex・OpenCode・Copilot・Gemini）の設定生成と、実行ファイル（`pis`・`pk`・`kcage` など）は触らない。**
-4. **記録を残す。** 経緯・凍結の一覧・未完の枝・学び・再開の手引きを [CHG-0065](../change/0065-agent-stack-freeze.md) に、調査の原本を `docs/research/archive/2026-11-agent-stack/` に、凍結した枝の bundle を `.tmp/keep/archive/` に置く。
+4. **記録を残す。** 経緯・凍結の一覧・未完の枝・学び・再開の手引きを [CHG-0065](../change/closed/0065-agent-stack-freeze.md) に、調査の原本を `docs/research/archive/2026-11-agent-stack/` に、凍結した枝の bundle を `.tmp/keep/archive/` に置く。
 
 ## 設計の原則として残すもの（再開するときの出発点）
 
@@ -57,8 +57,8 @@
 
 - stock の運用で、実際の事故または事故の寸前が起きたとき。
 - 公式の pi が、権限の制御・隔離の機能を標準で持つようになったとき。
-- コンテナ開発（GPU・compose）の隔離が、また要るようになったとき。再開の入口は [CHG-0065 の再開の手引き](../change/0065-agent-stack-freeze.md#再開の手引き)。
+- コンテナ開発（GPU・compose）の隔離が、また要るようになったとき。再開の入口は [CHG-0065 の再開の手引き](../change/closed/0065-agent-stack-freeze.md#再開の手引き)。
 
 ## 関連
 
-[CHG-0065](../change/0065-agent-stack-freeze.md)（記録と再開の手引き）・[ADR-0028](0028-per-repo-agent-container.md)・[kcage の概要（凍結した枝）](../research/archive/2026-11-agent-stack/README.md)・[同種の OSS の評価](../research/agents/oss-sandbox-evaluations-2026-11.md)・[ツール隔離の実現性](../research/agents/tool-isolation-feasibility-2026-11.md)
+[CHG-0065](../change/closed/0065-agent-stack-freeze.md)（記録と再開の手引き）・[ADR-0028](0028-per-repo-agent-container.md)・[kcage の概要（凍結した枝）](../research/archive/2026-11-agent-stack/README.md)・[同種の OSS の評価](../research/agents/oss-sandbox-evaluations-2026-11.md)・[ツール隔離の実現性](../research/agents/tool-isolation-feasibility-2026-11.md)

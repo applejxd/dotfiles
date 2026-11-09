@@ -1,7 +1,7 @@
 # 承認の設計と封じ込め（公開資料の調査）
 
 エージェントの安全を、**行動の監督（承認）**と**できることの制限（封じ込め）**のどちらを主にすべきか。複数のエージェントを束ねる運用では、どう変わるか。
-公開資料を集めて、このリポジトリの方針（[ADR-0022](../../adr/0022-containment-first-minimal-approvals.md)、[CHG-0054](../../change/0054-containment-and-async-approval.md)）の根拠にする。
+公開資料を集めて、このリポジトリの方針（[ADR-0022](../../adr/0022-containment-first-minimal-approvals.md)、[CHG-0054](../../change/closed/0054-containment-and-async-approval.md)）の根拠にする。
 
 > 現在の総合判断は案件（CHG-0054）の候補比較表が正本。この記録は、時点の事実と、それに対する推測を分けて残す。
 

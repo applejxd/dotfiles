@@ -13,7 +13,7 @@
 
 ### 根拠
 
-Fence 0.1.67、`.tmp/exp-denylist/`（使い捨て。リポジトリにない）、[記録 S1](pis-sandbox-field-test.md)、[CHG-0037](../../change/0037-pis-usability-and-telemetry.md)。
+Fence 0.1.67、`.tmp/exp-denylist/`（使い捨て。リポジトリにない）、[記録 S1](pis-sandbox-field-test.md)、[CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md)。
 
 ### 結果（元の文）
 

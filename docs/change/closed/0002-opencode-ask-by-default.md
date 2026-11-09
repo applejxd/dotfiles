@@ -2,7 +2,7 @@
 
 > この文書は当時の記録。現在の仕様は [`spec/opencode-config-generation.md` の既定は `ask`](../../spec/opencode-config-generation.md#既定は-ask) と
 > [plugin 層](../../spec/opencode-config-generation.md#plugin-層-guide-plugin)。
-> 残っていた段階 5（`verify` ツール）は [CHG-0020](../0020-pi-migration.md)（pi への移行）の段 5 へ移した。
+> 残っていた段階 5（`verify` ツール）は [CHG-0020](0020-pi-migration.md)（pi への移行）の段 5 へ移した。
 
 - **状態**: Done
 - **更新日**: 2026-10-09
@@ -488,5 +488,5 @@ CHG-0020 へ移して閉じた（2026-10-09）。冒頭の保留の注記と「�
 
 | 内容 | 移管先 |
 | --- | --- |
-| 段階 5: `verify` ツール（検証コマンドをツール 1 個に畳み、確認の回数を減らす） | [CHG-0020](../0020-pi-migration.md) の段 5（pi のハーネスのツールとして） |
+| 段階 5: `verify` ツール（検証コマンドをツール 1 個に畳み、確認の回数を減らす） | [CHG-0020](0020-pi-migration.md) の段 5（pi のハーネスのツールとして） |
 | 誘導・伏字化の規則そのもの | CHG-0020 の段 1・2（pi の判定器とハーネスへ移す。「段 1 の前の棚卸し」） |

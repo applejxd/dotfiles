@@ -2,7 +2,7 @@
 //
 //   node test/agents/pi/pending_store_driver.mjs
 //
-// see docs/change/0046-guarded-action-timeout.md
+// see docs/change/closed/0046-guarded-action-timeout.md
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

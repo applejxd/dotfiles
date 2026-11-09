@@ -1,5 +1,5 @@
 // 統合器（merge.ts）が使う git の実行器。書き込みを含む。
-// 設計: docs/change/0062-pr-hub-simplify.md の §3.2・§3.4.1。hook・外部の driver・filter を動かさない（S1）。
+// 設計: docs/change/closed/0062-pr-hub-simplify.md の §3.2・§3.4.1。hook・外部の driver・filter を動かさない（S1）。
 // 独立させるため、node: 標準ライブラリと ./ だけを import する。
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, realpathSync, rmSync, statSync } from "node:fs";

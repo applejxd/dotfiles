@@ -1,10 +1,10 @@
 # CHG-0055: 承認つきの操作を、確認が取れなくても失わず、利用者が後から承認して実行できるようにする（非同期承認の実装）
 
-> この文書は当時の記録。非同期承認（保留・`/pending approve`）は [CHG-0062](../0062-pr-hub-simplify.md) の段 A5 で撤去した。現在の統合は、利用者が PR ビューアの「統合する」を押す形（[PR ビューア](../../spec/pr-viewer.md)）。結論は末尾の「終了結果」。
+> この文書は当時の記録。非同期承認（保留・`/pending approve`）は [CHG-0062](0062-pr-hub-simplify.md) の段 A5 で撤去した。現在の統合は、利用者が PR ビューアの「統合する」を押す形（[PR ビューア](../../spec/pr-viewer.md)）。結論は末尾の「終了結果」。
 
 - **状態**: Abandoned
 - **更新日**: 2026-11-03
-- **基準**: コミット `9e979d8` 以降、pi 1.4.0。方針は [ADR-0023](../../adr/0023-pending-approval.md)（Superseded）。上位は [CHG-0054](../0054-containment-and-async-approval.md) の段 4。原型は [CHG-0046](../0046-guarded-action-timeout.md)（`git_commit` の退避）
+- **基準**: コミット `9e979d8` 以降、pi 1.4.0。方針は [ADR-0023](../../adr/0023-pending-approval.md)（Superseded）。上位は [CHG-0054](0054-containment-and-async-approval.md) の段 4。原型は [CHG-0046](0046-guarded-action-timeout.md)（`git_commit` の退避）
 
 ## 目的と非目的
 
@@ -35,7 +35,7 @@
 | P6 | `refs/pi/` をモデルが bash で書ける | `refs/pi/*` を書く git コマンドを必須確認にする（強化のみ。独立） | — | 完了 |
 | P7 | 統合の結果を、承認の前に算出する部品が無い | `git_integrate` の算出（結果の tree、結果コミットの案、リスクの抽出。外部コードを動かさない）。ツールには未接続 | — | 完了（`75c3faa`） |
 | P8 | 統合の確認が時間切れで失われる | `git_integrate` の操作と、保留への合流（別の worktree で作った保留を、本体で承認できる）。`[pi.integrate] enabled` をキルスイッチにする | P5・P7 | **P8a・P8b は完了**（P8a `b92f7ce`: 統合の実行器、P8b `d72838be`: 操作定義と保留・承認のアダプタ）。**P8c（本接続）は完了**（下の「P8c の決定 (v2)」） |
-| P8c | 統合を、排他・停止確認つきで本番の経路に接続する | 部品: 保存層の reason・facts（`00a11003`）、排他ロック `exclusive-lock`（`f2208bf8`）、実行器の停止確認（`a11cb16b`）、統合先の判定 `isTargetWorktree` とキルスイッチ（`e72bcfc6`）。本接続（F3）: 承認の核 `approve-core`（`f05cd583`）、実行器の結果の型 `integrate-adapter-wire`（`114e0775`）、保存専用の `git_integrate` `native-request`（`8da7fc8a`）、ID なしで選んで承認 `pending-pick`（`bb64e2aa`）、配線の部品 `wire-adapters`（`8be80e13`）・`wire-guidance`（`f4799139`）、`index.ts` への接続 `wire-index`（`ae6a8afe`）、独立 `review` の指摘の修正（`a1b5cb03`・`2eb5a554`・`315d5bf3`）。**見送り**: tree-guard（自動コミットの tree 束縛。配車 B1 まで。[CHG-0056](../0056-orchestrator.md)） | P8 | **完了**（キルスイッチは false のまま。実機未確認） |
+| P8c | 統合を、排他・停止確認つきで本番の経路に接続する | 部品: 保存層の reason・facts（`00a11003`）、排他ロック `exclusive-lock`（`f2208bf8`）、実行器の停止確認（`a11cb16b`）、統合先の判定 `isTargetWorktree` とキルスイッチ（`e72bcfc6`）。本接続（F3）: 承認の核 `approve-core`（`f05cd583`）、実行器の結果の型 `integrate-adapter-wire`（`114e0775`）、保存専用の `git_integrate` `native-request`（`8da7fc8a`）、ID なしで選んで承認 `pending-pick`（`bb64e2aa`）、配線の部品 `wire-adapters`（`8be80e13`）・`wire-guidance`（`f4799139`）、`index.ts` への接続 `wire-index`（`ae6a8afe`）、独立 `review` の指摘の修正（`a1b5cb03`・`2eb5a554`・`315d5bf3`）。**見送り**: tree-guard（自動コミットの tree 束縛。配車 B1 まで。[CHG-0056](0056-orchestrator.md)） | P8 | **完了**（キルスイッチは false のまま。実機未確認） |
 | P9 | 有効にする | `[pi.pending] enabled = true, modes = ["tui"]`。**出口条件**: (1) 新旧の形式・未対応の操作・キルスイッチの能力表と、実際の挙動が一致する。(2) 別のセッションとの競合、開始の前後の停止、結果の保存の失敗から、復旧できる。(3) linked worktree の Fence の内側で保存し、本体で承認する縦断を、実機で確かめた。(4) 算出で外部コードを動かさず、実行で品質ゲート（hook）を維持している。(5) 通知を失っても、成立した副作用と未完の後片付けを、一覧から確認できる。(6) `/pending approve` などを、15 桁の ID を打たずに（一覧から選ぶ・末尾一致で）使える。実機で、時間切れ → `/pending approve` → 結果通知 → モデルの続行を 1 往復する | P8c | 実装済み（F4。2026-11-02 に同梱の設定で有効化）。E1・E2 は合格、E3〜E5 は利用者の確認待ち |
 | P10 | `git_commit`・gh の操作 | `git_commit` の保留の承認（通常の `git commit`。hook を通す）、gh のアダプタ、既存の退避の承認 | P9 | 未着手 |
 | P11 | `chezmoi apply` と、子の要求 | `chezmoi_apply`（承認時に差分を作る形。境界の外のみ）、子の要求の中継。**設計を `review` に見せてから** | P9 | 未着手 |
@@ -210,7 +210,7 @@
 
 ## 終了結果
 
-**見送り**（実装まで進めたが、撤去した。2026-11-03）。確認が取れない操作の保存と、利用者が後から `/pending approve` で承認する経路は、[CHG-0062](../0062-pr-hub-simplify.md) の段 A5 で撤去した。承認・統合は、PR ビューアの「統合する」ボタン（利用者の押下）に置き換わった。本文の「現在地」「未解決点」「次の調査・実験」は、2026-11-01 時点の記録で、終了時の状態とは異なる。
+**見送り**（実装まで進めたが、撤去した。2026-11-03）。確認が取れない操作の保存と、利用者が後から `/pending approve` で承認する経路は、[CHG-0062](0062-pr-hub-simplify.md) の段 A5 で撤去した。承認・統合は、PR ビューアの「統合する」ボタン（利用者の押下）に置き換わった。本文の「現在地」「未解決点」「次の調査・実験」は、2026-11-01 時点の記録で、終了時の状態とは異なる。
 
 ### 採用したもの
 
@@ -221,19 +221,19 @@
 
 | 項目 | いつ | 理由 |
 | --- | --- | --- |
-| `git_integrate`・`/pending approve`・巡回・排他ロック・実行器（`integrate-plan.ts`・`integrate-exec.ts` ほか） | 2026-11-03 | 承認の記録が枝と別の永続物になり古い保留がごみになること、決定的な実行が LLM を載せた TUI の中にあること、squash が積み重ねで衝突することが実測された（[CHG-0062](../0062-pr-hub-simplify.md) §2） |
+| `git_integrate`・`/pending approve`・巡回・排他ロック・実行器（`integrate-plan.ts`・`integrate-exec.ts` ほか） | 2026-11-03 | 承認の記録が枝と別の永続物になり古い保留がごみになること、決定的な実行が LLM を載せた TUI の中にあること、squash が積み重ねで衝突することが実測された（[CHG-0062](0062-pr-hub-simplify.md) §2） |
 | 設定 `[pi.pending]`・`[pi.integrate] enabled` | 2026-11-03 | 機能ごと撤去 |
 | `chezmoi_apply`・`gh` の保留（P10 以降の未着手分） | 2026-11-03 | 作らない |
 
 ### 反映先
 
 - 仕様: [PR ビューア](../../spec/pr-viewer.md)・[pi-pending](../../spec/guard/pi-pending.md)（撤去の記録と残る機能）
-- 実装: [CHG-0062](../0062-pr-hub-simplify.md) の段 A5
+- 実装: [CHG-0062](0062-pr-hub-simplify.md) の段 A5
 - ADR: [ADR-0023](../../adr/0023-pending-approval.md)（Superseded）
 
 ### 移管した未完事項
 
 | 内容 | 移管先 |
 | --- | --- |
-| 統合・承認の運用 | [CHG-0062](../0062-pr-hub-simplify.md) |
+| 統合・承認の運用 | [CHG-0062](0062-pr-hub-simplify.md) |
 | 残骸の ref の掃除 | `pk pending-clean`（利用者が実行） |

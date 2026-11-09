@@ -2095,7 +2095,7 @@ def pi_integrate(common: dict[str, Any]) -> dict[str, Any]:
 
     ``protected_refs`` は下限 (``PI_INTEGRATE_FLOOR``) を全て含み、各要素は ``refs/`` で始めず、
     ``*`` は末尾の ``/*`` だけ。``target`` は ``protected_refs`` の完全一致の要素。
-    see docs/change/0053-worktree-integration-gate.md
+    see docs/change/closed/0053-worktree-integration-gate.md
     """
     section = (common.get("pi") or {}).get("integrate")
     if section is None:

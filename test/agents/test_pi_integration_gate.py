@@ -1,7 +1,7 @@
 """保護ブランチへの統合の確認 (harness/integration-gate.ts) の試験。使い捨ての実 git で、自由区の動的な検査まで確かめる。
 
 判定器の結果を、必要なら必須確認に引き上げるだけで、緩める方向には働かない。git を起動するのは head のときだけ。
-see docs/change/0053-worktree-integration-gate.md
+see docs/change/closed/0053-worktree-integration-gate.md
 """
 
 from __future__ import annotations

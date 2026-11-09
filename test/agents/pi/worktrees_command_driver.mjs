@@ -4,7 +4,7 @@
 //   node test/agents/pi/worktrees_command_driver.mjs '{"op":"run","repo":"...","args":"show job-0123abcd","live":[],"confirm":true}'
 //
 // confirm: true / false = 確認の答え、省略か null = 確認できない環境 (UI なし)。
-// see docs/change/0029-worktree-isolation.md#w1-の実装計画
+// see docs/change/closed/0029-worktree-isolation.md#w1-の実装計画
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 

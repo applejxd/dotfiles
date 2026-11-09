@@ -98,7 +98,7 @@
 | 状況 | 運営会社が 2026-04 に終了し、OSS として維持される（sunsetting） |
 | 結論 | **採用しない**（GitHub 前提・pi 非対応・エージェント管理アプリで、求めるものと違う） |
 
-案件は [CHG-0060](../../change/0060-local-pr-viewer.md)。
+案件は [CHG-0060](../../change/closed/0060-local-pr-viewer.md)。
 
 ## 次
 

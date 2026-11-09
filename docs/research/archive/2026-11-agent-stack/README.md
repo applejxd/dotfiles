@@ -1,6 +1,6 @@
 # 2026-11 エージェント基盤の凍結の原本（archive）
 
-[CHG-0065](../../../change/0065-agent-stack-freeze.md)・[ADR-0030](../../../adr/0030-freeze-agent-stack-return-to-stock-pi.md) の凍結に伴い、**あとで再検討できるように**、調査・設計・契約書の原文を残す。ホームの絶対パスは `/home/alice` に置き換えてある。原文なので、日本語・英語が混ざり、一部の記述は古い（凍結の時点のもの）。`.txt` なのは、整形ルール（markdownlint）の対象にしないため。
+[CHG-0065](../../../change/closed/0065-agent-stack-freeze.md)・[ADR-0030](../../../adr/0030-freeze-agent-stack-return-to-stock-pi.md) の凍結に伴い、**あとで再検討できるように**、調査・設計・契約書の原文を残す。ホームの絶対パスは `/home/alice` に置き換えてある。原文なので、日本語・英語が混ざり、一部の記述は古い（凍結の時点のもの）。`.txt` なのは、整形ルール（markdownlint）の対象にしないため。
 
 ## kcage の clone モード（`kcage-clone-mode/`）
 
@@ -13,7 +13,7 @@
 | `git-safety-policy-notes.txt` | git の安全方針の整理（保留のまま） |
 | `repro-mv-git.sh.txt`・`repro-mv-git-pin.sh.txt` | `mv .git` の迂回の再現と、`.git` の pin で封じる確認（bubblewrap。`.txt` を外して実行する） |
 
-実装は枝 `feature/kcage-clone-*`（未統合）。一覧と復元は [CHG-0065](../../../change/0065-agent-stack-freeze.md#未完の作業凍結した枝)。
+実装は枝 `feature/kcage-clone-*`（未統合）。一覧と復元は [CHG-0065](../../../change/closed/0065-agent-stack-freeze.md#未完の作業凍結した枝)。
 
 ## 同種の OSS の評価の原文（`oss-evaluations/`）
 

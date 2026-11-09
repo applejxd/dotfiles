@@ -2,7 +2,7 @@
 
 自由区の接頭辞は、**主 worktree (git の common dir) の HEAD** の pi.json だけから読む。
 feature 自身の HEAD の pi.json (エージェントが書ける) は信じない。fixture には架空の名前だけを使う。
-see docs/change/0057-per-project-integrate.md
+see docs/change/closed/0057-per-project-integrate.md
 """
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
 // PR ビューアの読み取り専用 git 実行器。承認の前に、リポジトリ内の設定・属性・hook が指す外部のコードを動かさない。
-// 設計: docs/change/0060-local-pr-viewer.md の C9。契約: .tmp/keep/prv-app/api-contract.md
+// 設計: docs/change/closed/0060-local-pr-viewer.md の C9。契約: .tmp/keep/prv-app/api-contract.md
 // 段 1 は独立させるため、harness の .ts は import しない。
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";

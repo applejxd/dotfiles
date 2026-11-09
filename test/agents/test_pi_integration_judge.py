@@ -2,7 +2,7 @@
 
 期待結果 (コマンド → kind) の表を持ち、node のドライバーに通して比べる。
 主眼は、負例 (none) が確認の対象にならないこと。
-see docs/change/0053-worktree-integration-gate.md
+see docs/change/closed/0053-worktree-integration-gate.md
 """
 
 from __future__ import annotations

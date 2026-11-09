@@ -57,7 +57,7 @@
 - **内側から外へ出られる宛先**は、Fence の許可リスト（`[web] allow_domains`・`[sandbox] shell_network_allow`）と、ブローカーのローカルのポート・ソケットだけ。
 - 検索のプロバイダー（Brave・Exa・Tavily・OpenAlex・DuckDuckGo）は許可リストに入れず、**検索ブローカー経由**で届く（実測: 内側から検索が通る）。
 - ページ本文の取得（`fetch`）は、許可リストの範囲（`[web] allow_domains`）。任意の URL には届かない。
-- 方針の候補（未決。[CHG-0037](../../change/0037-pis-usability-and-telemetry.md)）: 許可リスト型から、拒否リスト型（危険な宛先だけ止める）へ。
+- 方針の候補（未決。[CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md)）: 許可リスト型から、拒否リスト型（危険な宛先だけ止める）へ。
 - **認証つき HTTP プロキシ・TLS 検査を経由する環境での動作は未対応**。設計案と調査は[ブローカー](broker.md#未対応未検証)。
 
 ## 設定と試験の対応
@@ -87,4 +87,4 @@
 - 作業ツリー内の `.env` と、残りの `*_API_KEY` 環境変数が内側から見える。
 - ホームの他の場所の可視性は、個別に実測していない。
 - 通信の方針（拒否リスト型）、認証つき HTTP プロキシ、Bedrock の署名・AgentCore の MCP 中継は未対応。
-- 進捗と経緯は [CHG-0033](../../change/0033-sandbox-build-value-assessment.md)（責務の棚卸し）・[CHG-0037](../../change/0037-pis-usability-and-telemetry.md)。
+- 進捗と経緯は [CHG-0033](../../change/closed/0033-sandbox-build-value-assessment.md)（責務の棚卸し）・[CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md)。

@@ -10,7 +10,7 @@
 ## コンテキスト
 
 pi のハーネス（`pis`）は `-ne` で起動し、拡張を自動では読まない
-（[pi のガード](../spec/guard/pi-guard.md#起動)）。この構成は、[CHG-0020](../change/0020-pi-migration.md) の
+（[pi のガード](../spec/guard/pi-guard.md#起動)）。この構成は、[CHG-0020](../change/closed/0020-pi-migration.md) の
 設計の過程で AI が提案し、**利用者が十分に理解しないまま承認したもの**で、「拡張は足さない」という方針として
 扱われてきた。利用者が決めた方針ではない。
 
@@ -91,4 +91,4 @@ pi のハーネス（`pis`）は `-ne` で起動し、拡張を自動では読�
 
 - [pi のガード](../spec/guard/pi-guard.md)
 - [実測: ハーネス付きの pi への拡張の追加](../research/agents/pi-extension-under-harness.md)
-- [CHG-0020](../change/0020-pi-migration.md)
+- [CHG-0020](../change/closed/0020-pi-migration.md)
