@@ -34,6 +34,7 @@ NEW_PACKAGES = (
     "npm:pi-background@",
     "npm:@narumitw/pi-plan-mode@",
     "npm:@narumitw/pi-goal@",
+    "npm:@narumitw/pi-btw@",
     "npm:@ayulab/pi-rewind@",
 )
 # stock の AGENTS.md に出してはならない自作ハーネスの語
@@ -365,10 +366,22 @@ def test_stock_packages_are_pinned_npm(tmp_path):
         assert re.fullmatch(r"npm:(@[a-z0-9._-]+/)?[a-z0-9._-]+@\d+\.\d+\.\d+", pkg), pkg
 
 
-def test_stock_packages_include_background_plan_goal_rewind(tmp_path):
+def test_stock_packages_include_background_plan_goal_btw_rewind(tmp_path):
     pkgs = stock_packages(tmp_path)
     for prefix in NEW_PACKAGES:
         assert any(p.startswith(prefix) for p in pkgs), prefix
+
+
+def test_stock_packages_pi_btw_is_pinned_once_on_every_machine(tmp_path):
+    """pi-btw は版固定で 1 回だけ入る。is-work の真偽（tester=会社 PC・applejxd=家の機）に依らない。"""
+    for user in ("applejxd", "tester"):
+        hits = [p for p in stock_packages(tmp_path, user) if "pi-btw" in p]
+        assert hits == ["npm:@narumitw/pi-btw@0.63.5"], (user, hits)
+
+
+def test_pi_btw_config_is_not_deployed():
+    """pi-btw の設定 (pi-btw.json) は配らない。拡張の既定のままにする。"""
+    assert not list(HOME_SRC.rglob("*pi-btw.json*"))
 
 
 def test_stock_packages_never_include_pi_web_access(tmp_path):
