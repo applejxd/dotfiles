@@ -2525,6 +2525,8 @@ id = "agentcore-websearch"
 purpose = "AgentCore Web Search で web 検索する (Gateway の URL がある機だけ)"
 clis = [{{ if eq (includeTemplate "is-work" .) "true" }}"claude", "opencode", "pi"{{ else }}"pi"{{ end }}]
 requires_env = "AGENTCORE_GATEWAY_URL"
+# direct にして mcp__agentcore_websearch__* でモデルに見せ、plan mode の許可リストに具体名を足せるようにする
+pi_exposure = "direct"
 transport = "stdio"
 command = "uv"
 args = [
@@ -2542,6 +2544,8 @@ args = [
 id = "websearch"
 purpose = "家の機の web 検索・ページ取得・論文検索 (web_search / fetch_page / search_papers)"
 clis = ["pi"]
+# 既定の codemode ではモデルに直接見えず、plan mode の許可リストに具体名を足せない。direct にして mcp__websearch__* で見せる
+pi_exposure = "direct"
 transport = "stdio"
 command = "uv"
 args = [

@@ -41,6 +41,7 @@
 - pi-background: 12 分のコマンドで、終了時に親が起きること（`sendMessage` の `triggerTurn` がアイドル中に新しいターンを始めるか）。pi 1.5.0 との実機の動作。
 - plan と goal: permission-system との `tool_call` の実行順（plan mode が block する呼び出しで ask が先に出ないか）。Workflow Mutex の pi 1.5.0 での保証（README は 0.84.2 で特性確認）。
 - plan mode の `grep`・`find`・`ls` を使うには、pi の settings で有効化が要る（README の注意）。**有効化した**（stock の settings.json の `defaultTools: ["+grep", "+find", "+ls"]`。2026-11-09）。pi は、この 3 つが無いときだけ「ファイル操作は bash で」という規則をシステムプロンプトに入れるので、有効にすると専用ツールの説明に切り替わる（`dist/core/system-prompt.js`）。使われていなければ、セッションの記録を見て外す（設定の 1 行）。
+- plan mode の許可リストに検索 MCP を足した（許可リストは完全一致の名前だけで、パターンは使えない）。`websearch`・`agentcore-websearch` を `exposure: direct` で見せ、完全名 4 つを `defaultPlanTools` へ追記する（`codemode` を許すと任意の MCP が呼べるため退けた）。未確認: `direct` のツールが plan mode で実際に通ること・検索中に ask が出ないこと・`/mcp` で `direct` と表示されること・`agentcore-websearch` の完全名（規則から導いたもの。生のツール名 `web-search-tool__WebSearch` は実機で確認済み）・`pi-mcp-adapter` が別名で出す可能性。詳細は [MCP サーバ](../../spec/mcp-servers.md#pi_exposurepi-への見せ方)。
 - 自作の `/plan` を持つ custom プロファイルとのコマンド名の衝突は、stock では起きない（自作の拡張を配らない）。
 - 検索は決定済み: `pi-web-access` は入れない、`pi-mcp-adapter` は `is-work` の機だけ入れる（一覧は `is-work` で分岐）。`~/.pi/agent/mcp.json` は `generate.py --target pi-mcp` で配る。通知・ステータス表示は次の節。
 

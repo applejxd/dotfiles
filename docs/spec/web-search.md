@@ -202,5 +202,6 @@ python3 ~/.config/agents/websearch/core.py sync-keys --force --unlock   # どこ
 
 ## 未実装・未決
 
+- plan mode（stock の pi）でも検索できる: `websearch` MCP を `exposure: direct` にし、plan mode の許可リストに `mcp__websearch__*` を足している（[MCP サーバ](mcp-servers.md#pi_exposurepi-への見せ方)。**実機では未確認**）。
 - プロバイダの順位の実測比較（Brave と Exa）
 - 入力トークン・キャッシュヒットの実測（skill の説明だけが常駐するので小さい見込み）

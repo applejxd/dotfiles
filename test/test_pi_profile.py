@@ -420,7 +420,8 @@ def test_mcp_json_home_declares_websearch_and_keeps_user_servers(tmp_path):
     assert web["command"] == "uv"
     assert web["args"][:3] == ["run", "--no-project", "--quiet"]
     assert web["args"][3].endswith("/.config/agents/websearch/mcp_server.py")
-    assert not {"exposure", "requires_env", "transport", "purpose", "clis"} & set(web)
+    assert not {"requires_env", "transport", "purpose", "clis", "pi_exposure"} & set(web)
+    assert web["exposure"] == "direct"  # plan mode の許可リストに具体名を足すため
     again = run_script(script, json.dumps(out))
     assert json.loads(again) == out
 
@@ -457,9 +458,18 @@ def plan_mode_script(tmp_path: Path) -> Path:
     return script
 
 
+SEARCH_TOOLS = [
+    "mcp__websearch__web_search",
+    "mcp__websearch__fetch_page",
+    "mcp__websearch__search_papers",
+    "mcp__agentcore_websearch__web_search_tool__WebSearch",
+]
+
+
 def test_plan_mode_config_from_empty_input_has_defaults(tmp_path):
     out = json.loads(run_script(plan_mode_script(tmp_path), ""))
-    assert out["defaultPlanTools"] == ["read", "bash", "grep", "find", "ls", "ask_user_question"]
+    base = ["read", "bash", "grep", "find", "ls", "ask_user_question"]
+    assert out["defaultPlanTools"] == base + SEARCH_TOOLS
     assert "subagent" not in out["defaultPlanTools"]
     assert out["defaultPlanExportPath"] == ".tmp/keep/plan/"
 
@@ -471,6 +481,21 @@ def test_plan_mode_config_keeps_existing_values(tmp_path):
     assert out["thinkingLevel"] == "high"
     assert out["safeSubcommands"] == {}
     assert "defaultPlanTools" in out
+
+
+def test_plan_mode_config_appends_search_tools_to_existing_list(tmp_path):
+    script = plan_mode_script(tmp_path)
+    existing = {"defaultPlanTools": ["read", "my_tool", SEARCH_TOOLS[1]]}
+    first = run_script(script, json.dumps(existing))
+    tools = json.loads(first)["defaultPlanTools"]
+    # 利用者の順序と名前を保ち、無い名前だけ末尾へ足す (重複しない)
+    assert tools == ["read", "my_tool", SEARCH_TOOLS[1], SEARCH_TOOLS[0], *SEARCH_TOOLS[2:]]
+    assert run_script(script, first) == first
+
+
+def test_plan_mode_config_leaves_non_list_tools(tmp_path):
+    out = json.loads(run_script(plan_mode_script(tmp_path), '{"defaultPlanTools": "read"}'))
+    assert out["defaultPlanTools"] == "read"
 
 
 def test_plan_mode_config_is_idempotent_and_leaves_broken_input(tmp_path):

@@ -560,7 +560,9 @@ MCP_TRANSPORT_KEYS = {
     "http": {"url"},
     "stdio": {"command", "args"},
 }
-MCP_COMMON_KEYS = {"id", "purpose", "transport", "clis", "exposure", "requires_env"}
+MCP_COMMON_KEYS = {"id", "purpose", "transport", "clis", "exposure", "requires_env", "pi_exposure"}
+# pi_exposure: stock の pi の mcp.json の server の exposure に、無いときだけ補う値 (merge_pi_mcp)。
+# 他の生成先は読まない。pi 組み込みの MCP の既定は codemode で、モデルに直接見えない
 # requires_env: この環境変数が空のとき、pi のフルガードはこのサーバを登録しない (認証や URL が無い機で、動かないサーバを
 # 起動し続けない)。他の CLI への生成には影響しない
 MCP_ENV_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
@@ -617,6 +619,12 @@ def mcp_servers(common: dict[str, Any], cli: str | None = None) -> list[tuple[st
                 f"[[mcp]] {name} の exposure が不正: {exposure!r} "
                 f"(対応: {', '.join(MCP_EXPOSURES)})"
             )
+        pi_exposure = server.get("pi_exposure")
+        if pi_exposure is not None and pi_exposure not in MCP_EXPOSURES:
+            raise ValueError(
+                f"[[mcp]] {name} の pi_exposure が不正: {pi_exposure!r} "
+                f"(対応: {', '.join(MCP_EXPOSURES)})"
+            )
         required = server.get("requires_env")
         if required is not None and (
             not isinstance(required, str) or MCP_ENV_NAME.fullmatch(required) is None
@@ -653,6 +661,8 @@ def mcp_servers(common: dict[str, Any], cli: str | None = None) -> list[tuple[st
             entry["command"] = command
             entry["args"] = list(args)
 
+        if pi_exposure is not None:
+            entry["pi_exposure"] = pi_exposure
         servers.append((name, entry))
     return servers
 
@@ -702,7 +712,8 @@ def merge_pi_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, 
     ほかのサーバは残す。宣言したサーバでも ``command`` / ``args`` だけを持ち、
     ``env`` / ``enabled`` / ``exposure`` / ``timeout`` など利用者が足したキーは保つ
     (common.toml が持たない情報)。``[[mcp]]`` の ``exposure`` / ``requires_env`` は
-    pi 本体の MCP が解釈しないので出さない。http は ``url``、stdio は ``command`` / ``args``。
+    pi 本体の MCP が解釈しないので出さない。``pi_exposure`` があれば server の ``exposure`` に無いときだけ補う。
+    http は ``url``、stdio は ``command`` / ``args``。
     """
     out = dict(existing) if isinstance(existing, dict) else {}
     servers = dict(out.get("mcpServers") or {})
@@ -717,6 +728,9 @@ def merge_pi_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, 
             stale = ("url", "headers")
         for key in stale:
             entry.pop(key, None)
+        if "pi_exposure" in server:
+            # 利用者が /mcp で変えた値を保つ (無いときだけ補う)
+            entry.setdefault("exposure", server["pi_exposure"])
         servers[name] = entry
     out["mcpServers"] = servers
     return out

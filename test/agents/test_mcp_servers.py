@@ -337,9 +337,42 @@ def test_pi_mcp_is_generated_from_common(username):
     common = load_common(username)
     merged = gen.merge_pi_mcp({}, common)
     assert merged["mcpServers"] == {
-        name: {"command": s["command"], "args": s["args"]}
+        name: {
+            "command": s["command"],
+            "args": s["args"],
+            **({"exposure": s["pi_exposure"]} if "pi_exposure" in s else {}),
+        }
         for name, s in gen.mcp_servers(common, "pi")
     }
+
+
+def test_pi_mcp_websearch_is_direct_so_plan_mode_can_allow_it():
+    assert gen.merge_pi_mcp({}, COMMON)["mcpServers"]["websearch"]["exposure"] == "direct"
+    # agentcore-websearch も direct (plan mode の許可リストに具体名を足すため)
+    for common in (COMMON, TESTER):
+        servers = gen.merge_pi_mcp({}, common)["mcpServers"]
+        assert servers["agentcore-websearch"]["exposure"] == "direct"
+
+
+def test_pi_exposure_fills_only_when_missing_and_stays_out_of_other_clis():
+    declared = {**STDIO, "pi_exposure": "direct", "clis": ["pi", "claude", "opencode", "copilot"]}
+    common = {"mcp": [declared]}
+    merged = gen.merge_pi_mcp({}, common)
+    assert merged["mcpServers"]["x"]["exposure"] == "direct"
+    # 利用者が /mcp で変えた値は保つ
+    kept = gen.merge_pi_mcp({"mcpServers": {"x": {"exposure": "codemode"}}}, common)
+    assert kept["mcpServers"]["x"]["exposure"] == "codemode"
+    assert gen.merge_pi_mcp(merged, common) == merged
+    # 他の生成先は pi_exposure を出さない
+    for out in (gen.merge_copilot_mcp({}, common), gen.merge_opencode_config({}, common)):
+        assert "pi_exposure" not in json.dumps(out, default=str)
+    # harness の rules.json は exposure を従来どおり (pi_exposure を読まない)
+    assert "pi_exposure" not in json.dumps(gen.pi_mcp_servers(common))
+
+
+def test_pi_exposure_is_validated():
+    with pytest.raises(ValueError, match="pi_exposure"):
+        gen.mcp_servers({"mcp": [{**STDIO, "pi_exposure": "bogus"}]})
 
 
 def test_pi_mcp_websearch_only_on_personal_machine():
