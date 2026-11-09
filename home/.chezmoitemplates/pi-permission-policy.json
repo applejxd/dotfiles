@@ -184,6 +184,21 @@
     "goal_complete": "allow",
     "goal_blocked": "allow",
     "goal_wait": "allow",
-    "external_directory": { "*": "ask", "/tmp/*": "allow" }
+    "external_directory": { "*": "ask", "/tmp/*": "allow" },
+    "external_directory_read": {
+      "~/.pi/agent/npm/*": "allow",
+      "~/.pi/agent/install/*": "allow",
+      "~/.pi/agent/extensions/*": "allow",
+      "~/.pi/agent/extensions/*/logs": "ask",
+      "~/.pi/agent/extensions/*/logs/*": "ask",
+      "~/.pi/agent/agents/*": "allow",
+      "~/.pi/agent/git/*": "allow",
+      "~/.pi/agent/prompts/*": "allow",
+      "~/.pi/agent/skills/*": "allow",
+      "~/.pi/agent/themes/*": "allow",
+      "~/.pi/agent/AGENTS.md": "allow",
+      "~/.pi/agent/settings.json": "allow",
+      "/mnt/c/Users/applejxd/AppData/Local/Temp/orca-paste-*": "allow"
+    }
   }
 }
