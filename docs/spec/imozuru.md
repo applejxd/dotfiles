@@ -2,7 +2,7 @@
 
 知らない分野を、用語・人・場から引用と著者を芋づる式にたどり、**原文を要約せずに保存**して、要る主張ごとに原文の行番号を付けるスキル。
 上流は [MaryCache/imozuru](https://github.com/MaryCache/imozuru)（MIT）で、`home/dot_claude/skills/imozuru/` に vendor して調整した。
-検索は、すでにある [web-search](web-search.md) スキルの `websearch.py` を使う（検索役のサブエージェントは使わない）。
+検索は、使える検索ツールで行う（pi は自作の MCP `websearch` の `web_search` / `search_papers` / `fetch_page`。[Web 検索](web-search.md)）。スキル `web-search`（`websearch.py`）は 2026-11-09 に廃止した。検索役のサブエージェントは使わない。
 入口を skill + CLI にした理由は [入口の選び方](guard/pi-extensions.md#入口の選び方)、拡張でなくスキルで足りる判断は [ADR-0031](../adr/0031-evaluate-existing-extensions-first.md)（旧 [ADR-0016](../adr/0016-pi-extensions-own-first.md) を置き換え）。
 
 - 取り込んだ版: 上流 `ecb82c71b611872a0f49e783eda3bec987c80d91`。取得物の sha256 と原本のハッシュは、スキル内の `references/upstream.md`
@@ -10,7 +10,7 @@
 
 ## 配る範囲
 
-**個人用（`is-work` でない機、つまり applejxd）だけ**に配る。`web-search` と同じ理由（制約のある環境の機の検索語を AWS の外へ出さない）に、依存関係を足した。
+**個人用（`is-work` でない機、つまり applejxd）だけ**に配る。個人用の検索の核・MCP と同じ理由（制約のある環境の機の検索語を AWS の外へ出さない）に、依存関係（秘匿チェックは核を借りる）を足した。
 
 | 対象 | 条件 | 実装 |
 | --- | --- | --- |
@@ -25,7 +25,7 @@
 
 | 場所 | 役割 |
 | --- | --- |
-| `SKILL.md` | 流れ（0 周目で map.md を作り、周ごとにたどり、証拠で止める）、置き場、`websearch.py` の使い方、道具 |
+| `SKILL.md` | 流れ（0 周目で map.md を作り、周ごとにたどり、証拠で止める）、置き場、検索ツールの使い方、道具 |
 | `scripts/chain.py` | OpenAlex で引用・被引用・著者をたどる（`find` / `refs` / `cites` / `author`）。上流のまま（+ 秘匿チェックだけ） |
 | `scripts/fetch.py` | 原文の取得と保存（PDF は `pdftotext`、HTML は markdown、必要なら OCR）。YouTube は通さない |
 | `scripts/fetch_youtube.py` | YouTube の字幕（`yt-dlp`）。**個人の PC だけ**に配る別スクリプト |
@@ -38,7 +38,7 @@
 
 ## 検索役を使わない理由
 
-上流の「検索役」は、Web 検索できる軽いモデルのサブエージェントを 2 本並べる設計。このリポジトリでは使わない。`guarded_task` の子（`explore` / `review`）は**読み取り専用だが、`websearch.py` の `search`・`papers`・`fetch` と `chain.py` は確認なしに実行できる**（許可は `[pi.skill_scripts.allow]` にあり、役割を問わず効く。実測は [記録](../research/agents/imozuru-spec-notes.md)）。保存の `fetch.py` だけは確認が要るので、子には任せず親が行う。既定は親が `websearch.py` を順に呼ぶ形で、広く浅い検索を子に任せるのは任意（SKILL.md の「検索役」の節）。検索語の秘匿チェックは `websearch.py` が掛ける。
+上流の「検索役」は、Web 検索できる軽いモデルのサブエージェントを 2 本並べる設計。このリポジトリでは使わない。検索と原文の読み取りは、使える検索ツール（MCP の `web_search` / `search_papers` / `fetch_page`）を使う。`chain.py` は確認なしに実行できる（許可は `[pi.skill_scripts.allow]` にあり、役割を問わず効く）。`guarded_task` の子が MCP の検索ツールを使えるかは環境次第で、未確認。保存の `fetch.py` だけは確認が要るので、子には任せず親が行う。既定は親が検索ツールを順に呼ぶ形で、広く浅い検索を子に任せるのは任意（SKILL.md の「検索役」の節）。検索語の秘匿チェックは検索の核（MCP が呼ぶ）が掛ける。
 
 採らなかった案（専用の検索役 `searcher`）の理由は [記録](../research/agents/imozuru-spec-notes.md)。
 
@@ -59,14 +59,14 @@
 
 上流の `fetch.py` / `watch.py` は、名前を引いて宛先を検査したあと、`urllib` がもう一度名前を引いて接続する（上流の docstring も限界として認めている）。引き先を変えられる名前（DNS rebinding）だと、内側の宛先へ届く。
 
-`imozuru_net.py` が、**接続の直前に名前を 1 回だけ引き、全部が公開アドレスならその IP にだけ接続する**（TLS の SNI・証明書の検証・`Host` は元の名前。`websearch.py` の `fetch` と同じ方式）。`fetch.py` と `watch.py` の `_OPENER` に差し込んだ。
+`imozuru_net.py` が、**接続の直前に名前を 1 回だけ引き、全部が公開アドレスならその IP にだけ接続する**（TLS の SNI・証明書の検証・`Host` は元の名前。検索の核の `fetch_page` と同じ方式）。`fetch.py` と `watch.py` の `_OPENER` に差し込んだ。
 
 - **プロキシ宛ての要求（HTTP のプロキシ・HTTPS の CONNECT）は固定しない**: プロキシが名前を引くので、stdlib の接続のまま。`no_proxy` などで**直接つなぐ宛先は、環境変数の有無に関わらず固定する**（要求ごとに `req.has_proxy()` / `_tunnel_host` で判定）
 - 上流の宛先の検査（`url_problem`）は残る。VPN などで外の名前まで内側に引ける環境は、`IMOZURU_ALLOW_PRIVATE=1` で外せる（上流の仕様）
 - **残る限界**: プロキシ経由の通信では、プロキシが後で別の IP に解決するのを、こちらでは固定できない。`pis` のサンドボックス（Fence）のプロキシが内側の宛先を拒むかは**未確認**。この限界のために、`fetch.py` と `watch.py` の `add` / `check` は確認なしの許可に載せていない（下の許可規則）
 - **`pis` の内側のプロキシ越しの取得**: 内側は DNS が引けないので、`PIS_FETCH_VIA_PROXY=1`（`pis` が付ける）とループバックの
   `HTTPS_PROXY` が揃い、`no_proxy` に当たらない https の URL だけ、`url_problem` が名前を引かずにホスト名の形だけ見る（`imozuru_net.py` の
-  `via_fetch_proxy` / `proxy_url_problem`。`websearch.py` と同じ規則で、正規表現の一致は `test_imozuru.py` が固定する）。仕組みと理由は
+  `via_fetch_proxy` / `proxy_url_problem`。検索の核 `core.py` と同じ規則で、正規表現の一致は `test_imozuru.py` が固定する）。仕組みと理由は
   [web-search、pis の内側のプロキシ越しの取得](web-search.md#pis-の内側のプロキシ越しの取得)。
   `urllib` が実際に使うプロキシと `no_proxy` を同じ関数で見るので、検査だけ省いて直接つなぐ食い違いは出ない。
   Fence のプロキシは許可ドメインの外を 403 で拒む。ただし「内側の宛先を拒む」こと自体は、許可リストに内部名が無いことに依存する（実測は [記録](../research/agents/imozuru-spec-notes.md)）
@@ -75,9 +75,9 @@
 
 `imozuru_root.refuse_secrets()` が、`fetch.py` の URL、`watch.py add` の URL、`chain.py` の検索語を、外へ送る前に検査する（終了コード 2）。
 
-- 検査は `web-search` の `check_query`（秘密鍵・AWS のキー・GitHub のトークン・API キー・JWT・`password=…`・内部アドレス・長いトークン）を**そのまま借りる**（パターンを二重に持たない）。`web-search` が読めない機械のために、同じ内容の代替を内蔵する
+- 検査は検索の核 `~/.config/agents/websearch/core.py` の `check_query`（秘密鍵・AWS のキー・GitHub のトークン・API キー・JWT・`password=…`・内部アドレス・長いトークン）を**そのまま借りる**（パターンを二重に持たない）。核が読めない機械のために、同じ内容の代替を内蔵する
 - `watch.py` は、`add` で保存した URL（外部のページが示したもの）も、`check` で**送る直前に、名前を引く前に**検査する（ホスト名に秘密があると、DNS 問い合わせに載るため）
-- **限界**: 未知の形式の秘密・個人データは防げない。機密を含む調べものは、そもそも使わない（SKILL.md の境界）。`websearch.py` の `search` / `papers` の確認なしの許可と同じ水準
+- **限界**: 未知の形式の秘密・個人データは防げない。機密を含む調べものは、そもそも使わない（SKILL.md の境界）。検索ツールの秘匿チェックと同じ水準
 
 ## YouTube
 
@@ -124,5 +124,5 @@
 - `pis` のサンドボックスの通信先の許可リストと、プロキシが内側の宛先を拒むか
 - 実機の `pis` で、許可規則（allow / ask）が上の表のとおりに働くか（判定器の試験までは済み）
 - 実際のモデルが、SKILL.md の流れ（周・飽和・止めどき）を守るか。上流の主張（「通常の頼み方より良い」）は未検証
-- Windows の素の `pi`（スキルは配るが、`websearch.py` は `uv run --no-project` に読み替える）
+- Windows の素の `pi`（スキルは配るが、スクリプトは `uv run --no-project` に読み替える）
 - 専用の検索役 `searcher`（[検索役を使わない理由](#検索役を使わない理由)）

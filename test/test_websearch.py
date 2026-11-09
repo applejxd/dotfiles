@@ -1,6 +1,8 @@
 """web-search の核 (home/dot_config/agents/websearch/core.py) を、通信なしで検証する。
 
-スキルの CLI (scripts/websearch.py) は核を呼ぶ薄い入口で、その接続も確かめる。
+核を直接実行した場合 (鍵の同期のスクリプトが呼ぶ形) も確かめる。
+
+スキル web-search (薄い CLI) は廃止した。
 
 see docs/spec/web-search.md
 """
@@ -19,7 +21,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE = ROOT / "home" / "dot_config" / "agents" / "websearch" / "core.py"
-SKILL_CLI = ROOT / "home" / "dot_claude" / "skills" / "web-search" / "scripts" / "websearch.py"
 _spec = importlib.util.spec_from_file_location("websearch", CORE)
 assert _spec and _spec.loader
 ws = importlib.util.module_from_spec(_spec)
@@ -1072,10 +1073,10 @@ def test_a_proxy_that_refuses_the_tunnel_is_reported_as_blocked():
             ws.fetch_page("https://denied.example/", proxy=("127.0.0.1", port), timeout=5)
 
 
-# ─── スキルの CLI (薄い入口) が核へつながる ─────────────────────────────
+# ─── 核を直接実行する (鍵の同期のスクリプトが呼ぶ形) ──────────────────────
 
 
-def _run_skill_cli(tmp_path, *args, core_env=None):
+def _run_core_cli(tmp_path, *args, core_env=None):
     import subprocess
 
     env = {k: v for k, v in os.environ.items() if not k.startswith(("WEBSEARCH_", "BW_"))}
@@ -1089,7 +1090,7 @@ def _run_skill_cli(tmp_path, *args, core_env=None):
     )
     env.update(core_env or {})
     return subprocess.run(
-        [sys.executable, str(SKILL_CLI), *args],
+        [sys.executable, str(CORE), *args],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -1098,30 +1099,20 @@ def _run_skill_cli(tmp_path, *args, core_env=None):
     )
 
 
-def test_skill_cli_delegates_to_core(tmp_path):
-    proc = _run_skill_cli(
-        tmp_path, "search", "ghp_" + "a" * 30
-    )  # 秘匿チェックは核で止まる (通信しない)
+def test_core_cli_runs_the_secret_check(tmp_path):
+    proc = _run_core_cli(tmp_path, "search", "ghp_" + "a" * 30)  # 秘匿チェックで止まる (通信しない)
 
     assert proc.returncode == 2 and "検索を止めた" in proc.stderr
 
 
-def test_skill_cli_status_runs_without_network(tmp_path):
-    proc = _run_skill_cli(tmp_path, "status")
+def test_core_cli_status_runs_without_network(tmp_path):
+    proc = _run_core_cli(tmp_path, "status")
 
     assert proc.returncode == 0 and "brave: 鍵なし (飛ばす)" in proc.stdout
 
 
-def test_skill_cli_reports_a_missing_core(tmp_path):
-    proc = _run_skill_cli(tmp_path, "status", core_env={"WEBSEARCH_CORE": str(tmp_path / "x.py")})
+def test_core_cli_accepts_sync_keys(tmp_path):
+    # 鍵の同期のスクリプト (441 / 349) が呼ぶサブコマンド。bw が無い環境でも引数は解釈される (使い方のエラーではない)
+    proc = _run_core_cli(tmp_path, "sync-keys")
 
-    # 環境変数の指定が無くても、リポジトリ内の核へ落ちる (見つからなければ 2 で終わる)
-    assert proc.returncode in (0, 2)
-
-
-def test_skill_cli_has_no_provider_logic():
-    text = SKILL_CLI.read_text(encoding="utf-8")
-
-    # 薄い入口 (核への委譲と、古い読み手向けの名前の写しだけ)。プロバイダのロジックを持たない
-    assert len(text.splitlines()) < 90
-    assert "api.search.brave.com" not in text and "def sync_keys" not in text
+    assert "unrecognized arguments" not in proc.stderr and "invalid choice" not in proc.stderr

@@ -423,12 +423,11 @@ def test_interpreter_falls_back_to_shim_without_modern_python(tmp_path, availabl
     ("username", "ignored"),
     [("applejxd", False), (r"DOMAIN\applejxd", False), ("worker", True)],
 )
-def test_web_search_skill_is_not_deployed_to_bedrock_users(tmp_path, username, ignored):
-    """制約のある環境用 (Bedrock) は検索を AgentCore に一本化する。web-search skill と、それに依存する imozuru は個人用だけに配る。"""
+def test_search_core_and_imozuru_are_not_deployed_to_bedrock_users(tmp_path, username, ignored):
+    """制約のある環境用 (Bedrock) は検索を AgentCore に一本化する。自作の検索の核と、それに依存する imozuru は個人用だけに配る。"""
     rendered = render(home=str(tmp_path), username=username)
 
-    assert (".claude/skills/web-search/" in rendered) is ignored
-    assert (".claude/skills/web-search/**" in rendered) is ignored
+    assert (".config/agents/websearch/" in rendered) is ignored
     assert (".claude/skills/imozuru/" in rendered) is ignored
     assert (".claude/skills/imozuru/**" in rendered) is ignored
 
@@ -497,5 +496,4 @@ def test_personal_only_skills_follow_is_work_not_the_llm_provider(
     tmp_path, username, data, ignored
 ):
     rendered = render(home=str(tmp_path), username=username, data=data)
-    assert (".claude/skills/web-search/" in rendered) is ignored
     assert (".claude/skills/imozuru/" in rendered) is ignored

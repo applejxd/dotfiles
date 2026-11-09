@@ -24,7 +24,7 @@ import urllib.request
 # ─── pis の内側のプロキシ越しの取得 ──────────────────────────────────────
 # 内側は DNS が引けず、url_problem の事前の名前解決で必ず落ちる。pis が PIS_FETCH_VIA_PROXY=1 を付けたときだけ、
 # urllib が実際に使うプロキシがループバックなら、名前解決を省く (許可ドメインはプロキシが強制する)。
-# 検査は web-search の websearch.py (check_proxy_url) と同じ。正規表現が同じことは test_imozuru.py が固定する。
+# 検査は検索の核 (~/.config/agents/websearch/core.py の check_proxy_url) と同じ。正規表現が同じことは test_imozuru.py が固定する。
 # see docs/spec/web-search.md#pis-の内側のプロキシ越しの取得
 FETCH_PROXY_ENV = "PIS_FETCH_VIA_PROXY"
 _PROXY_RE = re.compile(r"http://127\.0\.0\.1:([0-9]{1,5})/?")

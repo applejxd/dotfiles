@@ -153,12 +153,10 @@ Documents/**
 .vscode-server/**
 {{- end }}
 
-# 会社 PC は検索を AgentCore の MCP に一本化する。web-search skill と、それに依存する imozuru は個人用 (is-work でない機) だけに配る
+# 会社 PC は検索を AgentCore の MCP に一本化する。それに依存しない自作の検索の核と imozuru は個人用 (is-work でない機) だけに配る
 # (LLM のプロバイダ (llm-provider) とは別の軸。会社 PC で Copilot を使っても配らない)
 # see docs/spec/web-search.md#配る範囲、docs/spec/imozuru.md#配る範囲
 {{- if eq (includeTemplate "is-work" .) "true" }}
-.claude/skills/web-search/
-.claude/skills/web-search/**
 .config/agents/websearch/
 .config/agents/websearch/**
 .claude/skills/imozuru/

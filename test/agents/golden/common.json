@@ -1782,15 +1782,6 @@
      ]
     },
     {
-     "script": "~/.claude/skills/web-search/scripts/websearch.py",
-     "subcommands": [
-      "search",
-      "fetch",
-      "papers",
-      "status"
-     ]
-    },
-    {
      "script": "~/.claude/skills/imozuru/scripts/chain.py",
      "subcommands": [
       "find",

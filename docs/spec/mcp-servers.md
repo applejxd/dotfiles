@@ -44,7 +44,7 @@ command = "uv"
 args = ["run", "--no-project", "--quiet", '{{ .chezmoi.homeDir }}/.config/agents/websearch/mcp_server.py']
 ```
 
-- 自作の stdio サーバ（ツール `web_search`・`fetch_page`・`search_papers`。仕様は [Web 検索](web-search.md#mcp-サーバ)）。
+- 自作の stdio サーバ（ツール `web_search`・`fetch_page`・`search_papers`。仕様は [Web 検索](web-search.md#mcp-サーバ)）。この MCP に一本化し、スキル `web-search` は廃止した（2026-11-09）。
 - `pi_exposure = "direct"`: pi の `mcp.json` の `exposure` に補う（下の「`pi_exposure`」）。モデルに直接見えるツール名は `mcp__websearch__web_search`・`mcp__websearch__fetch_page`・`mcp__websearch__search_papers`。
 - **`is-work` が `true` の機では宣言しない**（`[[mcp]]` のブロックごと条件で囲む）。検索の送り先が限られる環境では登録しない、という一般論による。その機の検索は `agentcore-websearch` だけ。
 - `clis = ["pi"]` のため、custom の harness（`rules.json`）にも `websearch` が登録される。custom は凍結だが、検索が使えるのは害がないので意図した変更として受け入れる。

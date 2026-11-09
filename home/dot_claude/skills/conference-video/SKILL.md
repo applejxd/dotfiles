@@ -99,7 +99,7 @@ Manim 用の環境は `uv sync`(`UV_PROJECT_ENVIRONMENT` で置き場所を指�
 
 1. **候補を探す**: 動機・課題の場面ごとに、代表的な応用の写真・短い動画を探す
    (例: AR グラスを使う場面、ロボットが室内を走行する場面)。検索は
-   web-search スキル(`websearch.py search` / `fetch`)を使う
+   使える検索ツールで行う(pi は MCP の `web_search` / `fetch_page`、ほかの CLI は内蔵の検索・取得ツール)
 2. **出典ポリシーに従う**(`references/attribution.md`)。素材は 3 区分:
    確認済み(CC0 / CC BY / Pexels など許諾あり、または著者本人が許可)、
    出典表示(許諾は未確認だが、出典を出して使う。短い・改変しない・説明の従)、

@@ -27,7 +27,7 @@ CLI ごとの解釈の違い、`allowed-tools` の書き方、fork の基準、�
 - ファイルのツールは、本文が実際に使うものだけ。一部のファイルだけなら `Edit(AGENTS.md)` の形（新規作成も、この形の編集の許可で足りる）
 - 本文のコマンドが `$SKILL_DIR` などの変数を使うと、許可の型に一致しない（照合は、書かれた文字列に対して行われる）。許可したいときは、`~/.claude/skills/<名前>/...` の形で書く
 - `Task` は 2.1.63 で `Agent` に改名され、古い名前は別名として動く。古い版との互換のため、`Task` のまま
-- 付けないもの: `github-operations`（書き込みは確認が本質）・`oss-research`・`web-search`・`learn`（Bash なし）・各移行スキル。検索のスクリプトなど、足したくなったら、パターンの一致試験と合わせて足す
+- 付けないもの: `github-operations`（書き込みは確認が本質）・`oss-research`・`learn`（Bash なし）・各移行スキル。検索のスクリプトなど、足したくなったら、パターンの一致試験と合わせて足す
 - 副作用の確認: 本文が書くスクリプトの呼び出しが、許可の型に一致するかは機械的に試験できる（2026-10-28 に実施）。**Claude Code の実機での確認は未実施**（認証が切れている）。許可から外れた操作は、確認が 1 回増えるだけで、動作は変わらない
 
 ## `context: fork` の基準
@@ -53,7 +53,7 @@ Claude Code の `context: fork` は、**本文（`$ARGUMENTS` 置換後）を、
 | `cuda-version-migration`・`uv-migration` | なし | 長時間で、判断が人の側。調査の段だけを `plan` 役へ任せる（[CHG-0044](../change/closed/0044-plan-agent.md)） | なし |
 | `oss-research` | なし | 読み取り中心で自己完結だが、`gh`・`curl` の実行と `rm` の承認が、子では通らない | なし |
 | `experiment-loop` | なし | 実行・記録・比較は CLI（`exp.py`）が担い、採否の判断と仮説は会話の文脈が材料。長い実行は背景（pi の `bg_run`）で回す | なし（`[pi.skill_scripts.allow]` へは足していない） |
-| `web-search`・`env-check` | なし | 条件は満たせるが、**便益が無い**（道具。結果を親がそのまま使う。子に回すと往復が増えるだけ） | `env-check` はスクリプトだけ |
+| `env-check` | なし | 条件は満たせるが、**便益が無い**（道具。結果を親がそのまま使う。子に回すと往復が増えるだけ） | `env-check` はスクリプトだけ |
 
 `allowed-tools` を持つスキル:
 
@@ -79,7 +79,7 @@ Claude Code の `context: fork` は、**本文（`$ARGUMENTS` 置換後）を、
 
 | 型 | 親の仕事 | 子の仕事 | スキル |
 | --- | --- | --- | --- |
-| A 丸ごと委譲 | 依頼文を渡して結果を受ける | 全部 | `fix`・`env-check`・`web-search`・`friction-review` の分類の段 |
+| A 丸ごと委譲 | 依頼文を渡して結果を受ける | 全部 | `fix`・`env-check`・`friction-review` の分類の段 |
 | B 合意だけ親 | 費用・範囲などの合意を取る | 実行（合意は引数で受ける） | `ipynb-to-marimo-pages`・`uv-migration`・`cuda-version-migration` の実行の段 |
 | C 文脈を渡して書かせる | 会話の決定事項を要約して依頼文に入れる | 文書・差分を作る | `sdd-docs`・`learn`・`commit` |
 | D 対話そのもの | 質問・承認 | 重い読み物・草稿・試験 | `onboarding`・`skill-creator`・`pi-extension-dev`・`github-operations`・`feature-orchestration`（ただし、草稿・実装・試験・読み戻しは子の工程。承認に結び付く書き込みは、親側の限定操作） |
