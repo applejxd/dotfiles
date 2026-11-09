@@ -177,11 +177,13 @@ def test_custom_ignore_skips_permission_system_config(tmp_path):
     assert PERMISSION_DIR in rendered
     assert f"{PERMISSION_DIR}/**" in rendered
     assert PLAN_MODE_CONFIG in rendered  # plan mode の設定も stock だけ
+    assert ".cc-safety-net" in rendered and ".cc-safety-net/**" in rendered  # cc-safety-net の規則も stock だけ
 
 
 def test_stock_ignore_keeps_plan_mode_config(tmp_path):
     rendered = lines(render_file(".chezmoiignore.tmpl", tmp_path, profile_env="stock"))
     assert PLAN_MODE_CONFIG not in rendered
+    assert ".cc-safety-net" not in rendered  # stock では配る
 
 
 def test_stock_ignore_excludes_own_pi_assets(tmp_path):
@@ -632,8 +634,10 @@ def test_permission_policy_matches_the_contract():
     perm = policy()["permission"]
     for tool in ("read", "write", "edit", "grep", "find", "ls"):
         assert perm[tool] == "allow", tool
-    assert perm["bash"]["*"] == "ask"
-    assert perm["external_directory"] == "ask"
+    # YOLO を切る前提。bash は既定 allow で、止めるものだけを後ろの規則で決める (個別の判定は test_pi_permission_decisions.py の表)
+    assert perm["bash"]["*"] == "allow"
+    assert next(iter(perm["bash"])) == "*"  # 後勝ち: 既定を先頭に置く
+    assert perm["external_directory"] == {"*": "ask", "/tmp/*": "allow"}  # /tmp の読み書きだけ事前許可
     assert perm["mcp"]["*"] == "ask"
     assert perm["skill"]["*"] == "allow"
 
@@ -641,10 +645,12 @@ def test_permission_policy_matches_the_contract():
         return value["action"] if isinstance(value, dict) else value
 
     bash = {k: action(v) for k, v in perm["bash"].items()}
-    for denied in ("rm -rf *", "sudo *", "git push*", "sh", "bash"):
+    for denied in ("sudo *", "git push*", "sh", "bash", "printenv", "gh *auth token*", "bw get*", "op read*"):
         assert bash[denied] == "deny", denied
-    for allowed in ("git status *", "git diff *", "mise run *", "uv run *", "pytest *", "rg *"):
-        assert bash[allowed] == "allow", allowed
+    # rm -rf の一律 deny は置かない (cc-safety-net が対象で判定する。2.0% の誤 deny を避ける)
+    assert not any(k.startswith("rm ") for k in bash)
+    for asked in ("gh *pr create*", "chezmoi *apply*", "git rebase*", "git -C * rebase*", "npm publish*", "ssh *"):
+        assert bash[asked] == "ask", asked
     path = perm["path"]
     assert next(iter(path)) == "*" and path["*"] == "allow"  # 後勝ち: 全許可を先頭に置く
     keys = list(path)
@@ -674,6 +680,11 @@ def test_permission_policy_matches_the_contract():
         "goal_complete",
         "goal_blocked",
         "goal_wait",
+        "subagent_launch",  # ワークフローの子の起動 (当面は allow。docs の「subagent_launch は allow」)
+        "contact_supervisor",
+        "intercom",
+        "structured_output",
+        "subagent_command",
     ):
         assert perm[tool] == "allow", tool
     assert "bg_run" not in perm  # bg_run は shellTools で bash と同じ判定に通す (allow にしない)
