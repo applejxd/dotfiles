@@ -587,6 +587,7 @@ def test_permission_config_from_empty_input_has_policy_and_runtime_defaults(tmp_
     assert out["permissionReviewLog"] is True
     assert out["doublePressToConfirm"] is True
     assert out["promptNotifications"] == ["bell"]  # 承認待ちの BEL (Zed・Orca の通知)
+    assert out["promptTimeoutMs"] == 300000  # 誰も答えない確認は、5 分で拒否して先へ進む (離席中に止まらない)
 
 
 def test_permission_config_keeps_runtime_values_and_replaces_policy(tmp_path):

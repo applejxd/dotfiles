@@ -24,6 +24,9 @@ RUNTIME_DEFAULTS = {
     "doublePressToConfirm": True,
     # 承認待ちのダイアログが開くときに端末の BEL を鳴らす (Zed・Orca がフォーカス外の端末の BEL を通知にする)。利用者が変えた値は保つ
     "promptNotifications": ["bell"],
+    # 誰も答えない確認は、この時間 (ミリ秒) の後に拒否して先へ進む (承認は決してしない)。離席中に、確認 1 件で全体が止まらないようにする。
+    # 答え始める (キーを押す) と時計は止まる。利用者が変えた値は保つ。see docs/spec/agent-config-generation.md#permission-system-の設定stock
+    "promptTimeoutMs": 300000,
 }
 
 
