@@ -124,3 +124,28 @@
 - **理由**: Ralph の主な利点は文脈の肥大を避けることだが、利用者の過去のセッションの集計では、長い文脈による質の低下の兆候が見つからなかった（[圧縮の研究ノート](long-context-compaction-paper-2026-11.md)）。新しい文脈にする必要性が、今はデータから支持されない。
 - **未確認**: **`pi-subagents` の背景の子に permission-system と cc-safety-net が載るか**（実機で確かめる 4 点の 2。載らなければ workflow のループも lnilluv と同じ迂回になる）。`@rahulmutt/pi-ralph` の `newSession` の後に permission-system の状態（allow の記憶・YOLO）が引き継がれるか。GitHub の Issue の対応状況（npm の情報のみ見た）。
 - **関連**: `@badliveware/pi-compaction-continue`（圧縮の後や停滞の後に促す見張り）は、圧縮の後の自動の再開に関係する（自作しないと決めた件。必要になったら評価する）。
+
+## btw の評価と決定（2026-11-09）
+
+出典は、npm レジストリ（`https://registry.npmjs.org/@narumitw%2Fpi-btw/latest`）・pi.dev の README（`https://pi.dev/packages/@narumitw/pi-btw`）・tarball の展開（取得・展開だけで、実行なし）。いずれも 2026-11-09 に取得した。
+
+- **結論: `@narumitw/pi-btw@0.63.5` を入れる**（利用者の指示 2026-11-09）。`pi-stock-packages` で版を固定し、`is-work` の分岐の外（全ての機）に置く。**導入の条件は、実機での `/btw` の動作確認**（まだしていない）。
+- **事実（レジストリ・tarball）**:
+  - 版 0.63.5。MIT。2026-11-06 公開（GitHub Actions の trusted publisher。SLSA の provenance の記載あり。署名は検証していない）。月間 18.1K DL。展開後 999,945 バイト・50 ファイル。
+  - peer 依存は `@earendil-works/pi-ai`・`pi-tui`・`pi-coding-agent`（いずれも `*`）。実依存は `@narumitw/pi-tui-kit ^0.69.1` の 1 つ。devDependencies は pi 1.5.0（実機と同じ版）でビルドされている。
+  - tarball の sha512 は、レジストリの公表値（`sha512-sH2q5rmUHJ6rF9N8VlsuMq/kDI8GJqR31huvgxojnl0/OR4wwR3PBKFIQrRYX/kxeR06JS8l8wcaX1EYbxS6qw==`）と一致した。
+  - 同じ作者（`@narumitw`）の `pi-plan-mode`・`pi-goal` は導入済み。
+- **コードの確認（grep のみ。`src/` と、実際に読み込まれる `dist/` の両方。全コードのレビューではない）**:
+  - 登録するのはコマンド `/btw` だけ（`registerTool` は 0 件）。モデル呼び出しは `completeSimple`（`tools` の指定なし）で、README の「The side model does not execute tools」と整合する。
+  - `fetch`・URL・`process.env` は 0 件。ファイル書き込みは `settings.ts` だけで、`$PI_CODING_AGENT_DIR/pi-btw.json`（通常は `~/.pi/agent/pi-btw.json`）へ、一時ファイル経由で原子的に書く（設定を変えたときだけ）。
+  - 子プロセスは `openUrlInBrowser`（`xdg-open` / `open` / `rundll32`。シェルを介さず、リンクを開く用途）の 1 か所だけ。`as any`・`@ts-ignore` は 0 件。pi 以外の依存は `@narumitw/pi-tui-kit` と node の組み込みだけ。
+- **README の記述（未検証）**: `/btw <質問>` で本体と別のスレッドを開く。本体へは明示したときだけ戻せる（エディタに入れるだけで送信しない）。モデル・思考レベルは本体と別に指定でき、既定は本体と同じ。**質問と選んだ文脈は、そのモデルの提供元へ送られる**。TUI モード専用。再開できる状態はメモリ内だけ（`/new`・`/resume`・`/fork`・`/reload`・再起動で破棄）。1 セッションで開ける BTW は 1 つ。Pi 0.85 未満では「最新へ移動」の操作が無い。
+- **権限の観点（上のコードの確認からの読み）**: ツールを登録せず、モデル呼び出しは `completeSimple` なので、permission-system の判定の対象（ツール呼び出し）にならない。`xdg-open` の起動も拡張のコードからで、判定の対象外。よって permission の設定は足さない。`pi-btw.json` も配らない（既定のまま）。
+- **候補の判定**:
+  - `pi-btw`（dbachelder 版・tbroadley 版）: 本物のサブセッションで `read`/`bash`/`edit`/`write` を持つ。2026-10-21 の調査（[pi-public-extensions-survey](pi-public-extensions-survey.md)）で「導入しない」と判断済み。→ 除外。
+  - `@pandi-coding-agent/btw@0.1.1`（ツールなし・履歴に残さない）: npm 上で deprecated（「`@pandi-coding-agent/pandi-btw` へ改名」）。後継は未確認。→ 見送り。
+  - `@firstpick/pi-extension-btw`・`@nguyenquangthai/pi-btw`・`@pi-unipi/btw`・`pi-mono-btw`: 検索結果の説明文しか見ておらず、判断できない。→ 未評価。
+- **理由**: ツールを登録せず（モデル呼び出しはツールなし）、本体と別のスレッドで質問できる。導入済みの plan mode・goal と同じ作者で、pi 以外の実依存が 1 つだけ。自作の `btw`（`home/dot_pi/agent/extensions/btw/`）は custom プロファイルでだけ配る（stock は自作の拡張を配らない）ので、コマンド名 `/btw` は衝突しない。
+- **未確認（実機・コード）**:
+  - 依存 `@narumitw/pi-tui-kit` のコードは見ていない。README が書く「非公開のレイアウトアクセス（公式のサポート保証なし）」の具体的な箇所は、grep では特定できなかった。dist が src からのビルド結果と一致するかは検証していない。provenance の署名は検証していない。
+  - インストールも実行もしていない。`chezmoi apply` 後に pi 1.5.0 が package を取得して `/btw` が動くこと、Orca の端末での表示、`pi-plan-mode`・`/goal` との共存は、実機で確かめていない。Windows 実機は未検証。
