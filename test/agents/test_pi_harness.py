@@ -112,6 +112,8 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "landlock_exec.py", harness / "landlock_exec.py")
     shutil.copy2(COMMIT_MESSAGE_SRC, harness / "commit-message.js")
     rules = gen.build_pi_harness({}, load_common())
+    # 実機のスクリプトを起動する MCP サーバ (websearch など) は登録しない (起動すると道具の一覧に混ざる)
+    rules["mcp"] = []
     # 子エージェントも偽のモデルで動かす (階層のモデルは認証が要る)
     for agent in rules["agents"].values():
         agent["model"] = None
@@ -2173,6 +2175,8 @@ def _render(template: Path) -> str:
     done = subprocess.run(
         [chezmoi, "--source", str(ROOT), "execute-template"],
         input=template.read_text(encoding="utf-8"),
+        # 実機の旗 (~/.config/chezmoi/pi-profile) に左右されないよう、環境変数で custom に固定する
+        env={**os.environ, "CHEZMOI_PI_PROFILE": "custom"},
         capture_output=True,
         text=True,
         encoding="utf-8",

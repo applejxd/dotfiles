@@ -484,6 +484,8 @@ def test_the_harness_replaces_it_instead_of_doubling(env):
     shutil.copy2(HARNESS_SRC.parent / "landlock_exec.py", harness / "landlock_exec.py")
     shutil.copy2(HARNESS_SRC.parent / "commit-message.js", harness / "commit-message.js")
     rules = gen.build_pi_harness({}, load_common())
+    # 実機のスクリプトを起動する MCP サーバ (websearch など) は登録しない (起動すると道具の一覧に混ざる)
+    rules["mcp"] = []
     for agent in rules["agents"].values():
         agent["model"] = None
     # action を持たない役割では、bash の git commit は従来どおり確認を出す (この試験は「確認が 1 回だけ」を見る)
