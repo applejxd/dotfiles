@@ -149,3 +149,29 @@
 - **未確認（実機・コード）**:
   - 依存 `@narumitw/pi-tui-kit` のコードは見ていない。README が書く「非公開のレイアウトアクセス（公式のサポート保証なし）」の具体的な箇所は、grep では特定できなかった。dist が src からのビルド結果と一致するかは検証していない。provenance の署名は検証していない。
   - インストールも実行もしていない。`chezmoi apply` 後に pi 1.5.0 が package を取得して `/btw` が動くこと、Orca の端末での表示、`pi-plan-mode`・`/goal` との共存は、実機で確かめていない。Windows 実機は未検証。
+
+## tok/s 表示の評価と決定（2026-11-09）
+
+出典は、npm レジストリ・npm のダウンロード数の API（last-month）・tarball の展開（`npm pack` と展開だけで、実行なし）・検索結果の README。いずれも 2026-11-09 に取得した。コードは grep と一部の読みだけで、全体のレビューではない。
+
+- **結論: `pi-show-token-rate@0.3.0` を入れる**（利用者の指示 2026-11-09）。`pi-stock-packages` で版を固定し、`is-work` の分岐の外（全ての機）に置く。**導入の条件は、実機での表示の確認**（まだしていない）。
+- **事実（レジストリ・tarball）**:
+  - 版 0.3.0。MIT。作成 2026-10-08・最終更新 2026-10-18。メンテナは 1 人（luohuidong）。リポジトリは `https://github.com/luohuidong/pi-extensions`（`packages/pi-show-token-rate`）。月間 398 DL。
+  - tarball は 17,631 バイト・15 ファイル（`src/` の .ts・README・LICENSE・CHANGELOG・package.json）。**tarball の sha512 は、レジストリの公表値（`sha512-6dDPWv4ZIzt5QOgd0PZl86hjMjj/WRUv75fT0NrloV4p4oAAF5fIt0FG70O7JTD8gZm80z2H4GDhbk56zWYjZg==`）と一致した。** レジストリの署名（`dist.signatures`）はあるが検証していない。レジストリの応答に provenance の attestations は無かった。
+  - 依存なし。peerDependencies は `@earendil-works/pi-coding-agent: *` だけ。package.json の pi マニフェストは `extensions: ["./src/index.ts"]`。
+- **コードの確認（grep のみ。配布物は `src/`・README・LICENSE・CHANGELOG だけ。全コードのレビューではない）**:
+  - 次は **すべて 0 件**: `fetch(`・URL（`https?://`）・`process.env`・`child_process`/`execSync`/`spawn`・`node:fs`/`writeFile`/`readFile`・`node:net`/`node:http`/`node:https`/WebSocket・`eval(`/`new Function`・`as any`/`@ts-ignore`・`registerTool`・`appendEntry`/`sendMessage`/`sendUserMessage`。pi 以外の import は無い。
+  - 登録するのはコマンド `/token-rate`（引数なし。表示の切り替え）だけ。表示は `ctx.ui.setStatus`。
+- **測り方（`src/` のコメントからの読み。実測では未確認）**: TTFT は、assistant メッセージ自身の timestamp（pi が応答のストリームを開いた時刻）から、最初のトークンを含むストリームのイベント（thinking を含む）までの差。300 秒を超える値は捨てる。ストリーム中の TPS は直近の窓の速度。provider が使える `usage.output` を返さない間は、文字数から推定する（全角・CJK は 1 文字 ≒ 1 トークン、半角は 4 文字 ≒ 1 トークン、ツールの JSON は 2.5 文字 ≒ 1 トークン）。ストリームが終わると値は残して薄く表示する。履歴・平均は無い。
+- **候補の比較**（月間 DL は npm の API の last-month。規模・触るものは tarball の展開と grep）:
+  - `pi-token-speed`（gsanhueza）: 5,800 DL・0.12.0（2026-10-20）・展開後 404KB・58 ファイル。窓の平均 TPS をステータス行に出す。色の選択画面などの設定 UI があり、設定ファイルを書く（`settings-storage.ts` の `writeFile`）。→ 数字 1 つの表示には大きすぎるので見送り。
+  - `@monotykamary/pi-tps`: 1,949 DL・1.3.19（2026-11-02）・`index.ts` 995 行。ターンごとに通知し、セッションへ `appendEntry('tps')` で記録し、`/tps-export` で `~/.cache` へ書き出して `execSync` で `xdg-open`/`open` を実行する。→ 触る範囲が広いので見送り。
+  - `pi-show-token-rate`: 398 DL。→ **採用**（ステータス行とコマンドだけ。ファイル・ネットワーク・子プロセスが無い）。
+  - `@nbafrank/pi-tks`: 357 DL・0.1.3（2026-10-22）・展開後 44KB。ローカルモデル向けで、ライブ TPS・最終の decode 速度・prefill 速度・TTFT を出す。コマンド `/tps`。ファイル・ネットワーク・子プロセスは grep で 0 件。→ **代替の第 1 候補**。
+  - `pi-tps`（summertime-wu）91 DL・`@kinarajv/pi-tps-extensions` 69 DL・`@yqt5420/pi-token-speed` 50 DL・`pi-ttft`（TTFT のみ）25 DL: 利用が少なく、検索結果の説明文しか見ていない。→ 未評価。
+  - 自作の `speed`（`home/dot_pi/agent/extensions/speed/index.ts`。100 行。直近 1 回の TTFT と decode 速度、取れない値は直前の値を残す、reasoning がストリームに出ない経路では `~` を付ける）: stock では配備されない（凍結。[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)）。→ **代替の第 2 候補**。復活には [ADR-0031](../../adr/0031-evaluate-existing-extensions-first.md) の記録（理由・維持費・撤去条件）と承認が要る。
+  - 先行の調査記録: [pi-public-extensions-survey](pi-public-extensions-survey.md) の記録 P8（2026-10-31。当時は公開の拡張を導入せず、README だけで比較した）。
+- **ほかに確認したこと**: pi 1.5.0 の本体には TPS の表示が無い（docs と dist の grep。`tokens per second` のヒットは、OpenRouter の経路指定の項目 `preferred_min_throughput` の説明だけで、表示の機能ではない）。
+- **理由**: [ADR-0031](../../adr/0031-evaluate-existing-extensions-first.md)（既存の拡張で足りるかを先に確認する）。ステータス行だけを触り、ファイル・ネットワーク・子プロセスを使わない最小の候補。日本語の文字数の推定が考慮されている。導入は 1 行の版固定で済む。
+- **代替に切り替える条件・撤去**: 実機で数値が極端に外れる（Copilot 経由で reasoning がストリームに出ないときの過小など）、他のステータス表示と競合する、更新が止まる、のいずれかなら、`@nbafrank/pi-tks` か自作 `speed` の復活を評価する。撤去は `pi-stock-packages` の 1 行を消すだけ。
+- **未確認**: 実機の TUI・Orca での見え方、Copilot 経由の数値の精度、pi 1.5.0 との実際の互換（peer は `*`）、長期の保守（作者 1 人・公開から約 5 週間）、配布物が GitHub のソースと一致するか（検証していない）。Windows 実機は未検証。

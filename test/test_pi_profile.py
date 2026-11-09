@@ -35,6 +35,7 @@ NEW_PACKAGES = (
     "npm:@narumitw/pi-plan-mode@",
     "npm:@narumitw/pi-goal@",
     "npm:@narumitw/pi-btw@",
+    "npm:pi-show-token-rate@",
     "npm:@ayulab/pi-rewind@",
 )
 # stock の AGENTS.md に出してはならない自作ハーネスの語
@@ -379,6 +380,13 @@ def test_stock_packages_pi_btw_is_pinned_once_on_every_machine(tmp_path):
     for user in ("applejxd", "tester"):
         hits = [p for p in stock_packages(tmp_path, user) if "pi-btw" in p]
         assert hits == ["npm:@narumitw/pi-btw@0.63.5"], (user, hits)
+
+
+def test_stock_packages_pi_show_token_rate_is_pinned_once_on_every_machine(tmp_path):
+    """pi-show-token-rate は版固定で 1 回だけ入る。is-work の真偽（tester=会社 PC・applejxd=家の機）に依らない。"""
+    for user in ("applejxd", "tester"):
+        hits = [p for p in stock_packages(tmp_path, user) if "pi-show-token-rate" in p]
+        assert hits == ["npm:pi-show-token-rate@0.3.0"], (user, hits)
 
 
 def test_pi_btw_config_is_not_deployed():
