@@ -512,6 +512,7 @@
    ],
    "command": "uv",
    "id": "agentcore-websearch",
+   "pi_exposure": "direct",
    "purpose": "AgentCore Web Search で web 検索する (Gateway の URL がある機だけ)",
    "requires_env": "AGENTCORE_GATEWAY_URL",
    "transport": "stdio"
@@ -528,6 +529,7 @@
    ],
    "command": "uv",
    "id": "websearch",
+   "pi_exposure": "direct",
    "purpose": "家の機の web 検索・ページ取得・論文検索 (web_search / fetch_page / search_papers)",
    "transport": "stdio"
   }
