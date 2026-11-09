@@ -3,7 +3,7 @@
 ``home/dot_config/pi/harness/`` 配下 (``judge/`` を含む) の ``*.ts`` / ``*.js`` の相対 import が、すべて実在するファイルを指す。
 ファイルを消したのに参照元を直し忘れると、pi の起動時に初めて落ちる。それを試験で先に見つける。
 
-see docs/change/0062-pr-hub-simplify.md
+see docs/change/closed/0062-pr-hub-simplify.md
 """
 
 from __future__ import annotations

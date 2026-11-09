@@ -5,7 +5,7 @@
 確かめるのは、旧形式 (承認が取れず退避した git commit) の list / show / drop / USAGE が従来の出力のままであることと、
 コマンドだけの登録 (ツールは登録しない)。新形式 (承認・巡回・resolve・unlock) の試験は、旧い統合経路の撤去で外した。
 
-see docs/change/0062-pr-hub-simplify.md
+see docs/change/closed/0062-pr-hub-simplify.md
 """
 
 from __future__ import annotations

@@ -9,7 +9,7 @@ sandbox によるパス単位の遮断は [sandbox (Claude Code / Copilot CLI)](
 > **現状**: Claude Code / Copilot CLI の判定 hook（`check_bash.py` など）は登録を外した（`common.toml.tmpl` の `[retired_hooks]`、
 > [ADR-0017](../../adr/0017-pi-only-and-ts-judge.md)）。この文書の「hook」の規則（`bashrules`）は Python 版で、
 > 同じ規則を TS の判定器（`pi/harness/judge/`）と `tables.toml` が引き継いでいる（[判定 API](pi-decide.md)）。
-> Python 版は TS 版の正解データの出力元として残り、撤去は [CHG-0035](../../change/0035-retire-python-judge-oracle.md)。
+> Python 版は TS 版の正解データの出力元として残り、撤去は [CHG-0035](../../change/closed/0035-retire-python-judge-oracle.md)。
 > Claude / Copilot の permission（allow / ask / deny の生成）の記述は、各 CLI の仕様の説明として残してある。
 
 ## 照合規則
@@ -158,7 +158,7 @@ world-readable な `passwd` / `group` は書き込み先のときだけ deny と
   ディレクトリ経由で保護対象を読む形は見逃すが、事故防止の水準([ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md))で
   は、そのディレクトリを作る必要があり、実質の穴にならないとして許容した
 - 実装は Python 版 `sensitive.py` の `_URL_RE` と TS 版 `sensitive.ts` の `URL_RE`(同じ正規表現)。
-  経緯と review は [CHG-0032](../../change/0032-guard-url-false-positive.md)
+  経緯と review は [CHG-0032](../../change/closed/0032-guard-url-false-positive.md)
 
 ## エージェント CLI のランタイム設定も秘密扱いにする
 

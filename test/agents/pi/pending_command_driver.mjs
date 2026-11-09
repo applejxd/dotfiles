@@ -4,7 +4,7 @@
 //
 //   node test/agents/pi/pending_command_driver.mjs
 //
-// see docs/change/0062-pr-hub-simplify.md
+// see docs/change/closed/0062-pr-hub-simplify.md
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

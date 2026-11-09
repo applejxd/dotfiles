@@ -2,7 +2,7 @@
 //
 //   node test/agents/pi/protectedrefs_driver.mjs '{"fn":"protected","ref":"develop","patterns":["develop"]}'
 //
-// see docs/change/0053-worktree-integration-gate.md
+// see docs/change/closed/0053-worktree-integration-gate.md
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 

@@ -13,7 +13,7 @@
 pi には承認の機能が無く、公式は OS・コンテナなどの境界で守る立場を取る（[調査記録](../research/agents/pi-isolation-options.md)）。
 このリポジトリは、判定の拡張（ツール呼び出しを allow / ask / deny に振り分けるガード）と、Fence による OS の隔離（サンドボックス）の 2 層を持っていた。
 `pis --boundary` が Fence の中で起動していたが、標準は Fence の外で、境界の中でのガードの動きは「受け取るだけで判定に使っていない」状態だった。
-起動コマンドの組み立ては、`pis`（bash）と `ocs` の `pi.py` で別々に持ち、拡張を足すたびに 3 か所を直す構造だった（[CHG-0023](../change/0023-guard-terminology.md) の段 3a）。
+起動コマンドの組み立ては、`pis`（bash）と `ocs` の `pi.py` で別々に持ち、拡張を足すたびに 3 か所を直す構造だった（[CHG-0023](../change/closed/0023-guard-terminology.md) の段 3a）。
 
 守る目的は、[ADR-0012](0012-ocs-boundary-for-accidents.md) のとおり「エージェントのうっかり」を止めること。悪意あるリポジトリへの耐性までは求めない。
 利用者の使い方は、普段は `pis` を打って起動し、制御ファイルの編集などサンドボックスが邪魔な作業だけ外で行う。
@@ -66,7 +66,7 @@ pi には承認の機能が無く、公式は OS・コンテナなどの境界�
 
 ## 決定の確認方法
 
-実装の進捗は [CHG-0023](../change/0023-guard-terminology.md) が持つ。ここには、決定が効いているかの確かめ方だけを書く。
+実装の進捗は [CHG-0023](../change/closed/0023-guard-terminology.md) が持つ。ここには、決定が効いているかの確かめ方だけを書く。
 
 - [ ] `pis` を引数なしで起動するとサンドボックスの中で動き、フッターに「🔒 サンドボックス」が出る（[記録 S1](../research/agents/pis-sandbox-field-test.md) で確認）
 - [ ] `PI_HARNESS_BOUNDARY=1` だけを立てて（許可の一覧・カナリアが無いまま）フルガードを起動すると、起動しない（`test_pi_harness.py`。自動試験のみ。実機は未確認）

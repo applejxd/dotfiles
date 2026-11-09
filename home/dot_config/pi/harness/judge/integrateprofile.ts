@@ -1,7 +1,7 @@
 // プロジェクト内の `.agents/config/pi.json` の解析・検査・実効の設定 (純関数。ファイル・git・時刻に触れない)。
 // 保護ブランチは全体設定のまま。ここで受けるのは統合先と接頭辞だけで、保護と交差する値は拒否する。
 // 診断は固定のコードとキー名だけ (入力の本文・値・生の例外は入れない)。
-// see docs/change/0057-per-project-integrate.md
+// see docs/change/closed/0057-per-project-integrate.md
 
 export type ProfileDefaults = {
 	protectedRefs: readonly string[];

@@ -7,7 +7,7 @@ Claude Code / Copilot CLI の hook を `common.toml` の `[[hooks]]` から生�
 **Claude / Copilot への hook の登録は撤去した（[ADR-0017](../adr/0017-pi-only-and-ts-judge.md)）。**
 `[[hooks]]` は、pi のフルガードが edit / write の後に呼ぶスクリプト（`post_edit = true`。整形と markdownlint）だけを持つ。
 判定の hook（`check_bash.py`・`redirect-tmp.py`・`check_file_read.py`）の判定は TS の判定器（`pi/harness/judge`）が担い、`[retired_hooks].scripts` に載せた。
-Python 版のファイルは `home/dot_claude/hooks/` に残るが、登録されず実行時は呼ばれない（正解データの書き出し元。[CHG-0035](../change/0035-retire-python-judge-oracle.md)）。
+Python 版のファイルは `home/dot_claude/hooks/` に残るが、登録されず実行時は呼ばれない（正解データの書き出し元。[CHG-0035](../change/closed/0035-retire-python-judge-oracle.md)）。
 
 | 生成先 | 生成方法 | 扱い |
 | --- | --- | --- |

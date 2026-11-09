@@ -1,6 +1,6 @@
 #!/bin/sh
 # CHG-0029 W1 S5: 実機の pis で、隔離の worker を通しで確かめるための使い捨てのリポジトリを作る・消す。
-# 手順と読み方は docs/change/0029-worktree-isolation.md の「S5 の手順」。
+# 手順と読み方は docs/change/closed/0029-worktree-isolation.md の「S5 の手順」。
 # 使い捨てのリポジトリ ($S5_BASE、既定 ~/src/s5-isolation) だけを触り、本物のリポジトリには書かない。
 set -eu
 

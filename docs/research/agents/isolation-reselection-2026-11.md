@@ -3,7 +3,7 @@
 - **日付**: 2026-11-05〜06
 - **対象**: 他のリポジトリ（外部コード・依存・Web アプリ・GPU を実行する）で、AI コーディングエージェント（pi）を動かす隔離方式。dotfiles は隔離を使わない（[ADR-0025](../../adr/0025-dotfiles-dev-without-os-sandbox.md)）。
 - **方法**: Web 調査は `explore` の子 5 本（読み取りと検索だけ。親が代表の行を確かめた）。試作は親が実機で行った（この機械: WSL2・カーネル 6.18.54.1・NVIDIA RTX 3070・rootless Docker 29.9）。別系統のモデル（GPT-6 Astra）へ、事実と暫定の結論を渡して相談した。**動かして確かめたのは「試作」の節だけ。それ以外は文書ベース**。
-- **関連**: 過去の見送り（Docker 系・OpenShell・nono。いずれも文書ベース）は [CHG-0009](../../change/closed/0009-ocs-simplify-for-accidents.md)・[CHG-0033](../../change/0033-sandbox-build-value-assessment.md)・[OpenShell 比較](openshell-comparison.md)・[代替候補の比較](sandbox-alternatives-comparison.md)・[nono の WSL2 での試験（CHG-0036）](../../change/0036-nono-trial-on-wsl2.md)。
+- **関連**: 過去の見送り（Docker 系・OpenShell・nono。いずれも文書ベース）は [CHG-0009](../../change/closed/0009-ocs-simplify-for-accidents.md)・[CHG-0033](../../change/closed/0033-sandbox-build-value-assessment.md)・[OpenShell 比較](openshell-comparison.md)・[代替候補の比較](sandbox-alternatives-comparison.md)・[nono の WSL2 での試験（CHG-0036）](../../change/closed/0036-nono-trial-on-wsl2.md)。
 
 ## 要件
 

@@ -253,7 +253,7 @@ const decided = new Map<string, { input: string; decision: Decision; approved: b
 // 確認は 1 件ずつ出す。TUI の confirm は 1 枠を共有し、後の確認が先の確認を置き換える
 // (codemode の中で並べた呼び出しで先の確認が永久に止まった。spike の E3)
 let confirmQueue: Promise<unknown> = Promise.resolve();
-// 利用者が不在と分かった状態 (確認が時間切れ)。入力の世代 gen は、利用者の入力のたびに進む。see docs/change/0046-guarded-action-timeout.md
+// 利用者が不在と分かった状態 (確認が時間切れ)。入力の世代 gen は、利用者の入力のたびに進む。see docs/change/closed/0046-guarded-action-timeout.md
 const absence = { absent: false, gen: 0 };
 // TUI 以外 (RPC など) は、クライアントが確認に応えないと永久に待つので期限を付ける (期限が来たら拒否)
 const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
@@ -990,7 +990,7 @@ const runningChildren = ((globalThis as any).__piChildren ??= new Map<string, Ru
 const MAX_JOBS = 6;
 const MAX_REPLY_CHARS = 20000;
 // 読み取り専用の子の役割 (プロファイル)。利用者のコマンド (`btw`) が起動できるのはこれだけで、計画モード (`/plan`) の間に
-// 起動・続きの依頼ができる子もこれだけ (see docs/change/0044-plan-agent.md)
+// 起動・続きの依頼ができる子もこれだけ (see docs/change/closed/0044-plan-agent.md)
 const READ_ONLY_CHILD_PROFILES = new Set(["reader", "explorer"]);
 const jobs = new Jobs(MAX_JOBS);
 // 異常終了でも孤児の子を残さない (stdin が閉じても止まるが、作業中の子はすぐ止める)
@@ -1038,7 +1038,7 @@ const fmtStats = (s: RoundStats) =>
 	`${fmtSecs(s.durationMs)}, ${s.calls} calls, ${fmtTokens(s.tokens)} tokens${s.cost > 0 ? `, $${s.cost.toFixed(3)}` : ""}`;
 
 // ─── 隔離 (worktree) ────────────────────────────────────────────────
-// 契約・順序・残る限界は docs/change/0029-worktree-isolation.md の「W1 の実装計画」
+// 契約・順序・残る限界は docs/change/closed/0029-worktree-isolation.md の「W1 の実装計画」
 
 // Landlock が使えるかは、プロセスの寿命の間 1 回だけ確かめる (null: 使える。文字列: 使えない理由)
 let landlockProblem: string | null | undefined;

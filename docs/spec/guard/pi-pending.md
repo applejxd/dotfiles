@@ -1,7 +1,7 @@
 # 保留（非同期承認）【撤去済み・履歴】
 
 確認が取れないとき操作を保留し、利用者があとで `/pending approve` で実行する仕組み（`git_integrate`）は、**撤去済み**。
-統合は PR ビューアの「統合する」ボタンへ移った（[CHG-0062](../../change/0062-pr-hub-simplify.md) 段 A5）。経緯は [CHG-0055](../../change/closed/0055-async-approval.md)・[ADR-0023](../../adr/0023-pending-approval.md)。
+統合は PR ビューアの「統合する」ボタンへ移った（[CHG-0062](../../change/closed/0062-pr-hub-simplify.md) 段 A5）。経緯は [CHG-0055](../../change/closed/0055-async-approval.md)・[ADR-0023](../../adr/0023-pending-approval.md)。
 撤去は 1 つの feature・1 回の保存で行った。PR ビューアが作る、この feature の統合 merge commit を `git revert -m 1` すれば旧経路が復活する（履歴には撤去本体・develop の取り込み・後続修正があり、本体 commit だけの revert は後続修正と競合しうる）。
 
 ## 今の統合の流れ
@@ -30,7 +30,7 @@
 
 ## 残骸の ref の掃除
 
-新形式の分の ref（`refs/pi/{pending,running,done,key,lock}/*`）は、撤去後は使われない。残骸は一回きりの整理で、継続して要る手順ではない（整理の補助スクリプトは利用者の私用でリポジトリ外。実行済みの手順は履歴 [CHG-0062](../../change/0062-pr-hub-simplify.md) へ）。残っているときは、**先に一覧で対象を確かめて**から消す。
+新形式の分の ref（`refs/pi/{pending,running,done,key,lock}/*`）は、撤去後は使われない。残骸は一回きりの整理で、継続して要る手順ではない（整理の補助スクリプトは利用者の私用でリポジトリ外。実行済みの手順は履歴 [CHG-0062](../../change/closed/0062-pr-hub-simplify.md) へ）。残っているときは、**先に一覧で対象を確かめて**から消す。
 
 ```sh
 git for-each-ref 'refs/pi/pending' 'refs/pi/running' 'refs/pi/done' 'refs/pi/key' 'refs/pi/lock'

@@ -839,7 +839,7 @@ seccomp_apply_path = "~/.local/share/mise/installs/npm-anthropic-ai-sandbox-runt
 # 使う側は providers = ["github-copilot", ...] で参照する。
 # 不足すると proxy が CONNECT を 403 で落とすだけなので、症状は
 # 「応答が来ない」になる。
-# see docs/change/0007-harness-profiles.md
+# see docs/change/closed/0007-harness-profiles.md
 
 [provider.github-copilot]
 network_allow = ["api.githubcopilot.com", "*.githubcopilot.com"]
@@ -1001,7 +1001,7 @@ bash = [
 checks = ["check_gh_api_mutation"]
 timeout_seconds = 300
 
-# 保護ブランチへの統合 (see docs/change/0053-worktree-integration-gate.md)
+# 保護ブランチへの統合 (see docs/change/closed/0053-worktree-integration-gate.md)
 # protected_refs は下限 (main / master / develop / release/* / hotfix/*) を必ず含める (末尾の /* だけがワイルドカード)。それ以外は、他のリポジトリの統合先 (例: production) を足す
 [pi.integrate]
 target = "develop"
@@ -1771,7 +1771,7 @@ plain_system = """
 # ★reader (bash なし): explorer は skill_scripts の許可が通るので、読み取り専用を指示だけでは強制できない。Git の情報は親が依頼文に載せる
 # ★timeout_minutes: plan は max で 17〜18 分かかる。worker は大きい実装が 15 分で途中で止まる。この 2 役だけ 1 往復の上限を 30 分に延ばす (他の役は 15 分のまま)
 # ★check_conditions: 依頼の守る条件の番号 (C1: …) が、返答の突き合わせの節に全部あるかを検査する (警告。満たす証明ではない)
-# see docs/change/0044-plan-agent.md
+# see docs/change/closed/0044-plan-agent.md
 [pi.agents.plan]
 profile = "reader"
 tier = "deep"

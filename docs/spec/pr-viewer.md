@@ -1,7 +1,7 @@
 # ローカル PR ビューアの設計
 
 GitHub をリモートに持たない開発で、PR 風のレビュー画面（Web）と pi を往復させる仕組みの設計。
-案件と経緯は [CHG-0060](../change/0060-local-pr-viewer.md)。**設計は 2026-11-03 に確定。実装は段階的で、未実装の段は各節に「未実装」と書く。**
+案件と経緯は [CHG-0060](../change/closed/0060-local-pr-viewer.md)。**設計は 2026-11-03 に確定。実装は段階的で、未実装の段は各節に「未実装」と書く。**
 
 ## 1 概要と状態
 
@@ -12,7 +12,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | 状態の正本 | git の ref（`refs/pi/review/<prKey>`）。アプリが落ちても、pi は git だけで動ける |
 | アプリ | 画面と入力。全リポジトリを 1 つのプロセスで扱う。置き場所は `apps/pr-viewer/`（chezmoi では配備しない） |
 | pi 側 | 道具 `pr_summary`・`/pr`。置き場所は `home/dot_config/pi/harness/`（§9） |
-| 実行器 | 統合の実行は**アプリ**（人がブラウザで押した「統合する」の POST。段 A2。§6「統合」・[CHG-0062](../change/0062-pr-hub-simplify.md)）。旧経路（窓口の pi の承認経路 `/pending approve`・`git_integrate`）は撤去済み（A5） |
+| 実行器 | 統合の実行は**アプリ**（人がブラウザで押した「統合する」の POST。段 A2。§6「統合」・[CHG-0062](../change/closed/0062-pr-hub-simplify.md)）。旧経路（窓口の pi の承認経路 `/pending approve`・`git_integrate`）は撤去済み（A5） |
 
 ### 段階
 
@@ -165,7 +165,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 | Host の検査 | loopback（`127.0.0.1`・`localhost`）と、tailnet の名前（`*.ts.net`）と、`--allow-host` で足した名前だけ。ほかは 403（tailnet の名前はリポジトリに書かない。DNS rebinding は攻撃者のドメインが `*.ts.net` でないことで防ぐ） |
 | tailnet への公開 | `tailscale serve` で HTTPS の 1 つの URL に公開する（手動の設定）。**公開範囲（tailnet の内側だけか）は未確認**。公開インターネットへ出す設定（funnel など）にしない |
 
-### 統合（段 A2。[CHG-0062](../change/0062-pr-hub-simplify.md) §3.5）
+### 統合（段 A2。[CHG-0062](../change/closed/0062-pr-hub-simplify.md) §3.5）
 
 人がブラウザで押した「統合する」の POST で、**アプリが develop へ merge commit で同期統合する**（統合器 `merge.ts`。詳細は CHG-0062 §3.5）。統合の権限は**この POST だけ**で、ref に書かれた「承認」・保留・`merge_request` は権限として読まない（Fence 内のエージェントも共有 `.git` の ref を書けるので、偽造できる。反例の試験で固定）。
 
@@ -221,7 +221,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 画面の「変更を依頼」（feature の worktree で `pis -p` を起動し、結果を検査してアプリが commit する機能。`--allow-jobs`・`job-*.ts`・`web/job.js`）は**撤去した**。
 実運用で 1 度も使わず、依頼はチャットで足りるため。
-設計の経緯は [CHG-0062](../change/0062-pr-hub-simplify.md) §3.4 と git の履歴にある。`--allow-jobs` は無くなり、`PRAPP_ALLOW_JOBS` も無視される。
+設計の経緯は [CHG-0062](../change/closed/0062-pr-hub-simplify.md) §3.4 と git の履歴にある。`--allow-jobs` は無くなり、`PRAPP_ALLOW_JOBS` も無視される。
 `GET /api/capabilities` に `jobs`・`jobsReason`・`jobLimits` は無い。統合の `merge-plan`・`merge` に、ジョブとの排他（`job_running`）は無い。
 
 ### 稼働版の固定（常駐サービスの版を、利用者が指定するまで動かさない）
@@ -243,7 +243,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 - 固定の対象は `develop` の先頭だけ。別の枝の版は動かせない。
 - `restart` の間（数秒）は応答しない。
 
-### 起票の撤去（[CHG-0062](../change/0062-pr-hub-simplify.md) 段 B1）
+### 起票の撤去（[CHG-0062](../change/closed/0062-pr-hub-simplify.md) 段 B1）
 
 - 画面の「＋ 起票」と、その書き込み API（`POST /api/repos/<repoId>/features`・旗 `--allow-create`・`PRAPP_ALLOW_CREATE`）を**撤去した**。実使用の証拠が 0 件だった（このリポジトリのレビュー記録に brief の保存履歴が無い）。
 - 起票は常にチャット（親の `git flow feature start` + `wt_owner.py claim` + worker）で行う。積み重ね・claim・担当外検査が使えるため、画面の起票より上回る。
@@ -253,7 +253,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 ## 7・8（欠番）
 
-ペアリングと制御ポート（旧 §7）・承認の指示（旧 §8）は、[CHG-0062](../change/0062-pr-hub-simplify.md) で「実装しない」と決めた旧設計なので削除した（本文は git の履歴にある）。
+ペアリングと制御ポート（旧 §7）・承認の指示（旧 §8）は、[CHG-0062](../change/closed/0062-pr-hub-simplify.md) で「実装しない」と決めた旧設計なので削除した（本文は git の履歴にある）。
 統合はアプリの「統合する」（§6「統合」）。節番号は他の文書からの参照を保つため詰めない。
 
 ## 9 pi 側
@@ -271,7 +271,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 ## 10 守る条件との対応
 
-条件の定義は [CHG-0060 §6](../change/0060-local-pr-viewer.md)。
+条件の定義は [CHG-0060 §6](../change/closed/0060-local-pr-viewer.md)。
 
 > 注: C1・C8・C11・C15 の「窓口の pi が保留を作る・ペア・制御ポート」は旧経路の設計で、置き換え済み（CHG-0062）。現行の統合は人の POST でアプリが行う（§6「統合」）。ここは当時の条件の記録として残す（C1・C15 の節の参照先は削除済み）。
 
@@ -319,7 +319,7 @@ GitHub をリモートに持たない開発で、PR 風のレビュー画面（W
 
 ## 13 関連
 
-- [CHG-0060](../change/0060-local-pr-viewer.md)（案件）
+- [CHG-0060](../change/closed/0060-local-pr-viewer.md)（案件）
 - [CHG-0055](../change/closed/0055-async-approval.md)（非同期承認）
 - [保留（撤去済み・履歴）](guard/pi-pending.md)
 - [pis のサンドボックス（pi の側）](guard/pi-sandbox.md)

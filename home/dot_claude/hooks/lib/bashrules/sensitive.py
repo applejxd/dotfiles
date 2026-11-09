@@ -133,7 +133,7 @@ def is_sensitive_path(text: str, *, heuristic: bool = True) -> str | None:
     ``cp .env.example .env`` のように「サンプルから作る」形は正当なので、
     cp / mv の最終引数 (コピー先) は判定対象から外す。
     ``shellparse`` で単純コマンドに分け、コマンドごとに判定する。
-    see docs/change/0012-bash-hook-shared-parser.md
+    see docs/change/closed/0012-bash-hook-shared-parser.md
     """
     for command in shellparse.parse(text):
         reason = sensitive_path_in_command(command, heuristic=heuristic)
@@ -144,7 +144,7 @@ def is_sensitive_path(text: str, *, heuristic: bool = True) -> str | None:
 
 # 引数中の http(s) URL はローカルのパスではない。直前が `/` `.` `~` や語の文字のものは
 # `./https://host/.ssh/id_rsa` のようなローカルパスの一部なので除かない。`file://` も除かない。
-# see docs/change/0032-guard-url-false-positive.md
+# see docs/change/closed/0032-guard-url-false-positive.md
 _URL_RE = re.compile(
     r"""(?<![\w/.~-])https?://(?:\[[0-9a-f:.]*\])?[^\s'"`)>,\[\]]*""", re.IGNORECASE
 )

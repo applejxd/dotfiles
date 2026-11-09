@@ -4,7 +4,7 @@
 (strip-types) を使うので、22.18 未満の node では飛ばす。試験ごとに使い捨ての git リポジトリを
 ``tmp_path`` に作る (本物のリポジトリは触らない)。
 
-see docs/change/0029-worktree-isolation.md#w1-の実装計画
+see docs/change/closed/0029-worktree-isolation.md#w1-の実装計画
 """
 
 from __future__ import annotations

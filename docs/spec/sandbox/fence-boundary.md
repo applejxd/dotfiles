@@ -17,7 +17,7 @@ Fence へ渡す設定（`fence.json` の形）は、共通の素材 + 起動デ�
 | `allowWrite` | 起動ディレクトリ、`write`（`~/.cache`）、`XDG_DATA_HOME/opencode`、worktree の共有 `.git` |
 | `denyRead` | 開けた場所の内側にある秘密（`deny_read` と `[sandbox] deny` のうち glob でないもの） |
 | `denyWrite` | [保護対象](#保護対象denywrite)、worktree の共有 `.git` の `hooks` と `config` |
-| `network` | 通信を許可したドメインのみ（**モデル提供元を入れ忘れると応答が来ない**）。接続先は `[provider.*]` から `providers` で引く（[CHG-0007](../../change/0007-harness-profiles.md)） |
+| `network` | 通信を許可したドメインのみ（**モデル提供元を入れ忘れると応答が来ない**）。接続先は `[provider.*]` から `providers` で引く（[CHG-0007](../../change/closed/0007-harness-profiles.md)） |
 | `allowPty` | `true`。TUI のリサイズを内側へ伝える |
 
 ### 組み立ての規則
@@ -220,7 +220,7 @@ Fence の `devices.allow` へ渡す。WSL の GPU は `/dev/dxg`、ネイティ�
 - **設計の判断**: 環境変数だけにして `sandbox.toml` には足さない、というより小さい設計も検討した。
   プロジェクトごとの GPU 要件を共有する用途があるため、両方を残した
 - **`/dev/dxg` を許すと、Windows の GPU ドライバへの経路が境界の内側に開く。** 影響は未評価のまま
-- worktree 隔離 ([CHG-0029](../../change/0029-worktree-isolation.md)) の子の Landlock の書込可にも、
+- worktree 隔離 ([CHG-0029](../../change/closed/0029-worktree-isolation.md)) の子の Landlock の書込可にも、
   同じデバイスが要る (そちらで扱う)
 
 ### 環境変数での追加
@@ -243,7 +243,7 @@ export PIS_EXTRA_READ="$HOME/dataset:/data2"
   Fence 側で `denyRead` が `allowRead` に勝つ点は未確認)
 - **表示**: 起動時に足す分を表示し、環境変数由来のものには `(PIS_EXTRA_READ)` を付ける
 - **リンク**: Fence はリンクを辿って許可を広げない。リンクのあるディレクトリと実体の両方を
-  指定する ([CHG-0029](../../change/0029-worktree-isolation.md) の「データセットの読み取りと GPU の調査」の実測)
+  指定する ([CHG-0029](../../change/closed/0029-worktree-isolation.md) の「データセットの読み取りと GPU の調査」の実測)
 - **内側から広げられない**: 環境変数は起動ラッパーが Fence の外で、起動前に読む。内側の環境には
   渡さない (`cli.DROP_ENV`、pi も併用)。内側のエージェントが次回の起動の環境を変える経路は
   無いと見ているが、利用者のシェルの設定ファイルを書けるかは別の話で、ここでは確かめていない (推測)

@@ -10,7 +10,7 @@
 //                     (feature の worktree への develop の取り込みを、確認なしで通す。develop を直接変えるものは cd が付いても必須確認)
 // git を起動するのは head のときだけ (毎回の edit / write や通常の bash では起動しない)。
 // 保証の範囲は「ガードが識別する直接経路」(alias・外部スクリプト・別のプロセスの中の ref の書き込みは見ない)。
-// see docs/change/0053-worktree-integration-gate.md
+// see docs/change/closed/0053-worktree-integration-gate.md
 import { realpathSync, statSync } from "node:fs";
 import { MUST_CONFIRM_INTEGRATION_PREFIX } from "./confirm-view.ts";
 import { classifyFreeZone, DEFAULT_PROTECTED, type FreeZone } from "./freezone.ts";

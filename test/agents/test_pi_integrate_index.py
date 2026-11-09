@@ -4,7 +4,7 @@
 - guarded_action の説明・システムプロンプト・bash の説明に git_integrate が出ない (設定の値に関わらず)
 - git_integrate を呼ぶと、未知の操作として拒否される
 - /pending は、退避したコミットの list / show / drop 用に登録されている (静的に確かめる)
-see docs/change/0062-pr-hub-simplify.md
+see docs/change/closed/0062-pr-hub-simplify.md
 """
 
 # ruff: noqa: F811

@@ -9,7 +9,7 @@
 // 引用の中の文字列はコマンドとして数えない。
 //
 // node の型除去でそのまま動く書き方だけを使う。
-// see docs/change/0053-worktree-integration-gate.md
+// see docs/change/closed/0053-worktree-integration-gate.md
 import { normalize, splitCommandSegments } from "./normalize.ts";
 import { basename, shlexSplit, ShlexError } from "./pystr.ts";
 import { isProtectedRef } from "./protectedrefs.ts";

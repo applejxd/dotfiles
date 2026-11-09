@@ -1,7 +1,7 @@
 """pi.json のローダー (harness/integrate-profile-load.ts) の試験。使い捨ての実 git リポジトリで確かめる。
 
 HEAD の blob だけを読む。作業ツリーの編集は無視する。fixture には架空の名前だけを使う。
-see docs/change/0057-per-project-integrate.md
+see docs/change/closed/0057-per-project-integrate.md
 """
 
 from __future__ import annotations

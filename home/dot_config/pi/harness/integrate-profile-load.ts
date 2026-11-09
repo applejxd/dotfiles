@@ -1,6 +1,6 @@
 // HEAD の `.agents/config/pi.json` (blob) だけを git から読み、実効の設定にする。作業ツリーのファイルは読まない。
 // キャッシュは blob ID (と全体の既定の値) が鍵。git は注入できる。
-// see docs/change/0057-per-project-integrate.md
+// see docs/change/closed/0057-per-project-integrate.md
 import { gitSync } from "./gitrun.ts";
 import { defaultResult, effectiveProfile, MAX_FILE_BYTES, type ProfileDefaults, type ProfileResult } from "./judge/integrateprofile.ts";
 

@@ -8,7 +8,7 @@
 > **2026-09-25 に保留へ移した。** A1（改名）は完了、A3 は消滅、A4 は保留。
 > **残るのは A2（固有設定の native 分離）だけ。**
 >
-> **再開条件**: [CHG-0020](0020-pi-migration.md)（pi への移行）の段 6 で OpenCode の節を撤去したあと。
+> **再開条件**: [CHG-0020](closed/0020-pi-migration.md)（pi への移行）の段 6 で OpenCode の節を撤去したあと。
 > 2026-10-09 に第一サポートが pi に決まった（[CHG-0019](closed/0019-pi-harness-port-evaluation.md)）。
 > CHG-0020 は `[pi]` の節を足し、段 6 で `[opencode.*]` を撤去するので、その前に A2 を進めると手戻りになる。
 > （当初の再開条件は「[CHG-0006](closed/0006-pi-harness-trial.md) が第一サポートを決めたとき」）
@@ -154,7 +154,7 @@ OpenCode 境界 allowedDomains             44 件 = [web] 28 + 同 10 + OpenCode
 - 当初 A3 として「OpenCode 固有のモデル API 6 ドメインを OpenCode 側へ移す」を
   挙げたが、**既に `[opencode.sandbox] network_allow` にある**。移す先が無いので
   **A3 は消滅**した
-  - その後 2026-09-24 に [CHG-0007](0007-harness-profiles.md) の段 1 で、モデル API の
+  - その後 2026-09-24 に [CHG-0007](closed/0007-harness-profiles.md) の段 1 で、モデル API の
     接続先は `[provider.*]` へ切り出され、`[opencode.sandbox] network_allow` には
     OpenCode 自身のサービス（`opencode.ai` / `*.opencode.ai`）だけが残った。
     どちらにしても `common.toml` の共通の節には入っていないので、A3 の消滅は変わらない

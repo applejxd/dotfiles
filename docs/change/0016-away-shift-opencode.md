@@ -1,7 +1,7 @@
 # CHG-0016: 深層学習ジョブの調査・再開を away-shift で任せる運用を決める（旧: away-shift を OpenCode 向けに最適化する）
 
 > 2026-10-25 に、段 2（運用の決定）だけを残す形に書き直した。OpenCode 向けの段 1・3 は、OpenCode を使っていないため消滅。
-> away-shift の pi 対応は [CHG-0030](0030-away-shift-on-pi.md) が引き継いだ。ファイル名と案件番号は変えない。
+> away-shift の pi 対応は [CHG-0030](closed/0030-away-shift-on-pi.md) が引き継いだ。ファイル名と案件番号は変えない。
 
 - **状態**: Paused
 - **更新日**: 2026-10-25
@@ -15,8 +15,8 @@
 非目的:
 
 - 制約のある環境の機からこの skill を外すこと（2026-10-07 の棚卸しで、その環境でも使うため残すと決めた）
-- away-shift を pi 上で動かすこと（[CHG-0030](0030-away-shift-on-pi.md) の範囲。0030 は、この案件の段 2 を非目的にしている）
-- OpenCode 向けの最適化（OpenCode を使っていない。2026-10-20、[CHG-0020](0020-pi-migration.md)）
+- away-shift を pi 上で動かすこと（[CHG-0030](closed/0030-away-shift-on-pi.md) の範囲。0030 は、この案件の段 2 を非目的にしている）
+- OpenCode 向けの最適化（OpenCode を使っていない。2026-10-20、[CHG-0020](closed/0020-pi-migration.md)）
 
 ## 実施計画
 

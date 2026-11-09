@@ -1,6 +1,6 @@
 # スキルの `context: fork` を、pi のハーネスで仕組みとして強制できるかの実験
 
-<!-- 現在の運用の正本は docs/change/0026-specialist-agents-with-skills.md（案件）。ここは実験の記録（実機の pi 1.4.0、偽のモデル）。 -->
+<!-- 現在の運用の正本は docs/change/closed/0026-specialist-agents-with-skills.md（案件）。ここは実験の記録（実機の pi 1.4.0、偽のモデル）。 -->
 
 ## 記録 F1 — 2026-10-27
 
@@ -109,7 +109,7 @@
 
 ## 記録 F3 — 2026-10-28（スキルごとの fork と allowed-tools の調査）
 
-- **問い**: 全 20 スキルのうち、`context: fork`・`agent` を付けてよいものはどれか。`allowed-tools` は、何を許可しているのが適切か。親をオーケストレーターに寄せる方針（[CHG-0045](../../change/0045-orchestrator-parent.md)）で、何を委譲できるか
+- **問い**: 全 20 スキルのうち、`context: fork`・`agent` を付けてよいものはどれか。`allowed-tools` は、何を許可しているのが適切か。親をオーケストレーターに寄せる方針（[CHG-0045](../../change/closed/0045-orchestrator-parent.md)）で、何を委譲できるか
 - **方法**: 子（`explore`）4 本が、各 5 スキルの本文と `references/`・`scripts/` を読み、8 項目（ツール・対話と承認・子の使用・会話履歴への依存・副作用・規模・本文の宣言・最小の許可）を、根拠の行つきで答えた。
   親が、中央の権限（Claude 向けの allow 46・ask 22・deny 192、既定の権限モードは `auto`）と、公式の仕様（F2）、過去の記録（[E1](../../research/opencode/skill-frontmatter.md)）と突き合わせた
 - **限界**: 子は `references/` を多くは読んでおらず、行番号の一部は概算。許可のパターンは、本文の呼び出しの形との**一致を機械的に試験した**だけで、Claude Code の実機（認証が切れている）では確かめていない。所要時間は、本文に数値があるもの以外は不明

@@ -1,7 +1,7 @@
 # 他のコーディングエージェントの、ファイル操作・シェルツールの作りと、シェルから専用ツールへ寄せる仕掛け
 
 - **観測日**: 2026-10-24。`explore` の子 3 件（公式 docs・ソース・第三者の転記。取得日が分からないものは日付を書かない）。実行は無し
-- **目的**: 自作ハーネスの `guarded_read`・`guarded_write`・`guarded_edit`・`guarded_bash` を、モデルの使用コストが下がるように作り込む（[CHG-0038](../../change/0038-guard-reclassification.md) 段 G8）ための参考
+- **目的**: 自作ハーネスの `guarded_read`・`guarded_write`・`guarded_edit`・`guarded_bash` を、モデルの使用コストが下がるように作り込む（[CHG-0038](../../change/closed/0038-guard-reclassification.md) 段 G8）ための参考
 
 ## 結論
 

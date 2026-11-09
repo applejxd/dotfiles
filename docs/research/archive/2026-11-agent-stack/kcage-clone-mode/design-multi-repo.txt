@@ -456,7 +456,7 @@ clone モードの `selftest` は `cli.py:322` の `selftest_commands` と、`cl
 - `kcage.cli.default_runner` はテキストのみ（`cli.py:52`）。バイト列の入出力は `gitsync/gitrun.py` が持つ。
 - 現行の `selftest`/`doctor`: `cli.py:37`・`cli.py:229`・`cli.py:322`・`cli.py:385`・`cli.py:420`。
 - 硬化の先例: `home/dot_config/pi/harness/pr-review.ts:16-45`、`apps/pr-viewer/git-view.ts:37-95`、`apps/pr-viewer/merge.ts:702-720`（`advanceTarget`）。
-- 入れ子 repo の扱いの先例: `docs/spec/guard/pi-extensions.md:88`（自由区）・`:101`（`dir`）。CHG-0053 の未解決点「入れ子の子リポジトリの自由区への拡張」（`docs/change/0053-worktree-integration-gate.md`）。
+- 入れ子 repo の扱いの先例: `docs/spec/guard/pi-extensions.md:88`（自由区）・`:101`（`dir`）。CHG-0053 の未解決点「入れ子の子リポジトリの自由区への拡張」（`docs/change/closed/0053-worktree-integration-gate.md`）。
 - `.gitflow` の設定: `.gitflow`（`worktreePath = .tmp/worktrees/{{ branchName }}`、`startPoint = develop`）。`bundle.py` が単一 repo 前提: `home/dot_claude/skills/feature-orchestration/scripts/bundle.py:70-71`。
 - 親の確認の置き場: `common.toml.tmpl:962-1000`（`[pi.confirm]`）、`:1008-1025`（`risk_paths`）、`:414`（`kcage-root` 拒否文）。
 - 試験の登録: `scripts/verify.py:447-448`。

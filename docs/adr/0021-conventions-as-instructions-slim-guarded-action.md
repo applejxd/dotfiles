@@ -28,7 +28,7 @@ pi のフルガード（`pis`）の `guarded_action` は、承認つきの `git_
 `guarded_action` ごと撤去し、コミットと投稿は bash の ask に戻す。
 
 - **利点**: 実装が最小になる
-- **欠点**: 内容を見せて 1 回で承認する経路と、承認の時間切れの退避（[CHG-0046](../change/0046-guarded-action-timeout.md)）を失う。`gh` の本文を bash に引数として渡すと、引用の事故が増える
+- **欠点**: 内容を見せて 1 回で承認する経路と、承認の時間切れの退避（[CHG-0046](../change/closed/0046-guarded-action-timeout.md)）を失う。`gh` の本文を bash に引数として渡すと、引用の事故が増える
 
 ### 選択肢 2: 縮める（採用）
 
@@ -50,14 +50,14 @@ pi のフルガード（`pis`）の `guarded_action` は、承認つきの `git_
 
 - 運用規約は、コードで強制せず、指示（`AGENTS.md`・`commit` スキル）にする。外せない層（境界・必須確認）に置くと、状態を読めない場所で副作用が出る。強制が要る危険は、境界と必須確認（外への送信・公開・push・戻せない操作）にあり、ブランチの規約はそこに入らない
 - 全廃（選択肢 1）は、内容を見せた 1 回の承認と、時間切れの退避という、残す価値のある部分まで失う
-- 現状維持（選択肢 3）は、副作用と実装量を、規約を機械で止める便益のために払い続ける。便益（develop のまま実装が始まるのを防ぐ）は、指示と運用の観察で見積もれる（[CHG-0050](../change/0050-slim-guarded-action.md) の「未解決点」）
+- 現状維持（選択肢 3）は、副作用と実装量を、規約を機械で止める便益のために払い続ける。便益（develop のまま実装が始まるのを防ぐ）は、指示と運用の観察で見積もれる（[CHG-0050](../change/closed/0050-slim-guarded-action.md) の「未解決点」）
 - ブランチモデル gitflow-lite 自体は残す。利用者が自分のシェルで `git flow feature start` / `finish` を実行し、AI は feature の worktree で起動した `pi` から `git_commit`（確認あり）する
 
 運用規約を、後から機械で支えたくなったときは、**誘導**（fail-open。git を読めないときは何もしない）として足す。deny・確認にはしない。
 
 ## 決定の確認方法
 
-実装の進捗は書かない（[CHG-0050](../change/0050-slim-guarded-action.md) が持つ）。
+実装の進捗は書かない（[CHG-0050](../change/closed/0050-slim-guarded-action.md) が持つ）。
 
 - [ ] 生成された `rules.json` の `judge.common.pi.actions` に、`gitflow_*` が無く、`git_commit` と `gh_issue_*` がある
 - [ ] develop の作業ツリーで、`git_commit` が git の状態の読み取りの失敗を理由に拒否・確認されない

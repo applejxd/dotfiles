@@ -1,5 +1,5 @@
 // PR ビューアの統合器。人の承認の後に、feature の枝を develop へ merge commit で統合する。
-// 設計: docs/change/0062-pr-hub-simplify.md §3.2・§3.3・§3.4.1、実験: docs/research/agents/pr-merge-spike.md の X1。
+// 設計: docs/change/closed/0062-pr-hub-simplify.md §3.2・§3.3・§3.4.1、実験: docs/research/agents/pr-merge-spike.md の X1。
 // 安全の条件 S1〜S10 は test/agents/test_pr_viewer_merge.py が固定する。この段では HTTP・画面につなげない。
 import { randomUUID } from "node:crypto";
 import {

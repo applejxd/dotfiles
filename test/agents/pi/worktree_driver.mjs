@@ -3,7 +3,7 @@
 //
 //   node test/agents/pi/worktree_driver.mjs '{"op":"create","repo":"...","jobId":"job-0123abcd","readDeny":{"globs":[],"exceptions":[]}}'
 //
-// see docs/change/0029-worktree-isolation.md#w1-の実装計画
+// see docs/change/closed/0029-worktree-isolation.md#w1-の実装計画
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 

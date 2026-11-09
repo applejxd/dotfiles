@@ -6,7 +6,7 @@
 
 ## コンテキスト
 
-[ADR-0023](0023-pending-approval.md) は、承認が取れない操作を保留として保存し、利用者が pi の `/pending approve` で後から承認して実行する形を選んだ。実機で次の摩擦が出た（[CHG-0062](../change/0062-pr-hub-simplify.md) §2）。
+[ADR-0023](0023-pending-approval.md) は、承認が取れない操作を保留として保存し、利用者が pi の `/pending approve` で後から承認して実行する形を選んだ。実機で次の摩擦が出た（[CHG-0062](../change/closed/0062-pr-hub-simplify.md) §2）。
 
 - 承認の記録が、承認する対象（枝の先頭）と別の永続物になり、古い保留がごみとして残る。
 - 決定的な実行（squash）が、LLM を載せた TUI の中にあり、モデルの実行中は承認できない。スマホでは統合まで閉じられない。

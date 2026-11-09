@@ -1,5 +1,5 @@
 // 判定用の git の同期実行。失敗しても例外を投げず、理由つきで返す。
-// see docs/change/0053-worktree-integration-gate.md
+// see docs/change/closed/0053-worktree-integration-gate.md
 import { execFileSync } from "node:child_process";
 import { repoTargetEnv } from "./pending-store.ts";
 

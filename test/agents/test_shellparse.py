@@ -1,6 +1,6 @@
 """bash 検査 hook の共通の解析関数 (``bashrules.shellparse``)。
 
-see docs/change/0012-bash-hook-shared-parser.md
+see docs/change/closed/0012-bash-hook-shared-parser.md
 
 Run with: ``uv run --with pytest --with pyyaml --no-project pytest test/agents/ -q``
 """

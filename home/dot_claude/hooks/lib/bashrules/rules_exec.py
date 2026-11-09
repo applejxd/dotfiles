@@ -209,7 +209,7 @@ def check_pipe_to_shell(cmd: str) -> str | None:
     # `bash -c "curl ... | sh"` のように引用符の中にある形や、
     # `curl ... |\n bash` の行継続、`| env bash` のようなラッパーも拾う。
     # ★引用を無視して文字列全体を `|` で切るのは意図的 (引用の中のパイプも拾う安全側)。
-    #   shellparse に替えると引用の中を見なくなる。see docs/change/0012-bash-hook-shared-parser.md
+    #   shellparse に替えると引用の中を見なくなる。see docs/change/closed/0012-bash-hook-shared-parser.md
     joined = re.sub(r"\\\s*\n", " ", cmd)
     joined = re.sub(r"\|\s*\n\s*", "| ", joined)
     for chunk in re.split(r"[\n;]+", joined):

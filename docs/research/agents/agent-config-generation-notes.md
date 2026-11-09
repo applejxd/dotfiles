@@ -30,7 +30,7 @@ pi の MCP は Windows でどこへ登録するか。
 - `--save <パス>` を `ask` で外そうとしても、`'--'save`・`$X`・argparse の省略形（`--sa`）で当たらなくなる（実測）
 - `git ls-files` や `git check-ignore` は `.git/config` の `core.fsmonitor` を起動する（実測。`git status` / `git diff` を shell の allow に載せない理由と同じ）
 - コマンド置換（`$(…)` / `` `…` ``）は scanner が中のコマンドを別の resource として取り出し、それぞれ照合する。中身が allow でなければ全体が確認になる（実測）
-- away-shift: `snapshot` は…**隔離ではない**（[CHG-0030](../../change/0030-away-shift-on-pi.md) の 2026-10-26）。許可の期待値は `test_decide.py` の `test_away_shift_scripts_allow_only_the_listed_subcommands` が固定している（2026-10-22 に全件通過）。実際の pis（TS 版）での挙動は未確認
+- away-shift: `snapshot` は…**隔離ではない**（[CHG-0030](../../change/closed/0030-away-shift-on-pi.md) の 2026-10-26）。許可の期待値は `test_decide.py` の `test_away_shift_scripts_allow_only_the_listed_subcommands` が固定している（2026-10-22 に全件通過）。実際の pis（TS 版）での挙動は未確認
 
 ## 記録 N3 — bypass の子の起動で確認が大量に出た事例（`#bypass-から呼べる子エージェント`）
 

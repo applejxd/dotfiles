@@ -3,7 +3,7 @@
 - **日付**: 2026-11-08（読み取りだけの調査。プロトタイプは着手前に中止した）
 - **対象**: pi 1.5.0 の公式の API・例と、私たちのフルガードのハーネス（`home/dot_config/pi/harness/`）。
 - **方法**: `explore` の子 2 本（pi の公式 API と例／ハーネスのローカル前提）。原本は [archive](../archive/2026-11-agent-stack/README.md) の `tool-isolation/`。
-- **関連**: [CHG-0065](../../change/0065-agent-stack-freeze.md)・[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)
+- **関連**: [CHG-0065](../../change/closed/0065-agent-stack-freeze.md)・[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)
 
 ## 結論
 

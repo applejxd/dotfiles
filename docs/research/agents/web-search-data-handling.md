@@ -55,7 +55,7 @@
 ### 次の問い
 
 - 制約のある環境: 使っているモデル、`data_retention_mode`、「opt-out」の正体を、AWS 管理者に確認する
-- 制約のある環境: `agentcore-websearch` が、境界の中で動くか（資格情報の渡し方。[CHG-0037](../../change/0037-pis-usability-and-telemetry.md)）
+- 制約のある環境: `agentcore-websearch` が、境界の中で動くか（資格情報の渡し方。[CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md)）
 - 家: Copilot の「データの利用を許可する」設定を、アカウントで確認する
 
 ### 参照

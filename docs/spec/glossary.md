@@ -31,7 +31,7 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
 
 ## pi のガード
 
-[CHG-0023](../change/0023-guard-terminology.md) で整理した呼び方。詳細は [pi のガード](guard/pi-guard.md#用語)。
+[CHG-0023](../change/closed/0023-guard-terminology.md) で整理した呼び方。詳細は [pi のガード](guard/pi-guard.md#用語)。
 
 - **ハーネス**: pi 本体を含む仕組み全体（一般の用法）。pi に足す特定の拡張は指さない。
   旧称では、pi に足す判定の拡張を「ハーネス」と呼んでいた

@@ -71,7 +71,7 @@
 ## 凍結した自作基盤の仕様
 
 **凍結＝保存のみ。開発しない**（[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。フルガード・`pis`・kcage・PR ビューア・作業台帳が対象）。
-再開の入口は [CHG-0065](../change/0065-agent-stack-freeze.md#再開の手引き)。本文は凍結時点のまま。
+再開の入口は [CHG-0065](../change/closed/0065-agent-stack-freeze.md#再開の手引き)。本文は凍結時点のまま。
 
 ### pi の運用・機能の総覧
 
