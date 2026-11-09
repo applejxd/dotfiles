@@ -575,8 +575,8 @@ def test_url_problem_keeps_resolving_outside_the_proxy_mode(name, proxy_env, mon
 
 
 def test_proxy_mode_checks_match_websearch():
-    """websearch.py の check_proxy_url と、同じホストの形・同じプロキシの形を使う (二重に持つので固定する)。"""
-    path = ROOT / "home" / "dot_claude" / "skills" / "web-search" / "scripts" / "websearch.py"
+    """検索の核 (core.py) の check_proxy_url と、同じホストの形・同じプロキシの形を使う (二重に持つので固定する)。"""
+    path = ROOT / "home" / "dot_config" / "agents" / "websearch" / "core.py"
     spec = importlib.util.spec_from_file_location("websearch_for_imozuru", path)
     module = importlib.util.module_from_spec(spec)
     sys.modules["websearch_for_imozuru"] = module

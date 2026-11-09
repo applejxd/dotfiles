@@ -471,7 +471,6 @@ RULES: tuple[Rule, ...] = (
         ("templates",),
         windows=True,
     ),
-    Rule("web-search", ("home/dot_claude/skills/web-search/**",), ("test_websearch",)),
     Rule(
         "imozuru",
         ("home/dot_claude/skills/imozuru/**", "scripts/vendor/imozuru_patch.py"),

@@ -195,7 +195,6 @@ def test_wildcard_intersection_refuses_shapes_it_cannot_cross(a, b):
 
 SDD = "~/.claude/skills/sdd-docs/scripts"
 CP = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
-WEB = "~/.claude/skills/web-search/scripts/websearch.py"
 IMOZURU = "~/.claude/skills/imozuru/scripts"
 AWAY = "~/.claude/skills/away-shift/scripts"
 ENVCHECK = "~/.claude/skills/env-check/scripts"
@@ -286,13 +285,6 @@ def test_skill_script_allow_is_not_widened_silently():
         f"python3 {ENVCHECK}/env_check.py names *",
         f"python3 {ENVCHECK}/env_check.py show *",
         f"python3 {ENVCHECK}/env_check.py get *",
-        # web-search: 引数で決められるのはクエリ・URL・件数・--json などだけで、
-        # 書き込み先や実行するものは決められない。書くのは固定の場所 (~/.cache/websearch) の
-        # 結果と休止の状態だけ。sync-keys (bw を呼ぶ) は載せない
-        f"python3 {WEB} search *",
-        f"python3 {WEB} fetch *",
-        f"python3 {WEB} papers *",
-        f"python3 {WEB} status *",
         # imozuru: report.py と watch.py list は置き場 (.tmp/research/) の中だけを読み書きする (confine)。
         # chain.py は公開 API へ検索語を送るだけ (秘匙チェックつき)。任意の URL を取りに行く
         # fetch.py / fetch_youtube.py と watch.py の add / check は載せない
@@ -305,18 +297,22 @@ def test_skill_script_allow_is_not_widened_silently():
     ]
 
 
-def test_web_search_script_is_allowed_only_for_the_personal_provider():
+def test_skill_scripts_are_allowed_only_for_the_personal_provider():
     """制約のある環境用 (Bedrock) は検索を AgentCore に一本化する。
-    skill も許可も個人用 (github-copilot) だけ。"""
+    imozuru の許可も個人用 (github-copilot) だけ。スキル web-search は廃止した (どちらにも無い)。"""
     from agents_common import load_common
+
+    chain = f"{IMOZURU}/chain.py"
+    old_web = "~/.claude/skills/web-search/scripts/websearch.py"
 
     def scripts(common):
         return [e["script"] for e in common["pi"]["skill_scripts"]["allow"]]
 
-    assert WEB in scripts(load_common("applejxd"))
-    assert WEB not in scripts(load_common("worker"))
+    assert chain in scripts(load_common("applejxd"))
+    assert chain not in scripts(load_common("worker"))
+    assert old_web not in scripts(load_common("applejxd"))
     allow, _ = gen.opencode_skill_script_rules(load_common("worker"))
-    assert not [r for r in allow if "web-search" in r]
+    assert not [r for r in allow if "web-search" in r or "imozuru" in r]
 
 
 def test_skill_script_redirect_deny_follows_its_allow():

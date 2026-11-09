@@ -20,7 +20,7 @@ PC ごとにモデルのプロバイダを 1 つに決め、既定モデル・�
 | ユーザー名が `applejxd`（`DOMAIN\applejxd` も含む、大小無視） | `false`（個人用） |
 | それ以外 | `true`（会社 PC） |
 
-- **`is-work` で切るもの**: `web-search` と `imozuru` のスキルの配布と許可規則（検索語を外へ出さない）、GitHub の認証の出どころ（個人は `gh auth token`、会社 PC は権限を絞った PAT のファイル）、`agentcore-websearch` を入れる CLI の一覧
+- **`is-work` で切るもの**: `imozuru` のスキルの配布と許可規則、自作の検索の核・MCP の配布（検索語を外へ出さない。スキル `web-search` は廃止）、GitHub の認証の出どころ（個人は `gh auth token`、会社 PC は権限を絞った PAT のファイル）、`agentcore-websearch` を入れる CLI の一覧
 - **`llm-provider` で切るもの**: Copilot ブローカー、Envoy の取得、OpenCode のプロバイダ、`[pis.network]` の既定
 - **AgentCore 自体は、どちらでも切らない。** 使うかは実行時（URL の有無）で決まる。判定を誤っても、認証が無ければ何も起きない
 - 勤務先の具体はリポジトリに書かない。判定の根拠は個人のユーザー名だけで、自動の判定が合わない機は `[data] work` で上書きする（`chezmoi update` は `init` を呼ばないので、`[data]` は `init` 時にしか変わらない。上書きが要るのは例外）

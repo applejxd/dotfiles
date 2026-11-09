@@ -28,7 +28,7 @@
 
 | ファイル | 変更 |
 | --- | --- |
-| `scripts/imozuru_root.py`（新規） | `confine()`: 書く先を `.tmp/research/` の中に限り、根や中のシンボリックリンク・ハードリンクを拒む。`refuse_secrets()`: 外へ送る文字列の秘匿チェック（`web-search` の `check_query` を借りる）。`youtube_problem()`: YouTube を fetch.py が通さないようにする（fetch_youtube.py だけが通す） |
+| `scripts/imozuru_root.py`（新規） | `confine()`: 書く先を `.tmp/research/` の中に限り、根や中のシンボリックリンク・ハードリンクを拒む。`refuse_secrets()`: 外へ送る文字列の秘匿チェック（検索の核 `core.py` の `check_query` を借りる。vendor 当時は `web-search` スキルの `websearch.py` から借りていた）。`youtube_problem()`: YouTube を fetch.py が通さないようにする（fetch_youtube.py だけが通す） |
 | `scripts/imozuru_net.py`（新規） | 名前を 1 回だけ引き、公開 IP だけに接続するハンドラ（DNS rebinding 対策。プロキシ宛ての要求だけ stdlib のまま） |
 | `scripts/fetch_youtube.py`（新規） | YouTube の字幕を取る別スクリプト。`fetch.py` を YouTube 許可つきで呼ぶ。個人の PC (applejxd) にだけ chezmoi が配り、確認なしの許可には載せない |
 | `scripts/fetch.py` | `confine`・`refuse_secrets`・接続の固定ハンドラを通す。YouTube は `youtube_problem()` で止める。`yt-dlp` に `--ignore-config`、外部コマンドの標準入力を遮断 |
@@ -36,6 +36,6 @@
 | `scripts/report.py` | `confine` |
 | `scripts/chain.py` | `refuse_secrets`（題名・著者名・ID） |
 | `references/theory.md` | 変更なし |
-| `SKILL.md` | `description` を二重引用符の 1 行にして、使わない場面（`oss-research`・`arxiv-paper-ja`）を足した。置き場を `~/research/` から `.tmp/research/` にした。検索役を、`web-search` スキルの `websearch.py` を使う親に置き換えた。呼び方（`python3 ~/.claude/skills/imozuru/scripts/<名前>.py`）と、上流の `examples/` への参照を直した |
+| `SKILL.md` | `description` を二重引用符の 1 行にして、使わない場面（`oss-research`・`arxiv-paper-ja`）を足した。置き場を `~/research/` から `.tmp/research/` にした。検索役を、使える検索ツール（pi は MCP の `web_search` など）を使う親に置き換えた（当初は `web-search` スキルの `websearch.py`。2026-11-09 に廃止）。呼び方（`python3 ~/.claude/skills/imozuru/scripts/<名前>.py`）と、上流の `examples/` への参照を直した |
 
 上流を更新するときは、上の sha256 と上流の新しい版を比べ、差分だけを取り込む。
