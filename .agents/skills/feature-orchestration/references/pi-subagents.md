@@ -46,3 +46,43 @@ return { api: api.artifactPaths, ui: ui.artifactPaths };
 ## F に切り替えるとき
 
 N の体感で、patch の適用や lane の記録が重いと感じたら、F に切り替える: 親が `git flow feature start <名前> --worktree` で feature worktree を作り、`subagent({ agent: "worker", task, cwd: "<その worktree の絶対パス>", async: true })` を、feature ごとに呼ぶ。枝・commit・統合が、従来の git flow のまま使える（`worktree: true` は使わない）。同時数と検査の規則は同じ。
+
+## Ralph ループ（毎回新しい子を起こす。新しい文脈が要るときだけ）
+
+Ralph Wiggum ループ＝同じ依頼を、**新しい文脈で繰り返し**、進捗はファイル・git に残して、完了まで続ける自走の技法。**既定は `/goal`（`pi-goal`。同じセッションで続ける）。** 追加の package は入れない（評価: [Ralph 系の評価](../../../../docs/research/agents/pi-stock-packages-evaluation-2026-11.md#ralph-wiggum-ループ系の評価と決定2026-11-09)）。新しい文脈が要るときだけ、`pi-subagents` の workflow で書く。
+
+- **使うとき**: 文脈の肥大が実際に作業の質を落としていると分かったとき。利用者の過去のセッションの集計では、長い文脈による質の低下の兆候は見つからなかった（[圧縮の方針](../../../../docs/research/agents/long-context-compaction-paper-2026-11.md)）ので、**今は `/goal` で足りる見込み**。
+- **前提（未確認。最初に確かめる）**: 背景の子に permission-system と cc-safety-net が載ること（上の「実機で確かめる 4 点」の 2）。載らなければ、この方式は判定の迂回になる。確かめるまで、離席中には使わない。
+- **permission**: workflow の子の起動は `subagent_launch` の確認が毎回出る（ask のまま。`s` でセッション中は許可できる）。
+- **完了の判定は独立させる**: 子の自己申告（`STATUS: DONE`）だけで終えず、別の `reviewer` の子が「全項目が満たされ、検査が通る」を確かめて `PASS` を返したときだけ終える。**`gate`・`acceptance.verify` は使わない**（上の規則）。検査のコマンドは reviewer の子が、`bash`（permission の方針が効く）で実行する。
+- **上限**: 反復数（`maxIterations`）・`timeoutMs`・`usageBudget`・`toolBudget` を必ず付ける。無進捗の検出は書いていない（`PROGRESS.md` の更新の有無を、reviewer に見させる）。
+
+例（**検証は未実施**。`subagent({ workflow: true, async: true, args: { maxIterations: 8, verify: "..." }, options: {...} })` のスクリプト本体。進捗は `PLAN.md`・`PROGRESS.md`〔作業ツリーの外の `.tmp/` を推奨〕に子が書く）:
+
+```js workflow
+const max = args.maxIterations ?? 8;
+let last = null;
+for (let i = 1; i <= max; i += 1) {
+  const work = await runs.run("work-" + i, {
+    agent: "worker",
+    task: [
+      "PLAN.md の未完了の項目を 1 つ進める。進捗と次の一手は PROGRESS.md に追記する。",
+      "コミットはしない。git の状態を変えない。",
+      "最後の行に STATUS: CONTINUE か STATUS: DONE か STATUS: BLOCKED を書く。"
+    ].join("\n")
+  });
+  if (/STATUS: DONE/.test(work.output)) {
+    const check = await runs.run("verify-" + i, {
+      agent: "reviewer",
+      task: "PLAN.md の全項目が満たされ、検査コマンド（" + args.verify + "）が通るか確かめ、PASS か FAIL と理由を書く。"
+    });
+    if (/\bPASS\b/.test(check.output)) return { done: true, iterations: i };
+    last = check.output;
+  } else if (/STATUS: BLOCKED/.test(work.output)) {
+    return { done: false, blocked: true, iterations: i, why: work.output.slice(-500) };
+  }
+}
+return { done: false, iterations: max, lastCheck: last };
+```
+
+呼び出し側の `options` の例: `{ timeoutMs: 3600000, usageBudget: { tokens: { soft: 2000000, hard: 3000000 } }, toolBudget: { soft: 80, hard: 120 } }`。

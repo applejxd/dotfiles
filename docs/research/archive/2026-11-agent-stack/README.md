@@ -32,3 +32,5 @@
 `background.txt`（背景シェル実行）・`plan-goal.txt`（plan mode と /goal）・`rewind-notify.txt`（巻き戻しと通知）・`status.txt`（ステータス表示）。通知とステータス表示の節は、利用者と相談中で決定していない。要約は [評価](../../agents/pi-stock-packages-evaluation-2026-11.md)。
 
 `orchestration-candidates.txt`・`orchestration-subagents.txt`（オーケストレーションの候補と `pi-subagents` の調査。2026-11-09。結論は [評価](../../agents/pi-stock-packages-evaluation-2026-11.md) の「オーケストレーションの評価と決定」）。
+
+`ralph.txt`（Ralph Wiggum ループ系の package の評価。2026-11-09。結論は [評価](../../agents/pi-stock-packages-evaluation-2026-11.md) の「Ralph Wiggum ループ系の評価と決定」）。

@@ -109,3 +109,17 @@
   3. 子の ask（`contact_supervisor`）が親の画面へ転送され、離席から戻って答えられる。
   4. `worktree: true` の子の patch（`artifactPaths` の handoff の記録）を、親の feature worktree へ適用できる。
 - **そのほかの未確認**: `maxActiveAsyncRunsPerSession` の上限を超えたときの挙動（拒否かキューか）。`subagent_launch` を ask にしたとき、背景の子の起動が確認画面で止まらないか。`worktreeProvider: "native"` で、worktree の置き場（リポジトリの隣の `worktrees/<プロジェクト名>/`）が書き込み境界に入るか。
+
+## Ralph Wiggum ループ系の評価と決定（2026-11-09）
+
+出典は、npm の検索（`keywords:pi-package ralph`。20 件ほど）と、上位 3 件の tarball（`npm pack` で展開して読んだだけ。実行なし）。原文は [archive の pi-eval](../archive/2026-11-agent-stack/pi-eval/ralph.txt)。
+
+- **結論: 追加の package は入れない。** 既定は `/goal`（`pi-goal`。導入済み）。新しい文脈が要るときは、`pi-subagents` の workflow で「毎回新しい子を起こす」ループを書く（[運用ガイド](../../../.agents/skills/feature-orchestration/references/pi-subagents.md)の「Ralph ループ」。スクリプト例つき。検証は未実施）。
+- **候補の判定**:
+  - `@tmustier/pi-ralph-wiggum@0.2.5`: 同じセッションの次のターンを回すだけで、新しい文脈にならず `pi-goal` と重なる。→ 除外。
+  - `@lnilluv/pi-ralph-loop@2.1.2`: 子プロセスを `--no-extensions` で起動する（`src/runner-rpc.ts`）ので、permission-system と cc-safety-net が子に効かない。`commands:` を拡張自身が実行し、`shellTools` の判定を通らない別経路もできる。→ 除外。
+  - `@rahulmutt/pi-ralph@0.4.0`: 同じプロセス内で `ctx.newSession()` を使うので、拡張は親のまま載る。ただし完了判定・無進捗の検出・予算がなく、固定回数を回すだけ。最終更新は 2026-04 で止まり、ライセンスの表記が食い違う（README は MIT、package.json と LICENSE は Apache-2.0）。→ 次点。
+  - 詰め合わせ（`@pi-unipi/*`・`pi-hooks`・`pi-spiral`・`pi-corp` など）: 必要でない機能まで入る。→ 除外。
+- **理由**: Ralph の主な利点は文脈の肥大を避けることだが、利用者の過去のセッションの集計では、長い文脈による質の低下の兆候が見つからなかった（[圧縮の研究ノート](long-context-compaction-paper-2026-11.md)）。新しい文脈にする必要性が、今はデータから支持されない。
+- **未確認**: **`pi-subagents` の背景の子に permission-system と cc-safety-net が載るか**（実機で確かめる 4 点の 2。載らなければ workflow のループも lnilluv と同じ迂回になる）。`@rahulmutt/pi-ralph` の `newSession` の後に permission-system の状態（allow の記憶・YOLO）が引き継がれるか。GitHub の Issue の対応状況（npm の情報のみ見た）。
+- **関連**: `@badliveware/pi-compaction-continue`（圧縮の後や停滞の後に促す見張り）は、圧縮の後の自動の再開に関係する（自作しないと決めた件。必要になったら評価する）。
