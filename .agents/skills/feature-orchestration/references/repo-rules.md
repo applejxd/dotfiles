@@ -1,5 +1,7 @@
 # リポジトリの運用規則（旧 AGENTS.md の親向けの規則）
 
+> stock の pi では `subagent` に読み替える。凍結した custom の運用（`guarded_*` 前提）。stock の既定の運用は [SKILL.md](../SKILL.md)。
+
 凍結（[ADR-0030](../../../../docs/adr/0030-freeze-agent-stack-return-to-stock-pi.md)）した自作基盤（フルガード・`guarded_task` など）が前提の運用規則。custom プロファイルの pi で feature を並列に実装するときに読む。工程は [SKILL.md](../SKILL.md)、並列度の運用は [parallel-ops.md](parallel-ops.md)。
 
 ## 開発の場所と統合
