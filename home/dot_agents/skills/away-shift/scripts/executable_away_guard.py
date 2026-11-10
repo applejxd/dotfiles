@@ -7,13 +7,17 @@
 
 書き込み先はカレントディレクトリの ``.tmp/away-shift/`` の中に閉じる
 (run_id の検査、シンボリックリンク・ハードリンクの拒否)。根は環境変数では変えられない。
+例外は、専用 worktree を使う run の ``prepare`` が worktree の ``.tmp/away/`` へ書く子への指示だけ。
 
 サブコマンド:
 
     init   実行ディレクトリと期限を作る。既存の run があれば再利用する。
            やり直すときは run_id を省略して新しい run を作る
+    prepare  専用 worktree (枝つき) と run と子への指示 (brief-common.md) を一度に作る
     check  停止条件を判定する。継続なら exit 0、停止なら exit 3。
-           停止済み (stopped が埋まっている) の run は確定状態で、状態を変えずに exit 3
+           停止済み (stopped が埋まっている) の run は確定状態で、状態を変えずに exit 3。
+           worktree の run では WORKTREE・CHILD_TIMEOUT_MS・CHILD_CHECKPOINT_MS も出す
+    audit  worktree の run の事後検査 (本体が無傷か・枝の成果・残りプロセス)。違反は exit 4
     log    サイクルの記録を追記する (--text / --note-file / 標準入力)。停止済みの run でも使える
     status 現在の run の要約を出す。停止済みの run でも使える
     sleep  <秒> (整数 1〜7200) だけ待つ。何も読み書きしない。pi の bg_run で再開を予約する用。
@@ -26,6 +30,7 @@ exit code:
     0  継続してよい
     3  停止条件に当たった (stdout に理由)
     2  引数や状態の誤り・閉じ込めの違反
+    4  audit が違反を見つけた (本体の HEAD が動いた・本体の作業ツリーが汚れた)
 
 依存は標準ライブラリのみ。``uv run --no-project python`` で動く。
 """
@@ -39,6 +44,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -52,6 +58,18 @@ STOP_NAMES = ("STOP", "stop")
 EXIT_CONTINUE = 0
 EXIT_STOP = 3
 EXIT_USAGE = 2
+EXIT_AUDIT_VIOLATION = 4
+
+# 子 (subagent) 1 回の実行時間の上限と、予備時間は check の --reserve-minutes (既定 15 分) を使う
+CHILD_MAX_MINUTES = 30
+CHILD_MIN_TIMEOUT_MS = 180000  # これ未満しか取れないなら、新しいサイクルを始めない
+CHILD_CHECKPOINT_MAX_MS = 180000
+GIT_TIMEOUT_SECONDS = 60
+PREPARE_BRIEF_PLACEHOLDERS = ("worktree", "repo", "branch", "run_id", "deadline", "goal")  # goal は最後に置き換える
+AUDIT_STATUS_MAX_LINES = 20
+AUDIT_LOG_MAX_LINES = 50
+AUDIT_COMMAND_MAX_CHARS = 80
+KILL_WAIT_SECONDS = 2.0
 
 # check の NEXT_WAKE_SECONDS は既定で 3600 まで (--max-wake-minutes 120 までは収まる)
 SLEEP_MAX_SECONDS = 7200
@@ -227,9 +245,47 @@ def find_stop_file(run_id: str) -> Path | None:
     return None
 
 
+def new_run_id(base: dt.datetime) -> str:
+    return base.strftime("%Y%m%d-%H%M%S")
+
+
+def parse_future_deadline(text: str, base: dt.datetime) -> dt.datetime:
+    """期限を読み、現在より後であることも確かめる。違えば ValueError (メッセージは利用者向け)。"""
+    deadline = parse_deadline(text, base)
+    if deadline <= base:
+        raise ValueError(f"期限が現在時刻より前です: {deadline.isoformat()}")
+    return deadline
+
+
+def create_run(
+    run_id: str,
+    goal: str,
+    deadline: dt.datetime,
+    max_cycles: int,
+    base: dt.datetime,
+    extra: dict | None = None,
+) -> None:
+    """run の state.json と cycles/・work/ を作る。init と prepare で共有する。"""
+    state = {
+        "run_id": run_id,
+        "goal": goal,
+        "started_at": base.isoformat(timespec="seconds"),
+        "deadline": deadline.isoformat(timespec="seconds"),
+        "max_cycles": max_cycles,
+        "cycle": 0,
+        "stopped": None,
+        **(extra or {}),
+    }
+    save_state(run_id, state)
+    make_dir(run_dir(run_id) / "cycles")
+    # 試行錯誤の作業場。ここだけは消してよい。cycles/ と state.json、
+    # report.md は証跡なので消さない
+    make_dir(run_dir(run_id) / "work")
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     base = now()
-    run_id = args.run_id if args.run_id is not None else base.strftime("%Y%m%d-%H%M%S")
+    run_id = args.run_id if args.run_id is not None else new_run_id(base)
     path = state_path(validate_run_id(run_id))
     confine(path)
     if path.exists():
@@ -240,34 +296,138 @@ def cmd_init(args: argparse.Namespace) -> int:
         return EXIT_CONTINUE
 
     try:
-        deadline = parse_deadline(args.deadline, base)
+        deadline = parse_future_deadline(args.deadline, base)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return EXIT_USAGE
-    if deadline <= base:
-        print(f"期限が現在時刻より前です: {deadline.isoformat()}", file=sys.stderr)
-        return EXIT_USAGE
 
-    state = {
-        "run_id": run_id,
-        "goal": args.goal,
-        "started_at": base.isoformat(timespec="seconds"),
-        "deadline": deadline.isoformat(timespec="seconds"),
-        "max_cycles": args.max_cycles,
-        "cycle": 0,
-        "stopped": None,
-    }
-    save_state(run_id, state)
-    make_dir(run_dir(run_id) / "cycles")
-    # 試行錯誤の作業場。ここだけは消してよい。cycles/ と state.json、
-    # report.md は証跡なので消さない
-    make_dir(run_dir(run_id) / "work")
+    create_run(run_id, args.goal, deadline, args.max_cycles, base)
     print(f"run_id: {run_id}")
     print(f"作業ディレクトリ: {run_dir(run_id) / 'work'}")
     print(f"証跡ディレクトリ: {run_dir(run_id)} (消さない)")
     print(f"期限: {deadline.isoformat(timespec='seconds')}")
     print(f"最大サイクル: {args.max_cycles}")
     print(f"停止するには: touch {run_dir(run_id) / 'STOP'}  または  touch STOP")
+    return EXIT_CONTINUE
+
+
+# ─── prepare (専用 worktree) ───────────────────────────────────────────────
+
+
+def run_git(args: list[str]) -> subprocess.CompletedProcess[str]:
+    """git を実行する (リスト形式・タイムアウトつき)。git が無い・時間切れは Refused。"""
+    env = {**os.environ, "GIT_OPTIONAL_LOCKS": "0"}
+    try:
+        return subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=GIT_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise Refused(f"git を実行できません: {type(exc).__name__}: {exc}") from None
+
+
+def git_text(args: list[str]) -> str:
+    """git の標準出力を返す。失敗したら Refused。"""
+    result = run_git(args)
+    if result.returncode != 0:
+        raise Refused(f"git {' '.join(args)} が失敗: {result.stderr.strip()[:200]}")
+    return result.stdout
+
+
+def child_brief_path() -> Path:
+    """子への指示のひな形。ソースの配置と配備先の両方で scripts/ の隣の references/ にある。"""
+    return Path(__file__).resolve().parent.parent / "references" / "child-brief.md"
+
+
+def render_child_brief(template: str, values: dict[str, str]) -> str:
+    """先頭の HTML コメントとその直後の空行を除き、{名前} を置き換える。
+
+    goal は利用者の文字列なので最後に置き換える (他の名前の置き換えに巻き込まない)。
+    """
+    if template.startswith("<!--"):
+        end = template.find("-->")
+        if end != -1:
+            template = template[end + len("-->"):].lstrip("\r\n")
+    for name in PREPARE_BRIEF_PLACEHOLDERS:
+        template = template.replace("{" + name + "}", values[name])
+    return template
+
+
+def cmd_prepare(args: argparse.Namespace) -> int:
+    cwd = Path.cwd().resolve()
+    top = run_git(["rev-parse", "--show-toplevel"])
+    if top.returncode != 0 or Path(top.stdout.strip()).resolve() != cwd:
+        print(f"git リポジトリの根で実行してください (いま: {cwd})", file=sys.stderr)
+        return EXIT_USAGE
+
+    base_time = now()
+    try:
+        deadline = parse_future_deadline(args.deadline, base_time)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_USAGE
+
+    run_id = new_run_id(base_time)
+    branch = f"feature/away-{run_id}"
+    worktree = cwd / ".tmp" / "worktrees" / f"away-{run_id}"
+    base_sha = git_text(["rev-parse", "HEAD"]).strip()
+    dirty = git_text(["status", "--short"]).strip()
+
+    added = run_git(["worktree", "add", "-b", branch, str(worktree), "HEAD"])
+    if added.returncode != 0:
+        print(f"worktree を作れませんでした (run は作っていません): {added.stderr.strip()}", file=sys.stderr)
+        return EXIT_USAGE
+
+    create_run(
+        run_id,
+        args.goal,
+        deadline,
+        args.max_cycles,
+        base_time,
+        extra={"worktree": str(worktree), "branch": branch, "base": base_sha, "repo": str(cwd)},
+    )
+
+    template_path = child_brief_path()
+    try:
+        template = template_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(
+            f"子への指示のひな形を読めません: {template_path} ({exc})\n"
+            f"作った worktree は消していません: {worktree} (枝 {branch}、run {run_id})",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
+    brief = render_child_brief(
+        template,
+        {
+            "worktree": str(worktree),
+            "repo": str(cwd),
+            "branch": branch,
+            "goal": args.goal,
+            "run_id": run_id,
+            "deadline": deadline.isoformat(timespec="seconds"),
+        },
+    )
+    handoff = worktree / ".tmp" / "away"
+    handoff.mkdir(parents=True, exist_ok=True)
+    (handoff / "brief-common.md").write_text(brief, encoding="utf-8")
+
+    print(f"run_id: {run_id}")
+    print(f"worktree: {worktree}")
+    print(f"branch: {branch}")
+    print(f"base: {base_sha[:8]}")
+    print(f"期限: {deadline.isoformat(timespec='seconds')}")
+    print(f"引き継ぎ: {handoff}/")
+    if dirty:
+        print("警告: 本体の作業ツリーに未コミットの変更がある。worktree には含まれない")
+    print(f"次: check {run_id} で CHILD_TIMEOUT_MS を得て、cwd を worktree にした子を起動する")
+    print("  依頼文には「brief-common.md と cycle-<N>-task.md を読む」とだけ書く")
+    print(f"  終わったら audit {run_id} --kill --write で本体が無傷かと残りプロセスを確かめる")
     return EXIT_CONTINUE
 
 
@@ -315,6 +475,16 @@ def cmd_check(args: argparse.Namespace) -> int:
         print(f"STOP: 最大サイクル数に達しました ({state['max_cycles']})")
         return EXIT_STOP
 
+    child_timeout_ms = min(CHILD_MAX_MINUTES * 60000, (remaining_min - args.reserve_minutes) * 60000)
+    if "worktree" in state and child_timeout_ms < CHILD_MIN_TIMEOUT_MS:
+        state["stopped"] = "child-time"
+        save_state(args.run_id, state)
+        print(
+            f"STOP: 子に割り当てられる時間が {child_timeout_ms // 1000} 秒で、"
+            f"{CHILD_MIN_TIMEOUT_MS // 1000} 秒に届かない (残り {remaining_min} 分、予備 {args.reserve_minutes} 分)"
+        )
+        return EXIT_STOP
+
     state["cycle"] += 1
     save_state(args.run_id, state)
     remaining_cycles = max(1, state["max_cycles"] - state["cycle"])
@@ -327,6 +497,10 @@ def cmd_check(args: argparse.Namespace) -> int:
     print(f"  残り: {remaining_min} 分 (期限 {state['deadline']})")
     print(f"  目標: {state['goal']}")
     print(f"NEXT_WAKE_SECONDS: {max(60, pace_min * 60)}")
+    if "worktree" in state:
+        print(f"WORKTREE: {state['worktree']}")
+        print(f"CHILD_TIMEOUT_MS: {child_timeout_ms}")
+        print(f"CHILD_CHECKPOINT_MS: {min(CHILD_CHECKPOINT_MAX_MS, child_timeout_ms // 3)}")
     return EXIT_CONTINUE
 
 
@@ -565,6 +739,153 @@ def cmd_snapshot(args: argparse.Namespace) -> int:
     return EXIT_CONTINUE
 
 
+# ─── audit (worktree の run の事後検査) ────────────────────────────────────
+
+
+def _short(sha: str) -> str:
+    return sha[:8]
+
+
+def _ancestor_pids() -> set[int]:
+    """自分自身と、親をたどった祖先の pid。audit --kill が自分の親を止めないための除外。"""
+    pids = {os.getpid()}
+    pid = os.getppid()
+    while pid > 1 and pid not in pids:
+        pids.add(pid)
+        pid = _parent_pid(pid)
+    return pids
+
+
+def _parent_pid(pid: int) -> int:
+    try:
+        data = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return 0
+    # コマンド名に空白や ) が入りうるので、最後の ) の後ろを数える (状態, 親 pid, ...)
+    fields = data.rsplit(")", 1)[-1].split()
+    return int(fields[1]) if len(fields) > 1 and fields[1].isdigit() else 0
+
+
+def _cwd_is_inside(cwd: str, worktree: str) -> bool:
+    return cwd == worktree or cwd.startswith(worktree + os.sep)
+
+
+def find_worktree_processes(worktree: str) -> list[tuple[int, str]]:
+    """cwd が worktree の中にあるプロセス (pid, コマンドの先頭) を返す。自分と祖先は除く。"""
+    resolved = os.path.realpath(worktree)
+    excluded = _ancestor_pids()
+    found = []
+    for entry in sorted(Path("/proc").iterdir(), key=lambda p: p.name):
+        if not entry.name.isdigit() or int(entry.name) in excluded:
+            continue
+        try:
+            cwd = os.readlink(entry / "cwd")
+        except OSError:
+            continue  # 他ユーザのプロセス・終了済みのプロセス
+        if not _cwd_is_inside(cwd, resolved):
+            continue
+        try:
+            command = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace").strip()
+        except OSError:
+            command = ""
+        found.append((int(entry.name), (command or "(コマンド不明)")[:AUDIT_COMMAND_MAX_CHARS]))
+    return found
+
+
+def _kill_worktree_processes(worktree: str, found: list[tuple[int, str]]) -> tuple[list[int], list[int]]:
+    """SIGTERM → 2 秒待ち → 残りに SIGKILL。(止めた pid, 止まらなかった pid) を返す。"""
+
+    def send(sig: int, pids: list[int]) -> None:
+        for pid in pids:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.kill(pid, sig)
+
+    def alive() -> list[int]:
+        wanted = {pid for pid, _ in found}
+        return [pid for pid, _ in find_worktree_processes(worktree) if pid in wanted]
+
+    send(signal.SIGTERM, [pid for pid, _ in found])
+    deadline = time.monotonic() + KILL_WAIT_SECONDS
+    remaining = alive()
+    while remaining and time.monotonic() < deadline:
+        time.sleep(0.1)
+        remaining = alive()
+    if remaining:
+        send(signal.SIGKILL, remaining)
+        time.sleep(0.2)
+        remaining = alive()
+    survivors = set(remaining)
+    stopped = [pid for pid, _ in found if pid not in survivors]
+    return stopped, sorted(survivors)
+
+
+def write_audit_report(run_id: str, text: str) -> Path:
+    """audit の結果を <run>/audit.md へ書く。work/ の外に書く唯一のファイル。"""
+    path = run_dir(run_id) / "audit.md"
+    confine(path)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _NOFOLLOW, 0o666)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    return path
+
+
+def cmd_audit(args: argparse.Namespace) -> int:
+    try:
+        state = load_state(args.run_id)
+    except FileNotFoundError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_USAGE
+    if "worktree" not in state:
+        print(f"worktree を使う run ではありません: {args.run_id} (prepare で作った run だけ audit できる)", file=sys.stderr)
+        return EXIT_USAGE
+
+    repo, worktree, branch, base = state["repo"], state["worktree"], state["branch"], state["base"]
+    lines: list[str] = []
+    violations: list[str] = []
+
+    head = git_text(["-C", repo, "rev-parse", "HEAD"]).strip()
+    same = head == base
+    lines.append(f"本体 HEAD: {_short(head)} (開始時 {_short(base)}) {'同じ' if same else '違う'}")
+    if not same:
+        violations.append("本体の HEAD が開始時から動いている")
+
+    main_status = git_text(["-C", repo, "status", "--short"]).splitlines()
+    lines.append(f"本体 git status: {len(main_status)} 件")
+    lines += [f"  {row}" for row in main_status[:AUDIT_STATUS_MAX_LINES]]
+    if main_status:
+        violations.append("本体の作業ツリーに変更がある")
+
+    commits = git_text(["-C", repo, "log", "--oneline", f"{base}..{branch}"]).splitlines()
+    shortstat = git_text(["-C", repo, "diff", "--shortstat", f"{base}..{branch}"]).strip()
+    lines.append(f"枝: {branch}")
+    lines.append(f"コミット: {len(commits)} 件")
+    lines += [f"  {row}" for row in commits[:AUDIT_LOG_MAX_LINES]]
+    lines.append(f"差分: {shortstat or 'なし'}")
+
+    wt_status = git_text(["-C", worktree, "status", "--short"]).splitlines()
+    lines.append(f"worktree の未コミット: {len(wt_status)} 件 (違反ではない)")
+    lines += [f"  {row}" for row in wt_status[:AUDIT_STATUS_MAX_LINES]]
+
+    if not os.path.isdir("/proc/self"):
+        lines.append("残っているプロセス: プロセスの確認は Linux だけ (この環境では飛ばした)")
+    else:
+        found = find_worktree_processes(worktree)
+        lines.append(f"残っているプロセス: {len(found)} 件 (cwd が worktree の中)")
+        lines += [f"  {pid} {command}" for pid, command in found]
+        if found and args.kill:
+            stopped, survivors = _kill_worktree_processes(worktree, found)
+            lines.append(f"  止めた pid: {' '.join(map(str, stopped)) or 'なし'}")
+            lines.append(f"  止まらなかった pid: {' '.join(map(str, survivors)) or 'なし'}")
+
+    lines.append("違反: " + ("; ".join(violations) if violations else "なし"))
+    text = "\n".join(lines) + "\n"
+    print(text, end="")
+    if args.write:
+        path = write_audit_report(args.run_id, f"# audit {args.run_id}\n\n" + text)
+        print(f"書き出しました: {path}")
+    return EXIT_AUDIT_VIOLATION if violations else EXIT_CONTINUE
+
+
 def _sleep_seconds(value: str) -> int:
     try:
         seconds = int(value)
@@ -600,6 +921,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--max-cycles", type=int, default=20)
     p_init.set_defaults(func=cmd_init)
 
+    p_prepare = sub.add_parser("prepare", help="専用 worktree と run と子への指示を作る")
+    p_prepare.add_argument("--goal", required=True, help="達成したいこと (1 行)")
+    p_prepare.add_argument("--deadline", required=True, help="停止時刻。HH:MM / YYYY-MM-DD HH:MM / 8h / 90m")
+    p_prepare.add_argument("--max-cycles", type=int, default=20)
+    p_prepare.set_defaults(func=cmd_prepare)
+
     p_check = sub.add_parser("check", help="停止条件を判定する (継続 0 / 停止 3)")
     p_check.add_argument("run_id")
     p_check.add_argument(
@@ -615,6 +942,12 @@ def build_parser() -> argparse.ArgumentParser:
         help=("NEXT_WAKE_SECONDS の上限 (分)。manage_schedule の wakeup は 1 時間で頭打ちになる"),
     )
     p_check.set_defaults(func=cmd_check)
+
+    p_audit = sub.add_parser("audit", help="worktree の run を事後検査する (違反 4)")
+    p_audit.add_argument("run_id")
+    p_audit.add_argument("--kill", action="store_true", help="cwd が worktree の中のプロセスを止める")
+    p_audit.add_argument("--write", action="store_true", help="結果を <run>/audit.md へ書く")
+    p_audit.set_defaults(func=cmd_audit)
 
     p_log = sub.add_parser("log", help="サイクルの記録を追記する")
     p_log.add_argument("run_id")
