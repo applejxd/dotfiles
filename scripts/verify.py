@@ -439,8 +439,8 @@ RULES: tuple[Rule, ...] = (
             "home/dot_pi/agent/extensions/subagent/*",
             "home/dot_pi/agent/themes/**",
             "home/dot_cc-safety-net/**",
-            "test/agents/pi/permission_check.mjs",
-            "test/agents/pi/permission_cases.json",
+            "test/agents/pi_stock/permission_check.mjs",
+            "test/agents/pi_stock/permission_cases.json",
         ),
         (
             "test_pi_profile",

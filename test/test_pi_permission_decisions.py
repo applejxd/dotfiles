@@ -3,7 +3,7 @@
 - ``pi-permission-policy.json`` を、``@gotgenes/pi-permission-system`` の判定エンジンに直接入れて評価する
   (YOLO は切った状態。bash は複合コマンドの分解とラッパーの床を含む)。
 - ``home/dot_cc-safety-net/`` の規則を、``cc-safety-net`` の ``explain`` に通す。
-- 表は ``test/agents/pi/permission_cases.json``。規則を変えたら、表に例を足して回す
+- 表は ``test/agents/pi_stock/permission_cases.json``。規則を変えたら、表に例を足して回す
   (規則の書き間違いと、誤判定 = 通常の作業を止める・危険な形を通す、を開発の段階で見つける)。
 
 pi の package が入っていない環境 (CI など) では skip する。skip は通過ではない。
@@ -24,8 +24,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "home" / ".chezmoitemplates" / "pi-permission-policy.json"
 CSN_RULES = ROOT / "home" / "dot_cc-safety-net" / "rules"
-DRIVER = ROOT / "test" / "agents" / "pi" / "permission_check.mjs"
-CASES = json.loads((ROOT / "test" / "agents" / "pi" / "permission_cases.json").read_text(encoding="utf-8"))
+DRIVER = ROOT / "test" / "agents" / "pi_stock" / "permission_check.mjs"
+CASES = json.loads((ROOT / "test" / "agents" / "pi_stock" / "permission_cases.json").read_text(encoding="utf-8"))
 
 AGENT_DIR = Path(os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi" / "agent")
 NODE_MODULES = AGENT_DIR / "npm" / "node_modules"
