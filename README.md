@@ -200,6 +200,11 @@ A. 以前「常に許可」した承認が残っている。
 A. YOLO が入っていると、確認は全部自動で承認される（deny だけが効く）。`/permission-system` で YOLO を OFF にする
 （[YOLO mode](docs/spec/agent-config-generation.md#permission-system-の設定stock)。機械ごとの設定で、apply では戻らない）。
 
+### Q. pi（stock）の確認で、自律稼働が止まる（待たされる）
+
+A. 誰も答えない確認は 5 分で拒否され、エージェントは先へ進む（`promptTimeoutMs`）。頻度を減らす方針と実測は
+[確認で待たせない方針](docs/spec/agent-config-generation.md#permission-system-の設定stock)。YOLO を入れると確認は全部自動承認になる（強制 ask も効かない）。
+
 ### Q. pi（stock）が作業ツリー外のデータセットを読むたびに確認される
 
 A. プロジェクトごとに、読み取りだけを事前許可できる（`/tmp` はグローバルで許可済み）。手順は
