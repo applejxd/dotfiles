@@ -29,7 +29,7 @@ _BARE_ONLY_DUMP_BINS = tables.as_set("rules_files", "bare_only_dump_bins")
 
 _ENV_READABLE = tables.as_list("rules_files", "env_readable_names")
 
-_ENV_CHECK = "python3 ~/.claude/skills/env-check/scripts/env_check.py"
+_ENV_CHECK = "python3 ~/.agents/skills/env-check/scripts/env_check.py"
 
 # `declare -p NAME` / `export -p NAME` のように変数の中身を読む形 (代入の `NAME=値` は読まない)
 _READ_FLAG_RE = re.compile(r"^-[A-Za-z]*p")

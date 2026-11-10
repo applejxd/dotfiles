@@ -1157,16 +1157,16 @@ runners = { py = ["python3"], sh = ["bash"] }
 redirect_message = "スキルのスクリプトにはリダイレクト (> / >> / < / 2>&1 など) を付けずに呼んでください。stdout も stderr もそのまま返ります。ファイルへ書くときは write ツールを使ってください。"
 
 [[pi.skill_scripts.allow]]
-script = "~/.claude/skills/sdd-docs/scripts/lint_docs.py"
+script = "~/.agents/skills/sdd-docs/scripts/lint_docs.py"
 
 [[pi.skill_scripts.allow]]
-script = "~/.claude/skills/sdd-docs/scripts/check_refs.py"
+script = "~/.agents/skills/sdd-docs/scripts/check_refs.py"
 # --save は引数のパスへ書く。既定の置き場を使う形だけを完全一致で通す
 exact = ["--save", "--baseline"]
 
 # docs_state.py の status は読み取りだけ (git の読み取り)。scaffold は docs/ へ書くので載せない
 [[pi.skill_scripts.allow]]
-script = "~/.claude/skills/sdd-docs/scripts/docs_state.py"
+script = "~/.agents/skills/sdd-docs/scripts/docs_state.py"
 subcommands = ["status"]
 
 [[pi.skill_scripts.allow]]
@@ -1177,16 +1177,16 @@ subcommands = ["paths", "lint", "read"]
 # away-shift。書き込み先はスクリプト側で .tmp/away-shift/ に閉じる。preflight.py は判定するだけで実行しない
 # see docs/spec/agent-config-generation.md#スキルのスクリプト
 [[pi.skill_scripts.allow]]
-script = "~/.claude/skills/away-shift/scripts/away_guard.py"
+script = "~/.agents/skills/away-shift/scripts/away_guard.py"
 subcommands = ["init", "check", "log", "status", "sleep", "snapshot"]
 
 [[pi.skill_scripts.allow]]
-script = "~/.claude/skills/away-shift/scripts/preflight.py"
+script = "~/.agents/skills/away-shift/scripts/preflight.py"
 
 # env-check。環境変数の診断 (読み取り専用。秘密らしい名前の値と URL の認証情報は出さない)。hook が env / printenv を止めたときの誘導先
 # see docs/spec/guard/agent-command-policy.md#環境変数の診断
 [[pi.skill_scripts.allow]]
-script = "~/.claude/skills/env-check/scripts/env_check.py"
+script = "~/.agents/skills/env-check/scripts/env_check.py"
 subcommands = ["names", "show", "get"]
 
 # imozuru (個人用だけ。vendor したスキル。検索は MCP の websearch で行い、スキル web-search は廃止した)。確認なしに載せるのは、書き込み先が .tmp/research/ の中に限られるものと、
@@ -1194,14 +1194,14 @@ subcommands = ["names", "show", "get"]
 # see docs/spec/imozuru.md#pis-の許可規則
 {{- if ne (includeTemplate "is-work" .) "true" }}
 [[pi.skill_scripts.allow]]
-script = "~/.claude/skills/imozuru/scripts/chain.py"
+script = "~/.agents/skills/imozuru/scripts/chain.py"
 subcommands = ["find", "refs", "cites", "author"]
 
 [[pi.skill_scripts.allow]]
-script = "~/.claude/skills/imozuru/scripts/report.py"
+script = "~/.agents/skills/imozuru/scripts/report.py"
 
 [[pi.skill_scripts.allow]]
-script = "~/.claude/skills/imozuru/scripts/watch.py"
+script = "~/.agents/skills/imozuru/scripts/watch.py"
 subcommands = ["list"]
 {{- end }}
 

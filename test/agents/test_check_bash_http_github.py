@@ -13,7 +13,7 @@ import yaml
 from check_bash_hook import COMMON, ROOT, gen, policy, run_hook
 
 GITHUB_OPERATIONS_SKILL_PATH = (
-    ROOT / "home" / "dot_claude" / "skills" / "github-operations" / "SKILL.md"
+    ROOT / "home" / "dot_agents" / "skills" / "github-operations" / "SKILL.md"
 )
 READ_ONLY_GH_COMMANDS = [
     "gh auth status",

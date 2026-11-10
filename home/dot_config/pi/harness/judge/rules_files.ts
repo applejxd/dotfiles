@@ -41,7 +41,7 @@ function envGuide(ctx: Ctx): string {
 	const readable = tableList(ctx, "rules_files", "env_readable_names");
 	return (
 		"複合コマンド (`;` `|` `&&`) の一部なら、コマンド全体を実行していません。この部分を除いて呼び直してください。\n" +
-		"環境変数の診断は `python3 ~/.claude/skills/env-check/scripts/env_check.py` を使ってください " +
+		"環境変数の診断は `python3 ~/.agents/skills/env-check/scripts/env_check.py` を使ってください " +
 		"(`names` で変数名の一覧、`show` で許可リストとプロキシ・ブローカー系の値 " +
 		"(URL の認証情報は伏せる)、`get NAME` で個別の設定有無を出します)。\n" +
 		`直接読めるのは許可リストの変数だけです (\`printenv NAME\` / \`echo $NAME\`): ${readable.join(", ")}`

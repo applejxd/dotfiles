@@ -1,4 +1,4 @@
-"""home/dot_claude/skills/experiment-loop/scripts/exp.py: 実験の実行・記録・統計比較。"""
+"""home/dot_agents/skills/experiment-loop/scripts/exp.py: 実験の実行・記録・統計比較。"""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "home" / "dot_claude" / "skills" / "experiment-loop" / "scripts" / "exp.py"
+SCRIPT = ROOT / "home" / "dot_agents" / "skills" / "experiment-loop" / "scripts" / "exp.py"
 
 _spec = importlib.util.spec_from_file_location("exp_under_test", SCRIPT)
 assert _spec and _spec.loader

@@ -163,7 +163,7 @@ def test_test_file_change_runs_itself():
 
 
 def test_skill_md_selects_frontmatter_test():
-    result = _plan("home/dot_claude/skills/commit/SKILL.md")
+    result = _plan("home/dot_agents/skills/commit/SKILL.md")
     assert not result.full
     assert "test/agents/test_skill_frontmatter.py" in _pytest_targets(result)
 
@@ -237,8 +237,8 @@ def test_file_a_test_reads_selects_that_test():
             "home/.chezmoiscripts/300_windows/run_after_349_websearch_keys.ps1.tmpl",
             "test/test_websearch.py",
         ),
-        ("home/dot_claude/skills/commit/SKILL.md", "test/agents/test_check_bash_config.py"),
-        ("home/dot_claude/skills/sdd-docs/SKILL.md", "test/agents/test_opencode_external_read.py"),
+        ("home/dot_agents/skills/commit/SKILL.md", "test/agents/test_check_bash_config.py"),
+        ("home/dot_agents/skills/sdd-docs/SKILL.md", "test/agents/test_opencode_external_read.py"),
         ("docs/spec/guard/agent-command-policy.md", "test/agents/test_check_bash_config.py"),
         (
             "home/dot_config/opencode/modify_opencode.json.py.tmpl",

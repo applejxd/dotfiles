@@ -53,7 +53,7 @@
   反映先 / 移管した未完事項と移管先**をそろえる。本文の途中にある古い
   「現在地」や「次の調査」は消さず、時点を添えて終了結果へ案内する
 - 番号は再利用しない。連続性は要求しない（終了で欠番が出るのは正常）
-- テンプレートは `~/.claude/skills/sdd-docs/references/change-template.md`
+- テンプレートは `~/.agents/skills/sdd-docs/references/change-template.md`
 
 ## 活動中
 

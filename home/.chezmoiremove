@@ -106,6 +106,34 @@
 .config/pi/harness/integrate-exec.ts
 .config/pi/harness/integrate-plan.ts
 .config/pi/harness/exclusive-lock.ts
+
+# 2026-11: 自作 skill の置き場を ~/.claude/skills から ~/.agents/skills へ移した (pi は ~/.claude/skills を読まない)。
+# 旧い置き場の自作 skill を消す。herdr など他のツールが入れた skill は、ここに挙げない。
+# powerpoint-studio の .venv・node_modules も旧い側から消える (新しい側で作り直す)。
+# web-search は廃止済みの skill (5573a804) で、配備済みの残りだけを片付ける。
+.claude/skills/agent-workflow
+.claude/skills/arxiv-paper-ja
+.claude/skills/away-shift
+.claude/skills/commit
+.claude/skills/conference-video
+.claude/skills/cuda-version-migration
+.claude/skills/env-check
+.claude/skills/experiment-loop
+.claude/skills/feature-orchestration
+.claude/skills/fix
+.claude/skills/github-operations
+.claude/skills/imozuru
+.claude/skills/ipynb-to-marimo-pages
+.claude/skills/learn
+.claude/skills/onboarding
+.claude/skills/oss-research
+.claude/skills/powerpoint-studio
+.claude/skills/review-loop
+.claude/skills/sdd-docs
+.claude/skills/skill-creator
+.claude/skills/uv-migration
+.claude/skills/web-search
+
 {{ if eq (includeTemplate "pi-profile" .) "stock" }}
 # pi の stock プロファイル (CHEZMOI_PI_PROFILE=stock か ~/.config/chezmoi/pi-profile): 配備済みの自作の拡張・ハーネスを片付ける。
 # custom に戻すと chezmoi apply が再配備する。ディレクトリはディレクトリで書く (冒頭の注意)。

@@ -193,18 +193,18 @@ def test_wildcard_intersection_refuses_shapes_it_cannot_cross(a, b):
 # スキルのスクリプト
 # ---------------------------------------------------------------------------
 
-SDD = "~/.claude/skills/sdd-docs/scripts"
+SDD = "~/.agents/skills/sdd-docs/scripts"
 CP = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
-IMOZURU = "~/.claude/skills/imozuru/scripts"
-AWAY = "~/.claude/skills/away-shift/scripts"
-ENVCHECK = "~/.claude/skills/env-check/scripts"
+IMOZURU = "~/.agents/skills/imozuru/scripts"
+AWAY = "~/.agents/skills/away-shift/scripts"
+ENVCHECK = "~/.agents/skills/env-check/scripts"
 
 
 @pytest.mark.parametrize(
     ("command", "expected"),
     [
         (f"python3 {SDD}/lint_docs.py --docs docs", "allow"),
-        (f"python3 {HOME}/.claude/skills/sdd-docs/scripts/lint_docs.py --docs docs", "allow"),
+        (f"python3 {HOME}/.agents/skills/sdd-docs/scripts/lint_docs.py --docs docs", "allow"),
         (f"python3 {SDD}/lint_docs.py", "allow"),
         (f"python3 {SDD}/check_refs.py --save", "allow"),
         (f"python3 {SDD}/check_refs.py --baseline", "allow"),
@@ -226,11 +226,11 @@ ENVCHECK = "~/.claude/skills/env-check/scripts"
         # 載せたスクリプト以外・別の起動形式は既定の ask のまま
         (f"python3 {SDD}/lint_docs.py.bak", "ask"),
         (f"python3 {SDD}/lint_docs.py/../../../../evil.py", "ask"),
-        ("python3 ~/.claude/skills/../../evil.py", "ask"),
+        ("python3 ~/.agents/skills/../../evil.py", "ask"),
         (f"uv run --no-project python {SDD}/lint_docs.py --docs docs", "ask"),
         ('uv run --no-project python "$S/lint_docs.py" --docs docs', "ask"),
-        (f'python3 "{HOME}/.claude/skills/sdd-docs/scripts/lint_docs.py"', "ask"),
-        ("bash ~/.claude/skills/other-skill/scripts/run.sh h.sh", "ask"),
+        (f'python3 "{HOME}/.agents/skills/sdd-docs/scripts/lint_docs.py"', "ask"),
+        ("bash ~/.agents/skills/other-skill/scripts/run.sh h.sh", "ask"),
     ],
 )
 def test_skill_scripts(command: str, expected: str):
@@ -240,12 +240,12 @@ def test_skill_scripts(command: str, expected: str):
 @pytest.mark.parametrize(
     ("command", "expected"),
     [
-        ("python3 C:\\Users\\x/.claude/skills/sdd-docs/scripts/lint_docs.py --docs docs", "allow"),
-        ("python3 C:\\Users\\x\\.claude\\skills\\sdd-docs\\scripts\\lint_docs.py", "allow"),
-        ("python3 C:/Users/x/.claude/skills/sdd-docs/scripts/lint_docs.py", "allow"),
-        ("python3 ~/.claude/skills/sdd-docs/scripts/lint_docs.py", "allow"),
-        ("python3 C:\\Users\\x\\.claude\\skills\\sdd-docs\\scripts\\lint_docs.py > a", "deny"),
-        ("python3 C:\\Users\\x\\.claude\\skills\\evil.py", "ask"),
+        ("python3 C:\\Users\\x/.agents/skills/sdd-docs/scripts/lint_docs.py --docs docs", "allow"),
+        ("python3 C:\\Users\\x\\.agents\\skills\\sdd-docs\\scripts\\lint_docs.py", "allow"),
+        ("python3 C:/Users/x/.agents/skills/sdd-docs/scripts/lint_docs.py", "allow"),
+        ("python3 ~/.agents/skills/sdd-docs/scripts/lint_docs.py", "allow"),
+        ("python3 C:\\Users\\x\\.agents\\skills\\sdd-docs\\scripts\\lint_docs.py > a", "deny"),
+        ("python3 C:\\Users\\x\\.agents\\skills\\evil.py", "ask"),
         ("python3 C:\\Users\\x\\.ssh\\evil.py", "ask"),
     ],
 )
@@ -359,7 +359,7 @@ def test_isolated_drops_the_skill_script_rules():
 
 
 SKILL_DOCS = (
-    ROOT / "home/dot_claude/skills/sdd-docs/SKILL.md",
+    ROOT / "home/dot_agents/skills/sdd-docs/SKILL.md",
     ROOT / "home/dot_config/opencode/skills/checkpoint/SKILL.md",
 )
 

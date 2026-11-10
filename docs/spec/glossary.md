@@ -113,7 +113,7 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
 - **案件の更新（A2）**: `docs/change/` の案件を更新する。`sdd-docs` スキルが持つ
 - **恒久的な文書化（B）**: `docs/research/`・`docs/adr/`・`docs/spec/` と索引へ書く。
   `sdd-docs` スキルが持つ。指示なしの `/sdd-docs` の挙動もスキル側が決める
-  （[スキルの手順](../../home/dot_claude/skills/sdd-docs/SKILL.md)）
+  （[スキルの手順](../../home/dot_agents/skills/sdd-docs/SKILL.md)）
 - CHG-0005 の A1〜A4 はその案件の段階番号で、上の A1 / A2 とは関係が無い
 
 [仕様一覧へ戻る](index.md)

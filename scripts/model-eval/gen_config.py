@@ -89,7 +89,7 @@ def main() -> None:
     rules.pop("ask_description", None)
     (guide / "rules.json").write_text(json.dumps(rules, ensure_ascii=False, indent=2), "utf-8")
     skills = assets / "skills"
-    shutil.copytree(repo / "home" / "dot_claude" / "skills" / "commit", skills / "commit")
+    shutil.copytree(repo / "home" / "dot_agents" / "skills" / "commit", skills / "commit")
 
     config = gen.merge_opencode_config({}, common)
     config["plugins"] = [str(guide)]

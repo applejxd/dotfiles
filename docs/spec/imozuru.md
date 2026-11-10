@@ -1,7 +1,7 @@
 # imozuru（調べものスキル）
 
 知らない分野を、用語・人・場から引用と著者を芋づる式にたどり、**原文を要約せずに保存**して、要る主張ごとに原文の行番号を付けるスキル。
-上流は [MaryCache/imozuru](https://github.com/MaryCache/imozuru)（MIT）で、`home/dot_claude/skills/imozuru/` に vendor して調整した。
+上流は [MaryCache/imozuru](https://github.com/MaryCache/imozuru)（MIT）で、`home/dot_agents/skills/imozuru/` に vendor して調整した。
 検索は、使える検索ツールで行う（pi は自作の MCP `websearch` の `web_search` / `search_papers` / `fetch_page`。[Web 検索](web-search.md)）。スキル `web-search`（`websearch.py`）は 2026-11-09 に廃止した。検索役のサブエージェントは使わない。
 入口を skill + CLI にした理由は [入口の選び方](guard/pi-extensions.md#入口の選び方)、拡張でなくスキルで足りる判断は [ADR-0031](../adr/0031-evaluate-existing-extensions-first.md)（旧 [ADR-0016](../adr/0016-pi-extensions-own-first.md) を置き換え）。
 
@@ -14,7 +14,7 @@
 
 | 対象 | 条件 | 実装 |
 | --- | --- | --- |
-| スキル本体（`.claude/skills/imozuru/`） | `is-work` でない機 | `home/.chezmoiignore.tmpl` が `is-work` のとき除く |
+| スキル本体（`.agents/skills/imozuru/`） | `is-work` でない機 | `home/.chezmoiignore.tmpl` が `is-work` のとき除く |
 | `fetch_youtube.py`（YouTube の字幕） | **ユーザー名が applejxd** | `home/.chezmoiignore.tmpl` の「個人 PC のみで導入」の節が、それ以外のユーザーには配らない |
 | `yt-dlp` 本体 | ユーザー名が applejxd | `home/dot_config/mise/config.toml.tmpl`（以前から） |
 | 許可規則（`[pi.skill_scripts.allow]`） | `is-work` でない機 | `common.toml.tmpl` |
@@ -90,7 +90,7 @@
 
 ## `pis` の許可規則
 
-`[pi.skill_scripts]`（`common.toml.tmpl`）に載せた（`is-work` でない機のときだけ）。**`python3 ~/.claude/skills/imozuru/scripts/<名前>.py <引数>` の形だけ**が確認なしで通る。
+`[pi.skill_scripts]`（`common.toml.tmpl`）に載せた（`is-work` でない機のときだけ）。**`python3 ~/.agents/skills/imozuru/scripts/<名前>.py <引数>` の形だけ**が確認なしで通る。
 
 | 形 | 判定 | 理由 |
 | --- | --- | --- |

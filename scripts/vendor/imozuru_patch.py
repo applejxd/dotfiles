@@ -2,14 +2,14 @@
 
 編集ツールの後処理の整形は上流との差分を大きくするので、文字列の置換をこのスクリプトで行う。
 上流の原本に対して何度でも当て直せる (置換元が 1 つでなければ止まる)。
-使い方 (リポジトリのルートで): 上流の 4 本を home/dot_claude/skills/imozuru/scripts/ へ複写し直してから
+使い方 (リポジトリのルートで): 上流の 4 本を home/dot_agents/skills/imozuru/scripts/ へ複写し直してから
 `python3 scripts/vendor/imozuru_patch.py`。
 see docs/spec/imozuru.md#上流との差分
 """
 
 from pathlib import Path
 
-D = Path("home/dot_claude/skills/imozuru/scripts")
+D = Path("home/dot_agents/skills/imozuru/scripts")
 
 
 def head(*names: str, net: bool = False, pathlib: bool = False) -> str:

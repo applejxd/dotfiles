@@ -91,7 +91,8 @@ OSごとの差分は `.chezmoiignore.tmpl`、テンプレート条件、OS別ス
 
 | パス | 役割 |
 | --- | --- |
-| `home/.chezmoitemplates/agent-instructions.md` | 4 CLI 共通の本文（平らな 25 行: 原則 5 つ・応答・未知の不具合の調査・コマンドの示し方。印なし）。進め方・委譲・承認などの詳細はスキル `agent-workflow`（`home/dot_claude/skills/`。自作基盤が前提で凍結）へ移した。リポジトリ固有の約束は各リポジトリの `AGENTS.md`（このリポジトリは平らな 45 行以内。編集の規則は `.agents/skills/dotfiles-conventions/`、運用の規則は `.agents/skills/feature-orchestration/references/repo-rules.md`） |
+| `home/.chezmoitemplates/agent-instructions.md` | 4 CLI 共通の本文（平らな 25 行: 原則 5 つ・応答・未知の不具合の調査・コマンドの示し方。印なし）。進め方・委譲・承認などの詳細はスキル `agent-workflow`（`home/dot_agents/skills/`。自作基盤が前提で凍結）へ移した。リポジトリ固有の約束は各リポジトリの `AGENTS.md`（このリポジトリは平らな 45 行以内。編集の規則は `.agents/skills/dotfiles-conventions/`、運用の規則は `.agents/skills/feature-orchestration/references/repo-rules.md`） |
+| `home/dot_agents/skills/` | `~/.agents/skills/`。自作 skill の置き場（pi・OpenCode・Copilot が読む。2026-11 に `home/dot_claude/skills/` から移した。旧い配備は `.chezmoiremove` が消す） |
 | `home/dot_claude/CLAUDE.md.tmpl` | `~/.claude/CLAUDE.md`。共通本文のみ |
 | `home/dot_codex/AGENTS.md.tmpl` | `~/.codex/AGENTS.md`。共通本文のみ |
 | `home/dot_config/opencode/AGENTS.md.tmpl` | `~/.config/opencode/AGENTS.md`。共通本文 + 自動リマインダー節（提供元が差し込む著作権などの注意への言及を止め、出力トークンを節約する。起きたのが OpenCode なのでここだけ） + 文脈の引き継ぎ節（`checkpoint` スキルが OpenCode 専用のため） |

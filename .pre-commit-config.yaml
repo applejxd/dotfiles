@@ -56,7 +56,7 @@ repos:
           mise exec -- uv run --with pyyaml --no-project
           python scripts/agents/validate_skills.py
         language: system
-        files: ^(home/(dot_claude|dot_config/opencode)|\.agents)/skills/[^/]+/SKILL\.md$
+        files: ^(home/(dot_agents|dot_claude|dot_config/opencode)|\.agents)/skills/[^/]+/SKILL\.md$
 
       # common.toml は chezmoi テンプレートなので check-toml が使えない。
       # hook が fail-closed で読む正本なので、描画結果を検査して代替する。
@@ -98,10 +98,10 @@ repos:
       # 検査するのは整合だけで、記述の妥当性は判定しない。
       - id: lint-docs-local
         name: Lint docs index consistency
-        entry: mise exec -- python3 home/dot_claude/skills/sdd-docs/scripts/lint_docs.py
+        entry: mise exec -- python3 home/dot_agents/skills/sdd-docs/scripts/lint_docs.py
         language: system
         pass_filenames: false
-        files: ^(docs/.*\.md|home/dot_claude/skills/sdd-docs/scripts/lint_docs\.py)$
+        files: ^(docs/.*\.md|home/dot_agents/skills/sdd-docs/scripts/lint_docs\.py)$
 
       # 警告のみでコミットは止めない。see docs/spec/development.md#コミット前の検証の印
       - id: verify-stamp

@@ -26,7 +26,7 @@ import generate as gen  # noqa: E402
 from agents_common import load_common  # noqa: E402
 
 COMMON = load_common("applejxd")
-SKILL = ROOT / "home" / "dot_claude" / "skills" / "commit" / "SKILL.md"
+SKILL = ROOT / "home" / "dot_agents" / "skills" / "commit" / "SKILL.md"
 
 
 def _glob(pattern: str) -> str:

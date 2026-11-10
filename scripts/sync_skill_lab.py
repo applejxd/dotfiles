@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""skill-lab の ``skills/<名前>`` を ``home/dot_claude/skills/<名前>`` へ複製して同期する。
+"""skill-lab の ``skills/<名前>`` を ``home/dot_agents/skills/<名前>`` へ複製して同期する。
 
 正本は skill-lab で、このリポジトリのコピーは編集しない。取り込むのは skill-lab の
 **コミット済みの版 (HEAD)** だけ (作業中の変更は取り込まない)。
@@ -124,7 +124,7 @@ def sync(skill: str, src: Path, repo: Path = REPO, check: bool = False) -> int:
         )
     commit = _git(src, "rev-parse", "--short=7", "HEAD").decode().strip()
     date = _git(src, "log", "-1", "--format=%cs", "HEAD", "--", f"skills/{skill}").decode().strip()
-    dest = repo / "home" / "dot_claude" / "skills" / skill
+    dest = repo / "home" / "dot_agents" / "skills" / skill
     with tempfile.TemporaryDirectory() as tmp:
         new = Path(tmp) / skill
         new.mkdir()

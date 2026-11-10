@@ -27,7 +27,7 @@ SKILL_PATHS = vs.discover()
 
 # 収集ロジックと独立に書いた既知のパス。glob を使い回すと自己確認になる。
 KNOWN_SKILLS = [
-    "home/dot_claude/skills/commit/SKILL.md",
+    "home/dot_agents/skills/commit/SKILL.md",
     "home/dot_config/opencode/skills/checkpoint/SKILL.md",
 ]
 
@@ -204,7 +204,7 @@ def test_conversation_dependent_body_without_fork_is_accepted(tmp_path):
 # description と本文の整合 (個別の skill)
 # ---------------------------------------------------------------------------
 
-CLAUDE_SKILLS = ROOT / "home/dot_claude/skills"
+CLAUDE_SKILLS = ROOT / "home/dot_agents/skills"
 
 
 def load_skill(name: str) -> tuple[dict, str]:

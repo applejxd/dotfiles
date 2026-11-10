@@ -11,7 +11,7 @@
 
 - **対象バージョン**: pi 1.3.0（`pi --version`）
 - **環境**: Ubuntu（WSL）。公開情報の閲覧だけで、**拡張のインストール・実行はしていない**（[ADR-0016](../../adr/0016-pi-extensions-own-first.md)、
-  [safe-acquisition](../../../home/dot_claude/skills/oss-research/references/safe-acquisition.md)）
+  [safe-acquisition](../../../home/dot_agents/skills/oss-research/references/safe-acquisition.md)）
 - **問い**: 著名な pi の公開拡張・スキルを、このハーネス（自作のみ・`-ne` 固定）では使えない。使えないことで、何を失っているか
 - **方法**: 公開されている一覧から、月間ダウンロード数の上位 150 件を取り、機能で分類した。分類ごとに、代表的な README を読み
   （18 件。残りは説明文だけ）、今のハーネスの状態と比べた
@@ -246,7 +246,7 @@
 ## 記録 P6 — 2026-10-22: worktree 隔離の先行例と P1〜P5 の訂正
 
 - **対象バージョン**: pi 1.3.0。**拡張のインストール・実行・展開はしていない**（[ADR-0016](../../adr/0016-pi-extensions-own-first.md)、
-  [safe-acquisition](../../../home/dot_claude/skills/oss-research/references/safe-acquisition.md)）
+  [safe-acquisition](../../../home/dot_agents/skills/oss-research/references/safe-acquisition.md)）
 - **問い**: (1) P1・P2 が「設計だけ借りて自作できる」とした worktree 隔離は、先行例でどう作られているか。
   (2) P1〜P5 の主張のうち、その後の実装で古くなったものはどれか
 - **方法**: npm レジストリから配布物を直接取得し、`dist.integrity`（sha512）と照合し、`tar -xzO` で必要なファイルだけを標準出力へ出して読んだ。

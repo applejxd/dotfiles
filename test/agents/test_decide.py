@@ -270,15 +270,15 @@ def test_bypass_turns_only_ask_into_allow():
 
 def test_skill_scripts_are_allowed_only_in_their_declared_form():
     home = os.path.expanduser("~")
-    lint = f"{home}/.claude/skills/sdd-docs/scripts/lint_docs.py"
-    refs = "~/.claude/skills/sdd-docs/scripts/check_refs.py"
+    lint = f"{home}/.agents/skills/sdd-docs/scripts/lint_docs.py"
+    refs = "~/.agents/skills/sdd-docs/scripts/check_refs.py"
     checkpoint = "~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
     assert bash(f"python3 {lint}")["decision"] == "allow"
     assert bash(f"python3 {refs} --save --baseline")["decision"] == "allow"
     assert bash(f"python3 {refs} --save other.txt")["decision"] == "ask"
     assert bash(f"python3 {checkpoint} read")["decision"] == "allow"
     # docs_state.py は status (読み取り) だけ。scaffold は docs/ へ書くので確認を出す
-    docs_state = "~/.claude/skills/sdd-docs/scripts/docs_state.py"
+    docs_state = "~/.agents/skills/sdd-docs/scripts/docs_state.py"
     assert bash(f"python3 {docs_state} status")["decision"] == "allow"
     assert bash(f"python3 {docs_state} scaffold")["decision"] == "ask"
     assert bash(f"python3 {checkpoint} write x")["decision"] == "ask"
@@ -295,7 +295,7 @@ def test_web_search_script_is_no_longer_allowed():
 
 
 def test_imozuru_scripts_allow_only_the_confined_or_read_only_forms():
-    base = "~/.claude/skills/imozuru/scripts"
+    base = "~/.agents/skills/imozuru/scripts"
     # 書き込み先が .tmp/research/ に限られる report.py、検索語を API へ送るだけの chain.py、読むだけの watch.py list
     for sub in ("find", "refs", "cites", "author"):
         assert bash(f'python3 {base}/chain.py {sub} "berrypicking"')["decision"] == "allow", sub
@@ -328,7 +328,7 @@ def test_imozuru_scripts_allow_only_the_confined_or_read_only_forms():
 
 
 def test_away_shift_scripts_allow_only_the_listed_subcommands():
-    base = "~/.claude/skills/away-shift/scripts"
+    base = "~/.agents/skills/away-shift/scripts"
     guard = f"python3 {base}/away_guard.py"
     for sub in (
         "init --goal g --deadline 8h --run-id r1",
@@ -358,7 +358,7 @@ def test_away_shift_scripts_allow_only_the_listed_subcommands():
         ("read", "app/.env", "deny"),
         ("read", "app/.env.example", "allow"),
         ("read", "/etc/hostname", "ask"),
-        ("read", "~/.claude/skills/sdd-docs/SKILL.md", "allow"),
+        ("read", "~/.agents/skills/sdd-docs/SKILL.md", "allow"),
         ("grep", "~/.ssh", "deny"),
         ("ls", "~/.aws", "ask"),
         ("ls", "~/.aws/credentials", "deny"),
@@ -367,7 +367,7 @@ def test_away_shift_scripts_allow_only_the_listed_subcommands():
         ("write", "app/.env.example", "allow"),
         ("write", "mise.toml", "ask"),
         ("edit", "/tmp/outside.txt", "ask"),
-        ("edit", "~/.claude/skills/sdd-docs/SKILL.md", "ask"),
+        ("edit", "~/.agents/skills/sdd-docs/SKILL.md", "ask"),
     ],
 )
 def test_file_decisions(tool, path, decision):

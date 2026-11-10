@@ -250,7 +250,7 @@ sed / awk / jq など、stdin を stdout へ通すフィルタを含む) と
 拒否文は、(1) 複合コマンドのときは**全体を実行していない**こと、(2) 代わりに使う診断の入口 `env-check` スキル、(3) 直接読める許可リスト、を必ず案内する。
 複合コマンドの一部（`...; env | grep proxy`）が止まると、他の部分も実行されないので、再実行の仕方が分からないと診断が止まる。
 
-診断の入口は `home/dot_claude/skills/env-check/scripts/env_check.py`（`[pi.skill_scripts]` で確認なしに実行できる）。
+診断の入口は `home/dot_agents/skills/env-check/scripts/env_check.py`（`[pi.skill_scripts]` で確認なしに実行できる）。
 
 | サブコマンド | 出力 |
 | --- | --- |

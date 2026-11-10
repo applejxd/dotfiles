@@ -862,7 +862,7 @@ def test_the_pre_move_skill_is_removed_on_apply():
     ]
     assert ".claude/skills/checkpoint" in lines
     # source 側にも復活していないこと (同名があると apply が inconsistent で落ちる)
-    assert not (ROOT / "home/dot_claude/skills/checkpoint").exists()
+    assert not (ROOT / "home/dot_agents/skills/checkpoint").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -872,7 +872,7 @@ def test_the_pre_move_skill_is_removed_on_apply():
 SKILLS = ROOT / "home/dot_config/opencode/skills"
 # sdd-docs は OpenCode に依存しないので ~/.claude/skills 側に置く。
 # そこは OpenCode がネイティブに監視し、~/.copilot/skills も張られている。
-SDD_DOCS = ROOT / "home/dot_claude/skills/sdd-docs"
+SDD_DOCS = ROOT / "home/dot_agents/skills/sdd-docs"
 MOVED_REFERENCES = ("adr-template.md", "change-template.md", "research-template.md")
 
 

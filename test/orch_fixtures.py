@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ORCH = ROOT / "home" / "dot_claude" / "skills" / "feature-orchestration" / "scripts" / "orch.py"
+ORCH = ROOT / "home" / "dot_agents" / "skills" / "feature-orchestration" / "scripts" / "orch.py"
 
 
 def clean_env(parent: Path) -> dict[str, str]:

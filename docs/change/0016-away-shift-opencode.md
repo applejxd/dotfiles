@@ -5,7 +5,7 @@
 
 - **状態**: Paused
 - **更新日**: 2026-10-25
-- **基準**: `home/dot_claude/skills/away-shift/`（f890912 時点。2026-10-25 の書き直しで、CHG-0030 の実装後を確認）
+- **基準**: `home/dot_agents/skills/away-shift/`（f890912 時点。2026-10-25 の書き直しで、CHG-0030 の実装後を確認）
 
 ## 目的と非目的
 
