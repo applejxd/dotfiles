@@ -25,6 +25,8 @@
 | [0030](0030-freeze-agent-stack-return-to-stock-pi.md) | エージェント基盤の凍結 | 自作のガード・境界・隔離環境は保存のみで開発せず、pi は公式の既定＋人気の拡張で使う |
 | [0031](0031-evaluate-existing-extensions-first.md) | 既存の評価を先に、自作は最後 | 機能は標準 → 入れた package → 公開 package → skill/MCP の順に探し、自作は理由・維持費・撤去条件・承認があるときだけ |
 | [0032](0032-docs-by-audience.md)（Proposed） | docs を読み手別に整理 | ADR はエージェント用、案件・調査・仕様は利用者用。入口は「今の作業計画」と本一覧 |
+| [0033](0033-delegate-subagents-by-standing-instruction.md)（Proposed） | 子の起動は常設の指示で授権し、数の上限は設けない | 小さな作業以外は、依頼を待たずに `subagent` へ委譲する。安全は数の上限でなく、外側の権限（作業ツリー外は即拒否・理由つき deny・子ごとの `timeout`）で担保する |
+| [0034](0034-skip-frozen-stack-tests-in-verify-all.md)（Proposed） | 凍結したスタックの試験は `verify:all` から外す | `verify:all` は凍結スタックの試験を省く（変更に当たるものは T1 で回る）。`main` への統合前と凍結コードに触れるときは `verify:full` |
 
 置き換え・廃止・凍結された決定（0012〜0029 の多く、0016 など）は下の一覧にある。
 

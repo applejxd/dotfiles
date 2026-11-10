@@ -87,6 +87,19 @@ Claude Code の `context: fork` は、**本文（`$ARGUMENTS` 置換後）を、
 
 例（工程への展開）: `skill-creator` は D（聞き取り）→ C（草稿）→ E（比較試験の管理）→ C（修正）。`github-operations` は D（対象・意図の確認）→ 子（現状調査・本文の準備）→ 親側の承認つき操作 → 子（読み戻し）。`oss-research` は A（調べて報告）だが、`gh`・`curl` の実行と取得物の削除の承認が要るので、承認の経路（CHG-0045 の段 4）が前提。
 
+## stock の pi 向けの書き直し（2026-11-10〜11）
+
+自作基盤の凍結（[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md)）のあと、skill を stock の pi の運用に合わせた。
+
+- **置き場**: 自作 skill は `home/dot_agents/skills/`（配備先 `~/.agents/skills/`）に置く（以前は `home/dot_claude/skills/`）。`~/.agents/skills` の読み取りと、`python3 ~/.agents/skills/…/*.py` の実行（`-c`・`-m` を除く。読み取り扱い）は、確認なしにしてある。`uv run`・`node` などは、作業ツリー外のパスだと確認になりうる（[権限の方針](agent-config-generation.md)）。
+- **パスの書き方**: `${CLAUDE_SKILL_DIR}` は展開されないので、`~/.agents/skills/<名前>/references/…` の形で書く。
+- **子の呼び方**: `review-loop`・`experiment-loop` は、`reviewer`（`pi-subagents` の組み込み）に合わせた。実機での動作は未確認（skill の中に明記）。
+- **`commit`**: `guarded_*` の記述は、末尾の節「凍結した custom（`pis`）での違い」へ移した。
+- **`feature-orchestration`**: stock の運用（feature の worktree＋`pi-subagents`）を既定にした。旧運用（`guarded_task`・フルガード）は `references/custom-harness.md`、子への依頼の契約は `references/worker-contract.md`。
+- **`github-operations`**: 本文・変更項目を会話に示してから、そのまま `gh` を実行する。承認は権限の確認（変更系の `gh` は ask）に任せ、会話では聞き直さない（承認が 2 回になるため。確認の画面には `--body-file` の本文が出ないので、本文は先に示す）。変更系が確認なしで通る環境と分かっているときだけ、会話で承認を得る。破壊的操作は、利用者が会話で明示したときだけ。
+- **`agent-workflow`**: 自作基盤前提で、stock の pi では使えないので、一覧から隠す（`skill` の deny）。
+- **`uv-migration`**: スクリプトは `python3`（`uv run` は確認が出ることがある）。
+
 ## `review-loop` の step back
 
 レビュー→修正が収束しないとき、パッチを当て続けず設計から見直す。手順は `review-loop/references/stepback.md`（実例 14 件に基づく）。

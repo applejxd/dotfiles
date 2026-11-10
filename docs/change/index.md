@@ -6,16 +6,18 @@
 
 ## 今の作業計画（活動中）
 
-利用者が今の作業計画を追うための 1 枚（2026-11-09 時点。節目＝開始・方針の変更・完了・依頼のときだけ更新する。[ADR-0032](../adr/0032-docs-by-audience.md)）。
+利用者が今の作業計画を追うための 1 枚（2026-11-11 時点。節目＝開始・方針の変更・完了・依頼のときだけ更新する。[ADR-0032](../adr/0032-docs-by-audience.md)）。
 
 | 作業 | 何を | 今どこ | 次の一手 | あなたが決めること | 関連 |
 | --- | --- | --- | --- | --- | --- |
-| stock の pi への移行 | 自作基盤を凍結し、公式の pi＋人気の拡張へ | 拡張の導入・検索 MCP の登録・pi-subagents の設定・圧縮の設定は develop に統合済み。切り替えはあなたの操作待ち | `pk stock-switch` で切り替え → 実機で確認（検索・permission・圧縮の設定・子エージェントの 4 点） | なし（切り替えの操作と確認） | [CHG-0065](closed/0065-agent-stack-freeze.md)・[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md)・[拡張の評価](../research/agents/pi-stock-packages-evaluation-2026-11.md) |
-| 検索 MCP（家の機向けの自作 1 件） | 検索を MCP サーバで提供する | 本体（`core.py`・`mcp_server.py`）と stock への登録（`mcp.json` の生成・package の整理・permission）は統合済み。plan mode でも使える変更を実装中。スキル `web-search` の廃止と imozuru の書き換え（S4）も実装済み（統合待ち） | 切り替え後に実機確認（S3） | なし | [web-search 仕様](../spec/web-search.md) |
+| stock の pi への移行 | 自作基盤を凍結し、公式の pi＋人気の拡張へ | **完了**。stock が既定のプロファイル（2026-11-10）で、実機で使用中。権限の方針は「YOLO を切る前提の deny と強制 ask」で、全 deny に理由がある（ask には理由の仕組みが無い） | 1〜2 週間使い、足りない所を `friction-review` スキルでセッションのログから洗い出す | なし | [CHG-0065](closed/0065-agent-stack-freeze.md)・[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md)・[拡張の評価](../research/agents/pi-stock-packages-evaluation-2026-11.md) |
+| 検索 MCP（家の機向けの自作 1 件） | 検索を MCP サーバで提供する | 統合済み（本体・stock への登録・plan mode でも使える・スキル `web-search` の廃止と imozuru の書き換え）。実機での確認の記録は無い | 使いながら確認 | なし | [web-search 仕様](../spec/web-search.md) |
 | 圧縮（コンパクト化）の方針 | 圧縮の要約を「続きの作業のための brief」にする | 決定・統合済み。70 万トークン（`reserveTokens` 30 万）で圧縮し、`pi-compaction` は要約の指示（brief）だけに使う。根拠: 過去セッションの集計で、長い文脈の劣化の兆候は見つからなかった。自作は足さない | 実機で確認（`/compaction-settings show`・1 回目の圧縮が brief になっているか） | なし | [圧縮の研究ノート](../research/agents/long-context-compaction-paper-2026-11.md) |
-| 子エージェントの運用（`pi-subagents`） | 子エージェントを拡張だけで運用する | 他の候補は入れず、これだけで足りると評価済み。設定は統合済み（`forceTopLevelAsync` を強制・scout と oracle は読み取り専用・`subagent_launch` は ask）。worktree は、まず拡張ネイティブ（N）で体感し、合わなければ feature worktree（F）へ | 切り替え後に実機確認 4 点 | なし | [拡張の評価](../research/agents/pi-stock-packages-evaluation-2026-11.md)・[運用ガイド](../../.agents/skills/feature-orchestration/references/pi-subagents.md) |
-| docs の見直し（この変更） | 読み手別に整理する縮小版（D 案）を試作 | D 案の試作を統合し、使って確かめる段階（ADR-0032 は Proposed） | この 1 枚で今の作業計画が追えるか確かめる → 追えれば、`commit` スキルと `sdd-docs` の変更（共通のスキルを縮小。案件更新の自動呼び出しと索引の自動補完を外す） | 試用のあと、ADR-0032 を Accepted にするか | [ADR-0032](../adr/0032-docs-by-audience.md) |
-| plan mode で検索 | plan mode の許可リストに検索（`websearch`）を足す。検索 MCP を `exposure: direct` で生成する | 実装中 | 統合 → 実機で確認（plan 中に検索が通る） | なし | [web-search 仕様](../spec/web-search.md) |
+| 子エージェントの運用（`pi-subagents`） | 子の起動を常設の指示で授権し、数の上限を外し、役ごとにモデルと権限を決める | 実装・統合済み（2026-11-11）。`reviewer`・`oracle`・`evidence-auditor` は親と別系統の GPT 6.1 sol。作業ツリーの外は子でも即拒否。**常設の指示が実際に効くか（指示なしに子を起動するか）は未観察** | 1〜2 週間使い、起動すべき場面で起動するか・過剰でないかを見る | [ADR-0033](../adr/0033-delegate-subagents-by-standing-instruction.md)（Proposed）を Accepted にするか | [仕様](../spec/agent-config-generation.md)・[oracle のモデル](../research/agents/oracle-model-2026-11.md)・[子の権限の実測](../research/agents/subagent-permission-frontmatter-2026-11.md)・[運用ガイド](../../.agents/skills/feature-orchestration/references/pi-subagents.md) |
+| away-shift（離席中の検証） | 親が監督し、専用 worktree の子へサイクルを任せる。利用者は離席と戻りの時刻を言うだけ | 再設計・実装済み（2026-11-10）。リハーサル 5 サイクルを通過し、確認（ask）は 0 件。**数時間規模の運転・子 1 回あたりのトークン・Windows/macOS は未測定** | 実際に離席する機会に 1 回回す | なし | [仕様](../spec/away-shift.md) |
+| 検証の高速化 | 凍結したスタックの試験を `verify:all` から外す | 統合済み。`verify:all` は 12〜13 分から 1 分 55 秒（`verify:full` は省略なしの 12 分 29 秒） | `main` への統合前に `verify:full` | [ADR-0034](../adr/0034-skip-frozen-stack-tests-in-verify-all.md)（Proposed）を Accepted にするか | [開発の仕様](../spec/development.md) |
+| skill の置き場と掃除 | 自作 skill を `~/.agents/skills` へ移し、stock の pi 向けに書き直す | 完了（置き場の移動・`~/.agents/skills` の読み取り許可・`reviewer` への書き直し・`feature-orchestration` を stock の運用を既定に・`github-operations` の承認を権限の確認に一本化） | なし | なし | [skill の frontmatter](../spec/skill-frontmatter.md) |
+| docs の見直し（この変更） | 読み手別に整理する縮小版（D 案）を試作 | D 案の試作を統合し、使って確かめる段階（ADR-0032 は Proposed）。2026-11-11 に、直近 2 週間の作業の抜け（ADR-0033・0034、この表、仕様の細部）を補った | この 1 枚で今の作業計画が追えるか確かめる → 追えれば、`commit` スキルと `sdd-docs` の変更（共通のスキルを縮小。案件更新の自動呼び出しと索引の自動補完を外す） | 試用のあと、ADR-0032 を Accepted にするか | [ADR-0032](../adr/0032-docs-by-audience.md) |
 
 凍結した案件は「終了」へ移した（入口は [CHG-0065](closed/0065-agent-stack-freeze.md)）。停滞した案件はこの表に入れない（下の「活動中」「保留」に残る）。
 
