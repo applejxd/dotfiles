@@ -88,7 +88,8 @@ def _now() -> str:
 def write_stamp(repo: Path, entries: Entries | None = None, scope: str = "full") -> Path:
     """印を書く。entries を渡すと、その内容 (検証の開始時の snapshot) を記録する。
 
-    scope は何を回した実行か (full = 従来の全件、closed:<名前> = 閉じたモジュールだけで T2 を省いた実行)。
+    scope は何を回した実行か (full = 従来の全件、closed:<名前> = 閉じたモジュールだけで T2 を省いた実行、
+    no-frozen = 凍結したスタックの試験を T2 から省いた実行)。
     照合 (check) は scope を見ない: 省いた T2 は変更の範囲外で、基準の内容は統合時に検査済みのため。
     """
     repo = Path(repo)
