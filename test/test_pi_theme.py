@@ -3,6 +3,7 @@
 - JSON として読め、name / appearance が決まった値であること
 - colors の値が 16 進の色か vars の名前で、循環・未定義が無いこと
 - 背景 #161821 に対する WCAG のコントラスト比 (text は 7 以上、主要な前景色は 4.5 以上)
+- 入力欄の枠 (思考レベルの色) が 7 段階で互いに違い、xhigh までは error の赤を使わないこと
 - pi 本体の組み込み dark.json があるときだけ、colors のキーの集合が一致すること
 実機の pi は起動しない。
 see docs/spec/agent-config-generation.md#テーマicebergstock
@@ -103,3 +104,28 @@ def test_color_keys_match_builtin_dark():
         pytest.skip("pi 本体の組み込み dark.json が見つからない (キー集合は未検査)")
     expected = set(json.loads(builtin.read_text(encoding="utf-8"))["colors"])
     assert set(load_theme()["colors"]) == expected
+
+
+THINKING_LEVELS = ("Off", "Minimal", "Low", "Medium", "High", "Xhigh", "Max")
+
+
+def test_thinking_levels_are_distinct():
+    """入力欄の枠は思考レベルで色が変わる。7 段階が互いに違う色であること。"""
+    theme = load_theme()
+    colors = [resolve(theme, f"thinking{level}") for level in THINKING_LEVELS]
+    assert len(set(colors)) == len(colors), colors
+
+
+def test_thinking_levels_up_to_xhigh_avoid_the_error_color():
+    """xhigh を常用する人の入力欄が、エラーの赤に見えないこと (赤系は使わない。max だけは暖色でよい)。"""
+    theme = load_theme()
+    error = {resolve(theme, "error"), resolve(theme, "toolDiffRemoved"), theme["vars"]["redLight"].lower()}
+    for level in THINKING_LEVELS[:-1]:
+        assert resolve(theme, f"thinking{level}") not in error, level
+
+
+@pytest.mark.parametrize("level", THINKING_LEVELS)
+def test_thinking_colors_are_visible_as_a_border(level: str):
+    """枠として見えるコントラスト (背景に対して 3 以上)。"""
+    ratio = contrast_ratio(resolve(load_theme(), f"thinking{level}"), BACKGROUND)
+    assert ratio >= 3.0, f"thinking{level} の比 {ratio:.2f}"
