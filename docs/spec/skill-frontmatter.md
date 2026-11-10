@@ -91,7 +91,7 @@ Claude Code の `context: fork` は、**本文（`$ARGUMENTS` 置換後）を、
 
 自作基盤の凍結（[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md)）のあと、skill を stock の pi の運用に合わせた。
 
-- **置き場**: 自作 skill は `home/dot_agents/skills/`（配備先 `~/.agents/skills/`）に置く（以前は `home/dot_claude/skills/`）。`~/.agents/skills` の読み取りと、skill のスクリプトの実行は、確認なしにしてある（[権限の方針](agent-config-generation.md)）。
+- **置き場**: 自作 skill は `home/dot_agents/skills/`（配備先 `~/.agents/skills/`）に置く（以前は `home/dot_claude/skills/`）。`~/.agents/skills` の読み取りと、`python3 ~/.agents/skills/…/*.py` の実行（`-c`・`-m` を除く。読み取り扱い）は、確認なしにしてある。`uv run`・`node` などは、作業ツリー外のパスだと確認になりうる（[権限の方針](agent-config-generation.md)）。
 - **パスの書き方**: `${CLAUDE_SKILL_DIR}` は展開されないので、`~/.agents/skills/<名前>/references/…` の形で書く。
 - **子の呼び方**: `review-loop`・`experiment-loop` は、`reviewer`（`pi-subagents` の組み込み）に合わせた。実機での動作は未確認（skill の中に明記）。
 - **`commit`**: `guarded_*` の記述は、末尾の節「凍結した custom（`pis`）での違い」へ移した。
