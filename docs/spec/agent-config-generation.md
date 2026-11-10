@@ -699,7 +699,7 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
   | --- | --- | --- | --- |
   | `worker` | `claude-sonnet-5.5:medium` | `us.anthropic.claude-sonnet-5-5:medium` | 実装は medium で足りる（opus と合格率が同じで sonnet が速い。`docs/research/opencode/tier-models.md`） |
   | `reviewer`・`evidence-auditor` | `gpt-6.1-sol:high` | `us.openai.gpt-6.1-sol:high` | 実装（Claude）と**別系統**にして、独立した目で見る（second_opinion） |
-  | `oracle` | `claude-sonnet-5.5:xhigh` | `us.anthropic.claude-sonnet-5-5:xhigh` | 深い判断（Copilot の deep の階層）。**Bedrock の Opus 5.5 は、カタログでは plan 役の既定で、ほかは明示の指示のときだけ**。常設の指示で自律に起動する子には使わない（高価） |
+  | `oracle` | `gpt-6.1-sol:high` | `us.openai.gpt-6.1-sol:high` | 二番目の意見。**親・worker の Claude と別系統**にし（同じモデルの自己点検はほとんど効かず、評価役は同系統の出力を好むため。[根拠](../research/agents/oracle-model-2026-11.md)）、`reviewer` と同じにする。Bedrock の Opus 5.5 は、カタログでは plan 役の既定で、ほかは明示の指示のときだけ。自律に起動する子には使わない（高価）。`context: fork` で親の会話を引き継ぐので、別モデルでは読み込みの再利用が効かない（少し高い） |
   | `scout` | `claude-sonnet-5.5:low` | `us.anthropic.claude-sonnet-5-5:low` | 速い調査（**新しい判断**。カタログに階層が無い。`explore` は計測が要るとされていた） |
   | `researcher` | `claude-sonnet-5.5:medium` | `us.anthropic.claude-sonnet-5-5:medium` | 調査の合成（**新しい判断**。カタログに階層が無い） |
 

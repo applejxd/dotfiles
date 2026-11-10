@@ -257,7 +257,8 @@ def test_settings_assigns_models_by_role_for_copilot(settings_script):
     models = {n: e["model"] for n, e in by_provider(out)["github-copilot"].items()}
     assert models["worker"] == "github-copilot/claude-sonnet-5.5:medium"
     assert models["scout"] == "github-copilot/claude-sonnet-5.5:low"
-    assert models["oracle"] == "github-copilot/claude-sonnet-5.5:xhigh"
+    # oracle は reviewer と同じ別系統 (親・worker の Claude と別の目。自己選好と自己点検の限界を避ける)
+    assert models["oracle"] == models["reviewer"] == "github-copilot/gpt-6.1-sol:high"
     # 実装と監査は系統を分ける (worker は Claude、reviewer は GPT)
     assert models["reviewer"] == "github-copilot/gpt-6.1-sol:high"
     assert models["evidence-auditor"] == models["reviewer"]
@@ -270,6 +271,7 @@ def test_settings_assigns_models_by_role_for_bedrock(settings_script):
     assert models["reviewer"].startswith("amazon-bedrock/us.openai.gpt-6.1-sol")
     # Opus は高価でカタログでは plan 役の既定。指示なしに自律で起動する oracle には使わない
     assert "opus" not in models["oracle"]
+    assert models["oracle"] == models["reviewer"]
     assert all(m.startswith("amazon-bedrock/us.") for m in models.values())  # global. は使わない
 
 
@@ -280,6 +282,21 @@ def test_settings_layers_models_per_provider_not_per_apply_time_default(settings
         assert set(by_provider(out)) == {"github-copilot", "amazon-bedrock"}
     out = json.loads(run(settings_script, "{}"))
     assert all("model" not in e for e in out["subagents"]["agentOverrides"].values())  # 層に置く。素の役には置かない
+
+
+def test_settings_moves_the_old_oracle_default_but_keeps_a_users_choice(settings_script):
+    """前の既定 (Sonnet の xhigh) のままなら新しい既定 (sol の high) へ移す。利用者が別のモデルにしていれば保つ。"""
+    old = {
+        "subagents": {
+            "agentOverridesByProvider": {
+                "github-copilot": {"oracle": {"model": "github-copilot/claude-sonnet-5.5:xhigh"}},
+                "amazon-bedrock": {"oracle": {"model": "amazon-bedrock/us.anthropic.claude-opus-5-5:high"}},
+            }
+        }
+    }
+    out = json.loads(run(settings_script, json.dumps(old)))
+    assert by_provider(out)["github-copilot"]["oracle"]["model"] == "github-copilot/gpt-6.1-sol:high"
+    assert by_provider(out)["amazon-bedrock"]["oracle"]["model"] == "amazon-bedrock/us.anthropic.claude-opus-5-5:high"
 
 
 def test_settings_keeps_a_users_model_and_other_providers(settings_script):
