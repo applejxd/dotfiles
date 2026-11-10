@@ -445,6 +445,30 @@ def test_imozuru_youtube_script_is_only_for_the_personal_pc(tmp_path, username, 
     assert (".agents/skills/imozuru/scripts/fetch.py" in rendered) is False
 
 
+def test_agents_skills_are_deployed_except_the_orca_store(tmp_path):
+    """~/.agents/skills は自作 skill の置き場。Orca の skill ストアだけを除き、`.agents` を丸ごと除外しない。
+
+    丸ごと除外すると、自作 skill が配備されないまま、.chezmoiremove が旧い置き場 (~/.claude/skills) を消す。
+    """
+    lines = render(home=str(tmp_path), username="applejxd")
+    assert ".agents" not in lines
+    assert ".agents/**" not in lines
+    assert ".agents/skills" not in lines
+    assert ".agents/skills/**" not in lines
+
+    own = sorted(p.name for p in (ROOT / "home" / "dot_agents" / "skills").iterdir() if p.is_dir())
+    assert own, "自作 skill が見つからない"
+    for name in own:
+        assert f".agents/skills/{name}" not in lines, name
+        assert f".agents/skills/{name}/**" not in lines, name
+
+    for name in ("computer-use", "orca-cli", "orchestration"):
+        assert f".agents/skills/{name}" in lines, name
+        assert f".agents/skills/{name}/**" in lines, name
+        assert name not in own, f"Orca の skill と同名の自作 skill: {name}"
+    assert ".agents/.skill-lock.json" in lines
+
+
 # ─── 会社 PC の判定 (is-work) ───────────────────────────────────────────
 
 

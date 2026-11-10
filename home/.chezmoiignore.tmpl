@@ -210,8 +210,16 @@ orca/**
 # npx skills (vercel-labs/skills) が管理する skill ストア。
 # Orca が初回起動時にインストールを促し、以降も Orca 側が更新を管理するため
 # chezmoi では追跡しない (二重管理を避ける)。
-.agents
-.agents/**
+# ★~/.agents/skills は自作 skill の置き場でもある (2026-11 に ~/.claude/skills から移した)。
+#   `.agents` を丸ごと除外すると自作 skill が配備されず、旧い置き場の削除だけが走る。
+#   除外は Orca が入れる 3 つの skill とロックファイルだけにする。
+.agents/.skill-lock.json
+.agents/skills/computer-use
+.agents/skills/computer-use/**
+.agents/skills/orca-cli
+.agents/skills/orca-cli/**
+.agents/skills/orchestration
+.agents/skills/orchestration/**
 
 # powerpoint-studio スキルが実行時に作る成果物。
 # スキル本体 (SKILL.md / scripts / assets / references / lock ファイル) は

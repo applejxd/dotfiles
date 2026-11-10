@@ -97,7 +97,9 @@ herdr の hook は `common.toml` から生成せず、herdr 自身が `run_after
 
 Orca 本体が作るファイル (`~/.orca/`, `~/.orca-wsl/`, `~/.orca-relay/`,
 `~/.local/share/orca/`, `~/.local/bin/orca-ide`, `~/orca/`) と、`npx skills` が
-管理する skill ストア (`~/.agents/`) は chezmoi では追跡しない。
+管理する skill ストア (`~/.agents/.skill-lock.json` と Orca が入れる `~/.agents/skills/` の
+`computer-use`・`orca-cli`・`orchestration`) は chezmoi では追跡しない。`~/.agents/skills/` の
+それ以外は自作 skill の置き場で、chezmoi が配る (`~/.agents/` を丸ごと除外しない。除外すると自作 skill が配備されない)。
 マシン固有のパスやバージョンを埋め込んでおり、Orca 自身が更新機構を持つため。
 `home/.chezmoiignore.tmpl` に列挙してあるので `chezmoi add` も拒否される。
 
