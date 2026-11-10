@@ -17,7 +17,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFLIGHT_PATH = (
-    ROOT / "home" / "dot_claude" / "skills" / "away-shift" / "scripts" / "executable_preflight.py"
+    ROOT / "home" / "dot_agents" / "skills" / "away-shift" / "scripts" / "executable_preflight.py"
 )
 HOOK_PATH = ROOT / "home" / "dot_claude" / "hooks" / "executable_check_bash.py"
 DECIDE_PATH = ROOT / "home" / "dot_claude" / "hooks" / "executable_decide.py"

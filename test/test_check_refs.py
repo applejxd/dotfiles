@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "home" / "dot_claude" / "skills" / "sdd-docs" / "scripts" / "check_refs.py"
+SCRIPT = ROOT / "home" / "dot_agents" / "skills" / "sdd-docs" / "scripts" / "check_refs.py"
 
 
 def make_repo(tmp_path: Path, files: dict[str, str]) -> Path:
@@ -120,7 +120,7 @@ def test_baseline_file_inside_the_repository_is_not_scanned(tmp_path):
     "text",
     [
         "# see sdd-docs/references/adr-template.md\n",
-        "# see ~/.claude/skills/sdd-docs/SKILL.md\n",
+        "# see ~/.agents/skills/sdd-docs/SKILL.md\n",
         "# see my.docs/x.md\n",
         "# see sdd-docs/b.md 「無い見出し」\n",
     ],

@@ -663,8 +663,8 @@ def test_env_exposure_variants_are_denied(command):
         "export FOO_BAR=1",
         "export FOO_BAR=1 && echo ok",
         "set -eu",
-        "python3 ~/.claude/skills/env-check/scripts/env_check.py show",
-        "python3 ~/.claude/skills/env-check/scripts/env_check.py get HTTPS_PROXY",
+        "python3 ~/.agents/skills/env-check/scripts/env_check.py show",
+        "python3 ~/.agents/skills/env-check/scripts/env_check.py get HTTPS_PROXY",
     ],
 )
 def test_env_readable_names_and_diagnosis_are_allowed(command):

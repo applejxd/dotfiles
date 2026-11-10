@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "home" / "dot_claude" / "skills" / "imozuru"
+SKILL = ROOT / "home" / "dot_agents" / "skills" / "imozuru"
 SCRIPTS = SKILL / "scripts"
 PUBLIC = "93.184.215.14"
 

@@ -107,8 +107,8 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 - **Claude Code が使えない**（2026-09-25〜）。OAuth が期限切れで、再開には
   契約が要る。**棚上げと判断した。** 止まるのは Claude 実機の検証だけで、
-  `~/.claude/skills` などの資産は OpenCode / Copilot から使われ続ける
-  （`~/.copilot/skills` は symlink、OpenCode は監視対象に含む）。
+  `~/.agents/skills` などの資産は OpenCode / Copilot から使われ続ける
+  （`~/.copilot/skills` は symlink、OpenCode は監視対象に含む。自作 skill の置き場は 2026-11 に `~/.claude/skills` から `~/.agents/skills` へ移した）。
   再開条件は「Claude Code を再契約したとき」
   - 保留中の測定: [`context: fork` が Claude 側で効くか](research/opencode/skill-frontmatter.md)
 - **CHG-0005 を保留へ移した**（2026-09-25）。残りは A2 だけで、

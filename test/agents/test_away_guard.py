@@ -21,7 +21,7 @@ from agents_common import agents_config_dir
 
 ROOT = Path(__file__).resolve().parents[2]
 GUARD_PATH = (
-    ROOT / "home" / "dot_claude" / "skills" / "away-shift" / "scripts" / "executable_away_guard.py"
+    ROOT / "home" / "dot_agents" / "skills" / "away-shift" / "scripts" / "executable_away_guard.py"
 )
 
 

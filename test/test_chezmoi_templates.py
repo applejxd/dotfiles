@@ -428,8 +428,8 @@ def test_search_core_and_imozuru_are_not_deployed_to_bedrock_users(tmp_path, use
     rendered = render(home=str(tmp_path), username=username)
 
     assert (".config/agents/websearch/" in rendered) is ignored
-    assert (".claude/skills/imozuru/" in rendered) is ignored
-    assert (".claude/skills/imozuru/**" in rendered) is ignored
+    assert (".agents/skills/imozuru/" in rendered) is ignored
+    assert (".agents/skills/imozuru/**" in rendered) is ignored
 
 
 @pytest.mark.parametrize(
@@ -440,9 +440,9 @@ def test_imozuru_youtube_script_is_only_for_the_personal_pc(tmp_path, username, 
     """yt-dlp で YouTube の字幕を取るスクリプトは、個人の PC (applejxd) だけに配る。制約のある環境の機にはスクリプト自体を配らない。"""
     rendered = render(home=str(tmp_path), username=username)
 
-    assert (".claude/skills/imozuru/scripts/fetch_youtube.py" in rendered) is ignored
+    assert (".agents/skills/imozuru/scripts/fetch_youtube.py" in rendered) is ignored
     # fetch.py 自体は YouTube を通さないので、これは Bedrock 側の除外 (スキルごと) だけが効く
-    assert (".claude/skills/imozuru/scripts/fetch.py" in rendered) is False
+    assert (".agents/skills/imozuru/scripts/fetch.py" in rendered) is False
 
 
 # ─── 会社 PC の判定 (is-work) ───────────────────────────────────────────
@@ -496,4 +496,4 @@ def test_personal_only_skills_follow_is_work_not_the_llm_provider(
     tmp_path, username, data, ignored
 ):
     rendered = render(home=str(tmp_path), username=username, data=data)
-    assert (".claude/skills/imozuru/" in rendered) is ignored
+    assert (".agents/skills/imozuru/" in rendered) is ignored

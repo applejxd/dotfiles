@@ -1,4 +1,4 @@
-"""scripts/<名>.py の転送: 本体 (home/dot_claude/skills/feature-orchestration/scripts/) と同じ出力・終了コードを返す。"""
+"""scripts/<名>.py の転送: 本体 (home/dot_agents/skills/feature-orchestration/scripts/) と同じ出力・終了コードを返す。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-BODY_DIR = ROOT / "home" / "dot_claude" / "skills" / "feature-orchestration" / "scripts"
+BODY_DIR = ROOT / "home" / "dot_agents" / "skills" / "feature-orchestration" / "scripts"
 NAMES = ["wt_owner", "wt_clean", "parallel_check", "feature_gate", "bundle", "prs"]
 
 
@@ -38,6 +38,6 @@ def test_forwarder_matches_body(name, args):
 @pytest.mark.parametrize("name", NAMES)
 def test_forwarder_is_thin_and_points_to_body(name):
     text = (ROOT / "scripts" / f"{name}.py").read_text(encoding="utf-8")
-    assert f"home/dot_claude/skills/feature-orchestration/scripts/{name}.py" in text
+    assert f"home/dot_agents/skills/feature-orchestration/scripts/{name}.py" in text
     assert len(text.splitlines()) < 30
     assert (BODY_DIR / f"{name}.py").is_file()

@@ -233,7 +233,7 @@ def test_reap_does_not_unlock_a_lock_replaced_after_observation(repo):
         ).returncode
         == 0
     )
-    sys.path.insert(0, str(ROOT / "home/dot_claude/skills/feature-orchestration/scripts"))
+    sys.path.insert(0, str(ROOT / "home/dot_agents/skills/feature-orchestration/scripts"))
     try:
         import wt_owner
     finally:

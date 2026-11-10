@@ -1736,17 +1736,17 @@
   "skill_scripts": {
    "allow": [
     {
-     "script": "~/.claude/skills/sdd-docs/scripts/lint_docs.py"
+     "script": "~/.agents/skills/sdd-docs/scripts/lint_docs.py"
     },
     {
      "exact": [
       "--save",
       "--baseline"
      ],
-     "script": "~/.claude/skills/sdd-docs/scripts/check_refs.py"
+     "script": "~/.agents/skills/sdd-docs/scripts/check_refs.py"
     },
     {
-     "script": "~/.claude/skills/sdd-docs/scripts/docs_state.py",
+     "script": "~/.agents/skills/sdd-docs/scripts/docs_state.py",
      "subcommands": [
       "status"
      ]
@@ -1760,7 +1760,7 @@
      ]
     },
     {
-     "script": "~/.claude/skills/away-shift/scripts/away_guard.py",
+     "script": "~/.agents/skills/away-shift/scripts/away_guard.py",
      "subcommands": [
       "init",
       "check",
@@ -1771,10 +1771,10 @@
      ]
     },
     {
-     "script": "~/.claude/skills/away-shift/scripts/preflight.py"
+     "script": "~/.agents/skills/away-shift/scripts/preflight.py"
     },
     {
-     "script": "~/.claude/skills/env-check/scripts/env_check.py",
+     "script": "~/.agents/skills/env-check/scripts/env_check.py",
      "subcommands": [
       "names",
       "show",
@@ -1782,7 +1782,7 @@
      ]
     },
     {
-     "script": "~/.claude/skills/imozuru/scripts/chain.py",
+     "script": "~/.agents/skills/imozuru/scripts/chain.py",
      "subcommands": [
       "find",
       "refs",
@@ -1791,10 +1791,10 @@
      ]
     },
     {
-     "script": "~/.claude/skills/imozuru/scripts/report.py"
+     "script": "~/.agents/skills/imozuru/scripts/report.py"
     },
     {
-     "script": "~/.claude/skills/imozuru/scripts/watch.py",
+     "script": "~/.agents/skills/imozuru/scripts/watch.py",
      "subcommands": [
       "list"
      ]

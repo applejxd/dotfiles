@@ -116,7 +116,7 @@ seccomp フィルタは mise の `npm:@anthropic-ai/sandbox-runtime` が入れ�
 
 ## CLI 起動時に Failed to load 1 skill と出る
 
-**対象**: Claude Code / Copilot CLI。`home/dot_claude/skills/` などの `SKILL.md`。
+**対象**: Claude Code / Copilot CLI。`home/dot_agents/skills/` などの `SKILL.md`。
 
 **症状**: 起動時のバナーに `Failed to load 1 skill.` と件数だけが出て、そのスキルが
 使えない。
@@ -174,7 +174,7 @@ grep -rhoE 'argumentsError": ?"[^\\]*' ~/.pi/agent/sessions | cut -c1-110 | sort
 ## Windows で .copilot/skills のリンクが作られない
 
 **対象**: Windows の Copilot CLI。`run_after_342_copilot_skills.ps1.tmpl` が作る
-`~/.copilot/skills` → `~/.claude/skills` の directory junction。
+`~/.copilot/skills` → `~/.agents/skills` の directory junction（2026-11 に `~/.claude/skills` から変えた）。
 
 **症状**: Copilot CLI から skill が見えない。apply の出力に
 `contains unmanaged data` / `points to ...` / `Failed to maintain the Copilot skills junction`
@@ -194,7 +194,7 @@ Windows では `.copilot/skills` を `.chezmoiignore.tmpl` で外しているの
 権限で作れる junction を使う。次の場合は作らずに警告だけ出す。
 
 - 既存の通常ディレクトリに中身がある（空なら消して作り直す）
-- 既存のリンクが `~/.claude/skills` 以外を指している
+- 既存のリンクが `~/.agents/skills` 以外を指している（旧い `~/.claude/skills` を指す junction も、これに当たる。移して作り直す）
 - ホームディレクトリが UNC / network path にある（junction はローカルのファイルシステム
   にしか作れない）
 
@@ -206,7 +206,7 @@ chezmoi apply
 ```
 
 **成功の確認**: 上の確認コマンドで `LinkType` が `Junction`、`Target` が
-`~/.claude/skills` になる。
+`~/.agents/skills` になる。
 
 ## pis の内側で本体の git status が dirty に見える
 

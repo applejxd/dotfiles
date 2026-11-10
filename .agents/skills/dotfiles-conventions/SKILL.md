@@ -18,7 +18,7 @@ description: "chezmoi の dotfiles リポジトリのファイルを編集する
 | chezmoi の展開範囲 | `uv run --with pytest --no-project pytest test/test_chezmoi_templates.py -q` |
 | シェルスクリプト | `git ls-files '*.sh' \| xargs mise exec shellcheck -- shellcheck` |
 | テンプレート（描画して検査） | `mise exec -- python3 scripts/lint_templates.py` |
-| docs の索引整合 | `mise exec -- python3 home/dot_claude/skills/sdd-docs/scripts/lint_docs.py` |
+| docs の索引整合 | `mise exec -- python3 home/dot_agents/skills/sdd-docs/scripts/lint_docs.py` |
 | OpenCode の実機試験 | `mise run opencode:probe -- '<prompt>'`（実 DB を汚さない） |
 | 展開結果 | `chezmoi diff`（sandbox 内では不可） |
 

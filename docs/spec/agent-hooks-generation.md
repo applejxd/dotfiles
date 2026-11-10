@@ -150,7 +150,7 @@ Copilot は PascalCase イベント名で書くと Claude の tool 名 (`Edit` /
 `pptx` だけを外すことはできないので、`document-skills` を落とすと
 `docx` / `pdf` / `xlsx` なども一緒に消える点に注意。
 
-自前の `powerpoint-studio` スキル (`home/dot_claude/skills/`) は
+自前の `powerpoint-studio` スキル (`home/dot_agents/skills/`) は
 プラグインの `pptx` と**競合しない**。前者は新規作成・大幅改稿の専用で、
 description に「単なる .pptx のテキスト抽出や軽微な一語置換には使わない」と
 明示してあり、抽出・軽微修正は後者が担当する。

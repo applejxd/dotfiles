@@ -6207,20 +6207,20 @@
 {"arg": "python3 fetch.py https://blaxel.ai/blog/egress-proxy-api-credentials-ai-agent-sandboxes out.md", "fn": "find_match", "list": "deny", "out": null}
 {"arg": "python3 fetch.py https://blaxel.ai/blog/egress-proxy-api-credentials-ai-agent-sandboxes out.md", "fn": "find_match", "list": "ask", "out": null}
 {"arg": "python3 fetch.py https://blaxel.ai/blog/egress-proxy-api-credentials-ai-agent-sandboxes out.md", "fn": "find_match", "list": "allow", "out": null}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "split", "out": ["python3 ~/.claude/skills/env-check/scripts/env_check.py get HTTPS_PROXY"]}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "normalize", "out": ["python3 ~/.claude/skills/env-check/scripts/env_check.py get HTTPS_PROXY"]}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "subst", "out": []}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "funcs", "out": []}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "find_match", "list": "deny", "out": null}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "find_match", "list": "ask", "out": null}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "find_match", "list": "allow", "out": null}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py show", "fn": "split", "out": ["python3 ~/.claude/skills/env-check/scripts/env_check.py show"]}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py show", "fn": "normalize", "out": ["python3 ~/.claude/skills/env-check/scripts/env_check.py show"]}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py show", "fn": "subst", "out": []}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py show", "fn": "funcs", "out": []}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py show", "fn": "find_match", "list": "deny", "out": null}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py show", "fn": "find_match", "list": "ask", "out": null}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py show", "fn": "find_match", "list": "allow", "out": null}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "split", "out": ["python3 ~/.agents/skills/env-check/scripts/env_check.py get HTTPS_PROXY"]}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "normalize", "out": ["python3 ~/.agents/skills/env-check/scripts/env_check.py get HTTPS_PROXY"]}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "subst", "out": []}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "funcs", "out": []}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "find_match", "list": "deny", "out": null}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "find_match", "list": "allow", "out": null}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py show", "fn": "split", "out": ["python3 ~/.agents/skills/env-check/scripts/env_check.py show"]}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py show", "fn": "normalize", "out": ["python3 ~/.agents/skills/env-check/scripts/env_check.py show"]}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py show", "fn": "subst", "out": []}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py show", "fn": "funcs", "out": []}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py show", "fn": "find_match", "list": "deny", "out": null}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py show", "fn": "find_match", "list": "ask", "out": null}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py show", "fn": "find_match", "list": "allow", "out": null}
 {"arg": "python3.12 -m pip install requests", "fn": "split", "out": ["python3.12 -m pip install requests"]}
 {"arg": "python3.12 -m pip install requests", "fn": "normalize", "out": ["python3.12 -m pip install requests"]}
 {"arg": "python3.12 -m pip install requests", "fn": "subst", "out": []}
@@ -10121,8 +10121,8 @@
 {"arg": "python3 -m pytest test/", "fn": "shlex", "out": {"tokens": ["python3", "-m", "pytest", "test/"]}}
 {"arg": "python3 -mpip install x", "fn": "shlex", "out": {"tokens": ["python3", "-mpip", "install", "x"]}}
 {"arg": "python3 fetch.py https://blaxel.ai/blog/egress-proxy-api-credentials-ai-agent-sandboxes out.md", "fn": "shlex", "out": {"tokens": ["python3", "fetch.py", "https://blaxel.ai/blog/egress-proxy-api-credentials-ai-agent-sandboxes", "out.md"]}}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "shlex", "out": {"tokens": ["python3", "~/.claude/skills/env-check/scripts/env_check.py", "get", "HTTPS_PROXY"]}}
-{"arg": "python3 ~/.claude/skills/env-check/scripts/env_check.py show", "fn": "shlex", "out": {"tokens": ["python3", "~/.claude/skills/env-check/scripts/env_check.py", "show"]}}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py get HTTPS_PROXY", "fn": "shlex", "out": {"tokens": ["python3", "~/.agents/skills/env-check/scripts/env_check.py", "get", "HTTPS_PROXY"]}}
+{"arg": "python3 ~/.agents/skills/env-check/scripts/env_check.py show", "fn": "shlex", "out": {"tokens": ["python3", "~/.agents/skills/env-check/scripts/env_check.py", "show"]}}
 {"arg": "python3.12 -m pip install requests", "fn": "shlex", "out": {"tokens": ["python3.12", "-m", "pip", "install", "requests"]}}
 {"arg": "redis-cli", "fn": "shlex", "out": {"tokens": ["redis-cli"]}}
 {"arg": "rg '\\$GITHUB_TOKEN' .", "fn": "shlex", "out": {"tokens": ["rg", "\\$GITHUB_TOKEN", "."]}}

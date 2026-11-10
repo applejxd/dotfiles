@@ -261,7 +261,7 @@ def test_omp_skills_registers_when_unset(tmp_path):
         tmp_path, OMP_SKILLS, value_json("skills.customDirectories", [])
     )
     assert result.returncode == 0, result.stderr
-    assert json.loads(sets["skills.customDirectories"]) == [str(home / ".claude" / "skills")]
+    assert json.loads(sets["skills.customDirectories"]) == [str(home / ".agents" / "skills")]
 
 
 def test_omp_skills_keeps_existing_entries(tmp_path):
@@ -272,14 +272,14 @@ def test_omp_skills_keeps_existing_entries(tmp_path):
     assert result.returncode == 0, result.stderr
     assert json.loads(sets["skills.customDirectories"]) == [
         "/other",
-        str(home / ".claude" / "skills"),
+        str(home / ".agents" / "skills"),
     ]
 
 
 def test_omp_skills_skips_when_registered(tmp_path):
     """登録済みなら書き戻さない。"""
     home = tmp_path / "home"
-    registered = value_json("skills.customDirectories", [str(home / ".claude" / "skills")])
+    registered = value_json("skills.customDirectories", [str(home / ".agents" / "skills")])
     result, _, sets = run_with_fake_omp(tmp_path, OMP_SKILLS, registered)
     assert result.returncode == 0, result.stderr
     assert sets == {}
@@ -375,7 +375,7 @@ def test_omp_success_does_not_touch_the_marker(tmp_path, script):
     marker.write_text("x\n", encoding="utf-8")
     os.utime(marker, (1_000_000_000, 1_000_000_000))
     registered = {
-        OMP_SKILLS: value_json("skills.customDirectories", [str(home / ".claude" / "skills")]),
+        OMP_SKILLS: value_json("skills.customDirectories", [str(home / ".agents" / "skills")]),
         OMP_CLAUDE_ASSETS: value_json("enabledProviders", ["claude"]),
     }[script]
 

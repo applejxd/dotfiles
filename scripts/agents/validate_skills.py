@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # 再帰で探さないのは、skill に同梱した資材の中の SKILL.md を拾わないため。
 # このリポジトリだけで使う skill (.agents/skills) も含める。`pis` が --skill で足すので、frontmatter が壊れると黙って読み飛ばされる。
 SKILL_ROOTS = (
-    "home/dot_claude/skills",
+    "home/dot_agents/skills",
     "home/dot_config/opencode/skills",
     ".agents/skills",
 )

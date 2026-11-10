@@ -539,9 +539,9 @@ def test_v1_exempt_agent_is_not_stopped_by_the_plugin(tmp_path):
 
 SKILL_HEADS = gen._skill_script_allow_and_heads(COMMON)[1]
 SKILL_MESSAGE = COMMON["opencode"]["skill_scripts"]["redirect_message"]
-LINT_DOCS = "python3 ~/.claude/skills/sdd-docs/scripts/lint_docs.py"
+LINT_DOCS = "python3 ~/.agents/skills/sdd-docs/scripts/lint_docs.py"
 CHECKPOINT = "python3 ~/.config/opencode/skills/checkpoint/scripts/checkpoint.py"
-CHECK_REFS = "python3 ~/.claude/skills/sdd-docs/scripts/check_refs.py"
+CHECK_REFS = "python3 ~/.agents/skills/sdd-docs/scripts/check_refs.py"
 
 SKILL_STOP = [
     f"{LINT_DOCS} 2>&1",

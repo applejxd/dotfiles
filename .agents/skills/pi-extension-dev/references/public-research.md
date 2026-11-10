@@ -65,4 +65,4 @@
 
 - [stock の package の評価（2026-11）](../../../../docs/research/agents/pi-stock-packages-evaluation-2026-11.md): 導入した 7 つの評価と、見つけた他の候補
 - [pi-public-extensions-survey.md](../../../../docs/research/agents/pi-public-extensions-survey.md)（月間ダウンロード上位 150 件の分類。自作路線の頃の調査）
-- 公開 OSS の読み取り調査の一般的な作法は `home/dot_claude/skills/oss-research/`
+- 公開 OSS の読み取り調査の一般的な作法は `home/dot_agents/skills/oss-research/`

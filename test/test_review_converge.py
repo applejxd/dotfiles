@@ -1,4 +1,4 @@
-"""home/dot_claude/skills/review-loop/scripts/converge.py: 収束・step back 判定（表駆動）。"""
+"""home/dot_agents/skills/review-loop/scripts/converge.py: 収束・step back 判定（表駆動）。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "home" / "dot_claude" / "skills" / "review-loop" / "scripts" / "converge.py"
+SCRIPT = ROOT / "home" / "dot_agents" / "skills" / "review-loop" / "scripts" / "converge.py"
 
 _spec = importlib.util.spec_from_file_location("converge_under_test", SCRIPT)
 assert _spec and _spec.loader

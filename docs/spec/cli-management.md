@@ -256,7 +256,7 @@ Pi のフォークで、LSP 統合・DAP・subagent を持ちます。起動は 
 
 | 設定 | 繋がるもの |
 | --- | --- |
-| `skills.customDirectories` | `~/.claude/skills` の自作 skills 15 個 |
+| `skills.customDirectories` | `~/.agents/skills` の自作 skills（2026-11 に `~/.claude/skills` から移した。旧い登録は残る） |
 | `enabledProviders: [claude]` | `~/.claude.json` の MCP サーバ定義、`~/.claude/commands` |
 | `commands.enableClaudeUser` | `~/.claude/commands` の `/criticalthink`（chezmoi が配るのはこれだけ） |
 

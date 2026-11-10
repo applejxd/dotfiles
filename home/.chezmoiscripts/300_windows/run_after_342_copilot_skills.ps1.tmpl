@@ -3,7 +3,7 @@
 # Run on every apply so a deleted or replaced junction is repaired.
 $homeDir = {{ .chezmoi.homeDir | toJson }}
 $linkPath = Join-Path $homeDir '.copilot\skills'
-$skillsPath = Join-Path $homeDir '.claude\skills'
+$skillsPath = Join-Path $homeDir '.agents\skills'
 $trimSeparators = [char[]] @(
     [IO.Path]::DirectorySeparatorChar,
     [IO.Path]::AltDirectorySeparatorChar

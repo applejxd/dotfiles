@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "home" / "dot_claude" / "skills" / "sdd-docs"
+SKILL = ROOT / "home" / "dot_agents" / "skills" / "sdd-docs"
 
 
 def load(name: str):

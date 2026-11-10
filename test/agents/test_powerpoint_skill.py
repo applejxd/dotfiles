@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-PREFIX = ".claude/skills/powerpoint-studio"
-SKILL = ROOT / "home/dot_claude/skills/powerpoint-studio"
+PREFIX = ".agents/skills/powerpoint-studio"
+SKILL = ROOT / "home/dot_agents/skills/powerpoint-studio"
 
 
 @pytest.mark.parametrize(

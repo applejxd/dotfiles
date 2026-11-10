@@ -62,7 +62,7 @@ LINT_DOCS = [
     "exec",
     "--",
     "python3",
-    "home/dot_claude/skills/sdd-docs/scripts/lint_docs.py",
+    "home/dot_agents/skills/sdd-docs/scripts/lint_docs.py",
 ]
 # pyyaml を足さない試験 (AGENTS.md「検証」の表の形)
 NO_YAML_TESTS = frozenset({"test_windows_assets", "test_chezmoi_templates"})
@@ -173,7 +173,7 @@ _HOOK_TESTS = (
     "test_markdownlint_hook",
     "test_env_check",
 )
-_ORCH = "home/dot_claude/skills/feature-orchestration/scripts"
+_ORCH = "home/dot_agents/skills/feature-orchestration/scripts"
 _PI_TESTS = (
     "test_pi_public_bypasses",
     "test_pi_harness",
@@ -296,12 +296,12 @@ RULES: tuple[Rule, ...] = (
     Rule("試験ファイル自身", ()),  # 実体は plan() が処理する (SELF_TEST)
     Rule(
         "skill の検証",
-        ("scripts/agents/validate_skills.py", "home/dot_claude/skills/*/SKILL.md"),
+        ("scripts/agents/validate_skills.py", "home/dot_agents/skills/*/SKILL.md"),
         ("test_skill_frontmatter",),
     ),
     Rule(
         "skill 本文を直接読む試験",
-        ("home/dot_claude/skills/*/SKILL.md",),
+        ("home/dot_agents/skills/*/SKILL.md",),
         ("test_check_bash_config", "test_opencode_commit_rules", "test_check_bash_http_github"),
     ),
     Rule(
@@ -483,37 +483,37 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "imozuru",
-        ("home/dot_claude/skills/imozuru/**", "scripts/vendor/imozuru_patch.py"),
+        ("home/dot_agents/skills/imozuru/**", "scripts/vendor/imozuru_patch.py"),
         ("test_imozuru", "test_chezmoi_templates"),
     ),
     Rule(
         "powerpoint-studio",
-        ("home/dot_claude/skills/powerpoint-studio/**",),
+        ("home/dot_agents/skills/powerpoint-studio/**",),
         ("test_powerpoint_skill", "test_chezmoi_templates"),
     ),
     Rule(
         "github-operations",
-        ("home/dot_claude/skills/github-operations/**",),
+        ("home/dot_agents/skills/github-operations/**",),
         ("test_github_operations_resolve",),
     ),
     Rule(
         "checkpoint skill",
-        ("home/dot_claude/skills/checkpoint/**", "scripts/checkpoint.py"),
+        ("home/dot_agents/skills/checkpoint/**", "scripts/checkpoint.py"),
         ("test_checkpoint*",),
     ),
     Rule(
         "sdd-docs",
-        ("home/dot_claude/skills/sdd-docs/**",),
+        ("home/dot_agents/skills/sdd-docs/**",),
         ("test_check_refs", "test_docs_state", "test_lint_docs", "test_opencode_external_read"),
         ("docs",),
     ),
-    Rule("away-shift", ("home/dot_claude/skills/away-shift/**",), ("test_away_guard",)),
+    Rule("away-shift", ("home/dot_agents/skills/away-shift/**",), ("test_away_guard",)),
     Rule(
-        "experiment-loop", ("home/dot_claude/skills/experiment-loop/scripts/*.py",), ("test_exp",)
+        "experiment-loop", ("home/dot_agents/skills/experiment-loop/scripts/*.py",), ("test_exp",)
     ),
     Rule(
         "review-loop",
-        ("home/dot_claude/skills/review-loop/scripts/*.py",),
+        ("home/dot_agents/skills/review-loop/scripts/*.py",),
         ("test_review_converge",),
     ),
     Rule(
@@ -522,7 +522,7 @@ RULES: tuple[Rule, ...] = (
         ("test_models_tool", "test_pi_model_catalog"),
     ),
     Rule("tmp-clean", ("home/dot_config/pi/harness/tmp_clean.py",), ("test_tmp_clean",)),
-    Rule("env-check", ("home/dot_claude/skills/env-check/**",), ("test_env_check",)),
+    Rule("env-check", ("home/dot_agents/skills/env-check/**",), ("test_env_check",)),
     Rule(
         "PR ビューア (apps/pr-viewer)",
         ("apps/pr-viewer/**", "test/agents/pr_viewer_fixtures/**"),
@@ -575,7 +575,7 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "オーケストレーションのプロファイル検出",
-        ("home/dot_claude/skills/feature-orchestration/scripts/*.py", "test/orch_fixtures.py"),
+        ("home/dot_agents/skills/feature-orchestration/scripts/*.py", "test/orch_fixtures.py"),
         ("test_orch_profile",),
     ),
     Rule(

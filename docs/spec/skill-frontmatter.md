@@ -6,7 +6,7 @@ CLI ごとの解釈の違い、`allowed-tools` の書き方、fork の基準、�
 
 ## CLI ごとの解釈
 
-スキルは `~/.claude/skills` に置き、Claude Code・pi・OpenCode・Copilot CLI が共通で読む（`home/dot_claude/skills/`。pi と OpenCode は同じ置き場を読む）。
+スキルは `~/.agents/skills` に置き、pi・OpenCode・Copilot CLI が共通で読む（`home/dot_agents/skills/`。2026-11 に、pi が読まない `~/.claude/skills` から移した。Claude Code は使わない）。
 
 | フィールド | Claude Code | pi | OpenCode |
 | --- | --- | --- | --- |
@@ -22,10 +22,10 @@ CLI ごとの解釈の違い、`allowed-tools` の書き方、fork の基準、�
 
 - **許可を足す宣言**で、制限ではない。権限の単一ソースは `common.toml.tmpl` で、スキルは、それに**足してよい**範囲を狭く書く。
   deny > ask > allow の順と hook は、スキルの許可があっても変わらない（ask と deny は、そのまま効く）
-- **一括の `Bash` を書かない**。許可するのは、そのスキル自身のスクリプトを、実際に呼ぶ形（`Bash(python3 ~/.claude/skills/<名前>/scripts/* )`）で
+- **一括の `Bash` を書かない**。許可するのは、そのスキル自身のスクリプトを、実際に呼ぶ形（`Bash(python3 ~/.agents/skills/<名前>/scripts/* )`）で
 - **利用者の合意を取る操作は、許可に含めない**（例: 有料 API を呼びうる `marimo export html`、GitHub への書き込み）。確認が残る
 - ファイルのツールは、本文が実際に使うものだけ。一部のファイルだけなら `Edit(AGENTS.md)` の形（新規作成も、この形の編集の許可で足りる）
-- 本文のコマンドが `$SKILL_DIR` などの変数を使うと、許可の型に一致しない（照合は、書かれた文字列に対して行われる）。許可したいときは、`~/.claude/skills/<名前>/...` の形で書く
+- 本文のコマンドが `$SKILL_DIR` などの変数を使うと、許可の型に一致しない（照合は、書かれた文字列に対して行われる）。許可したいときは、`~/.agents/skills/<名前>/...` の形で書く
 - `Task` は 2.1.63 で `Agent` に改名され、古い名前は別名として動く。古い版との互換のため、`Task` のまま
 - 付けないもの: `github-operations`（書き込みは確認が本質）・`oss-research`・`learn`（Bash なし）・各移行スキル。検索のスクリプトなど、足したくなったら、パターンの一致試験と合わせて足す
 - 副作用の確認: 本文が書くスクリプトの呼び出しが、許可の型に一致するかは機械的に試験できる（2026-10-28 に実施）。**Claude Code の実機での確認は未実施**（認証が切れている）。許可から外れた操作は、確認が 1 回増えるだけで、動作は変わらない
@@ -99,9 +99,9 @@ T6 ラウンド 3 以降に未解決 BLOCKER が 2 件以上、T7 `surface-open`
 
 ## `experiment-loop`
 
-ベンチマーク改善の実験ループ（グローバルのスキル。`~/.claude/skills/experiment-loop/`）。標準ライブラリだけの CLI `scripts/exp.py` が、次を持つ。
+ベンチマーク改善の実験ループ（グローバルのスキル。`~/.agents/skills/experiment-loop/`）。標準ライブラリだけの CLI `scripts/exp.py` が、次を持つ。
 
 - `run`: seed ごとに実行し、ledger（`.exp/ledger.jsonl`）へ 1 回 1 行で追記（失敗も記録。commit・dirty・差分のハッシュつき）
 - `compare`: 差の 95% ブートストラップ区間・Cohen's d・Mann–Whitney の p 値。n < 5 の群があれば「判断できない」
-- 検証用の分割の予算（`max_runs`）・排他ロック（`resources.lock`）。設定は `.agents/config/experiments.json`（[スキーマ](../../home/dot_claude/skills/experiment-loop/references/config.md)）
-- 許可: `[pi.skill_scripts.allow]` へは足していない（足すときは `python3 ~/.claude/skills/experiment-loop/scripts/exp.py` の完全一致）
+- 検証用の分割の予算（`max_runs`）・排他ロック（`resources.lock`）。設定は `.agents/config/experiments.json`（[スキーマ](../../home/dot_agents/skills/experiment-loop/references/config.md)）
+- 許可: `[pi.skill_scripts.allow]` へは足していない（足すときは `python3 ~/.agents/skills/experiment-loop/scripts/exp.py` の完全一致）

@@ -20,7 +20,7 @@ sys.path.insert(
     str(
         Path(__file__).resolve().parents[1]
         / "home"
-        / "dot_claude"
+        / "dot_agents"
         / "skills"
         / "feature-orchestration"
         / "scripts"

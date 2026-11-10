@@ -169,7 +169,7 @@ CLI: `pis --no-broker` は**3 つとも**無効にする（設定が `auto` で�
 
 ### `websearch.py` 側の挙動
 
-`home/dot_claude/skills/web-search/scripts/websearch.py`（スキル web-search は 2026-11-09 に廃止。この節は凍結した自作基盤の記述で、挙動は核 `~/.config/agents/websearch/core.py` に残る）。`WEBSEARCH_BROKER_URL` があるときは、`http://127.0.0.1:<port>` の形だけを受け付け
+`home/dot_agents/skills/web-search/scripts/websearch.py`（スキル web-search は 2026-11-09 に廃止。この節は凍結した自作基盤の記述で、挙動は核 `~/.config/agents/websearch/core.py` に残る）。`WEBSEARCH_BROKER_URL` があるときは、`http://127.0.0.1:<port>` の形だけを受け付け
 （それ以外は終了コード 2）、各プロバイダーの URL を接頭辞つきに組み替える。鍵は探さず（ファイル・環境変数・`bw` を見ない）、
 鍵が要るプロバイダーにはダミー（`broker`）を付ける。503（`pis-broker: no key for`）は「鍵が無い」と同じ扱いで、次のプロバイダーへ回る。
 

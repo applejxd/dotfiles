@@ -127,13 +127,13 @@ opencode api get /api/skill
 | スキル | 対象 | 置き場 | 起動 |
 | --- | --- | --- | --- |
 | `checkpoint` | `.tmp/` のセッション別記録 | `~/.config/opencode/skills` | 圧縮フックが自動。手動でも呼べる |
-| `sdd-docs` | `docs/change/` `adr/` `research/` `spec/` と索引 | `~/.claude/skills` | 人が頼んだときだけ |
+| `sdd-docs` | `docs/change/` `adr/` `research/` `spec/` と索引 | `~/.agents/skills` | 人が頼んだときだけ |
 
 置き場が違うのは、**OpenCode への結合があるかどうか**で決まる。`checkpoint` は
 plugin が絶対パスで読み、`ctx.storage` と `session.hook` を前提にするので
 OpenCode 専用。`sdd-docs` は markdown を編集して `lint_docs.py` を回すだけで
-依存が無いため、3 CLI に届く `~/.claude/skills` へ置く
-（OpenCode がネイティブに監視し、`~/.copilot/skills` がそこへ張られている）。
+依存が無いため、3 CLI に届く `~/.agents/skills` へ置く
+（OpenCode がネイティブに監視し、`~/.copilot/skills` がそこへ張られている。2026-11 に `~/.claude/skills` から移した）。
 
 分けた理由と経緯は [記録](../research/agents/checkpoint-notes.md)。
 
@@ -306,7 +306,7 @@ uv run --no-project python "$CP" read --session "<セッションID>"
 
 - 設計理由: [ADR-0009](../adr/0009-save-before-documenting.md)
 - docs の運用: [ADR-0010](../adr/0010-exploratory-spec-driven-docs.md)
-- 文書化の手順: `~/.claude/skills/sdd-docs/SKILL.md`（A2 / B）
+- 文書化の手順: `~/.agents/skills/sdd-docs/SKILL.md`（A2 / B）
 - イベント仕様の実測: [compaction 関連の hook 仕様](../research/agents/compaction-hooks.md)
 - 経緯の記録: [CHG-0001](../change/closed/0001-compaction-context-handover.md)
 

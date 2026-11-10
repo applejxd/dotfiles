@@ -35,7 +35,7 @@ def labs(tmp_path):
     _git(src, "add", "-A")
     _git(src, "commit", "-q", "-m", "init")
     repo = tmp_path / "repo"
-    dest = repo / "home" / "dot_claude" / "skills" / "demo"
+    dest = repo / "home" / "dot_agents" / "skills" / "demo"
     dest.mkdir(parents=True)
     (dest / "OLD.md").write_text("stale\n", encoding="utf-8")
     (dest / ".venv").mkdir()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 転送。本体は home/dot_claude/skills/feature-orchestration/scripts/wt_clean.py
+# 転送。本体は home/dot_agents/skills/feature-orchestration/scripts/wt_clean.py
 """本体へ引数・終了コード・標準入出力・環境変数をそのまま渡す転送。"""
 
 import os
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 SKILL = (
-    Path(__file__).resolve().parent.parent / "home/dot_claude/skills/feature-orchestration/scripts"
+    Path(__file__).resolve().parent.parent / "home/dot_agents/skills/feature-orchestration/scripts"
 )
 BODY = SKILL / "wt_clean.py"
 

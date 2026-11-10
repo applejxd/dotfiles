@@ -20,7 +20,7 @@ from agents_common import load_common
 from check_bash_hook import COMMON, COMMON_PATH, HOOK, HOOK_PATH, ROOT, gen, policy, run_hook
 
 COMMIT_SKILL_PATHS = [
-    ROOT / "home" / "dot_claude" / "skills" / "commit" / "SKILL.md",
+    ROOT / "home" / "dot_agents" / "skills" / "commit" / "SKILL.md",
 ]
 CHEZMOI_TEMPLATES = ROOT / "home" / ".chezmoitemplates"
 # 常時読み込まれる個人用カスタム指示。共通部分は .chezmoitemplates に置き、

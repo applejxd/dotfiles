@@ -61,7 +61,7 @@
 - **理由欄**は 1 行 `owner=<kind> id=<id> pid=<pid> started=<unix 秒>`。`id` は空白を含まない 1 語。
 - **kind**: `worker`（親が起動した子エージェント）・`job`（PR ビューアのジョブ。撤去済み）・`create`（起票の作成中だけ。撤去済み）・`bundle`（統合用の枝の組み立て）・`interactive`（人の対話 pi。任意）。
 - **生死**: `pid` が生きている間だけ「有効」（`kill -0`）。死んでいれば「残骸」。**残骸は `claim` が自動では奪わない**（`unlock`→`lock` は原子的でなく、古い観測で他方の新しい lock を外しうるため。終了コード 3・「`reap` で解除してから」）。解除は明示の回復操作 `reap` だけが、観測した理由欄を再読して一致する場合に限り行う。`owner=` で始まらない lock（人が付けたもの・理由なし）は「不明の lock」として自動では解除しない。
-- **道具**: `scripts/wt_owner.py`（本体は `home/dot_claude/skills/feature-orchestration/scripts/wt_owner.py`。`scripts/` のは転送。`wt_clean.py`・`bundle.py`・`parallel_check.py`・`feature_gate.py`・`prs.py` も同じ）（`claim <wt> --kind <k> --id <id> [--pid N]`・`release <wt> [--id <id>]`・`status [<wt>]`・`reap`。他の有効な owner・残骸・不明の lock で終了コード 3）。同じ規則の TS 実装が `apps/pr-viewer/worktree-owner.ts`。`--pid` を省くと、シェルではない最初の祖先（= 呼び出した AI）の pid になる。
+- **道具**: `scripts/wt_owner.py`（本体は `home/dot_agents/skills/feature-orchestration/scripts/wt_owner.py`。`scripts/` のは転送。`wt_clean.py`・`bundle.py`・`parallel_check.py`・`feature_gate.py`・`prs.py` も同じ）（`claim <wt> --kind <k> --id <id> [--pid N]`・`release <wt> [--id <id>]`・`status [<wt>]`・`reap`。他の有効な owner・残骸・不明の lock で終了コード 3）。同じ規則の TS 実装が `apps/pr-viewer/worktree-owner.ts`。`--pid` を省くと、シェルではない最初の祖先（= 呼び出した AI）の pid になる。
 - **排他**: git の `worktree lock` 自体が「lock 済みか確認 → `locked` ファイルを書く」の非原子で、負荷下では 2 件が同時に成功した（実測）。そのため `claim`・`release`・`reap` の臨界区間は、共通 git-dir の `pi-wt-owner.guard`（`O_EXCL` 作成。既定の待ち 10 秒、30 秒より古いガードは残骸として削除）で排他にする（Python・TS 共通。取れなければ fail closed: `claim` は終了コード 3、他は失敗）。`claim` は lock 後に理由欄を再読して自分のものか確かめる。待ち時間は `PI_WT_OWNER_GUARD_WAIT_MS` で変えられる（試験用）。
 - **4 経路**: (1) 子エージェント = 親が起動の直前に手で `claim`、commit 後に `release`（ハーネスは改造しない）。(2) ジョブ = 起動前検査（`preflight`）が他の有効な owner・残骸・不明の lock・cwd が worktree の中のプロセスを `worktree_busy`（HTTP 409）で拒否し、開始で `claim(kind=job, id=<jobId>)`（起動前検査の後に残骸が現れて拒否されたときは、ジョブは `failed`・理由 `worktree_busy`＋`stale_lock`。`reap` で解除してからやり直す）、終了・失敗・キャンセル・回復で `release`（**停止を確認できなかったジョブ（`stop_unconfirmed`）は lock を残す**）。(3) 起票 = （撤去済み。画面の起票が `worktree add --lock` で作成中だけ `kind=create` を表明していた）。(4) 人の対話 pi = 任意。
 - **限界**: lock を忘れた経路は検出できない。cwd 走査は、cwd が別の場所の子エージェントを見つけられない。pid の再利用は見分けない（`kill -0` だけ）。全件検査の前に `status` で worker の lock が無いことを確かめる（検査中の編集による誤失敗の防止）。
@@ -192,7 +192,7 @@ AI のガードが `git merge` を直接は通さない場合に備え、`python
 
 ## リポジトリのプロファイルの検出（`orch.py profile`）
 
-並列実装の道具を、リポジトリの形（git-flow-next・git-flow AVH・素の git）を検出して動かすための土台。`home/dot_claude/skills/feature-orchestration/scripts/` の `orchlib.py`（検出）と `orch.py`（入口。いまは `profile` だけ）。
+並列実装の道具を、リポジトリの形（git-flow-next・git-flow AVH・素の git）を検出して動かすための土台。`home/dot_agents/skills/feature-orchestration/scripts/` の `orchlib.py`（検出）と `orch.py`（入口。いまは `profile` だけ）。
 
 - **出力**（`--json`、`v:1`）: `flow`・`integration`（`branch`/`ref`）・`trunk`・`topic`（`prefixes`/`new_prefix`/`start_point`/`also_list`）・`worktrees`（`template`/`base_abs`/`inside_repo`/`ignored`。`{name}` は接頭辞を除いた名前）・`verify`・`overlay`・`gate_checks`・`repo`・`sources`（項目ごとの出所）・`ambiguous`・`warnings`。
 - **優先順**（項目ごとに独立）: CLI（`--integration`・`--prefix`・`--worktrees-dir`）→ `git config --local orchestration.*` → `.gitflow` の `[orchestration]` 節と `.agents/config/orchestration.gitconfig`（同順位。食い違うと曖昧）→ git-flow-next の型設定（local、無ければ `.gitflow`。主トピック型 `feature` の `parent`・`prefix`・`startpoint`、`worktreePath` の `{{ branchName }}` は `{name}`）→ AVH（`gitflow.branch.develop`・`gitflow.prefix.feature`）→ 形の検出（幹の枝の有無・枝名の分布）→ 既定（候補が 1 つのときだけ）。

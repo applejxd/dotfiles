@@ -7,7 +7,7 @@ import sys
 
 from agents_common import ROOT
 
-SCRIPT = ROOT / "home/dot_claude/skills/env-check/scripts/env_check.py"
+SCRIPT = ROOT / "home/dot_agents/skills/env-check/scripts/env_check.py"
 BASHRULES = ROOT / "home/dot_claude/hooks/lib"
 
 

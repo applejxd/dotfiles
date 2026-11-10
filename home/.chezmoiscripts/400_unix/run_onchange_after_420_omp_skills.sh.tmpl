@@ -11,7 +11,8 @@ set -euo pipefail
 # omp (oh-my-pi) は ~/.claude を設定探索ルートに含むが、**他ツールの
 # ユーザ領域 skills の読み込みは opt-in** で、既定は無効。
 #   skills.enableClaudeUser = false
-# そのため素のままでは ~/.claude/skills の自作 skills が 1 つも見えない。
+# そのため素のままでは ~/.agents/skills の自作 skills が 1 つも見えない
+# (2026-11 に置き場を ~/.claude/skills から ~/.agents/skills へ移した。旧い登録は残るが害は無い)。
 #
 # フラグ (enableClaudeUser) ではなく customDirectories で明示する。
 # フラグは ~/.claude 配下の何が有効になるかが読めないが、パス指定なら
@@ -29,7 +30,7 @@ if [[ ! -x "$omp_path" ]]; then
     fi
 fi
 
-target="${HOME}/.claude/skills"
+target="${HOME}/.agents/skills"
 
 # 既に入っていれば何もしない。他のエントリは保つ (置き換えない)。
 # 取得・解析に失敗したら書き戻さない (空配列扱いにすると既存の登録を消す)。

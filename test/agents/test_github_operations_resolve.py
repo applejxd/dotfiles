@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "home/dot_claude/skills/github-operations/scripts/executable_resolve-project.sh"
+SCRIPT = ROOT / "home/dot_agents/skills/github-operations/scripts/executable_resolve-project.sh"
 
 pytestmark = pytest.mark.skipif(
     os.name == "nt" or shutil.which("jq") is None or shutil.which("bash") is None,
