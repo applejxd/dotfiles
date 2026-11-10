@@ -730,6 +730,20 @@ def _check_state_map(value, where: str) -> None:
             assert act in states, (where, pattern)
 
 
+def test_every_deny_rule_carries_a_reason():
+    """deny は、エージェントが「なぜ拒否され、代わりに何をすべきか」を読めるよう、理由をつける (ask には理由の仕組みが無い)。"""
+    missing = []
+    for surface, value in policy()["permission"].items():
+        if isinstance(value, str):
+            assert value != "deny", f"{surface} が理由のない単一の deny"
+            continue
+        for pattern, act in value.items():
+            denied = act == "deny" or (isinstance(act, dict) and act.get("action") == "deny")
+            if denied and not (isinstance(act, dict) and act.get("reason", "").strip()):
+                missing.append((surface, pattern))
+    assert not missing, f"理由のない deny: {missing}"
+
+
 def test_permission_policy_structure():
     """同梱のスキーマ (permissions.schema.json) の要点を、外部の依存なしで検査する。"""
     data = policy()
