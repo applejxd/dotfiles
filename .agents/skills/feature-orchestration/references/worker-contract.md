@@ -29,7 +29,7 @@ subagent({
 6. **コミット**: 親が確かめてからコミットするなら「コミットしない」。worker にさせるなら、そう書く（bash の `git commit` は確認なしで通る。`git push*` は拒否される）。
    `git reset --hard`・`git checkout -- <path>`・`git restore`・`git clean -f`・`git branch -D` は cc-safety-net が拒否するので、使わせない。
 7. **報告の形**: 結論を先頭 3 行以内。続けて、変更ファイル・各検査の出力（抜粋）・判断に迷った点・確かめられなかったこと・次への申し送り。
-8. **止まる条件**: 契約にない決定が要るとき、確認が出る操作に当たったとき（push・`chezmoi apply`・`git worktree remove`・`git config`・`gh` の変更系）は、進めずに報告して止まる。
+8. **止まる条件**: 契約にない決定が要るとき、確認が出る操作に当たったとき（push・`chezmoi apply`・`git config`・`gh` の変更系。`git worktree remove` は `.tmp/worktrees/` の外の指定のとき）は、進めずに報告して止まる。
 
 ## 時間と終了
 

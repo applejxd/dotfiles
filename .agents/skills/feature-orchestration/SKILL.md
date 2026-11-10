@@ -25,7 +25,7 @@ description: "feature を起票して worker に実装を切り出し、成果�
 
 - 子の起動は `subagent({ agent, task, cwd, async: true, options: { timeoutMs, checkpointBeforeDeadlineMs } })`。同梱の agent は worker・scout・reviewer（読み取り専用・shell なし）・evidence-auditor・researcher・oracle・delegate など。
 - 前景の子には権限の確認機構が載らないので、**`async: true`（背景）で起動する**。完了は通知で届き、アイドルの親が自動で再開する（`sleep` やポーリングは要らない）。同時に動かせる子は **4 つまで**。
-- コミット: bash の `git commit` は確認なしで通る（feature の worktree でも同じ）。`git push*`・`sudo *` は拒否される。`git worktree remove`・`git config`・`gh` の変更系・`chezmoi apply` は強制の確認（無人では 5 分で拒否される）。
+- コミット: bash の `git commit` は確認なしで通る（feature の worktree でも同じ）。`git push*`・`sudo *` は拒否される。`git config`・`gh` の変更系・`chezmoi apply` は強制の確認（無人では 5 分で拒否される）。`git worktree remove` は、`.tmp/worktrees/` の下で `--force`・`-f`・`..` が無いときだけ確認なし（それ以外は確認）。
 - 破壊的な git（`git reset --hard`・`git checkout -- <path>`・`git restore`・`git clean -f`・`git branch -D`）は、cc-safety-net が拒否する。
 - `python3 ~/.agents/skills/…/*.py` は確認なしで実行できる。`uv run …`・`node …` は向きを証明できないので、作業ツリーの外のパスでは確認になりうる。
 
@@ -49,7 +49,7 @@ description: "feature を起票して worker に実装を切り出し、成果�
 8. **統合**: **利用者が「統合して」と言ったときだけ**、`git flow feature finish <名前> --no-ff --no-squash -M "<メッセージ>" --keepremote --no-fetch --no-push --notag` を実行する（push はしない）。
    指示が無いときは、コミットと要約（統合メッセージの案・確かめた内容・未確認）までで止める。`finish` で確認が出るかは未確認（出たら利用者の承認を待つ）。
    docs の更新表や `_PI_TESTS` の同じ位置の衝突は、両方の行を残す。
-9. **後始末の確認**: `git log --oneline -3`・`git worktree list`・`git status --short`。残った worktree を `git worktree remove` で消すときは、強制の確認が出る（利用者の承認を待つ）。
+9. **後始末の確認**: `git log --oneline -3`・`git worktree list`・`git status --short`。残った worktree は `git worktree remove .tmp/worktrees/<名前>`（`--force` なし）で消す。枝は残るので、統合済みなら統合先の worktree から `git -C <その worktree> branch -d <枝>` で消す（`-D` は拒否される。統合前の枝は消さない）。
 10. **止まらずに次へ**: コミットと要約を出したら、統合の指示を待たずに、他の feature・docs・検査へ進む。止まるのは、利用者の方針決定がないと進められる作業が無いときだけ。
 
 ## 積み重ね (依存する feature)
