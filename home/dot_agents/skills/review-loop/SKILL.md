@@ -26,7 +26,7 @@ allowed-tools: Read, Edit, Write, Bash, Grep, Glob, Task
 | --- | --- |
 | linter の機械的な指摘を直したいだけ | `fix` skill |
 | 指摘一覧が欲しいだけ（修正は不要） | レビュー役のサブエージェント単体 |
-| 脆弱性を探したい | Copilot CLI は `security-review` サブエージェント、Claude Code は `/security-review` コマンド、OpenCode は `review` に観点を指定して渡す |
+| 脆弱性を探したい | Copilot CLI は `security-review` サブエージェント、Claude Code は `/security-review` コマンド、OpenCode は `review`、pi は `reviewer` に、脆弱性の観点を指定して渡す（pi に `security-review` 相当の組み込みの子は無い） |
 
 ## レビュー役のサブエージェント
 
@@ -37,7 +37,21 @@ CLI によって使える子が違う。
 | Copilot CLI | `code-review`（組み込み） | レビュー役に `git diff` などを実行させてよい |
 | Claude Code | 組み込みに無い。`code-review` を定義していればそれを、無ければ `general-purpose` に「編集せず指摘だけを返す」と指示して使う | 同上 |
 | OpenCode | `review` | `review` は shell を使えない（読むだけ）。差分・未追跡ファイルの一覧は親が実行し、出力を依頼文に貼る |
-| pi | `guarded_task` の `agent: review`（フルガード `pis` が登録。素の `pi` には無い）。子は会話を見られず shell を使えない | 同上（親が差分・未追跡ファイルの内容を依頼文に貼る） |
+| pi（stock） | `subagent` の `agent: "reviewer"`（`pi-subagents` 同梱）。読み取り専用で shell を使えず、親の会話も見られない | OpenCode と同じ（親が差分・未追跡ファイルの内容を依頼文に貼る。理由は表の下） |
+
+pi（stock）では次のように起動する。実機では未確認（`pi-subagents` の docs とエージェント定義を読んで書いた）。
+
+```text
+subagent({ agent: "reviewer", async: true, cwd: "<作業ツリー>", task: "<references/review-prompt.md の雛形を埋めた依頼文>",
+           options: { timeoutMs: 900000, checkpointBeforeDeadlineMs: 120000 } })
+```
+
+- `async: true`（背景）で起動する。前景の子には権限の確認機構が載らない。完了は通知で届き、アイドルの親が自動で再開するので、`sleep` やポーリングで待たない。同時に動かせる子は 4 つまで。時間の値は目安
+- 差分は親が貼る。`reviewer` に付く `watchdog_diff` は未コミットの差分を見るが、基準がセッション開始時点のコミットで、手順 1 で固定した `<base>` に合わせられない。`reviewer.md` も、コミット済みの範囲は渡された材料で見るよう求めている。現状レビューは差分でなく現在の内容を読ませるので、どのみち貼る
+- `reviewer` の標準の出力は P0 / P1 / P2。依頼文に出力形式（重大度・原因クラス）を指定する。P0 / P1 / P2 で返ってきたら、親が手順 3-2 の重大度の表で分類し直す
+- 修正は親（実装役）が行う。`reviewer` は読み取り専用で、worktree への書き手は親だけになる
+
+> 凍結した custom（`pis`）では、`guarded_task` の `agent: review` がレビュー役だった。
 
 OpenCode に `code-review` / `security-review` は無い。作業先のリポジトリが同じ名前の子を
 定義していても、`bypass` からは起動できない（起動できる子は許可リストで決まっている）。
@@ -104,8 +118,8 @@ mkdir -p "./.tmp/review-loop/${RUN_ID}"
 指摘の記録は、人が読む `round-<N>.md`・`ledger.md` のほかに、判定用の `rounds.jsonl`（1 行 1 ラウンド。
 形式は `references/convergence.md`）にも残す。
 
-`./.tmp/` は使い捨ての置き場で、削除に承認は要らない（`redirect-tmp.py` が
-`/tmp` の代わりに誘導する先）。ここに置いた記録は成果物ではないので、
+`./.tmp/` は使い捨ての置き場（Claude Code などでは `redirect-tmp.py` が
+`/tmp` の代わりに誘導する先で、削除に承認は要らない。stock の pi で削除の確認が出るかは未確認）。ここに置いた記録は成果物ではないので、
 最終レポートは会話に出す。
 
 ### 3. ラウンドを回す

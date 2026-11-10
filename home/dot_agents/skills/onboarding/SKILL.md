@@ -61,7 +61,7 @@ allowed-tools: Read, Grep, Glob, Edit(AGENTS.md)
 
 ### 4) AGENTS.md ドラフト作成
 
-`${CLAUDE_SKILL_DIR}/references/agents-template.md` をベースに作成する。
+`~/.agents/skills/onboarding/references/agents-template.md` をベースに作成する。
 
 品質基準:
 
@@ -86,7 +86,7 @@ allowed-tools: Read, Grep, Glob, Edit(AGENTS.md)
 
 ### 6) 承認後に反映
 
-ユーザーが明示承認したら、`${CLAUDE_SKILL_DIR}/references/review-checklist.md` を読み全項目を確認してから `AGENTS.md` を更新する。
+ユーザーが明示承認したら、`~/.agents/skills/onboarding/references/review-checklist.md` を読み全項目を確認してから `AGENTS.md` を更新する。
 
 ## 出力フォーマット（会話）
 
@@ -96,8 +96,10 @@ allowed-tools: Read, Grep, Glob, Edit(AGENTS.md)
 
 ## 参照ファイル
 
-- テンプレート: `${CLAUDE_SKILL_DIR}/references/agents-template.md`
-- チェックリスト: `${CLAUDE_SKILL_DIR}/references/review-checklist.md`
+パスは `~/.agents/skills/onboarding/references/` 配下（pi・Copilot CLI では `${CLAUDE_SKILL_DIR}` が展開されないため、絶対パスで書く）。
+
+- テンプレート: `~/.agents/skills/onboarding/references/agents-template.md`
+- チェックリスト: `~/.agents/skills/onboarding/references/review-checklist.md`
 
 ## 付記（モノレポの場合のみ）
 
