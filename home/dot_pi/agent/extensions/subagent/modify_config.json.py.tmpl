@@ -6,7 +6,8 @@ pi-subagents (nicobailon。home/.chezmoitemplates/pi-stock-packages で版固定
 - forceTopLevelAsync は true に強制する。前景の子には親の拡張が載らず、permission-system と
   cc-safety-net が効かないため (背景の子には載る)。利用者が false にしても apply で true に戻る。
 - それ以外 (worktreeProvider・同時数・入れ子・起動数の上限) は、無いときだけ補う。利用者が変えた値は戻さない。
-  同時数・入れ子の深さ・起動数の上限は取り払う (2026-11-10。初期値の 4・1・32 のままなら、新しい値へ移す)。
+  同時数・入れ子の深さ・起動数の上限は取り払う (2026-11-10。初期値の 4・1・32 のままなら、新しい値へ移す。
+  この 3 つの値を意図して選ぶことはできない: apply のたびに戻る。別の値なら保つ)。
 - 利用者が足した他のキーは保つ。壊れた入力は触らない。何度流しても同じ結果になる。
 stock でだけ配る (custom は .chezmoiignore.tmpl で除外)。
 see docs/spec/agent-config-generation.md#pi-subagents-の設定stock
@@ -37,6 +38,10 @@ DEFAULTS = {
     "maxSubagentSpawnsPerSession": 0,
 }
 
+# tasks:[…] や chain の並列グループの上限 (既定は maxTasks 8・concurrency 4。docs/configuration.md の parallel)。
+# 入れ子の dict なので、キーごとに無いときだけ補う
+PARALLEL_DEFAULTS = {"maxTasks": 64, "concurrency": 16}
+
 # 前の既定値。この値のままなら、利用者が選んだ値ではないので新しい既定へ移す
 LEGACY_DEFAULTS = {
     "maxActiveAsyncRunsPerSession": 4,
@@ -58,6 +63,12 @@ def main() -> int:
     for key, value in DEFAULTS.items():
         if key not in data or (key in LEGACY_DEFAULTS and data[key] == LEGACY_DEFAULTS[key]):
             data[key] = value
+    parallel = data.get("parallel")
+    if parallel is None:
+        parallel = data["parallel"] = {}
+    if isinstance(parallel, dict):
+        for key, value in PARALLEL_DEFAULTS.items():
+            parallel.setdefault(key, value)
     data.update(FORCED)
     json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
     sys.stdout.write("\n")

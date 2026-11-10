@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -106,6 +107,7 @@ def test_config_from_empty_input(config_script):
         "maxSubagentSpawnsPerRun": 10000,
         "globalConcurrencyLimit": 1000,
         "maxSubagentSpawnsPerSession": 0,  # 0 = 無制限
+        "parallel": {"maxTasks": 64, "concurrency": 16},  # tasks / chain の並列グループ (既定は 8・4)
     }
 
 
@@ -122,7 +124,7 @@ def test_config_forces_top_level_async_and_keeps_user_values(config_script):
     assert out["worktreeProvider"] == "auto"  # 無いときだけ補う
     assert out["maxActiveAsyncRunsPerSession"] == 2
     assert out["timeoutMs"] == 3600000  # 利用者のキーは保つ
-    assert out["parallel"] == {"maxTasks": 12}
+    assert out["parallel"] == {"maxTasks": 12, "concurrency": 16}  # 利用者の値は保ち、無いキーだけ補う
     assert out["maxSubagentDepth"] == 8  # 無かったものは補う
 
 
@@ -148,6 +150,13 @@ def test_config_limits_are_valid_for_pi_subagents(config_script):
         assert isinstance(out[key], int) and out[key] > 0, key  # 0 は使えない (読み込みが失敗・無視される)
     for key in ("maxActiveAsyncRunsPerSession", "maxSubagentSpawnsPerSession", "maxSubagentDepth"):
         assert isinstance(out[key], int) and out[key] >= 0, key
+
+
+def test_config_fills_parallel_limits_key_by_key(config_script):
+    out = json.loads(run(config_script, json.dumps({"parallel": {"maxTasks": 12}})))
+    assert out["parallel"] == {"maxTasks": 12, "concurrency": 16}  # 利用者の値は保ち、無いキーだけ補う
+    out = json.loads(run(config_script, json.dumps({"parallel": "x"})))
+    assert out["parallel"] == "x"  # 壊れた値には触らない
 
 
 def test_config_is_idempotent_and_leaves_broken_json(config_script):
@@ -239,43 +248,67 @@ def test_settings_keeps_user_overrides(settings_script):
     }
 
 
+def by_provider(out: dict) -> dict:
+    return out["subagents"]["agentOverridesByProvider"]
+
+
 def test_settings_assigns_models_by_role_for_copilot(settings_script):
-    out = json.loads(run(settings_script, json.dumps({"defaultProvider": "github-copilot"})))
-    models = {n: e["model"] for n, e in out["subagents"]["agentOverrides"].items()}
+    out = json.loads(run(settings_script, "{}"))
+    models = {n: e["model"] for n, e in by_provider(out)["github-copilot"].items()}
     assert models["worker"] == "github-copilot/claude-sonnet-5.5:medium"
     assert models["scout"] == "github-copilot/claude-sonnet-5.5:low"
-    assert models["oracle"] == "github-copilot/claude-sonnet-5.5:xhigh"  # deep
+    assert models["oracle"] == "github-copilot/claude-sonnet-5.5:xhigh"
     # 実装と監査は系統を分ける (worker は Claude、reviewer は GPT)
     assert models["reviewer"] == "github-copilot/gpt-6.1-sol:high"
     assert models["evidence-auditor"] == models["reviewer"]
-    assert not any("haiku" in m for m in models.values())  # Haiku は使わない (利用者の方針)
 
 
 def test_settings_assigns_models_by_role_for_bedrock(settings_script):
-    out = json.loads(run(settings_script, json.dumps({"defaultProvider": "amazon-bedrock"})))
-    models = {n: e["model"] for n, e in out["subagents"]["agentOverrides"].items()}
+    out = json.loads(run(settings_script, "{}"))
+    models = {n: e["model"] for n, e in by_provider(out)["amazon-bedrock"].items()}
     assert models["worker"] == "amazon-bedrock/us.anthropic.claude-sonnet-5-5:medium"
-    assert models["oracle"] == "amazon-bedrock/us.anthropic.claude-opus-5-5:high"
     assert models["reviewer"].startswith("amazon-bedrock/us.openai.gpt-6.1-sol")
+    # Opus は高価でカタログでは plan 役の既定。指示なしに自律で起動する oracle には使わない
+    assert "opus" not in models["oracle"]
     assert all(m.startswith("amazon-bedrock/us.") for m in models.values())  # global. は使わない
 
 
-def test_settings_does_not_assign_models_for_an_unknown_provider(settings_script):
-    for existing in ({}, {"defaultProvider": "other"}):
+def test_settings_layers_models_per_provider_not_per_apply_time_default(settings_script):
+    """defaultProvider に依らず、両方の層を常に置く (後からプロバイダを替えても、/model で替えても追従する)。"""
+    for existing in ({}, {"defaultProvider": "amazon-bedrock"}, {"defaultProvider": "other"}):
         out = json.loads(run(settings_script, json.dumps(existing)))
-        assert all("model" not in e for e in out["subagents"]["agentOverrides"].values())
+        assert set(by_provider(out)) == {"github-copilot", "amazon-bedrock"}
+    out = json.loads(run(settings_script, "{}"))
+    assert all("model" not in e for e in out["subagents"]["agentOverrides"].values())  # 層に置く。素の役には置かない
 
 
-def test_settings_keeps_a_users_model_for_a_role(settings_script):
+def test_settings_keeps_a_users_model_and_other_providers(settings_script):
     existing = {
-        "defaultProvider": "github-copilot",
-        "subagents": {"agentOverrides": {"worker": {"model": "x/y"}, "reviewer": {"thinking": "low"}}},
+        "subagents": {
+            "agentOverridesByProvider": {
+                "github-copilot": {"worker": {"model": "x/y"}, "reviewer": {"thinking": "low"}},
+                "openrouter": {"worker": {"model": "z/w"}},
+            }
+        },
     }
     out = json.loads(run(settings_script, json.dumps(existing)))
-    overrides = out["subagents"]["agentOverrides"]
-    assert overrides["worker"]["model"] == "x/y"  # 利用者の model を保つ
-    assert overrides["reviewer"]["thinking"] == "low"
-    assert overrides["reviewer"]["model"] == "github-copilot/gpt-6.1-sol:high"  # 無いものは補う
+    layer = by_provider(out)["github-copilot"]
+    assert layer["worker"]["model"] == "x/y"  # 利用者の model を保つ
+    assert layer["reviewer"]["thinking"] == "low"
+    assert layer["reviewer"]["model"] == "github-copilot/gpt-6.1-sol:high"  # 無いものは補う
+    assert by_provider(out)["openrouter"] == {"worker": {"model": "z/w"}}  # 知らないプロバイダの層は触らない
+
+
+def test_assigned_models_exist_in_the_catalog_and_never_use_haiku():
+    """割り当てるモデルが、以前のカタログ (common.toml.tmpl の [pi.model.catalog.*]) にある ID で、Haiku は使わない。"""
+    source = (HOME_SRC / ".chezmoitemplates" / "modify_pi_stock_settings.py.tmpl").read_text(encoding="utf-8")
+    catalog = (HOME_SRC / "dot_config" / "agents" / "common.toml.tmpl").read_text(encoding="utf-8")
+    models = re.findall(r'"((?:github-copilot|amazon-bedrock)/[^"]+)"', source[source.index("PROVIDER_AGENT_MODELS") :])
+    assert len(models) >= 12
+    for model in models:
+        assert "haiku" not in model
+        model_id = model.split("/", 1)[1].split(":", 1)[0]
+        assert f'id = "{model_id}"' in catalog, model
 
 
 def test_settings_is_idempotent(settings_script):
@@ -297,15 +330,27 @@ def test_permission_policy_for_subagents():
 # --- agent 定義 (組み込みの写し + permission) --------------------------------
 
 AGENTS_DIR = HOME_SRC / "dot_pi" / "agent" / "agents"
-COPIED_AGENTS = ("worker", "reviewer", "scout", "oracle")
+COPIED_AGENTS = ("worker", "reviewer", "scout", "oracle", "researcher", "evidence-auditor")
 BUILTIN_AGENTS = Path.home() / ".pi" / "agent" / "npm" / "node_modules" / "pi-subagents" / "agents"
 
 
 def split_agent(text: str) -> tuple[dict, str]:
-    yaml = pytest.importorskip("yaml")
+    """frontmatter (key: value の行と、インデントした入れ子 1 段) と本文に分ける。yaml に依らない (skip させない)。"""
     assert text.startswith("---\n")
     end = text.index("\n---\n", 4)
-    return yaml.safe_load(text[4:end]), text[end + 5 :]
+    meta: dict = {}
+    current = None
+    for line in text[4:end].splitlines():
+        if not line.strip():
+            continue
+        if line.startswith((" ", "\t")):
+            key, _, value = line.strip().partition(":")
+            meta[current][key.strip()] = value.strip()
+            continue
+        key, _, value = line.partition(":")
+        current = key.strip()
+        meta[current] = value.strip() if value.strip() else {}
+    return meta, text[end + 5 :]
 
 
 @pytest.mark.parametrize("name", COPIED_AGENTS)
@@ -359,5 +404,8 @@ def test_standing_delegation_instruction_authorizes_the_subagent_roles():
         assert f"`{role}`" in text, role
     assert "`async: true`" in text
     assert "自己申告を信じない" in text
+    # 小さな作業は委譲しない (閾値が低くて過剰に委譲しないように、先頭の近くで除外する)。利用者の「委譲しないで」に従う
+    assert text.index("小さな作業は委譲しない") < text.index("委譲してよい場面")
+    assert "委譲しないで" in text
     # 承認が要る操作は任せない
     assert "`push`" in text and "`chezmoi apply`" in text

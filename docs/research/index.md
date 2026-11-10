@@ -149,6 +149,7 @@
 | [OpenCode V2のaskと並列バッチ](opencode/ask-and-parallel-batch.md) | 承認待ちは並列を壊さない実測、拒否が中断の起点、permission.reply のスキーマ、askの実効がモードで変わる |
 | [OpenCode V2のキーバインド](opencode/keybinds.md) | 未知の ID は黙って無視される実測、ID の実在確認法、ctrl+c を app.exit が握る件、キー送出検証が成立しない理由 |
 | [OpenCode V2のスキル frontmatter の解釈範囲](opencode/skill-frontmatter.md) | `context: fork` / `agent` / `allowed-tools` は読み捨てられる実証、スキルは常に会話へ展開される、Claude Code 側は未検証 |
+| [子エージェントの権限（agent ファイルの `permission:`）の実測](agents/subagent-permission-frontmatter-2026-11.md) | 2026-11-10。`external_directory: deny`（単一の値）は、作業ツリーの外の `read`・bash のパス引数を確認なしで即座に拒否した（審査ログでも確認）。入れ子の書式は agent 定義が無効になる。許可リストより `deny` が強い。user 配下の写しでの実測は未確認 |
 | [OpenCode V2のエージェントごとのモデル指定](opencode/agent-models.md) | 子エージェントの model は効く、V1 の agent キーは #variant を黙って無視する、主エージェントは --agent で選んでもモデルが変わらない |
 | [OpenCode V2のcommit / reviewエージェントの実機確認](opencode/commit-review-agents.md) | 割り当てたモデルで起動する、--auto は子セッションの確認を自動承認せず止まる（推測）。外部コマンドを止めた git の allow と git commit の ask の実機（E2）、下ごしらえ 10 回の試行錯誤の計測（E3: opus は allow の形の外に出ない、haiku はコミットせずに返る）、接頭辞をやめ素の形を allow にした版（E4: haiku は上書きを手順 4 の冒頭に置いて 9/10 がコミット、書式はスキル任せだと崩れる）、Copilot の Sonnet で Bedrock の Sonnet を近似した計測（E5: 10/10 がコミット、書式は 14 件すべてそろう、`cd` の誘導と連結の確認は増える）、Copilot の Sonnet 5.5 の計測（E6: opus と同等の 10/10・書式で速く、承認済みの全文を一字も変えずに使う。Copilot の commit を切り替え）、子エージェントに確認画面が見えず「確認は出なかった」と推測で報告した件と、`git commit` と確かめを同じ応答に並べた件（E7: `system` を直して並べた回数 5 → 0、言い切りは減るが親が報告を求めると残る） |
 | [OpenCode V2でCopilot CLIの/fleet相当を組む](opencode/fleet.md) | コマンドと作業役の子エージェントだけで動く、並べて呼んだ子は同時に走る、background は使われなかった |

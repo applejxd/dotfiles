@@ -66,13 +66,14 @@ AGENT_TOOL_OVERRIDES = {
 }
 
 
-# 役割ごとのモデル (subagents.agentOverrides.<name>.model。`:` の後ろは思考の深さ)。
+# 役割ごとのモデル (subagents.agentOverridesByProvider.<プロバイダ>.<役>.model。`:` の後ろは思考の深さ)。
+# pi-subagents が、親のセッションのモデルのプロバイダ (/model で替えても追従する) ごとに層を重ねる (docs/models.md)。
 # 以前の Copilot / Bedrock のカタログ (common.toml.tmpl の [pi.model.tier.*]・docs/spec/agent-model-assignment.md) に合わせる:
 # worker = Sonnet 5.5 の medium、reviewer・evidence-auditor = 別系統の second_opinion (GPT 6.1 sol。worker と系統を分ける)、
-# oracle = deep (Copilot は Sonnet 5.5 の xhigh、Bedrock は Opus 5.5 の high)、scout = low、researcher = medium。Haiku は使わない。
-# 親の既定のプロバイダ (defaultProvider) に合う表だけを使う。知らないプロバイダは補わない (子は親のモデルを継ぐ)。
+# oracle = Sonnet 5.5 の xhigh (Opus は高価で、カタログでは plan 役の既定。指示なしに自律で起動する子には使わない)。
+# scout = low、researcher = medium は、カタログに階層が無い新しい判断。Haiku は使わない。
 # 利用者がすでに同じ役の model を書いていれば保つ (無いときだけ補う)。
-AGENT_MODELS = {
+PROVIDER_AGENT_MODELS = {
     "github-copilot": {
         "scout": "github-copilot/claude-sonnet-5.5:low",
         "researcher": "github-copilot/claude-sonnet-5.5:medium",
@@ -87,9 +88,10 @@ AGENT_MODELS = {
         "worker": "amazon-bedrock/us.anthropic.claude-sonnet-5-5:medium",
         "reviewer": "amazon-bedrock/us.openai.gpt-6.1-sol:high",
         "evidence-auditor": "amazon-bedrock/us.openai.gpt-6.1-sol:high",
-        "oracle": "amazon-bedrock/us.anthropic.claude-opus-5-5:high",
+        "oracle": "amazon-bedrock/us.anthropic.claude-sonnet-5-5:xhigh",
     },
 }
+
 
 def is_incremental(value: object) -> bool:
     return (
@@ -142,13 +144,21 @@ def main() -> int:
             entry = {}
         entry.setdefault("tools", list(tools))
         overrides[name] = entry
-    models = AGENT_MODELS.get(data.get("defaultProvider")) if isinstance(data.get("defaultProvider"), str) else None
-    for name, model in (models or {}).items():
-        entry = overrides.get(name)
-        if not isinstance(entry, dict):
-            entry = {}
-        entry.setdefault("model", model)
-        overrides[name] = entry
+    by_provider = subagents.get("agentOverridesByProvider")
+    if not isinstance(by_provider, dict):
+        by_provider = {}
+    for provider, roles in PROVIDER_AGENT_MODELS.items():
+        layer = by_provider.get(provider)
+        if not isinstance(layer, dict):
+            layer = {}
+        for name, model in roles.items():
+            entry = layer.get(name)
+            if not isinstance(entry, dict):
+                entry = {}
+            entry.setdefault("model", model)
+            layer[name] = entry
+        by_provider[provider] = layer
+    subagents["agentOverridesByProvider"] = by_provider
     subagents["agentOverrides"] = overrides
     data["subagents"] = subagents
     add_compaction_overrides(data)
