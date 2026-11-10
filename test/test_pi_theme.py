@@ -129,3 +129,38 @@ def test_thinking_colors_are_visible_as_a_border(level: str):
     """枠として見えるコントラスト (背景に対して 3 以上)。"""
     ratio = contrast_ratio(resolve(load_theme(), f"thinking{level}"), BACKGROUND)
     assert ratio >= 3.0, f"thinking{level} の比 {ratio:.2f}"
+
+
+# 会話・ツールのブロック (ユーザーの入力・実行中・成功・失敗・拡張のメッセージ) は、端末の背景と色相の違いで区別する。
+# 枠線は theme では引けないので、背景の明るさの差で境界を出す (小さい画面でも見えるように、背景との比を 1.3 以上にする)。
+BLOCK_BACKGROUNDS = (
+    "userMessageBg",
+    "toolPendingBg",
+    "toolSuccessBg",
+    "toolErrorBg",
+    "customMessageBg",
+)
+MIN_BLOCK_EDGE = 1.3
+
+
+@pytest.mark.parametrize("token", BLOCK_BACKGROUNDS)
+def test_block_backgrounds_stand_out_from_the_terminal_background(token: str):
+    ratio = contrast_ratio(resolve(load_theme(), token), BACKGROUND)
+    assert ratio >= MIN_BLOCK_EDGE, f"{token} の背景との比 {ratio:.2f} < {MIN_BLOCK_EDGE}"
+
+
+def test_block_backgrounds_are_distinct_colors():
+    theme = load_theme()
+    colors = [resolve(theme, token) for token in BLOCK_BACKGROUNDS]
+    assert len(set(colors)) == len(colors), colors
+
+
+@pytest.mark.parametrize("token", BLOCK_BACKGROUNDS)
+@pytest.mark.parametrize(
+    ("foreground", "minimum"),
+    [("text", 7.0), ("toolOutput", 4.5), ("toolTitle", 4.5)],
+)
+def test_text_is_readable_on_each_block_background(token: str, foreground: str, minimum: float):
+    theme = load_theme()
+    ratio = contrast_ratio(resolve(theme, foreground), resolve(theme, token))
+    assert ratio >= minimum, f"{foreground} on {token}: {ratio:.2f} < {minimum}"
