@@ -6,7 +6,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 ## 検証
 
 - `mise run verify`（日常。変更に応じた選択実行）
-- `mise run verify:all`（コミット前に 1 回。全件）
+- `mise run verify:all`（コミット前に 1 回。全件。凍結したスタックの試験は省く。`main` への統合前・凍結したコードに触れるときは `mise run verify:full`）
 - `uv run pre-commit run --all-files`（lint / secret scan）
 
 対象別のコマンドと選択規則は [docs/spec/development.md](docs/spec/development.md)。`*.tmpl` は pre-commit が素通りするので `lint_templates.py` も要る。

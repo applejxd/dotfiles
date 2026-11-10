@@ -607,7 +607,7 @@ def test_main_all_acquires_lock_but_other_modes_do_not(monkeypatch):
     monkeypatch.setattr(verify, "acquire_all_lock", lambda *a, **k: calls.append(1))
     monkeypatch.setattr(verify, "execute", lambda *a, **k: [])
     monkeypatch.setattr(verify, "_stamp_snapshot", lambda: None)
-    monkeypatch.setattr(verify, "_write_stamp", lambda started=None: None)
+    monkeypatch.setattr(verify, "_write_stamp", lambda started=None, scope=None: None)
     monkeypatch.setattr(verify.os, "nice", lambda n: 0, raising=False)
     for argv in (["--all", "--dry-run"], ["--dry-run"], ["--list"], ["--changed", "--dry-run"]):
         assert verify.main(argv) == 0
@@ -955,3 +955,148 @@ def test_closed_scope_rejects_other_docs():
     """モジュール外の文書が混ざれば閉じていない (従来どおり全件)。"""
     paths = ["scripts/kcage/cli.py", "docs/spec/development.md"]
     assert verify.closed_scope(paths, TEST_FILES) is None
+
+
+# 凍結したスタックの試験の省略 (全件の T2 から外す。変更に当たるものは T1 で回る)
+
+FROZEN_FILES = set(verify.resolve_tests(verify.FROZEN_TESTS, TEST_FILES))
+
+
+def test_every_pi_and_pr_viewer_test_is_classified_as_frozen_or_stock():
+    """test_pi_*・test_pr_viewer_* が、凍結か stock かのどちらかに分類されている (新しい試験の分類漏れを防ぐ)。"""
+    stock = set(verify.resolve_tests(verify.STOCK_PI_TESTS, TEST_FILES))
+    unclassified = [
+        f
+        for f in TEST_FILES
+        if posixpath.basename(f).startswith(("test_pi_", "test_pr_viewer_"))
+        and f not in FROZEN_FILES
+        and f not in stock
+    ]
+    assert unclassified == [], "凍結 (FROZEN_TESTS) か stock (STOCK_PI_TESTS) に分類する"
+    assert not (FROZEN_FILES & stock)
+    assert FROZEN_FILES  # 空にすると省略が効かなくなる
+
+
+def test_full_stages_skips_frozen_tests_from_t2_but_not_from_t1():
+    frozen = ["test/agents/test_pi_harness.py", "test/agents/test_pi_actions.py"]
+    t1 = ["test/agents/test_pi_actions.py"]  # 変更に当たる試験は T1 で回る
+    stages = verify.full_stages(t1, [], TEST_FILES, skip_tests=frozen)
+    flat = [c for s in stages for c in s]
+    t2 = stages[-1][0]
+    assert "--ignore=test/agents/test_pi_harness.py" in t2  # 省く
+    assert t2.count("--ignore=test/agents/test_pi_actions.py") == 1  # T1 と重複して数えない
+    assert any(c[-2:] == ["test/agents/test_pi_actions.py", "-q"] for c in flat)  # T1 で回る
+    assert not any(c[-2:] == ["test/agents/test_pi_harness.py", "-q"] for c in flat)  # 省いた分は回らない
+
+
+def test_full_stages_drops_t2_when_everything_left_is_skipped():
+    files = ["test/test_verify.py", "test/agents/test_pi_harness.py"]
+    stages = verify.full_stages([], [], files, skip_tests=["test/agents/test_pi_harness.py"])
+    assert len(stages) == 1  # T0 だけ。補集合が空のまま pytest を走らせない
+
+
+def _frozen_repo(tmp_path: Path, monkeypatch, *changed: str) -> Path:
+    repo = _repo(tmp_path)
+    # discover_test_files の既定の根は import 時の ROOT なので、この一時リポジトリを走査させる
+    monkeypatch.setattr(
+        verify,
+        "discover_test_files",
+        lambda: sorted(p.relative_to(repo).as_posix() for p in (repo / "test").rglob("test_*.py")),
+    )
+    for rel in (
+        "test/agents/test_pi_harness.py",  # 凍結
+        "test/agents/test_pi_profile.py",  # stock
+        "test/test_other.py",
+    ):
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text("def test_x():\n    pass\n", encoding="utf-8")
+    _g(repo, "add", ".")
+    _g(repo, "commit", "-q", "-m", "tests")
+    _g(repo, "switch", "-q", "-c", "feature/x")
+    for rel in changed:
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text("x\n", encoding="utf-8")
+    _g(repo, "add", ".")
+    _g(repo, "commit", "-q", "-m", "change")
+    return repo
+
+
+def test_all_skips_frozen_tests_and_says_so(tmp_path, monkeypatch, capsys):
+    repo = _frozen_repo(tmp_path, monkeypatch, "docs/a.md")
+    assert _run_main(monkeypatch, repo, "--all") == 0
+    out = capsys.readouterr().out
+    assert "凍結した自作スタックの試験 (1 ファイル)" in out and "mise run verify:full" in out
+    (t2,) = _t2_lines(out)
+    assert "--ignore=test/agents/test_pi_harness.py" in t2
+    assert "--ignore=test/agents/test_pi_profile.py" not in t2  # stock は外さない
+
+
+def test_all_full_never_skips_frozen_tests(tmp_path, monkeypatch, capsys):
+    repo = _frozen_repo(tmp_path, monkeypatch, "docs/a.md")
+    assert _run_main(monkeypatch, repo, "--all", "--full") == 0
+    out = capsys.readouterr().out
+    assert "凍結した自作スタック" not in out
+    (t2,) = _t2_lines(out)
+    assert "test_pi_harness" not in t2
+
+
+def test_all_does_not_skip_frozen_tests_for_unknown_paths(tmp_path, monkeypatch, capsys):
+    repo = _frozen_repo(tmp_path, monkeypatch, "unknown_area/x.dat")  # どの規則にも当たらない → 全件
+    assert _run_main(monkeypatch, repo, "--all") == 0
+    out = capsys.readouterr().out
+    assert "凍結した自作スタック" not in out
+    (t2,) = _t2_lines(out)
+    assert "test_pi_harness" not in t2
+
+
+def test_all_runs_the_frozen_tests_that_the_change_selects(tmp_path, monkeypatch, capsys):
+    repo = _frozen_repo(tmp_path, monkeypatch, "home/dot_config/pi/harness/actions.ts")
+    assert _run_main(monkeypatch, repo, "--all") == 0
+    out = capsys.readouterr().out
+    assert any(line.endswith("test/agents/test_pi_harness.py -q") for line in out.splitlines())  # T1
+    assert "凍結した自作スタックの試験" not in out  # 省略した分が無いので、案内も出さない
+
+
+def test_stamp_notes_the_scope_when_frozen_tests_were_skipped(tmp_path, monkeypatch):
+    repo = _frozen_repo(tmp_path, monkeypatch, "docs/a.md")
+    monkeypatch.setattr(verify, "ROOT", repo)
+    monkeypatch.setattr(verify, "execute", lambda *a, **k: [])
+    monkeypatch.setattr(verify, "acquire_all_lock", lambda *_a, **_k: None)
+    written: list[str] = []
+
+    class Stamp(_FakeStamp):
+        def write_stamp(self, _root, entries=None, scope="full"):
+            written.append(scope)
+
+    monkeypatch.setattr(verify, "_stamp_module", lambda: Stamp({}))
+    monkeypatch.setattr(verify, "_stamp_snapshot", dict)
+    assert verify.main(["--all"]) == 0
+    assert written == ["no-frozen"]
+    written.clear()
+    assert verify.main(["--all", "--full"]) == 0
+    assert written == ["full"]
+
+
+# 選択の予算: 代表的な変更で、選ばれる試験が増えすぎない (粗い glob が重い試験を引き込む退行を防ぐ)
+
+
+@pytest.mark.parametrize(
+    ("paths", "budget"),
+    [
+        (
+            [
+                "home/.chezmoitemplates/pi-permission-policy.json",
+                "test/agents/pi_stock/permission_cases.json",
+            ],
+            20,
+        ),
+        (["home/dot_agents/skills/commit/SKILL.md"], 10),
+        (["docs/spec/development.md"], 5),
+    ],
+    ids=["policy", "skill", "docs"],
+)
+def test_representative_changes_stay_within_the_selection_budget(paths, budget):
+    result = _plan_real(*paths)
+    assert not result.full
+    assert len(result.selected) <= budget, result.selected
+    assert not set(result.selected) & FROZEN_FILES, "凍結したスタックの試験を引き込んでいる"

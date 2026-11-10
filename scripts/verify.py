@@ -266,6 +266,25 @@ _PI_TESTS = (
     "test_pi_subagents_config",
     "test_pi_compaction_config",
 )
+# 凍結した自作スタック (ADR-0030: フルガード・境界・PR ビューア・作業台帳) の試験。もう変えないコードの試験で、
+# 全件 (--all) の CPU 時間の大半を占める (2026-11-10 の実測: 1 秒以上のテストの CPU 時間の 97%)。
+# 全件の T2 からだけ外す。変更パス・試験が読むファイルに当たるものは T1 で回る。省略なしは mise run verify:full。
+# see docs/spec/development.md#凍結したスタックの試験の省略
+STOCK_PI_TESTS = (  # test_pi_* のうち、今も使っている stock の試験 (T2 から外さない)
+    "test_pi_profile",
+    "test_pi_theme",
+    "test_pi_permission_decisions",
+    "test_pi_subagents_config",
+    "test_pi_compaction_config",
+)
+FROZEN_TESTS = (
+    *(t for t in _PI_TESTS if t not in STOCK_PI_TESTS),
+    "test_pi_judge_ts",
+    "test_pi_judge_baseline",
+    "test_pi_commit_parse",
+    "test_pr_viewer_*",
+)
+
 _OC_TESTS = (
     "test_generate_opencode*",
     "test_opencode_*",
@@ -826,10 +845,12 @@ def full_stages(
     test_files: Sequence[str] | None = None,
     *,
     skip_t2: bool = False,
+    skip_tests: Sequence[str] = (),
 ) -> list[list[list[str]]]:
     """全件を段に分ける: T0 (数秒〜数十秒の安い検査) → T1 (変更に当たる試験) → T2 (残りの全件)。
 
     T2 は T1 と T0 の試験を --ignore する補集合なので、取りこぼしも二重実行も出ない。
+    skip_tests (凍結したスタックの試験など) は、T1 に入っていなければ T2 からも外す (意図して省く試験)。
     test_files (全試験ファイル) を渡すと、補集合が空のときは T2 を省く (空のまま pytest を走らせると「試験なし」で失敗する)。
     lint_docs を直接呼ばないのは、pre-commit の hook (lint-docs-local) が --all-files で同じ検査をするため。
     """
@@ -846,8 +867,9 @@ def full_stages(
     t1 = selected_commands([f for f in t1_files if f not in T0_PYTEST_FILES])
     if t1:
         stages.append(t1)
-    if not skip_t2 and (test_files is None or set(test_files) - set(done)):
-        stages.append([pytest_command(["test/"], ignore=done)])
+    ignored = [*done, *(f for f in skip_tests if f not in done)]
+    if not skip_t2 and (test_files is None or set(test_files) - set(ignored)):
+        stages.append([pytest_command(["test/"], ignore=ignored)])
     return stages
 
 
@@ -1297,6 +1319,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     shell_files = tracked_shell_files(_git)
     stamp_scope: str | None = None
     closed: list[ClosedModule] | None = None
+    changed: list[str] | None = None  # 統合先との merge-base からの変更 (決められなければ None)
     if args.all and not args.full:
         # 基準を決められない・git でないときは全件 (取りこぼしより過剰な実行を選ぶ)
         with contextlib.suppress(Exception):
@@ -1328,8 +1351,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         stamp_scope = "closed:" + ",".join(m.name for m in closed)
     elif args.all:
         # 全件でも、変更に当たる試験を T1 として先に回す (変更が無ければ T1 は空)
-        selection = plan(collect_changed(_git), test_files, shell_files=shell_files)
-        commands, gates = flatten_stages(full_stages(selection.selected, shell_files, test_files))
+        skipped: list[str] = []
+        if changed is not None:
+            selection = plan(changed, test_files, shell_files=shell_files)
+            if not selection.full:  # 削除・未一致・全件に回す領域があるときは、何も省かない
+                skipped = resolve_tests(FROZEN_TESTS, test_files)
+        else:
+            selection = plan(collect_changed(_git), test_files, shell_files=shell_files)
+        omitted = [f for f in skipped if f not in selection.selected]
+        if omitted:
+            print(
+                f"凍結した自作スタックの試験 ({len(omitted)} ファイル) を T2 (残りの全件) から省略します。"
+                "変更に当たるものは T1 で回ります (省略なしは mise run verify:full)",
+                flush=True,
+            )
+            stamp_scope = "no-frozen"
+        commands, gates = flatten_stages(
+            full_stages(selection.selected, shell_files, test_files, skip_tests=omitted)
+        )
         result = Plan(
             commands=commands,
             gates=gates,
