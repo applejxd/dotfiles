@@ -70,6 +70,7 @@ AUDIT_STATUS_MAX_LINES = 20
 AUDIT_LOG_MAX_LINES = 50
 AUDIT_COMMAND_MAX_CHARS = 80
 KILL_WAIT_SECONDS = 2.0
+START_TIME_TOLERANCE_SECONDS = 2.0  # /proc の起動時刻は 1 秒ほどずれうる
 
 # check の NEXT_WAKE_SECONDS は既定で 3600 まで (--max-wake-minutes 120 までは収まる)
 SLEEP_MAX_SECONDS = 7200
@@ -756,22 +757,55 @@ def _ancestor_pids() -> set[int]:
     return pids
 
 
-def _parent_pid(pid: int) -> int:
+def _proc_fields(pid: int) -> list[str]:
+    """/proc/<pid>/stat の、コマンド名より後ろの欄 (先頭が状態 = 全体の 3 番目)。読めなければ空。"""
     try:
         data = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return 0
-    # コマンド名に空白や ) が入りうるので、最後の ) の後ろを数える (状態, 親 pid, ...)
-    fields = data.rsplit(")", 1)[-1].split()
+        return []
+    # コマンド名に空白や ) が入りうるので、最後の ) の後ろを数える
+    return data.rsplit(")", 1)[-1].split()
+
+
+def _parent_pid(pid: int) -> int:
+    fields = _proc_fields(pid)
     return int(fields[1]) if len(fields) > 1 and fields[1].isdigit() else 0
+
+
+def _has_controlling_tty(pid: int) -> bool:
+    """端末つきのプロセス (利用者のシェル・手で動かしているコマンド) か。子エージェントの配下には端末が無い。"""
+    fields = _proc_fields(pid)
+    return len(fields) > 4 and fields[4] != "0"
+
+
+def _process_started_at(pid: int) -> float | None:
+    """プロセスの起動時刻 (epoch 秒)。読めなければ None。精度は 1 秒ほどずれうる。"""
+    fields = _proc_fields(pid)
+    try:
+        ticks = int(fields[19])
+        stat_lines = Path("/proc/stat").read_text(encoding="utf-8").splitlines()
+        boot = next(int(line.split()[1]) for line in stat_lines if line.startswith("btime "))
+        return boot + ticks / os.sysconf("SC_CLK_TCK")
+    except (IndexError, ValueError, StopIteration, OSError):
+        return None
 
 
 def _cwd_is_inside(cwd: str, worktree: str) -> bool:
     return cwd == worktree or cwd.startswith(worktree + os.sep)
 
 
-def find_worktree_processes(worktree: str) -> list[tuple[int, str]]:
-    """cwd が worktree の中にあるプロセス (pid, コマンドの先頭) を返す。自分と祖先は除く。"""
+def _protected_reason(pid: int, run_started: float | None) -> str:
+    """止めてはいけない理由 (空なら止めてよい)。端末つき = 利用者の操作、run より前に起動 = 利用者の既存のプロセス。"""
+    if _has_controlling_tty(pid):
+        return "端末つき"
+    started = _process_started_at(pid)
+    if run_started is not None and started is not None and started < run_started - START_TIME_TOLERANCE_SECONDS:
+        return "run より前に起動"
+    return ""
+
+
+def find_worktree_processes(worktree: str, run_started: float | None = None) -> list[tuple[int, str, str]]:
+    """cwd が worktree の中にあるプロセス (pid, コマンドの先頭, 止めない理由) を返す。自分と祖先は除く。"""
     resolved = os.path.realpath(worktree)
     excluded = _ancestor_pids()
     found = []
@@ -788,12 +822,16 @@ def find_worktree_processes(worktree: str) -> list[tuple[int, str]]:
             command = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace").strip()
         except OSError:
             command = ""
-        found.append((int(entry.name), (command or "(コマンド不明)")[:AUDIT_COMMAND_MAX_CHARS]))
+        pid = int(entry.name)
+        found.append((pid, (command or "(コマンド不明)")[:AUDIT_COMMAND_MAX_CHARS], _protected_reason(pid, run_started)))
     return found
 
 
-def _kill_worktree_processes(worktree: str, found: list[tuple[int, str]]) -> tuple[list[int], list[int]]:
-    """SIGTERM → 2 秒待ち → 残りに SIGKILL。(止めた pid, 止まらなかった pid) を返す。"""
+def _kill_worktree_processes(
+    worktree: str, found: list[tuple[int, str, str]], run_started: float | None
+) -> tuple[list[int], list[int]]:
+    """止めてよいもの (止めない理由が空) に SIGTERM → 2 秒待ち → 残りに SIGKILL。(止めた pid, 止まらなかった pid) を返す。"""
+    wanted = {pid for pid, _, protected in found if not protected}
 
     def send(sig: int, pids: list[int]) -> None:
         for pid in pids:
@@ -801,10 +839,9 @@ def _kill_worktree_processes(worktree: str, found: list[tuple[int, str]]) -> tup
                 os.kill(pid, sig)
 
     def alive() -> list[int]:
-        wanted = {pid for pid, _ in found}
-        return [pid for pid, _ in find_worktree_processes(worktree) if pid in wanted]
+        return [pid for pid, _, _ in find_worktree_processes(worktree, run_started) if pid in wanted]
 
-    send(signal.SIGTERM, [pid for pid, _ in found])
+    send(signal.SIGTERM, sorted(wanted))
     deadline = time.monotonic() + KILL_WAIT_SECONDS
     remaining = alive()
     while remaining and time.monotonic() < deadline:
@@ -815,7 +852,7 @@ def _kill_worktree_processes(worktree: str, found: list[tuple[int, str]]) -> tup
         time.sleep(0.2)
         remaining = alive()
     survivors = set(remaining)
-    stopped = [pid for pid, _ in found if pid not in survivors]
+    stopped = sorted(wanted - survivors)
     return stopped, sorted(survivors)
 
 
@@ -869,11 +906,13 @@ def cmd_audit(args: argparse.Namespace) -> int:
     if not os.path.isdir("/proc/self"):
         lines.append("残っているプロセス: プロセスの確認は Linux だけ (この環境では飛ばした)")
     else:
-        found = find_worktree_processes(worktree)
+        run_started = dt.datetime.fromisoformat(state["started_at"]).timestamp()
+        found = find_worktree_processes(worktree, run_started)
         lines.append(f"残っているプロセス: {len(found)} 件 (cwd が worktree の中)")
-        lines += [f"  {pid} {command}" for pid, command in found]
-        if found and args.kill:
-            stopped, survivors = _kill_worktree_processes(worktree, found)
+        for pid, command, protected in found:
+            lines.append(f"  {pid} {command}" + (f" [止めない: {protected}]" if protected else ""))
+        if any(not protected for _, _, protected in found) and args.kill:
+            stopped, survivors = _kill_worktree_processes(worktree, found, run_started)
             lines.append(f"  止めた pid: {' '.join(map(str, stopped)) or 'なし'}")
             lines.append(f"  止まらなかった pid: {' '.join(map(str, survivors)) or 'なし'}")
 

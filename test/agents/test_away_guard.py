@@ -954,7 +954,7 @@ def sleepers(gitrepo):
     procs: list[subprocess.Popen] = []
 
     def start(cwd: Path) -> subprocess.Popen:
-        proc = subprocess.Popen(["sleep", "60"], cwd=cwd)
+        proc = subprocess.Popen(["sleep", "60"], cwd=cwd, start_new_session=True)
         procs.append(proc)
         return proc
 
@@ -992,3 +992,32 @@ def test_audit_kill_stops_only_processes_whose_cwd_is_in_the_worktree(gitrepo, s
     assert inside.wait(timeout=5) is not None
     assert str(inside.pid) in out.split("止めた pid:")[1]
     assert outside.poll() is None
+
+
+@linux_only
+def test_audit_kill_spares_processes_with_a_controlling_tty(gitrepo, sleepers, capsys, monkeypatch):
+    """worktree で利用者が動かしているシェル・コマンド (端末つき) は、一覧には出すが止めない。"""
+    run_id = prepare_run()
+    inside = sleepers(gitrepo / ".tmp" / "worktrees" / f"away-{run_id}")
+    monkeypatch.setattr(guard, "_has_controlling_tty", lambda pid: pid == inside.pid)
+    capsys.readouterr()
+
+    assert audit_exit(run_id, "--kill") == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    assert f"{inside.pid} sleep 60 [止めない: 端末つき]" in out
+    assert "止めた pid:" not in out
+    assert inside.poll() is None
+
+
+@linux_only
+def test_audit_kill_spares_processes_started_before_the_run(gitrepo, sleepers, capsys, monkeypatch):
+    """run より前に起動したプロセスは、利用者の既存のプロセスなので止めない。"""
+    run_id = prepare_run()
+    inside = sleepers(gitrepo / ".tmp" / "worktrees" / f"away-{run_id}")
+    monkeypatch.setattr(guard, "_process_started_at", lambda pid: 0.0)
+    capsys.readouterr()
+
+    assert audit_exit(run_id, "--kill") == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    assert f"{inside.pid} sleep 60 [止めない: run より前に起動]" in out
+    assert inside.poll() is None
