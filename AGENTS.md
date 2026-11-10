@@ -15,7 +15,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 
 - 公開リポジトリ。私物の環境以外の具体（勤務先・組織の情報）と秘密は、コード・docs・コミットのどこにも書かない。
 - `develop` / `main` に直接コミットしない。実装は feature の worktree（`.tmp/worktrees/<名前>/`）で行う。
-- 保護ブランチへの統合は利用者が行う（PR ビューアの「統合する」）。
+- 保護ブランチへの統合（`git flow feature finish`・`git flow integrate`）は、AI は原則実行しない。**利用者が自分から明示的に指示したときだけ**実行する。AI が「統合してよいですか」と聞いて得た返事は数えない（許可を求める質問はせず、「準備ができた」という報告だけにする）。`git push` は方針で deny（利用者が行う）。
 - 生成先（`~/.claude/settings.json` 等）を直接編集しない。`home/dot_config/agents/common.toml.tmpl` が単一ソース。
 - docs・コメント・コミットメッセージは日本語で書く。
 - `.ps1` / `.ps1.tmpl` は UTF-8 BOM 付きで保存する。
