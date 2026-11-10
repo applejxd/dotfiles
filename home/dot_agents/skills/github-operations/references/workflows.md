@@ -1,12 +1,12 @@
 # 典型ワークフロー
 
-> すべて **事前確認（現在の状態を取得して提示）→ 承認 → 実行 → 読み戻し** の順で行う。
+> すべて **事前確認（現在の状態を取得して提示）→ 本文・変更項目を会話に示す → 実行（承認は権限の確認の画面）→ 読み戻し** の順で行う。
 > 各コマンドは直接 `gh` を呼ぶ。repo は `--repo OWNER/REPO` で明示する。
 
 ## 1. issue を作って Project に入れ、Status を変更する
 
 1. issue 作成: `gh issue create --repo OWNER/REPO --title ... --body-file FILE`
-   （承認が要る。URL を保持）
+   （権限の確認が出る。URL を保持）
 2. `resolve-project.sh OWNER NUMBER` → `project_id`、`fields.Status.id`、該当 option ID を保持
 3. `gh project item-add NUMBER --owner OWNER --url ISSUE_URL --format json` → item ID を保持
    （登録済みなら既存 item が返るかを読み戻して確認する）

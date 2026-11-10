@@ -610,6 +610,12 @@ package `cc-safety-net` は、破壊的なコマンド（`git reset --hard`・`r
   - pi-background の自動背景化は、pi 組み込みの bash のときだけ効く。**bash を置き換える拡張（サンドボックス系・`pi-patty-bg-tasks` など）を入れない**。入れると無効になる。pi を閉じると実行中の job は死ぬ。
   - `/goal` の完了は同じエージェントの**自己申告**（`goal_complete`）。独立した検証ではない。独立性が要るときは review の子を手順に入れる。
   - `pi-rewind` は **GPL-3.0**。npm で参照するだけで、このリポジトリにコードを取り込まない。戻せるのは作業ツリーのファイルだけ（`git commit`・ブランチ操作・push は戻らない）。
+  - **`pi-rewind` の警告「Checkpoint failed: Command failed with exit code 1」（2026-11-10 に確認）**: `/reload` の直後のターンで出た。
+    - 確かめたこと: 拡張のコードは、ターンの開始時に `git commit`（`--allow-empty` なし）を呼ぶ。変更が無いと git は「nothing to commit」を**標準出力**に出して終了コード 1 になる（使い捨ての repo で再現。標準エラーは 0 バイト）。拡張は、標準エラーが空だと「exit code 1」とだけ表示する。
+    - 推測（未確認）: 拡張が覚えている「前回の記録」が `/reload` 後に古く、作業ツリーが記録済みの状態と一致して、食い違いで失敗した。確かめるには記録用の git（`~/.pi/agent/ayu/`）を読む必要があるが、方針で deny。
+    - 影響: 警告が出たターンは、巻き戻しの地点にならない。データは失われない。
+    - 上流: 0.4.6 が npm の最新で、リポジトリ `ayu-exorcist/oh-my-pi` は 2026-07-28 にアーカイブ済み（読み取り専用）。同じ警告の Issue は無く、直る見込みもない。
+    - 方針: 利用者が `/rewind` を使う予定なので、拡張は残す。毎ターン出るようなら（変更の有無に依らず）、拡張を外すか代わりを探す。
 - **導入の条件（実機での確認。すべて未確認）**:
   - pi-rewind: worktree の中で `/rewind` して、`git status`・`git reflog`・`git stash list` が変わらないこと。
   - pi-background: 12 分のコマンドで、終了時に親が起きること。
