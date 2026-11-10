@@ -59,6 +59,10 @@
 - 公式の pi が、権限の制御・隔離の機能を標準で持つようになったとき。
 - コンテナ開発（GPU・compose）の隔離が、また要るようになったとき。再開の入口は [CHG-0065 の再開の手引き](../change/closed/0065-agent-stack-freeze.md#再開の手引き)。
 
+## 追記（2026-11-10）: 既定を stock にした
+
+決定 2 の「リポジトリの既定は custom のままにする」を変更し、**既定を stock にした**（`home/.chezmoitemplates/pi-profile`）。理由は、`main` を見る他のマシンが、旗を置かなくても stock になるようにするため（自作ハーネスは凍結しており、新しい機に配る意味が無い）。`custom` へ戻すには、旗 `~/.config/chezmoi/pi-profile` に `custom` と書く（可逆）。stock の運用で実機の確認を済ませた機（この PC）の旗は、既定と同じになったので、置いても置かなくても同じ。Windows 実機では未検証。
+
 ## 関連
 
 [CHG-0065](../change/closed/0065-agent-stack-freeze.md)（記録と再開の手引き）・[ADR-0028](0028-per-repo-agent-container.md)・[kcage の概要（凍結した枝）](../research/archive/2026-11-agent-stack/README.md)・[同種の OSS の評価](../research/agents/oss-sandbox-evaluations-2026-11.md)・[ツール隔離の実現性](../research/agents/tool-isolation-feasibility-2026-11.md)
