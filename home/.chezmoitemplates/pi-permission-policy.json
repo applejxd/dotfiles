@@ -172,7 +172,10 @@
       "websearch": "allow",
       "agentcore-websearch": "allow"
     },
-    "skill": { "*": "allow" },
+    "skill": {
+      "*": "allow",
+      "agent-workflow": { "action": "deny", "reason": "自作基盤（フルガード・計画モード・guarded_task）前提で、stock の pi では使えない。custom プロファイルへ戻すときはこの deny を外す" }
+    },
     "todo": "allow",
     "ask_user_question": "allow",
     "subagent": "allow",
