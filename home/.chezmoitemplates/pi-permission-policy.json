@@ -237,6 +237,8 @@
       "~/.pi/agent/settings.json": "allow",
       "~/.agents/skills": "allow",
       "~/.agents/skills/*": "allow",
+      "~/.pi/agent/sessions/*/subagent-artifacts/*_output.md": "allow",
+      "~/.pi/agent/sessions/*/subagent-artifacts/outputs/*": "allow",
       "/tmp": "allow",
       "/mnt/c/Users/applejxd/AppData/Local/Temp/orca-paste-*": "allow"
     }
