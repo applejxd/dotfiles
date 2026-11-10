@@ -456,6 +456,7 @@ RULES: tuple[Rule, ...] = (
             "home/dot_pi/agent/modify_pi-plan-mode.json.py.tmpl",
             "home/dot_pi/agent/modify_compaction.json.py.tmpl",
             "home/dot_pi/agent/extensions/subagent/*",
+            "home/dot_pi/agent/agents/*",
             "home/dot_pi/agent/themes/**",
             "home/dot_cc-safety-net/**",
             "test/agents/pi_stock/permission_check.mjs",

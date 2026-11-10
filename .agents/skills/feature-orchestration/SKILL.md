@@ -26,6 +26,8 @@ description: "feature を起票して worker に実装を切り出し、成果�
 - 子の起動は `subagent({ agent, task, cwd, async: true, options: { timeoutMs, checkpointBeforeDeadlineMs } })`。同梱の agent は worker・scout・reviewer（読み取り専用・shell なし）・evidence-auditor・researcher・oracle・delegate など。
 - 前景の子には権限の確認機構が載らないので、**`async: true`（背景）で起動する**。完了は通知で届き、アイドルの親が自動で再開する（`sleep` やポーリングは要らない）。同時に動かせる子は **4 つまで**。
 - コミット: bash の `git commit` は確認なしで通る（feature の worktree でも同じ）。`git push*`・`sudo *` は拒否される。`git config`・`gh` の変更系・`chezmoi apply` は強制の確認（無人では 5 分で拒否される）。`git worktree remove` は、`.tmp/worktrees/` の下で `--force`・`-f`・`..` が無いときだけ確認なし（それ以外は確認）。
+- 子（`worker`・`reviewer`・`scout`・`oracle`）は、作業ツリーの外の読み書きが**確認なしで即座に拒否**される（`~/.pi/agent/agents/` の写しの `permission: external_directory: deny`。離席中に 5 分止まらない）。引き継ぎは worktree の中のファイルで行う。モデルは設定で役割ごとに決めてある（`reviewer` は実装と別系統。依頼で指定しない）。
+- 上限（同時数・入れ子・起動数）は取り払ってある。並列度は CPU と、親の確認の手間で決まる。
 - 破壊的な git（`git reset --hard`・`git checkout -- <path>`・`git restore`・`git clean -f`・`git branch -D`）は、cc-safety-net が拒否する。
 - `python3 ~/.agents/skills/…/*.py` は確認なしで実行できる。`uv run …`・`node …` は向きを証明できないので、作業ツリーの外のパスでは確認になりうる。
 
@@ -38,7 +40,8 @@ description: "feature を起票して worker に実装を切り出し、成果�
    `subagent({ agent: "worker", cwd: "<worktree の絶対パス>", async: true, options: { timeoutMs, checkpointBeforeDeadlineMs }, task: "契約 … を読み、…" })`。
    大きな JSON・長い文章を `task` に直接入れず、パスを渡す。契約に入れるもの（担当ファイル・変えてはいけないもの・合格条件のコマンド・報告形式）は [worker-contract.md](references/worker-contract.md)。
    権限や境界を**緩める**変更は、「反例を先に試験として足し、現状で落ちることを確かめてから直す」と書き、実装の前後で `reviewer` に見せる。
-4. **確認**: 子の完了通知で再開する。報告を鵜呑みにせず、**親が同じコマンドを自分で再実行して確かめる**。担当外のファイルが変わっていないか `git diff --stat`。
+4. **確認**: 子の完了通知で再開する。報告を鵜呑みにせず、**親が同じコマンドを自分で再実行して確かめる**。
+   複数ファイルにまたがる変更・設計や安全に関わる変更は、コミットの前に `reviewer`（読み取り専用で shell なし。差分は親が依頼文に貼る）に監査させる。worker の完了ごとに、並列で起動できる（利用者の常設の指示で、依頼を待たずに起動してよい）。担当外のファイルが変わっていないか `git diff --stat`。
    `git add -A` のあと `git diff --cached --numstat` で行数の急減（整形 hook が空にしたファイル）がないか見る。
 5. **登録の漏れを先に潰す**（全件検査を無駄にしない。対象が `scripts/` に実在するか確かめてから書く）:
    - 新しい試験ファイルは `scripts/verify.py` の `_PI_TESTS`（または該当の `Rule`）へ。**ほかの feature と隣り合わない位置に**足す（同じ位置だと取り込みで衝突する）。
