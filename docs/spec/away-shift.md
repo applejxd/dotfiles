@@ -75,4 +75,5 @@
 - 数時間規模の運転（子の完了通知による再開の連鎖）。実際の無人（利用者が不在）での通し運転。
 - 子 1 回あたりのトークン・費用と、親の文脈の伸び。
 - Windows・macOS（`audit --kill` は Linux のみ。`prepare` と `check` は標準ライブラリだけ）。
+- `check` は、worktree の run で `WORKTREE`・`CHILD_TIMEOUT_MS`・`CHILD_CHECKPOINT_MS`（子に渡す `timeoutMs` と `checkpointBeforeDeadlineMs`）を出す。残りの時間から計算した子の時間が 180 秒に満たないときは、停止理由 `child-time` で止める（子を起動しても、完了前に締め切りが来るため）。
 - `audit` は、本体の `.tmp/` が `.gitignore` で無視されている前提（無視されていなければ、本体の `git status` が汚れて違反になる）。
