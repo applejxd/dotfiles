@@ -49,8 +49,8 @@ description: "feature を起票して worker に実装を切り出し、成果�
    - docs を触ったら `lint_docs.py` と `check_refs.py`（`home/dot_agents/skills/sdd-docs/scripts/`）。docs に日付を書くときは `date '+%F %H:%M'` で確かめる。
 6. **全件検査**: `bg_run` で `mise run verify:all` を **1 本ずつ**（完了通知を待つ。`sleep` や `bg_log` の連打はしない）。worker の試験が走っている間も重ねない。
 7. **コミット**: bash の `git commit`（`cd <worktree の絶対パス> && git commit …`。件名＋本文 1〜3 行の Conventional Commits）。
-8. **統合**: **利用者が「統合して」と言ったときだけ**、`git flow feature finish <名前> --no-ff --no-squash -M "<メッセージ>" --keepremote --no-fetch --no-push --notag` を実行する（push はしない）。
-   指示が無いときは、コミットと要約（統合メッセージの案・確かめた内容・未確認）までで止める。`finish` で確認が出るかは未確認（出たら利用者の承認を待つ）。
+8. **統合**: **利用者が自分から「統合して」と言ったときだけ**（AI が「統合してよいですか」と聞いて得た返事は数えない。許可を求める質問はしない）、`git flow feature finish <名前> --no-ff --no-squash -M "<メッセージ>" --keepremote --no-fetch --no-push --notag` を実行する（push はしない）。
+   指示が無いときは、コミットと要約（統合メッセージの案・確かめた内容・未確認）までで止める。要約は「準備ができた」という報告で、「統合しましょうか」と問う形にしない。`finish` で確認が出るかは未確認（出たら利用者の承認を待つ）。
    docs の更新表や `_PI_TESTS` の同じ位置の衝突は、両方の行を残す。
 9. **後始末の確認**: `git log --oneline -3`・`git worktree list`・`git status --short`。残った worktree は `git worktree remove .tmp/worktrees/<名前>`（`--force` なし）で消す。枝は残るので、統合済みなら統合先の worktree から `git -C <その worktree> branch -d <枝>` で消す（`-D` は拒否される。統合前の枝は消さない）。
 10. **止まらずに次へ**: コミットと要約を出したら、統合の指示を待たずに、他の feature・docs・検査へ進む。止まるのは、利用者の方針決定がないと進められる作業が無いときだけ。

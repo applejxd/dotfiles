@@ -33,7 +33,7 @@ return { api: api.artifactPaths, ui: ui.artifactPaths };
 1. **検査は、feature ごとに親が 1 本ずつ。** 子には全件検査（`mise run verify:all`）を回させない。回す前に、`pi-background` の `bg_run` で背景に出す（12 分）。
 2. **verify が通るまで review に進まない。** review の修正で、通った verify を無効にしたら、verify からやり直す（`pi-gauntlet` の考え方。package は入れない）。
 3. **同時数の上限**: 設定の `maxActiveAsyncRunsPerSession`（既定の案は 4）。空きが出たら、親が通知を見て次を起動する。上限を超えたときの挙動（拒否かキューか）は実機で確認する。
-4. **統合は利用者が行う。** 親は、commit・サマリーまで。
+4. **統合は利用者の明示的かつ自発的な指示があるときだけ。** 親は、commit・サマリー（「準備ができた」という報告）まで。許可を求める質問はしない。
 5. **子が使うツール名**（permission の許可）: `subagent`・`subagents_enable`・`bg_wait`・`subagent_supervisor`・`subagent_launch`。`subagent_launch`（workflow の子の起動）は、2026-11-09 に当面の運用として **allow** にした（確認は出ない）。内容（担当・`cwd`・`worktree`・`commands`）を毎回見たいときは、方針の `subagent_launch` を `ask` へ戻す（`s` でセッション中は許可できる）。`gate`・`acceptance.verify` を使わない運用（上）なので、`commands` が検査されない点は実害が出にくい。
 
 ## N を使うときに、実機で確かめる 4 点（初回）

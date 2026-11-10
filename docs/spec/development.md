@@ -370,8 +370,15 @@ chezmoi apply --exclude=scripts
 
 このリポジトリは、`main`（リリース。他のマシンの `chezmoi update` が見る）・`develop`（統合。この PC の chezmoi のソースが指す）・`feature/<名前>`（作業。専用の worktree）で運用する（[CHG-0047](../change/0047-gitflow.md)）。`release`・`hotfix` は使わない。
 
-- **feature**: 親が `git flow feature start <名前> --worktree --no-fetch` で起票する。AI は feature の worktree（`.tmp/worktrees/<名前>`）で起動した `pi` から、`guarded_action` の `git_commit` で細かくコミットする（**feature の linked worktree では確認なし**。それ以外は確認あり。[`git_commit`](guard/pi-extensions.md#guarded_action承認つきの外部操作)）。**develop への統合は利用者が PR ビューアの「統合する」を押す**（merge commit。AI は `finish`・`merge` を実行しない。正本は [運用モード](operation-modes.md)）。AI の `gitflow_feature_*` の操作は 2026-10-31 に撤去した（[CHG-0050](../change/closed/0050-slim-guarded-action.md)、[ADR-0021](../adr/0021-conventions-as-instructions-slim-guarded-action.md)）
-- **main へ**: 検証（`mise run verify:all`）の後、利用者が `git flow integrate develop` で `develop` を `main` に merge し、`push` する。AI は `integrate` と `push` を行わない
+- **feature**: 親が `git flow feature start <名前> --worktree --no-fetch` で起票する。AI は feature の worktree（`.tmp/worktrees/<名前>`）で起動した `pi` から、`guarded_action` の `git_commit` で細かくコミットする（**feature の linked worktree では確認なし**。それ以外は確認あり。[`git_commit`](guard/pi-extensions.md#guarded_action承認つきの外部操作)）。**develop への統合は、凍結したスタックでは利用者が PR ビューアの「統合する」を押す**（merge commit。正本は [運用モード](operation-modes.md)）。stock の pi では、下の「統合の規則」に従う。AI の `gitflow_feature_*` の操作は 2026-10-31 に撤去した（[CHG-0050](../change/closed/0050-slim-guarded-action.md)、[ADR-0021](../adr/0021-conventions-as-instructions-slim-guarded-action.md)）
+- **main へ**: 検証（`mise run verify:full`。省略なし）の後、`git flow integrate develop` で `develop` を `main` に merge する（タグ・fetch は既定でオフ）。`push` は利用者が行う。
+- **統合の規則（stock の pi。2026-11-11）**: 保護ブランチへの統合（`git flow feature finish`・`git flow integrate`）は、AI は**原則実行しない**。**利用者が自分から明示的に指示したときだけ**実行する。
+  - AI が「統合してよいですか」と聞いて得た返事は、承認に数えない。AI は、許可を求める質問をせず、「準備ができた」（検証の結果・統合する内容）という報告だけにする。
+  - 実行するのは、指示された 1 回の操作だけ（`push` はしない。`git push` は権限の方針で deny）。
+  - **機構の裏づけ（2026-11-11）**: `develop`・`main` へのマージは、権限の方針で確認（ask）にしてある（`git flow feature|release|hotfix|bugfix|support finish` と `git flow integrate`。`-C` 付き・`git-flow` 形も）。確認の画面は、利用者が指示した操作の確認で、AI の質問への返事ではない。無人（`/goal`・away-shift）では 5 分で拒否される。**feature 同士のマージと、`develop` から feature への取り込み（`git merge`・`git flow update`・`git flow feature rebase`）は確認なし**。
+  - **限界**: 生の `git merge`・`git checkout main && git merge` は、機構では守れない（feature の枝への日常のマージを止めてしまうため）。指示だけが頼り。
+  - （訂正）以前の版は、`git flow integrate` を「どこからでも必須の確認」と書いていたが、これは凍結した自作基盤（`integration-gate`）の挙動で、stock の pi には無かった。
+  - `integrate` は `main` に切り替えたまま終わるので、実行したら `develop` に戻す。
 - **設定**: 共有の `.gitflow`（`gitflow.worktreePath` を含む）を、`scripts/gitflow-setup.sh` で作る・取り込む。グローバルの `~/.gitconfig` に旧キー `gitflow.branch.master` が残っていると、`git flow` が期待どおり動かないことがある（`dot_config/git/config.tmpl` からは消してあり、`chezmoi apply` で反映する）。**サンドボックスの外で、利用者が一度だけ**行う（`.git/config` を書くため）。新しい clone や別のマシンでは、同じスクリプトで `git flow config sync` する
 - **ガード**: develop / main の作業ツリーへの直接の編集・コミットは、機械では止めない（pi のガードの gate は 2026-10-31 に撤去。[CHG-0050](../change/closed/0050-slim-guarded-action.md)）。`AGENTS.md` と `commit` スキルの指示で、feature の worktree で作業する運用にしている
 - **検査**: スタンプは worktree ごと。push の基準は `origin/develop`（あれば）、無ければ `origin/main`。CI は `main` と `develop` への push と、全ての pull request で動く
