@@ -52,7 +52,8 @@ def chezmoi_bin() -> str:
     return found
 
 
-def render(template: str, home: Path, *, profile_env: str | None = None) -> str:
+def render(template: str, home: Path, *, profile_env: str | None = "custom") -> str:
+    # 引数なしは custom (custom の試験の意味を保つ)。リポジトリの既定は stock (2026-11-10)
     context = {
         "chezmoi": {
             "os": "linux",

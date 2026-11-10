@@ -479,20 +479,20 @@ feat(opencode): git commit の確認に件名と本文を抜き出して出す  
 
 ## pi のプロファイル（custom と stock）
 
-pi の設定は 2 つのプロファイルを切り替えられる。既定は `custom`（このリポジトリの自作ハーネス）。
-`stock` は、pi の公式の既定に、人気の拡張（pi の package）だけを入れた構成。
+pi の設定は 2 つのプロファイルを切り替えられる。**既定は `stock`**（2026-11-10 に `custom` から変更。[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md) の追記）。
+`stock` は、pi の公式の既定に、人気の拡張（pi の package）だけを入れた構成。`custom` は、凍結した自作ハーネスの配備で、旗で選ぶ（[custom へ戻す](#custom-へ戻す)）。
 
 **この切り替えは可逆で、自作部分（拡張・ハーネス・docs・試験）はリポジトリに凍結して残っている。**
-stock にしても何も消えず、`chezmoi apply` が配備しなくなり、配備済みのものを片付けるだけ。
+stock にしても何も消えず、`chezmoi apply` が配備しなくなり、配備済みのものを片付けるだけ。**旗の無い機（新しい機・他のマシン）は、`chezmoi update` で stock になる。**
 
-判定は共有テンプレート `home/.chezmoitemplates/pi-profile`（単一ソース）。次のどちらかが `stock` なら stock、
-それ以外（ファイルが無い・空・不正な値）は custom。`chezmoi.toml` の `[data]` には置かない
+判定は共有テンプレート `home/.chezmoitemplates/pi-profile`（単一ソース）。次のどちらかが `custom` なら custom、
+それ以外（ファイルが無い・空・不正な値）は stock。`chezmoi.toml` の `[data]` には置かない
 （`chezmoi update` は `init` を呼ばないため）。
 
 - 環境変数 `CHEZMOI_PI_PROFILE`
 - ファイル `~/.config/chezmoi/pi-profile` の中身（前後の空白を除く）
 
-| 対象 | custom（既定） | stock |
+| 対象 | custom（凍結した自作ハーネス） | stock（既定） |
 | --- | --- | --- |
 | 自作の拡張 `~/.pi/agent/extensions/` の各ディレクトリ（`activity`・`ask`・`btw` など。一覧は `pi-own-extensions`） | 配る | 配らない・配備済みは自作のディレクトリだけ削除（`extensions/` 全体は消さない） |
 | `~/.pi/agent/extensions/pi-permission-system/config.json`（確認画面の方針） | 配らない（拡張が無い） | `modify_` スクリプトで配る（下の「permission-system の設定」） |
@@ -616,11 +616,9 @@ package `cc-safety-net` は、破壊的なコマンド（`git reset --hard`・`r
   - pi-show-token-rate: `chezmoi apply` 後に pi 1.5.0 が package を取得してステータス行に出ること。Copilot 経由（reasoning がストリームに出ない場合）で数値が極端に過小にならないこと。Orca の端末での表示。他のステータス表示と競合しないこと。（すべて未確認）
   - plan と goal: permission-system との `tool_call` の実行順（plan mode が block する呼び出しで ask が先に出ないか）。
 
-### stock にする（利用者が実行）
+### stock にする（既定。旗を置いた機は、旗を消す）
 
-```sh
-mkdir -p ~/.config/chezmoi && printf 'stock\n' > ~/.config/chezmoi/pi-profile
-```
+既定が stock なので、旗（`~/.config/chezmoi/pi-profile`）が無ければ何もしなくてよい。`custom` の旗を置いてある機は、旗を消す（環境変数で選んだときは外す）。
 
 ```sh
 chezmoi apply
@@ -630,7 +628,12 @@ chezmoi apply
 
 ### custom へ戻す
 
-`~/.config/chezmoi/pi-profile` を消して（環境変数で選んだときは外して）`chezmoi apply`。
+```sh
+mkdir -p ~/.config/chezmoi && printf 'custom\n' > ~/.config/chezmoi/pi-profile
+chezmoi apply
+```
+
+環境変数 `CHEZMOI_PI_PROFILE=custom` でもよい。
 自作の拡張・ハーネス・prompts・`models.json` は `chezmoi apply` が再配備する。
 `settings.json` はハーネスのキーを生成器が書き直す。`packages` は生成器の持ち物ではないので残る
 （不要なら `pi remove` か手で消す）。

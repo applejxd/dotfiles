@@ -53,7 +53,7 @@ def render(
     template: str,
     home: Path,
     *,
-    profile_env: str | None = None,
+    profile_env: str | None = "custom",
     os_name: str = "linux",
     username: str = "tester",
 ) -> str:
@@ -71,6 +71,7 @@ def render(
     )
     env = dict(os.environ)
     env.pop("CHEZMOI_PI_PROFILE", None)
+    # 引数なしは custom (custom の試験の意味を保つ)。None は環境変数なし = リポジトリの既定 (stock)
     if profile_env is not None:
         env["CHEZMOI_PI_PROFILE"] = profile_env
     result = subprocess.run(
@@ -107,38 +108,42 @@ def write_profile(home: Path, content: str) -> None:
 # --- 判定 -------------------------------------------------------------
 
 
-def test_profile_defaults_to_custom(tmp_path):
-    assert profile(tmp_path) == "custom"
+def test_profile_defaults_to_stock(tmp_path):
+    """リポジトリの既定は stock (2026-11-10)。旗も環境変数も無い機は stock になる。"""
+    assert profile(tmp_path, profile_env=None) == "stock"
 
 
 def test_profile_from_env(tmp_path):
     assert profile(tmp_path, profile_env="stock") == "stock"
+    assert profile(tmp_path, profile_env="custom") == "custom"
 
 
-@pytest.mark.parametrize("content", ["stock\n", "  stock  \n\n", "stock"])
-def test_profile_from_file(tmp_path, content):
+@pytest.mark.parametrize("content", ["custom\n", "  custom  \n\n", "custom"])
+def test_profile_custom_from_file(tmp_path, content):
     write_profile(tmp_path, content)
-    assert profile(tmp_path) == "stock"
+    assert profile(tmp_path, profile_env=None) == "custom"
 
 
-@pytest.mark.parametrize("content", ["", "\n", "Stock", "custom\n", "stock2", "foo"])
-def test_profile_invalid_file_is_custom(tmp_path, content):
+@pytest.mark.parametrize("content", ["stock\n", "", "\n", "Custom", "custom2", "foo"])
+def test_profile_stock_file_or_invalid_file_is_stock(tmp_path, content):
     write_profile(tmp_path, content)
-    assert profile(tmp_path) == "custom"
+    assert profile(tmp_path, profile_env=None) == "stock"
 
 
-def test_profile_invalid_env_is_custom(tmp_path):
-    assert profile(tmp_path, profile_env="nonsense") == "custom"
+def test_profile_invalid_env_is_stock(tmp_path):
+    assert profile(tmp_path, profile_env="nonsense") == "stock"
 
 
 def test_profile_env_wins_over_file_only_when_set(tmp_path):
-    write_profile(tmp_path, "stock\n")
+    write_profile(tmp_path, "custom\n")
     # 環境変数が空なら、ファイルを見る
-    assert profile(tmp_path, profile_env="") == "stock"
+    assert profile(tmp_path, profile_env="") == "custom"
+    # 環境変数があれば、ファイルより優先する
+    assert profile(tmp_path, profile_env="stock") == "stock"
 
 
-def test_profile_on_windows_without_file_is_custom(tmp_path):
-    assert profile(tmp_path, os_name="windows") == "custom"
+def test_profile_on_windows_without_file_is_stock(tmp_path):
+    assert profile(tmp_path, profile_env=None, os_name="windows") == "stock"
 
 
 # --- 除外と撤去 -------------------------------------------------------

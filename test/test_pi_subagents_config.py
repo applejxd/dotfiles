@@ -29,7 +29,8 @@ READ_ONLY = {"read", "grep", "find", "ls", "contact_supervisor"}
 WRITE_TOOLS = {"bash", "write", "edit"}
 
 
-def render(template: str, home: Path, *, profile_env: str | None = None) -> str:
+def render(template: str, home: Path, *, profile_env: str | None = "custom") -> str:
+    # 引数なしは custom (custom の試験の意味を保つ)。リポジトリの既定は stock (2026-11-10)
     chezmoi = shutil.which("chezmoi")
     if chezmoi is None:
         pytest.skip("chezmoi is not installed")
