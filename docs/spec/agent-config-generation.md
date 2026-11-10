@@ -687,8 +687,26 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
 
 - **`~/.pi/agent/extensions/subagent/config.json`**（単数形。stock だけ。custom は `.chezmoiignore.tmpl` で除外）: `home/dot_pi/agent/extensions/subagent/modify_config.json.py.tmpl` が配る。
   - **`forceTopLevelAsync: true` は強制**（利用者が false にしても apply で戻る）。前景の子には親の拡張が載らず permission-system と cc-safety-net が効かないため。
-  - 無いときだけ補う: `worktreeProvider: "native"`・`maxActiveAsyncRunsPerSession: 4`（同時数）・`maxSubagentDepth: 1`（入れ子なし）・`maxSubagentSpawnsPerRun: 32`（1 run の子の累計。既定は 64）。
+  - 無いときだけ補う: `worktreeProvider: "native"` と、**取り払った上限**（2026-11-10。利用者の指示。実際に先に詰まるのは同時数ではなく CPU だった）: `maxActiveAsyncRunsPerSession: 0`（同時数。0 は無制限）・`maxSubagentDepth: 8`（入れ子の深さ。入れ子にするかは agent ごとの許可 `allowNestedSubagents` で決まる）・`maxSubagentSpawnsPerRun: 10000`（1 run の子の累計。0 は使えず、無視されて 64 になるので、大きな値）・`globalConcurrencyLimit: 1000`（1 run の同時数。正の整数のみ）・`maxSubagentSpawnsPerSession: 0`（セッションの累計。0 は無制限）。初期値の 4・1・32 のままなら、上限を外した値へ移す（利用者が選んだ値は戻さない）。上限の範囲は文書に最大値の記載が無い（正の整数・0 以上の整数のみ）。実機の `subagent({ action: "doctor" })` で、反映後に読み込みが通ることを確かめる（**未確認**）。
   - 利用者が足した他のキーは保つ。壊れた JSON は触らない。何度流しても同じ。
 - **settings の `subagents.agentOverrides`**（`modify_pi_stock_settings.py.tmpl`）: 組み込みの `scout`（`read`・`grep`・`find`・`ls`・`contact_supervisor`）と `oracle`（`read`・`grep`・`find`・`ls`）の `tools` を読み取り専用に絞る（組み込みの既定は `bash`・`write` を持つ）。`reviewer`（読み取り専用）・`worker` は変えない。利用者が同じ役の `tools` を書いていれば保つ（無いときだけ補う）。他の `subagents` のキー・他の役の上書きも保つ。
+- **役割ごとのモデル**（`modify_pi_stock_settings.py.tmpl` の `AGENT_MODELS`。`subagents.agentOverrides.<名>.model`。`:` の後ろは思考の深さ）: 以前の Copilot / Bedrock のカタログ（`common.toml.tmpl` の `[pi.model.tier.*]`・[役割ごとのモデル](agent-model-assignment.md)）に合わせる。親の `defaultProvider` に合う表だけを使い、知らないプロバイダは補わない（子は親のモデルを継ぐ）。利用者が書いた `model` は保つ。
+
+  | 役割 | github-copilot | amazon-bedrock | 理由 |
+  | --- | --- | --- | --- |
+  | `worker` | `claude-sonnet-5.5:medium` | `us.anthropic.claude-sonnet-5-5:medium` | 実装は medium で足りる（opus と合格率が同じで sonnet が速い。`docs/research/opencode/tier-models.md`） |
+  | `reviewer`・`evidence-auditor` | `gpt-6.1-sol:high` | `us.openai.gpt-6.1-sol:high` | 実装（Claude）と**別系統**にして、独立した目で見る（second_opinion） |
+  | `oracle` | `claude-sonnet-5.5:xhigh` | `us.anthropic.claude-opus-5-5:high` | 深い判断（deep の階層。Opus は高価なので、ここだけ） |
+  | `scout` | `claude-sonnet-5.5:low` | `us.anthropic.claude-sonnet-5-5:low` | 速い調査 |
+  | `researcher` | `claude-sonnet-5.5:medium` | `us.anthropic.claude-sonnet-5-5:medium` | 調査の合成 |
+
+  Haiku は使わない（利用者の方針。担当外の編集・書式崩れの実測）。Bedrock の `gpt-6.1-sol`・`opus-5-5` は `verified=false`（会社の機での pi のツール呼び出しは未確認）。`delegate` は設定せず、親のモデルを継ぐ。
+- **agent 定義の写し**（`home/dot_pi/agent/agents/{worker,reviewer,scout,oracle}.md`。配備先は `~/.pi/agent/agents/`。stock だけ。custom は `.chezmoiignore.tmpl` で除外）: 組み込みの agent を**そのまま写し**、frontmatter に `permission: { external_directory: deny }` だけを足した。
+  - **理由（ADR-0031 の評価）**: 子が作業ツリーの外を読もうとすると、方針は確認（ask）になり、**親の画面へ転送される。離席中は誰も答えず、5 分止まる**（実例: 2026-11-10、`review` の worker が `cd ~/.pi/…` で 240 秒以上待った）。確認ではなく**即座の拒否**にしたい。agent ごとの `permission:` は、agent ファイルの frontmatter にしか書けない（settings の `agentOverrides` は `permission` を扱えない）。ほかの標準の手段は無い。
+  - **実測**（2026-11-10。使い捨ての project agent で。審査ログの `permission_request.blocked`・`origin: project-agent` でも確認）: `external_directory: deny` で、作業ツリーの外の `read` と bash のパス引数は即座に拒否された（`/etc/hostname`・`/etc`・`/tmp`・`~/.agents/skills/…`。pi 本体の `~/.pi/agent/npm/…` は読めた）。作業ツリーの中は通った。`skills: <名>` と `inheritSkills: false` で、子には指定した skill だけが見えた。
+  - **書式の制約**: pi-subagents は `permission:` の値に `allow`・`ask`・`deny` の単一の値だけを許す。permission-system の docs にある入れ子の形（`external_directory:` の下にパターン）は、agent 定義が `Invalid agent definitions` になる。bash のルールも書けない。
+  - **維持費と撤去条件**: 4 つの組み込みの prompt の写しを持つ。`pi-subagents` の版を上げたら、写し直す（試験 `test_agent_files_match_the_builtin_except_permission` が、パッケージの組み込みとの食い違いを検出する）。`agentOverrides` が `permission` を扱えるようになるか、子の既定の権限を設定で変えられるようになったら、写しをやめる。
+  - 作業ツリーが worktree の子（`cwd` に feature の worktree）では、本体の `.tmp/` や共有の `~/.agents/skills` を読めない（引き継ぎは worktree の中のファイルで行う）。
+- **常設の委譲の指示**（`agent-instructions-stock.md` の「委譲（サブエージェント）」。配備先は `~/.pi/agent/AGENTS.md`）: `pi-subagents` は、利用者が今回の依頼または**適用される利用者・プロジェクトの指示**で委譲を求めたときだけ子を起動する（規模・複雑さ・専門の agent があることは授権にならない。`skills/pi-subagents/SKILL.md`）。そのため、委譲してよい場面（調査の並列・実装後の `reviewer` の監査・独立した実装の並列・判断が分かれるときの `oracle`）と作法（`async: true`・親が再検証・承認が要る操作は任せない）を、利用者の常設の指示として書いた。授権のための設定項目は無い（`authorityPolicy` は危険操作の確認の設定で、起動の授権ではない）。
 - **permission**（`pi-permission-policy.json`）: `subagent_supervisor` は allow、`subagent_launch`（workflow の子の起動ごとの確認）は **ask**。`gate`・`acceptance.verify` のシェルは bash の規則の外なので使わない。
 - 試験は `test/test_pi_subagents_config.py`（描画して確かめる。実機の apply は行わない）。

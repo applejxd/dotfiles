@@ -66,6 +66,31 @@ AGENT_TOOL_OVERRIDES = {
 }
 
 
+# 役割ごとのモデル (subagents.agentOverrides.<name>.model。`:` の後ろは思考の深さ)。
+# 以前の Copilot / Bedrock のカタログ (common.toml.tmpl の [pi.model.tier.*]・docs/spec/agent-model-assignment.md) に合わせる:
+# worker = Sonnet 5.5 の medium、reviewer・evidence-auditor = 別系統の second_opinion (GPT 6.1 sol。worker と系統を分ける)、
+# oracle = deep (Copilot は Sonnet 5.5 の xhigh、Bedrock は Opus 5.5 の high)、scout = low、researcher = medium。Haiku は使わない。
+# 親の既定のプロバイダ (defaultProvider) に合う表だけを使う。知らないプロバイダは補わない (子は親のモデルを継ぐ)。
+# 利用者がすでに同じ役の model を書いていれば保つ (無いときだけ補う)。
+AGENT_MODELS = {
+    "github-copilot": {
+        "scout": "github-copilot/claude-sonnet-5.5:low",
+        "researcher": "github-copilot/claude-sonnet-5.5:medium",
+        "worker": "github-copilot/claude-sonnet-5.5:medium",
+        "reviewer": "github-copilot/gpt-6.1-sol:high",
+        "evidence-auditor": "github-copilot/gpt-6.1-sol:high",
+        "oracle": "github-copilot/claude-sonnet-5.5:xhigh",
+    },
+    "amazon-bedrock": {
+        "scout": "amazon-bedrock/us.anthropic.claude-sonnet-5-5:low",
+        "researcher": "amazon-bedrock/us.anthropic.claude-sonnet-5-5:medium",
+        "worker": "amazon-bedrock/us.anthropic.claude-sonnet-5-5:medium",
+        "reviewer": "amazon-bedrock/us.openai.gpt-6.1-sol:high",
+        "evidence-auditor": "amazon-bedrock/us.openai.gpt-6.1-sol:high",
+        "oracle": "amazon-bedrock/us.anthropic.claude-opus-5-5:high",
+    },
+}
+
 def is_incremental(value: object) -> bool:
     return (
         isinstance(value, list)
@@ -116,6 +141,13 @@ def main() -> int:
         if not isinstance(entry, dict):
             entry = {}
         entry.setdefault("tools", list(tools))
+        overrides[name] = entry
+    models = AGENT_MODELS.get(data.get("defaultProvider")) if isinstance(data.get("defaultProvider"), str) else None
+    for name, model in (models or {}).items():
+        entry = overrides.get(name)
+        if not isinstance(entry, dict):
+            entry = {}
+        entry.setdefault("model", model)
         overrides[name] = entry
     subagents["agentOverrides"] = overrides
     data["subagents"] = subagents
