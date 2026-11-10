@@ -11,10 +11,14 @@ type State = { enabled: boolean; saved?: string[] };
 
 const PLAN_PROMPT = `[計画モード]
 今は計画モードで、ファイルの編集・コマンドの実行はできない（ツールを外してある）。
-読むツールで調べ、実行に移せる計画を番号付きの手順で示す。変更は行わない。
+読むツールで調べ、利用者と対話して計画を詰める。変更は行わない。
 - 前提が曖昧なら、先に質問する
-- 各手順には、触るファイルと確認の方法を書く
-- 最後の応答は、番号付きの手順で終える`;
+- 計画が十分に詰まり、実行に移せると判断したときだけ、最後に「## 実行計画」の見出しをつけて、番号付きの手順を示す。各手順には、触るファイルと確認の方法を書く（この見出しがあるときだけ、利用者に「実行する」の確認画面が出る）
+- それ以外の応答（質問・調査の途中・論点の整理）は、「## 実行計画」の見出しを使わない。毎回の応答では確認を求めない`;
+
+// 応答が「実行に移せる計画」を示しているか。見出し「## 実行計画」と番号付きの手順の両方があるときだけ、確認の画面を出す
+// （番号付きの行だけでは出さない。相談の途中の応答で毎回聞かれるのを避ける。試験: test/agents/test_pi_plan_ready.py）
+export const isPlanReady = (text: string): boolean => /^#{1,3}\s*実行計画/m.test(text) && /^\s*\d+[.)]\s/m.test(text);
 
 export default function (pi: ExtensionAPI) {
 	let enabled = false;
@@ -89,7 +93,7 @@ export default function (pi: ExtensionAPI) {
 		const text = Array.isArray(last?.content)
 			? last.content.map((b: { type: string; text?: string }) => (b.type === "text" ? b.text ?? "" : "")).join("\n")
 			: "";
-		if (!/^\s*\d+[.)]\s/m.test(text)) return; // 質問だけの応答では聞かない
+		if (!isPlanReady(text)) return; // 計画が詰まったと判断した応答（見出し「## 実行計画」つき）だけ聞く
 		const choice = await ctx.ui.select("計画をどうしますか？", ["実行する", "計画のまま続ける", "計画を直す"]);
 		if (choice === "実行する") {
 			set(false, ctx);

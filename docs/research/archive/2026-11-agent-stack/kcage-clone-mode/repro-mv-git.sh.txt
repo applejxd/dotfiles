@@ -1,0 +1,29 @@
+#!/bin/sh
+# .git を ro の重ねごと mv して差し替えられるかの確認（bubblewrap の mount namespace。箱の bind mount と同じ核の挙動）。
+set -u
+T="${TMPDIR:-/tmp}/mvgit-test"
+rm -rf "$T"
+mkdir -p "$T/repo/.git/hooks" "$T/repo/.git/objects"
+echo "[core]" > "$T/repo/.git/config"
+echo "HEAD" > "$T/repo/.git/HEAD"
+echo "x" > "$T/repo/.git/commondir"
+if ! command -v bwrap >/dev/null 2>&1; then echo "SKIP: bwrap が無い"; exit 0; fi
+# 箱の重ねと同じ形: repo を rw で、.git/config・.git/hooks・.git/commondir を ro で重ねる
+bwrap --die-with-parent --unshare-all --dev /dev --proc /proc --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib --symlink usr/lib64 /lib64 \
+  --bind "$T/repo" /w \
+  --ro-bind "$T/repo/.git/config" /w/.git/config \
+  --ro-bind "$T/repo/.git/hooks" /w/.git/hooks \
+  --ro-bind "$T/repo/.git/commondir" /w/.git/commondir \
+  --chdir /w \
+  /bin/sh -c '
+    echo "-- write to ro config:"; (echo evil >> .git/config) 2>&1 | head -1
+    echo "-- mv .git .git.old:"; mv .git .git.old 2>&1; echo "mv_rc=$?"
+    if [ -d .git.old ]; then
+      echo "-- re-create .git as a writable copy"
+      cp -a .git.old .git 2>&1 | head -2
+      echo "[core]" > .git/config; echo "fsmonitor = evil" >> .git/config; echo "copy_config_rc=$?"
+      echo "-- new .git/config content:"; cat .git/config
+    fi
+  '
+echo "-- host view of repo/.git/config (what the host git would read):"
+cat "$T/repo/.git/config"

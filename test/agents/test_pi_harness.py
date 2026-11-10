@@ -61,8 +61,41 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "model-choice.ts", harness / "model-choice.ts")
     shutil.copy2(HARNESS_SRC.parent / "autocheckpoint.ts", harness / "autocheckpoint.ts")
     shutil.copy2(HARNESS_SRC.parent / "quiet-notices.ts", harness / "quiet-notices.ts")
+    shutil.copy2(HARNESS_SRC.parent / "goal-core.ts", harness / "goal-core.ts")
+    shutil.copy2(HARNESS_SRC.parent / "goal-types.ts", harness / "goal-types.ts")
     (harness / "work").mkdir()
-    for name in ("journal.ts", "types.ts"):
+    for name in (
+        "journal.ts",
+        "types.ts",
+        "register.ts",
+        "runtime.ts",
+        "tool.ts",
+        "panel.ts",
+        "notices.ts",
+        "text-width.ts",
+        "store.ts",
+        "root.ts",
+        "reduce.ts",
+        "events.ts",
+        "invariants.ts",
+        "project.ts",
+        "globs.ts",
+        "transitions.ts",
+        "settle.ts",
+        "arbiter.ts",
+        "settle-snapshot.ts",
+        "goal.ts",
+        "goal-run.ts",
+        "driver-run.ts",
+        "driver.ts",
+        "adapt.ts",
+        "aimd.ts",
+        "digest.ts",
+        "sched.ts",
+        "strategy.ts",
+        "reserve.ts",
+        "overlap.ts",
+    ):
         shutil.copy2(HARNESS_SRC.parent / "work" / name, harness / "work" / name)
     shutil.copy2(HARNESS_SRC.parent / "pending-store.ts", harness / "pending-store.ts")
     for name in (
@@ -79,6 +112,8 @@ def env(tmp_path):
     shutil.copy2(HARNESS_SRC.parent / "landlock_exec.py", harness / "landlock_exec.py")
     shutil.copy2(COMMIT_MESSAGE_SRC, harness / "commit-message.js")
     rules = gen.build_pi_harness({}, load_common())
+    # 実機のスクリプトを起動する MCP サーバ (websearch など) は登録しない (起動すると道具の一覧に混ざる)
+    rules["mcp"] = []
     # 子エージェントも偽のモデルで動かす (階層のモデルは認証が要る)
     for agent in rules["agents"].values():
         agent["model"] = None
@@ -1893,7 +1928,9 @@ def test_todo_reminds_once_when_waiting_leaves_startable_pending_items(env):
     assert out.count("REMINDER=") == 1, out
     # 未着手は新しい項目 (ID が大きい) から並べる
     assert "待ち: #1 a" in out and "未着手: #3 c / #2 b" in out, out
-    assert "利用者の方針決定がないと進められる作業が無いときだけ" in out, out
+    assert "契約の範囲に進められる作業が無く、利用者の決定が要るときだけ" in out, out
+    # pending は契約が確定した項目だけ (判断が未回答のものは blocked)
+    assert "blocked にして着手しない" in out, out
 
 
 @pytest.mark.parametrize(
@@ -2138,6 +2175,8 @@ def _render(template: Path) -> str:
     done = subprocess.run(
         [chezmoi, "--source", str(ROOT), "execute-template"],
         input=template.read_text(encoding="utf-8"),
+        # 実機の旗 (~/.config/chezmoi/pi-profile) に左右されないよう、環境変数で custom に固定する
+        env={**os.environ, "CHEZMOI_PI_PROFILE": "custom"},
         capture_output=True,
         text=True,
         encoding="utf-8",

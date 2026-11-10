@@ -7,8 +7,8 @@
 **結論の要点**: 全体の上位互換は、**確認できた範囲では見つからなかった**。部品ごとに上のものはある（[比較](#このリポジトリの構成との比較)）。
 
 関連: [pi を AI オーケストレーターとして使う仕組みの調査](pi-orchestrator-survey.md)（O1・O2。pi の拡張と運用の型）、
-[親を絞る設計](orchestrator-role-plan.md)、[CHG-0056](../../change/0056-orchestrator.md)（非目的に Web UI・常駐の監督・台帳）、
-[CHG-0055](../../change/closed/0055-async-approval.md)（非同期承認）、[CHG-0053](../../change/0053-worktree-integration-gate.md)（統合の確認）。
+[親を絞る設計](orchestrator-role-plan.md)、[CHG-0056](../../change/closed/0056-orchestrator.md)（非目的に Web UI・常駐の監督・台帳）、
+[CHG-0055](../../change/closed/0055-async-approval.md)（非同期承認）、[CHG-0053](../../change/closed/0053-worktree-integration-gate.md)（統合の確認）。
 
 ## 種別と記号
 
@@ -55,7 +55,7 @@
 ## このリポジトリの構成との比較
 
 自分たち: pi の親（`orchestrator` の役割）が `guarded_task` で `worker` を起動し、`feature/*` の worktree で並列に作業。調整の正本は git の ref・案件（`docs/change/`）・git-flow。
-保護ブランチへの統合は必須確認（[CHG-0053](../../change/0053-worktree-integration-gate.md)）。Web UI・常駐の監督・台帳は非目的（[CHG-0056](../../change/0056-orchestrator.md)）。
+保護ブランチへの統合は必須確認（[CHG-0053](../../change/closed/0053-worktree-integration-gate.md)）。Web UI・常駐の監督・台帳は非目的（[CHG-0056](../../change/closed/0056-orchestrator.md)）。
 
 | 観点 | 自分たち | 他 | **部品ごとに上のもの** |
 | --- | --- | --- | --- |

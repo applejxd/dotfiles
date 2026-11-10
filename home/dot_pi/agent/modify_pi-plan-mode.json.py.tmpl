@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""pi の stock プロファイルの ~/.pi/agent/pi-plan-mode.json。標準入力の現状を変換して出す。
+
+@narumitw/pi-plan-mode の設定。拡張が /plan settings で書き換えるので、
+既存のキーはすべて保ち、次の 2 つを補う (利用者が変えた値は戻さない)。
+- defaultPlanTools: plan mode で使えるツール。subagent は入れない。無いときは既定を入れ、
+  あるときは検索の 3 つ (SEARCH_TOOLS) のうち無い名前だけを末尾へ追記する (和集合。順序・利用者の名前は保つ)。
+  plan mode の許可リストは完全一致の名前だけなので、検索 MCP (websearch。exposure=direct) の具体名を並べる
+- defaultPlanExportPath: 計画の書き出し先。作業ツリーを汚さないよう .tmp/keep/plan/ にする (無いときだけ)
+壊れた入力は触らない。何度流しても同じ結果になる。
+stock でだけ配る (custom は .chezmoiignore.tmpl で除外)。
+see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
+"""
+from __future__ import annotations
+
+import json
+import sys
+
+SEARCH_TOOLS = [
+    "mcp__websearch__web_search",
+    "mcp__websearch__fetch_page",
+    "mcp__websearch__search_papers",
+    # agentcore-websearch (ツールの生の名前 web-search-tool__WebSearch は実機で確認済み。完全名は命名規則から導いた)
+    "mcp__agentcore_websearch__web_search_tool__WebSearch",
+]
+DEFAULTS = {
+    "defaultPlanTools": ["read", "bash", "grep", "find", "ls", "ask_user_question", *SEARCH_TOOLS],
+    "defaultPlanExportPath": ".tmp/keep/plan/",
+}
+
+
+def main() -> int:
+    raw = sys.stdin.read()
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        sys.stdout.write(raw)  # 壊れた入力は触らない
+        return 0
+    if not isinstance(data, dict):
+        sys.stdout.write(raw)
+        return 0
+    for key, value in DEFAULTS.items():
+        data.setdefault(key, value)
+    tools = data["defaultPlanTools"]
+    if isinstance(tools, list):
+        tools.extend(t for t in SEARCH_TOOLS if t not in tools)
+    json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

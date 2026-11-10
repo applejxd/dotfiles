@@ -291,6 +291,9 @@ def runcpp(request, tmp_path):
             [*argv, "-c", script, "sh", stdin, *args],
             work,
             XDG_CACHE_HOME=str(tmp_path / "cache"),
+            # LeakSanitizer は ptrace 下 (sandbox など) で致命的エラーになる。この試験は範囲外アクセスの検出が目的なので、
+            # リーク検出だけを切る (AddressSanitizer の検出は残る)
+            ASAN_OPTIONS="detect_leaks=0",
             **extra,
         )
 

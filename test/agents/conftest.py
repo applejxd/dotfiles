@@ -64,12 +64,16 @@ def neutral_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def neutral_pi_harness_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """実行者の ``PI_HARNESS_*`` と ``ORCA_*`` を遮断する。
+    """実行者の ``PI_HARNESS_*``・``PI_WORK*``・``ORCA_*``・``PIS_IMAGE_INBOX*`` を遮断する。
 
     ★フルガード (``pis``) の中で実行すると ``PI_HARNESS_BYPASS=1`` などが子プロセスへ
       引き継がれる。bypass 中は ask が確認なしで通るので、「確認が 1 回出る」ことを
       見る ``test_pi_commit_confirm.py`` が環境しだいで落ちる (実際 23 件落ちた)。
       各テストが必要な値は自分で ``setenv`` する。
+
+    ★作業台帳の旗 (``PI_WORK_TOOL`` など。``pk pi-flags`` が付ける) が残ると、本物の pi を起動する試験で
+      ``work`` ツールが加わり、「ガード済みのツールだけ」を見る ``test_pi_settings_launch.py`` などが落ちる。
     """
-    for key in [k for k in os.environ if k.startswith(("PI_HARNESS_", "ORCA_"))]:
+    prefixes = ("PI_HARNESS_", "ORCA_", "PI_WORK", "PIS_IMAGE_INBOX")
+    for key in [k for k in os.environ if k.startswith(prefixes)]:
         monkeypatch.delenv(key)

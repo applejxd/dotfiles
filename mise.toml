@@ -12,6 +12,9 @@ node = "latest"
 
 [env]
 UV_PROJECT_ENVIRONMENT = "{% if os() == 'windows' %}.venv-windows{% else %}.venv{% endif %}"
+# uvx が作る tools ディレクトリを作業ツリー内の .tmp へ置く。pis (Fence) の内側では ~/.local/share/uv へ書けず、
+# pre-commit の uvx hook (ruff / yamllint) が os error 13 で落ちる。see docs/spec/sandbox/fence-boundary.md#uvx-の一時領域
+UV_TOOL_DIR = "{{config_root}}/.tmp/uv-tools"
 
 [tasks.e2e]
 description = "Docker で cold start を検証する（引数: [service] [mode]。test/README.md 参照）"
@@ -24,6 +27,10 @@ run = "python3 scripts/verify.py --changed"
 [tasks."verify:all"]
 description = "検証を全件実行する（安い検査を先に回し、前の段が落ちたら止まる。コミット前に 1 回）"
 run = "python3 scripts/verify.py --all"
+
+[tasks."verify:full"]
+description = "閉じたモジュールの省略をせず、必ず全件を実行する（main への統合の前はこれ）"
+run = "python3 scripts/verify.py --all --full"
 
 [tasks.prs]
 description = "develop へのマージ待ちの一覧（枝名・先行数・件名だけ。詳細・統合・掃除はエージェントへ）"
@@ -47,7 +54,7 @@ run = "./scripts/opencode_probe.sh"
 
 [tasks."websearch:keys"]
 description = "web-search の API キーを Bitwarden から取り直す（BW_SESSION が無ければ bw unlock を求める）"
-run = "uv run --no-project {{ get_env(name='USERPROFILE', default=env.HOME) }}/.claude/skills/web-search/scripts/websearch.py sync-keys --force --unlock"
+run = "uv run --no-project {{ get_env(name='USERPROFILE', default=env.HOME) }}/.config/agents/websearch/core.py sync-keys --force --unlock"
 
 [tasks.dotfiles-update]
 description = "Update zinit itself and all zinit-managed plugins (run after `chezmoi update` on other PCs)"

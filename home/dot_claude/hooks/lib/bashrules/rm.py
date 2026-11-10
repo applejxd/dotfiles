@@ -123,7 +123,7 @@ def _argvs_of(cmd: str, is_target: Callable[[str], bool]) -> list[list[str]]:
 
     ``shellparse`` の値 (引用・エスケープを外した語) を使い、リダイレクトは引数に含めない。
     ``timeout 5 rm x`` のような実行ラッパーは外す。
-    see docs/change/0012-bash-hook-shared-parser.md
+    see docs/change/closed/0012-bash-hook-shared-parser.md
     """
     out: list[list[str]] = []
     for command in _commands(cmd):

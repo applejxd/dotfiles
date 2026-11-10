@@ -2,7 +2,7 @@
 
 - **状態**: Done
 - **更新日**: 2026-11-02
-- **基準**: pi 1.4.0、[CHG-0044](../0044-plan-agent.md)（計画役）・[CHG-0045](../0045-orchestrator-parent.md)（親の絞り込み）、[子エージェント](../../spec/guard/pi-subagents.md)
+- **基準**: pi 1.4.0、[CHG-0044](0044-plan-agent.md)（計画役）・[CHG-0045](0045-orchestrator-parent.md)（親の絞り込み）、[子エージェント](../../spec/guard/pi-subagents.md)
 - **この文書は当時の記録。現在の仕様は [子エージェント](../../spec/guard/pi-subagents.md) の節「子の文脈 (AGENTS.md) の抜粋 (CHG-0059)」。最終結果は末尾の「終了結果」を見る**
 - 実装は段階（S0〜S6）。**既定は従来どおり（`inherit`）のまま入れ、実機の評価の後に切り替える**
 
@@ -257,7 +257,7 @@
 
 ## 10. 関連
 
-- [子エージェント](../../spec/guard/pi-subagents.md)・[CHG-0044](../0044-plan-agent.md)・[CHG-0045](../0045-orchestrator-parent.md)・[設定生成](../../spec/agent-config-generation.md)
+- [子エージェント](../../spec/guard/pi-subagents.md)・[CHG-0044](0044-plan-agent.md)・[CHG-0045](0045-orchestrator-parent.md)・[設定生成](../../spec/agent-config-generation.md)
 
 ## 終了結果
 

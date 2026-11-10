@@ -1,4 +1,8 @@
-"""web-search の CLI (websearch.py) を、通信なしで検証する。
+"""web-search の核 (home/dot_config/agents/websearch/core.py) を、通信なしで検証する。
+
+核を直接実行した場合 (鍵の同期のスクリプトが呼ぶ形) も確かめる。
+
+スキル web-search (薄い CLI) は廃止した。
 
 see docs/spec/web-search.md
 """
@@ -7,6 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import socket
 import sys
@@ -15,12 +20,23 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "home" / "dot_claude" / "skills" / "web-search" / "scripts" / "websearch.py"
-_spec = importlib.util.spec_from_file_location("websearch", SCRIPT)
+CORE = ROOT / "home" / "dot_config" / "agents" / "websearch" / "core.py"
+_spec = importlib.util.spec_from_file_location("websearch", CORE)
 assert _spec and _spec.loader
 ws = importlib.util.module_from_spec(_spec)
 sys.modules["websearch"] = ws  # dataclass が自分のモジュールを引く
 _spec.loader.exec_module(ws)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_websearch_env(monkeypatch):
+    """実行者の環境の WEBSEARCH_* (sandbox 内のブローカー設定など) を遮断する。
+
+    ブローカーがあると URL が 127.0.0.1 へ置き換わり、ホスト別の偽応答に当たらなくなる。
+    各試験が必要な値は自分で setenv する。
+    """
+    for name in [n for n in os.environ if n.startswith("WEBSEARCH_")]:
+        monkeypatch.delenv(name)
 
 
 def resp(status=200, body=None, headers=None):
@@ -700,8 +716,10 @@ def test_key_scripts_are_personal_and_never_stop_apply(path):
         if re.match(r"\s*(bw unlock|& bw|\$env:BW_SESSION\s*=)", line)
     ]
     assert "skip" in text.lower()
-    # 鍵そのものを書き出す処理が無い (書くのは websearch.py だけ)
+    # 鍵そのものを書き出す処理が無い (書くのは核の core.py だけ)
     assert "Set-Content" not in text and "Out-File" not in text and "bw get" not in text
+    # 呼び先はスキルではなく中立な核 (スキルを廃止しても鍵の同期が残る)
+    assert "core.py" in text and ".claude" not in text
 
 
 def test_windows_key_script_is_saved_with_a_bom():
@@ -1053,3 +1071,48 @@ def test_a_proxy_that_refuses_the_tunnel_is_reported_as_blocked():
         port = server.server_address[1]
         with pytest.raises(ws.Blocked, match="プロキシが接続を拒否"):
             ws.fetch_page("https://denied.example/", proxy=("127.0.0.1", port), timeout=5)
+
+
+# ─── 核を直接実行する (鍵の同期のスクリプトが呼ぶ形) ──────────────────────
+
+
+def _run_core_cli(tmp_path, *args, core_env=None):
+    import subprocess
+
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("WEBSEARCH_", "BW_"))}
+    env.update(
+        {
+            "HOME": str(tmp_path),
+            "AGENTS_CONFIG_DIR": str(tmp_path / "cfg"),
+            "WEBSEARCH_CACHE_DIR": str(tmp_path / "cache"),
+            "PATH": "/nonexistent",
+        }
+    )
+    env.update(core_env or {})
+    return subprocess.run(
+        [sys.executable, str(CORE), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        timeout=60,
+    )
+
+
+def test_core_cli_runs_the_secret_check(tmp_path):
+    proc = _run_core_cli(tmp_path, "search", "ghp_" + "a" * 30)  # 秘匿チェックで止まる (通信しない)
+
+    assert proc.returncode == 2 and "検索を止めた" in proc.stderr
+
+
+def test_core_cli_status_runs_without_network(tmp_path):
+    proc = _run_core_cli(tmp_path, "status")
+
+    assert proc.returncode == 0 and "brave: 鍵なし (飛ばす)" in proc.stdout
+
+
+def test_core_cli_accepts_sync_keys(tmp_path):
+    # 鍵の同期のスクリプト (441 / 349) が呼ぶサブコマンド。bw が無い環境でも引数は解釈される (使い方のエラーではない)
+    proc = _run_core_cli(tmp_path, "sync-keys")
+
+    assert "unrecognized arguments" not in proc.stderr and "invalid choice" not in proc.stderr

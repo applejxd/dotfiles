@@ -12,6 +12,8 @@ description: "feature を起票して worker に実装を切り出し、成果�
 
 計画から自走へ移るときの**実行の契約**（雛形・決定ログ）は [references/plan-contract.md](references/plan-contract.md)。
 
+**凍結（[ADR-0030](../../../docs/adr/0030-freeze-agent-stack-return-to-stock-pi.md)）**: 自作基盤（フルガード・`guarded_task` など）が前提の運用。旧 `AGENTS.md` の運用規則（worktree・統合・並列度・完璧より完了・複数会話）は [references/repo-rules.md](references/repo-rules.md)。
+
 ## 使う条件
 
 - 担当ファイルを分けられる実装が 2 件以上ある、または 1 件でも設計が固まっていて指示を完全に書ける。
@@ -49,7 +51,7 @@ description: "feature を起票して worker に実装を切り出し、成果�
    **`message` は 1200 字以下**。feature の linked worktree なら確認なし）。bash の `git commit` は拒否される。
 8. **PR の要約と統合**: `guarded_pr_summary` で、PR に要約（`mergeMessage` の下書き。develop のコミットメッセージになる）を出す。
    **統合は、既定では利用者が PR ビューアの「統合する」を押す**（アプリが merge commit で同期統合する）。利用者がチャットで統合を明示的に指示したときに限り、AI が統合コマンドを必須確認つきで実行してよい（[運用モード](../../../docs/spec/operation-modes.md#統合)）。指示が無いときは `git flow feature finish`・`git merge` を実行しない
-   （素の pi で実行すると、bypass でも必須確認になる。[CHG-0053](../../../docs/change/0053-worktree-integration-gate.md)）。
+   （素の pi で実行すると、bypass でも必須確認になる。[CHG-0053](../../../docs/change/closed/0053-worktree-integration-gate.md)）。
    押されたあとの衝突・復旧は、ビューアの表示と [PR ビューア](../../../docs/spec/pr-viewer.md) の手順に従う。
    docs の更新表や `_PI_TESTS` の同じ位置の衝突は、両方の行を残す。
 9. **後始末の確認**: `git log --oneline -3`・`git worktree list`・`git status --short`。todo は子の完了で blocked（確認待ち）になる。実差分を確かめてから done にする。
@@ -62,19 +64,23 @@ B が、まだ develop に入っていない A の変更を要るとき、A の�
 1. **起票**: A をコミットしたあと、`git flow feature start <B> feature/<A> --worktree --no-fetch`（B は A の先頭から始まる）。
 2. **A がさらに進んだら**: `cd <B の worktree の絶対パス> && git merge feature/<A> -m "merge: feature/<A> を取り込む"`（`&&`・パイプなし）。**マージするのは親だけ**（worker は git を書けない）。**衝突したら、止めて利用者に報告する**（LLM に直させない）。
 3. **関門**: `feature_gate.py check <B> --owned <B の glob>`。A の変更は「継承したパス」として引かれ（出力に `depends on: feature/<A>`）、担当外・重複を誤検知しない。既知の制限: B が A のファイルをコミットで編集しても検知されない。
-4. **統合は、A・B とも利用者の押下**。統合は merge commit なので、A を先に統合すると B から見て A は祖先になり、順序の問題は起きない（squash では B が衝突した。[CHG-0062](../../../docs/change/0062-pr-hub-simplify.md) の実験 X1 で確かめ、合格）。B を先に押すと A の変更も一緒に入り、あとの A は「統合しても内容が変わらない」状態になる（A のブランチは手で片付ける）。
+4. **統合は、A・B とも利用者の押下**。統合は merge commit なので、A を先に統合すると B から見て A は祖先になり、順序の問題は起きない（squash では B が衝突した。[CHG-0062](../../../docs/change/closed/0062-pr-hub-simplify.md) の実験 X1 で確かめ、合格）。B を先に押すと A の変更も一緒に入り、あとの A は「統合しても内容が変わらない」状態になる（A のブランチは手で片付ける）。
 5. **全件検査**は B の worktree でも回せる（A の変更を含む。A が壊れていれば B も落ちる）。
 
 ## 複数 feature をまとめて取り込む (bundle)
 
-全件検査と「統合する」を 1 回にしたいときは、手で merge せず `python3 scripts/bundle.py start <a> <b> ...` を使う（衝突は止まる＝終了コード 3。worker に解消させ、`git add -A` 後に `continue`、最後に `verify`・`summary`）。正本は [統合用の枝](../../../docs/spec/orchestration.md#統合用の枝bundle)。
+全件検査と「統合する」を 1 回にしたいときは、手で merge せず `python3 scripts/bundle.py start <a> <b> ...` を使う（既存の bundle に枝を足すときは `add`。シェルの `git merge` は対象によらず保護ブランチへの統合と同じ確認が出る。衝突は止まる＝終了コード 3。worker に解消させ、`git add -A` 後に `continue`、最後に `verify`・`summary`）。正本は [統合用の枝](../../../docs/spec/orchestration.md#統合用の枝bundle)。
+
+## stock の pi でのオーケストレーション
+
+stock の pi（拡張 `pi-subagents`）では、`guarded_task`・`bundle.py` ではなく、拡張ネイティブの workflow（`worktree: true`）で子を回す。手順・規則・実機で確かめる点は [references/pi-subagents.md](references/pi-subagents.md)。
 
 ## 落とし穴
 
 - **整形 hook が書き込み直後にファイルを書き換える**。すぐ `git add` すると空のファイルをステージする（工程 4 の `sleep 4` と `--numstat`）。
-- **worker の時間制限は約 15 分**。範囲を絞り、優先順位をつける。報告なしで打ち切られても成果物が揃っていることがある（実物で確かめる）。
+- **worker の時間制限は約 30 分（24 分で「まとめに入れ」）。explore・review は約 15 分**。範囲を絞り、優先順位をつける。報告なしで打ち切られても成果物が揃っていることがある（実物で確かめる）。
 - **feature への `develop` の取り込み**（と、feature 同士のマージ）は、`cd <絶対パス> && git merge develop`（`&&`・直接の git 1 コマンド・パイプなし）なら、**統合の必須確認にはならない**（判定器の結果のまま。通常モードでは通常の確認、bypass では確認なし）。
-  相対パス・`;`・パイプ・`2>&1`・`env` や `sh -c` で包む形は、必須確認になる（[CHG-0053](../../../docs/change/0053-worktree-integration-gate.md)）。
+  相対パス・`;`・パイプ・`2>&1`・`env` や `sh -c` で包む形は、必須確認になる（[CHG-0053](../../../docs/change/closed/0053-worktree-integration-gate.md)）。
 - **AI は、利用者の指示が無いのに保護ブランチへ統合しない**（既定は利用者の押下。チャットで明示的に指示されたときだけ、必須確認つきで実行してよい）。`finish`・`merge`・`update-ref` などを素の pi で実行すると、`bypass` でも必須確認になる。
 - `git_commit` の `message` が 1200 字を超えると拒否される。短い版でコミットし、全文は `guarded_pr_summary` の要約（`mergeMessage`）に置く。
 - **全件検査は 1 本ずつ回す**（worker の試験が走っている間も重ねない）。重なると負荷が上がり（16 コアで負荷平均 18 超）、pi を実際に起動する時間依存の試験

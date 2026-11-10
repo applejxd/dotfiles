@@ -85,13 +85,18 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def write_stamp(repo: Path, entries: Entries | None = None) -> Path:
-    """印を書く。entries を渡すと、その内容 (検証の開始時の snapshot) を記録する。"""
+def write_stamp(repo: Path, entries: Entries | None = None, scope: str = "full") -> Path:
+    """印を書く。entries を渡すと、その内容 (検証の開始時の snapshot) を記録する。
+
+    scope は何を回した実行か (full = 従来の全件、closed:<名前> = 閉じたモジュールだけで T2 を省いた実行)。
+    照合 (check) は scope を見ない: 省いた T2 は変更の範囲外で、基準の内容は統合時に検査済みのため。
+    """
     repo = Path(repo)
     data = {
         "version": VERSION,
         "head": _head(repo),
         "created": _now(),
+        "scope": scope,
         "entries": snapshot(repo) if entries is None else entries,
     }
     dest = _git_path(repo, "verify-stamp.json")

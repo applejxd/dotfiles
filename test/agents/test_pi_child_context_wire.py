@@ -27,10 +27,10 @@ pytestmark = pytest.mark.skipif(
     PI is None or _node() is None, reason="pi か、型除去に対応した node (22.18 以上) が無い"
 )
 
-REAL_PROJECT = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-REAL_GLOBAL = (ROOT / "home" / ".chezmoitemplates" / "agent-instructions.md").read_text(
-    encoding="utf-8"
-)
+# 凍結 (ADR-0030): 実物は印なしの平らな文書になったので、印つきの固定サンプル (旧正本の写し) を使う
+_FIX = ROOT / "test" / "agents" / "fixtures" / "child_context"
+REAL_PROJECT = (_FIX / "repo-instructions.md").read_text(encoding="utf-8")
+REAL_GLOBAL = (_FIX / "agent-instructions.md").read_text(encoding="utf-8")
 ROLES = ["explore", "review", "plan", "worker"]
 HEADING_HEAD = "【親の指示からの抜粋】あなたは子エージェント ("
 PARENT_WORDS = ["`ask`", "guarded_action", "コミットの承認"]
@@ -426,11 +426,15 @@ def test_report_lists_each_decision_without_the_body(env):
     report = env["tmp"] / "report.jsonl"
     _child(env, "review", "extract", PI_HARNESS_CHILD_CONTEXT_REPORT=str(report))
     recs = [json.loads(x) for x in report.read_text(encoding="utf-8").splitlines()]
-    kinds = {r["path"].replace("\\", "/").rsplit("/", 2)[-2:][-1]: r for r in recs}
-    assert recs and all(
-        r["kind"] == "extract" and r["blocks"] >= 1 for r in recs if r["path"].endswith("AGENTS.md")
+    # 祖先の AGENTS.md は環境で変わる（平らな実物は抽粋の対象にならない）ので、試験が置いた 2 つだけを見る
+    placed = [r for r in recs if Path(r["path"]).is_relative_to(env["tmp"])]
+    kinds = {r["path"].replace("\\", "/").rsplit("/", 2)[-2:][-1]: r for r in placed}
+    assert placed and all(
+        r["kind"] == "extract" and r["blocks"] >= 1
+        for r in placed
+        if r["path"].endswith("AGENTS.md")
     )
-    assert all(r["after"] < r["before"] for r in recs if r["kind"] == "extract")
+    assert all(r["after"] < r["before"] for r in placed if r["kind"] == "extract")
     assert kinds
     assert "新しい試験ファイルは" not in report.read_text(encoding="utf-8")
 

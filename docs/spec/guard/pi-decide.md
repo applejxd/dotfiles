@@ -2,10 +2,10 @@
 
 pi のフルガードが、ツールの呼び出しを実行してよいかを問い合わせる判定器。CLI に依存せず、
 **どの入力にも allow / ask / deny と理由を返す**。本番の実装は TS 版（`home/dot_config/pi/harness/judge/`。[TS 版への移植](#ts-版への移植)）。
-Python 版（`decide.py` と、`bashrules` / `command_policy.py`）は、TS 版の正解データの出力元として残っている（撤去は [CHG-0035](../../change/0035-retire-python-judge-oracle.md)）。
+Python 版（`decide.py` と、`bashrules` / `command_policy.py`）は、TS 版の正解データの出力元として残っている（撤去は [CHG-0035](../../change/closed/0035-retire-python-judge-oracle.md)）。
 以下の `check_bash.py` は Claude Code / Copilot CLI の Python 版の hook の名前で、判定の hook の登録は外してある。`check_bash.py` はこの判定器を使わない。
 
-移行の計画と経緯は [CHG-0020](../../change/0020-pi-migration.md)。呼び出し側は [pi のガード](pi-guard.md)。
+移行の計画と経緯は [CHG-0020](../../change/closed/0020-pi-migration.md)。呼び出し側は [pi のガード](pi-guard.md)。
 
 ## 置き場
 
@@ -27,7 +27,7 @@ response: { decision: allow | ask | deny, reason, source: rule | check | default
 
 | キー | 中身 |
 | --- | --- |
-| `tool` | `bash` / `read` / `edit` / `write` / `grep` / `find` / `ls` / `task`（子エージェントの起動）/ `todo`（タスクリストの拡張）/ `ask`（利用者への質問の拡張）と MCP のツール（`mcp__…`）。フルガードがツールを別名で登録していても、元の名前で渡す。役割の `tools` に無い名前は deny |
+| `tool` | `bash` / `read` / `edit` / `write` / `grep` / `find` / `ls` / `task`（子エージェントの起動）/ `todo`（タスクリストの拡張）/ `work`（作業台帳。親の役割だけ）/ `ask`（利用者への質問の拡張）と MCP のツール（`mcp__…`）。フルガードがツールを別名で登録していても、元の名前で渡す。役割の `tools` に無い名前は deny |
 | `input` | ツールの引数。`bash` は `command`、ファイルのツールは `path`（`grep` / `find` / `ls` は省略すると `.`） |
 | `cwd` | 作業ディレクトリの絶対パス。相対パスの解決と「作業ツリーの中か」の判定に使う |
 | `role` | `[pi.profiles]` の名前（「役割」の表） |
@@ -95,7 +95,7 @@ Claude Code / Copilot CLI の hook は「何も返さない」と「CLI 自身�
 ## confirm
 
 bypass でも確認を出す ask。外部への送信・公開（issue や PR の投稿など）を、`pis` の標準起動（サンドボックス＋bypass 既定オン）でも確認なしに通さないための仕組み
-（[CHG-0038](../../change/0038-guard-reclassification.md)）。ガードは境界ではなく「うっかり防止」（Python などで迂回できる）。強い保証は PAT のスコープとブローカーで。
+（[CHG-0038](../../change/closed/0038-guard-reclassification.md)）。ガードは境界ではなく「うっかり防止」（Python などで迂回できる）。強い保証は PAT のスコープとブローカーで。
 
 - **属性**: 応答の `mustConfirm: true`（`decision` が `ask` のときだけ）。**bypass（手順 5）も、サンドボックスの緩和（手順 4'。`source: default` だけに効く）も、この ask を allow にしない**。
   理由の先頭は「確認が必要な外部への送信・公開 (bypass でも確認する): 」。確認の UI と時間切れは[ハーネス側](pi-guard.md#confirm-の確認)
@@ -116,8 +116,8 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
   前置の環境変数・`env`・`git` のグローバルオプション（`-C`・`-c`・`--git-dir`・`--work-tree` など）を読み飛ばしてから、サブコマンドとフラグを見る（`--` 以降と、値を取るオプションの値は数えない。`git clean -e '-n' -f` は dry-run と見なさない）。
   評価の位置は、確認表の直後・`bashAsk` の前。**ask が既定の役割（親・`worker`）は、bypass でもサンドボックスの緩和でも ask のまま（理由の先頭は「確認が必要な元に戻せない git 操作 (bypass でも確認する): 」）**。
   **既定が deny の役割（`explorer`・`reader`・`committer`）は deny**: これらは `[bash] ask` が役割の既定の deny より先に当たり、`git branch -D`・`git clean`・`docker rm` が bypass で allow になっていた（2026-10-29 に実測。ask 一般の扱いは[次の節](#既定が-deny-の役割の-ask)）。
-  保証の範囲は既存と同じ「うっかり防止」で、git の alias・外部スクリプト・動的に組み立てた文字列は見ない。素の `git branch` の作成・切り替え・`git tag` の作成などは従来どおり。ブランチモデル（[CHG-0047](../../change/0047-gitflow.md)）の `git flow` は、利用者が自分のシェルで実行する（bash の `git flow` の deny は [CHG-0050](../../change/0050-slim-guarded-action.md) で撤去した）
-- **保護ブランチへの統合の確認（`[pi.confirm] integration = true`。[CHG-0053](../../change/0053-worktree-integration-gate.md)）**: bash（と `bg_run`）の統合コマンドを、**bypass でも省略できない必須確認**（`mustConfirm` の ask。見出しは「保護ブランチへの統合」）にする。判定器ではなく、**ハーネスの `decide`（`index.ts`）が、判定器の結果を引き上げる**（`integration-gate.ts`。緩める方向には働かない: deny と、すでに必須確認のものはそのまま）。Python 版と golden の判定は変わらない（TS だけ）。分類は `judge/gitintegration.ts` の静的な検出器（前置の環境変数・`env`・`command`・git のグローバルオプションを読み飛ばし、引用内と heredoc の本文は数えない）:
+  保証の範囲は既存と同じ「うっかり防止」で、git の alias・外部スクリプト・動的に組み立てた文字列は見ない。素の `git branch` の作成・切り替え・`git tag` の作成などは従来どおり。ブランチモデル（[CHG-0047](../../change/0047-gitflow.md)）の `git flow` は、利用者が自分のシェルで実行する（bash の `git flow` の deny は [CHG-0050](../../change/closed/0050-slim-guarded-action.md) で撤去した）
+- **保護ブランチへの統合の確認（`[pi.confirm] integration = true`。[CHG-0053](../../change/closed/0053-worktree-integration-gate.md)）**: bash（と `bg_run`）の統合コマンドを、**bypass でも省略できない必須確認**（`mustConfirm` の ask。見出しは「保護ブランチへの統合」）にする。判定器ではなく、**ハーネスの `decide`（`index.ts`）が、判定器の結果を引き上げる**（`integration-gate.ts`。緩める方向には働かない: deny と、すでに必須確認のものはそのまま）。Python 版と golden の判定は変わらない（TS だけ）。分類は `judge/gitintegration.ts` の静的な検出器（前置の環境変数・`env`・`command`・git のグローバルオプションを読み飛ばし、引用内と heredoc の本文は数えない）:
   - **always**（どこからでも必須確認）: 保護 ref を直接変える操作。`git flow {feature,release,hotfix,support,bugfix} {finish,delete,abort}`、`git flow integrate`、`git-flow` の同じもの、`update-ref <保護 ref>`、`symbolic-ref`、`branch -m/-c/-f` の対象が保護 ref、`branch <保護 ref>`、`fetch` の宴先が保護 ref（`--refmap` の値と、`-c remote.<名>.fetch=` で渡した refspec の宛先も同じ検査。判定できなければ unknown）、`worktree add -b/-B <保護 ref>`
   - **unknown**（必須確認）: 対象を静的に決められない。`cd`・`-C`・`--git-dir`・`GIT_DIR=` と統合系を同じコマンドに含む、`-c alias.`、`update-ref --stdin`、`reflog delete`、`fast-import`、宴先が `$VAR`、`update-ref`/`symbolic-ref` の宛先が他の worktree の ref の別名（`main-worktree/…`・`worktrees/<id>/…`。git が解決して主 worktree の保護ブランチや HEAD を動かせる）、`git replace` の書き換え（作成・`-f`・`-d`・`--graft`・`--edit`。一覧だけは none）
   - **head**（`merge`・`cherry-pick`・`revert`・`pull`・`am`・`reset`）: 現在のブランチを動かす。**cwd が自由区（feature の linked worktree。`freezone.ts`）なら日常の操作なので判定器の結果のまま**、自由区の外と、判定できないとき（deny にせず）は必須確認
@@ -265,11 +265,11 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 
 | 役割 | `tools` | `default` | ほか | 使うもの |
 | --- | --- | --- | --- | --- |
-| `implementer` | 7 つのツール・`task`・`todo`・`ask`・`mcp__*` | ask | `deny_except` に `git worktree remove`（force なしを許可。[例外](#git-worktree-remove-の例外)）と `git restore --staged`（[例外](#git-restore---staged-の例外)）。`shell_deny` は無い（`git flow`・`git-flow` の拒否は [CHG-0050](../../change/0050-slim-guarded-action.md) で撤去） | 親（主エージェント） |
+| `implementer` | 7 つのツール・`task`・`todo`・`work`・`ask`・`mcp__*` | ask | `deny_except` に `git worktree remove`（force なしを許可。[例外](#git-worktree-remove-の例外)）と `git restore --staged`（[例外](#git-restore---staged-の例外)）。`shell_deny` は無い（`git flow`・`git-flow` の拒否は [CHG-0050](../../change/closed/0050-slim-guarded-action.md) で撤去） | 親（主エージェント） |
 | `reader` | read・grep・find・ls | deny | — | 利用者が `pis --role reader` で選ぶ読み取り専用の親。子の `plan` 役も使う（`[pi.agents.plan]`。bash を持たないので、`skill_scripts` の許可が通らない）。harness の読み取り専用の子の一覧 `READ_ONLY_CHILD_PROFILES` に含む（`/btw` の入口と、計画モードの間に起動できる子）。bash を持たない役割の試験にも使う |
 | `explorer` | `reader` + bash | deny | `shell_allow` に `wc` と読み取り専用の git（`status` / `diff` / `log` / `show` / `ls-files`） | 子の `explore` / `review` |
 | `committer` | bash・read・grep・find・ls | deny | `shell_allow` に `git status` / `git diff` / `git log` など。`shell_deny` に git の状態を変える操作 | 子の `commit` |
-| `orchestrator` | read・grep・find・ls・task・todo・ask・action | deny | 許可リスト。`bash`・`edit`・`write`・MCP を持たない。`/orchestrate on` の間だけ、親の役割になる（[親の絞り込み](pi-subagents.md#親の絞り込みorchestrate)） | 親（利用者が切り替える） |
+| `orchestrator` | read・grep・find・ls・task・todo・work・ask・action | deny | 許可リスト。`bash`・`edit`・`write`・MCP を持たない。`/orchestrate on` の間だけ、親の役割になる（[親の絞り込み](pi-subagents.md#親の絞り込みorchestrate)） | 親（利用者が切り替える） |
 | `worker` | 7 つのツール | ask | `deny_except` に `git worktree remove`（同上）。`shell_deny` に git の状態を変える操作 | 子の `worker` |
 
 **既定の役割**は `[pi] default_role`（`common.toml`。既定は `implementer`）。`pis` は `--role` / `PI_HARNESS_ROLE` で上書きでき、
@@ -296,7 +296,7 @@ bypass でも確認を出す ask。外部への送信・公開（issue や PR �
 判定の本番は TS 版（`home/dot_config/pi/harness/judge/`）で、フルガードがプロセスの中で呼ぶ。
 Python 版（`decide.py`・`bashrules/`・`command_policy.py`）は**撤去されておらず**、
 TS 版の正解データの出力元（照合用）として残る。Claude Code / Copilot CLI の判定 hook は登録を外してあり、Python 版は実行時には走らない。
-Python 版の撤去は [CHG-0035](../../change/0035-retire-python-judge-oracle.md)（段 R1〜R5 は未着手）。
+Python 版の撤去は [CHG-0035](../../change/closed/0035-retire-python-judge-oracle.md)（段 R1〜R5 は未着手）。
 移植の進捗・実測・修正済みの不具合の経緯は、同案件の「判定器の TS 移植の記録（旧 pi-decide.md から移設）」。
 
 ### 差分試験（正解データ）
@@ -322,12 +322,13 @@ Python 版の判定結果を正解として、TS 版との全件一致を確か�
 - **使い方**: `judge_baseline.mjs --write-baseline`（意図した変更のあとに書き出し直す）・`--check`（1 行でも違えば 1）。`judge_diff.mjs` は差を強さ（deny > mustConfirm > ask > allow）で `relax`・`tighten`・`reason` に分け、台帳に無い差があれば終了コード 1。`--emit-ledger` は台帳の雛形を出す。`--corpus <JSON の文字列配列>` は外部コーパス（`.tmp/keep` に置き、リポジトリには入れない）を回し、baseline に無い入力の分布だけを出す（コマンドは出さない）。
 - **台帳の運用**: 1 行 `{kind, input, role, mode, old, new, class, reason, approver}`（`class` は `relax`・`tighten`・`false-positive`・`neutral`）。緩和は 1 件ずつ理由と承認者（`user`・`review`）を記録し、`relax` は台帳なしでは通らない。差が消えた台帳の行は警告（古い台帳）。承認した差は baseline を書き出し直して台帳を空に戻してよい。
 - **限界**: golden とコーパスに無い入力の退行は検知できない。baseline は「現状」で、正しさは保証しない。check は golden に載る（ヒットのある）入力だけで、ヒット無しの入力の新規ヒットは見ない。
+- **公開の突破の回帰試験**: `test_pi_public_bypasses.py` は、公開の突破の入力（引数・ラッパー・パス・展開の 4 型）の判定を bypass あり・役割 `implementer` で固定する。止まるものは `deny`、止まらない既知の穴は `xfail(strict)` で、塞がれると XPASS で失敗し表の更新を促す。結果は [調査](../../research/agents/command-judge-survey.md#公開の突破の回帰試験の結果2026-11-05)。
 
 ### 判定が前の呼び出しに依存していた（修正済み）
 
 同じ入力でも、同じプロセスで前に何を判定したかで結果が変わる不具合があった（`bashrules/_shared.py` の `_LITERAL_HEREDOC_BODIES`、引用付き heredoc の本文の記録がモジュールのグローバルに残る）。
 **TS 版へ写してはいけない（判定ごとの状態にする）**。Python 版は `decide()` が bash の判定の前にこの記録を空にする。
-試験は `test_decision_does_not_depend_on_earlier_calls`。経緯と標本の確認は[移植の記録](../../change/0035-retire-python-judge-oracle.md)。
+試験は `test_decision_does_not_depend_on_earlier_calls`。経緯と標本の確認は[移植の記録](../../change/closed/0035-retire-python-judge-oracle.md)。
 
 ### 状態
 
@@ -357,15 +358,44 @@ bash は `setBashDecider(makeBashDecider(tables))` で差し込む。
 
 ### 次
 
-- Python 版の撤去は [CHG-0035](../../change/0035-retire-python-judge-oracle.md)。撤去のときは正解データを固定の入力として残し、`--check` の鮮度検査を外す方針
+- Python 版の撤去は [CHG-0035](../../change/closed/0035-retire-python-judge-oracle.md)。撤去のときは正解データを固定の入力として残し、`--check` の鮮度検査を外す方針
 - `tables.toml` の置き場: `home/dot_config/pi/harness/judge/tables.toml`。TS 版が `rules.json` 経由で読む。
   Python 版の `tables.py` は、同じディレクトリ → リポジトリのソース → 配備先 `~/.config/pi/harness/judge/` の順に探す（撤去までの橋渡し。
   Windows は `harness/` を配らないので、Windows の Python の hook は表を読めず fail-closed で止まる）
 - 構文解析の堅牢化（`shellparse` を正式な構文解析に替える）は別の変更。差分試験を残したまま進める
 
+## 解析結果 Plan（G1(a)）
+
+`judge/plan.ts` の `analyze(cmd, {sshTargets})` は、bash を構文木（同梱の mvdan-sh）から**1 回だけ**解析し、実行点 `ExecSite` の平坦な列 `Plan` を返す純関数。
+**判定器には接続していない**（挙動は変えない。接続は後続）。Plan は、旧の判定を置換せず、拒否側の所見・追加の厳格化と shadow 比較の入力になる（tighten-only）。
+
+- 型: `ExecSite` = `argv`（ラッパーを剥がした実効）・`rawArgv`・`assigns`・`redirs`・`via`・`cmd`・`cwd`（caller / chain / unknown）・`ctl`・入れ子（`parent`・`depth`）。
+  語 `Word` は lit / tilde / pat / unk。literal は「展開後も 1 つの文字列に決まる語」で、`Lit` かどうかでは決めない
+- 拒否側専用の view: `tails`（`--` の後ろ・runner・here-string・プロセス置換の echo など、旧の埋め込み抽出と同じ範囲）と
+  `denyViews`（git のグローバル引数を除いた view）。許可の被覆には使わない。`varsVisible` は旧の字句上の代入名
+- 入れ子: `bash -c`・heredoc・許可宛先の ssh・`find -exec`・xargs・`$()`・`<()` を同じ列に平坦化する。`eval`・`source`・インタプリタの本文は `opaque`
+- fail-closed: 読み込み失敗・sha 不一致・評価失敗・構文エラー・CR/NUL ほかの C0・上限超え（長さ 10000・実行箇所 200・深さ 4・語 4000）は `ok:false`（呼び出し側が deny にする）
+- 限界: `$'…'`・`$"…"` は復号せず unk（頭にあれば後段が deny にする印）。cwd の chain は実在確認をしない（G5 が解く）。`CDPATH`・関数・alias がある原文の `cd` は unknown
+- 試験: `test_pi_plan_literal.py`（表 L・演算子番号・fixture）・`test_pi_plan_failclosed.py`・`test_pi_plan_sites.py`。実型は [mvdan-sh の構文木の実型](../../research/agents/mvdan-sh-ast-fixtures.md)
+
+## shadow（観測）
+
+`judge/shadow.ts` は、bash（`bash`・`bg_run`）の判定の**後**に `analyze` を呼び、観測の 1 行を `<cwd>/.tmp/work/shadow/<session>.jsonl` に追記する。
+目的は、`analyze` を判定の先頭へ繋いで `ok:false` を deny にする案（G1(b)）の前に、**正当なコマンドを deny にする率**を実測すること。
+
+- 記録: 時刻・役割・モード・旧の decision/source・コマンド長・先頭の語・`ok`・失敗種別 `why`・site 数・cmd 名（最大 8。安全な字種だけ、他は `?`）・`ms`・`would_tighten`（旧が allow/ask で新が `ok:false`）・`vendor_missing`。**コマンドの全文・引用・値は入れない**
+- 不変: 応答（decision・reason・source）を変えない。`analyze` の例外・追記の失敗は握りつぶす。`PI_SHADOW=0` で無効（既定は有効）、子（`PI_HARNESS_CHILD`）では記録しない。1 ファイル 5 MB で止める
+- 簡易ブレーカー: `analyze` が 200 ms を超えたら以降は呼ばない（同期処理なので 1 回の遅れは防げない。最初の 1 回は vendor 読み込みを含むので対象外）
+- 集計: `python3 scripts/shadow_stats.py [パス]`（失敗率・`would_tighten` と理由・ms の p50/p90/p99・失敗した入力の先頭の語）。試験は `test_pi_shadow.py`
+- 限界: 子と Windows の別実行は記録の置き場が無く観測しない。判定後の確認待ちの結果（承認・拒否）は記録しない
+
 ## 既知の制約
 
-- gitflow-lite のリポジトリで develop / main を直接編集・コミットさせない制限は、判定器の外側の層（[CHG-0049](../../change/0049-gitflow-convention-guard.md)）に置いていたが、2026-10-31 に撤去した（[CHG-0050](../../change/0050-slim-guarded-action.md)）。今は機械では止めず、指示で運用する。`decide` は変えていない
+- シェルが値をコードとして実行する入口の環境変数（`PROMPT_COMMAND`・`BASH_ENV`・`LD_PRELOAD`・`LD_AUDIT`・`DYLD_INSERT_LIBRARIES`・`BASH_FUNC_*`、値にコマンド置換などを含む `PS4`）の設定と `compgen -C` / `complete -C` / `mapfile -C` は、`rules_guard.ts` の `codeEntryEnv`（Python 版は `rules_guard.py` の `code_entry_env`）が役割・bypass によらず deny にする。単純コマンドの語の列の、代入になりうる位置（前置代入・ラッパーの引数・`export` 等・`read`/`mapfile` の設定先・`-c` の文字列）だけを見るので、通常の引数中の言及（`rg 'PS4='` など）・`ENV=production ./deploy`・安全な `PS4` は拒否しない（既知の限界: `rg -- 'X=1'` や `;` を含むコミットメッセージで名簿の名前を `NAME=` で書くと誤って拒否する。詳細は仕様）。名前を実行時に組み立てる形と `eval` は対象外（[詳細](pi-guard.md#コードの入口になる環境変数)）。試験は `test_pi_control_files_bash.py`・`test_decide.py`・golden。
+
+- 作業台帳の置き場は、名前の正規表現 (`.git/pi-work`・`.tmp/work`) に加え、`judge/ledger_root.ts` の `ledgerRoots(cwd, env)` が fs だけで解いた実体（`--separate-git-dir`・`GIT_DIR`・worktree の common-dir）とも照合する。bash の `ledgerHit` とファイルツールの `decideFile`（`@` などの pi のパス解釈の各形も照合）が使う。結果は 2 秒の TTL でキャッシュする。common-dir 自身の削除・移動（`.git` 名以外）も拒否する。既知の制約: 広い祖先（`~`・作業ツリー全体）の再帰削除は既存の rm の判定に任せる。TTL の間に作られた `.git` は最大 2 秒拾えない。
+- 結果は cwd ごとに最大 64 件キャッシュする（同じプロセスの中で `.git` を作り直すと古いまま）。読めない・不正な `.git` は例外にせず、名前の照合だけに戻る。試験は `test_pi_ledger_root.py`。
+- gitflow-lite のリポジトリで develop / main を直接編集・コミットさせない制限は、判定器の外側の層（[CHG-0049](../../change/0049-gitflow-convention-guard.md)）に置いていたが、2026-10-31 に撤去した（[CHG-0050](../../change/closed/0050-slim-guarded-action.md)）。今は機械では止めず、指示で運用する。`decide` は変えていない
 - `[pi.external_read]` だけを開けている。OpenCode が開けている `[opencode.sandbox] work_read`（`~/src` など）は
   まだ読まないので、隣のリポジトリを読むと確認になる
 - `boundary` の緩和は TS 版だけにある（Python 版 `decide.py` は持たない。正解データは `boundary` なしの要求）。試験は `test_pi_judge_ts.py`

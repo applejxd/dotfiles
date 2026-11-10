@@ -17,7 +17,7 @@ Fence へ渡す設定（`fence.json` の形）は、共通の素材 + 起動デ�
 | `allowWrite` | 起動ディレクトリ、`write`（`~/.cache`）、`XDG_DATA_HOME/opencode`、worktree の共有 `.git` |
 | `denyRead` | 開けた場所の内側にある秘密（`deny_read` と `[sandbox] deny` のうち glob でないもの） |
 | `denyWrite` | [保護対象](#保護対象denywrite)、worktree の共有 `.git` の `hooks` と `config` |
-| `network` | 通信を許可したドメインのみ（**モデル提供元を入れ忘れると応答が来ない**）。接続先は `[provider.*]` から `providers` で引く（[CHG-0007](../../change/0007-harness-profiles.md)） |
+| `network` | 通信を許可したドメインのみ（**モデル提供元を入れ忘れると応答が来ない**）。接続先は `[provider.*]` から `providers` で引く（[CHG-0007](../../change/closed/0007-harness-profiles.md)） |
 | `allowPty` | `true`。TUI のリサイズを内側へ伝える |
 
 ### 組み立ての規則
@@ -180,10 +180,22 @@ devices = ["/dev/dxg"]
 
 #### `devices` (デバイスを境界の中へ見せる)
 
+**`pis` は既定で、ホストに在る GPU のデバイスを見せる**（実測 2026-11-05。WSL2・Fence 0.1.67: `devices: {"mode": "minimal", "allow": ["/dev/dxg"]}` で `nvidia-smi -L` が RTX 3070 を認識し、許可しないと失敗する）。
+一覧は `/dev/dxg`・`/dev/nvidiactl`・`/dev/nvidia-uvm`・`/dev/nvidia-uvm-tools`・`/dev/nvidia0`〜`7` のうち、起動時にホストに在るキャラクタデバイスだけ（`boundary.DEFAULT_GPU_DEVICES`。symlink は先を見る。ディレクトリ・通常ファイルは足さない）。
+`.opencode/sandbox.toml` の `devices`・`PIS_EXTRA_DEVICES` と重複を 1 つにまとめ、既定が先頭。
+起動時に `pis: デバイス: /dev/dxg (既定の GPU。PIS_NO_GPU=1 で無効)` を 1 行出す。既定の追加と明示した宣言を合流した結果が空なら、何も出さず `devices` も作らない（GPU が無く宣言も無い機械では従来と同じ）。
+`PIS_NO_GPU=1` で既定の追加だけを止める（明示した宣言は効く。`PIS_NO_GPU` は内側へ渡さない）。`ocs`・`--no-sandbox` は既定を足さない。
+
+- **境界を広げる理由**: GPU を使う開発が多く、無いと sandbox が採用できない（使わないケースの方が少ない）
+- **限界**: 内側の任意のプロセスが GPU を使える。GPU ドライバへの攻撃面が増える。GPU のメモリはプロセス間で分離されるが、ドライバの欠陥は境界の外。ホストに GPU が無ければ何も変わらない
+- 子（worktree 隔離）の Landlock の書込可（`harness/index.ts` の `ISOLATION_DEVICES`）は同じ一覧（`nvidia-modeset` は両方で除外）
+
+以下は `devices` 全般（`ocs` を含む明示の宣言）の規則。
+
 Fence の `devices.allow` へ渡す。WSL の GPU は `/dev/dxg`、ネイティブの Linux の NVIDIA は
 `/dev/nvidiactl`・`/dev/nvidia0`・`/dev/nvidia-uvm` など。
 
-- **既定は無効。** どちらも無ければ `devices` を設定に作らない (Fence は `mode: auto` で、`/dev` は最小)。
+- **`ocs` と `--no-sandbox` の既定は無効。** `pis` は既定でホストに在る GPU を足す（上）。足す分と明示した宣言が全て空なら `devices` を設定に作らない (Fence は `mode: auto` で、`/dev` は最小)。
   足すときだけ `{"mode": "minimal", "allow": [...]}` を設定へ入れる (`auto` の挙動に依存しないため)
 - **書式**: `~` を使わない絶対パスで、`/dev/` 直下の名前 1 つだけ (`/dev/dxg`)。`..`・`//`・余計な階層・
   `/dev` 自体・末尾の `/` は拒否する。glob (`* ? [`) も拒否する (Fence の README に `devices.allow` が
@@ -208,7 +220,7 @@ Fence の `devices.allow` へ渡す。WSL の GPU は `/dev/dxg`、ネイティ�
 - **設計の判断**: 環境変数だけにして `sandbox.toml` には足さない、というより小さい設計も検討した。
   プロジェクトごとの GPU 要件を共有する用途があるため、両方を残した
 - **`/dev/dxg` を許すと、Windows の GPU ドライバへの経路が境界の内側に開く。** 影響は未評価のまま
-- worktree 隔離 ([CHG-0029](../../change/0029-worktree-isolation.md)) の子の Landlock の書込可にも、
+- worktree 隔離 ([CHG-0029](../../change/closed/0029-worktree-isolation.md)) の子の Landlock の書込可にも、
   同じデバイスが要る (そちらで扱う)
 
 ### 環境変数での追加
@@ -231,7 +243,7 @@ export PIS_EXTRA_READ="$HOME/dataset:/data2"
   Fence 側で `denyRead` が `allowRead` に勝つ点は未確認)
 - **表示**: 起動時に足す分を表示し、環境変数由来のものには `(PIS_EXTRA_READ)` を付ける
 - **リンク**: Fence はリンクを辿って許可を広げない。リンクのあるディレクトリと実体の両方を
-  指定する ([CHG-0029](../../change/0029-worktree-isolation.md) の「データセットの読み取りと GPU の調査」の実測)
+  指定する ([CHG-0029](../../change/closed/0029-worktree-isolation.md) の「データセットの読み取りと GPU の調査」の実測)
 - **内側から広げられない**: 環境変数は起動ラッパーが Fence の外で、起動前に読む。内側の環境には
   渡さない (`cli.DROP_ENV`、pi も併用)。内側のエージェントが次回の起動の環境を変える経路は
   無いと見ているが、利用者のシェルの設定ファイルを書けるかは別の話で、ここでは確かめていない (推測)
@@ -247,6 +259,34 @@ export PIS_EXTRA_DEVICES=/dev/nvidiactl:/dev/nvidia0:/dev/nvidia-uvm  # ネイ�
 - `.opencode/sandbox.toml` の `devices` の後ろに足す (重複は 1 つ)。表示には `(PIS_EXTRA_DEVICES)` を付ける
 - 起動ラッパーが Fence の外で読み、内側へは渡さない (`cli.DROP_ENV`)。`write`・`network_allow` は
   環境変数では足せない
+
+### 公開ポート（Web アプリをホストのブラウザで開く）
+
+内側で動かす Web アプリを、ホスト側のブラウザから開けるようにする（`pis` のみ。`ocs` は読まない）。**既定は無効**で、
+宣言が無ければ Fence の起動引数は 1 バイトも変わらない。ポートは**起動時に確定**し、内側のエージェントは後から開けられない。
+
+```sh
+export PIS_EXPOSE_PORTS=3000:8000     # コロン区切り
+```
+
+- **入口は環境変数 `PIS_EXPOSE_PORTS` だけ**。Fence の起動に `-p <PORT>` をこの順で繰り返し足す。
+  **`.opencode/sandbox.toml` の `expose_ports` は許可の根拠にしない**。書かれていても `-p` に渡さず、起動時に 1 行の警告を出して無視する（起動は止めない）。
+  理由: リポジトリが決めると、見知らぬリポジトリを取得して起動しただけで、ホストのループバックのポートが開く。
+  ホストの他のアプリの通信（OAuth のコールバックなど）を内側へ誘導できるため、利用者の環境変数だけを許可の根拠にする。
+  `devices`・`read` は内側に閉じるので、従来どおり宣言を適用する
+- **検証（不正は起動を拒否。黙って無視しない）**: 整数のみ・1024〜65535・最大 8 個（重複を除いた数）。
+  `ADDR:PORT`・`0.0.0.0`・空白・符号・小数は拒否し、常に `127.0.0.1` だけ（LAN には公開しない）。
+  pis 自身が使うポート（ブローカー・検索・中継の `network.upstreamProxy`）と重なるときも拒否する
+- **内側へ渡さない**: `PIS_EXPOSE_PORTS` は `cli.DROP_ENV` に入れ、内側の環境へ渡さない
+- **表示**: 起動時に `pis: 公開ポート: 3000, 8000 (PIS_EXPOSE_PORTS)` を出す
+- **`--no-sandbox`**: Fence が無くホストのループバックで直接動くので、宣言は使わず、環境変数があれば 1 行で知らせる
+- **境界チェック（`pis --check`）は変えない**: 公開ポートはカナリアの外
+- **実測（2026-11-05。Fence 0.1.67、WSL2）**: `fence --settings <最小> -p 18766 -c "python3 -m http.server 18766 --bind 127.0.0.1"` で、
+  ホストから `curl http://127.0.0.1:18766/` が 200、サーバーを止めると 000。`allowLocalBinding` は不要だった。
+  GPU は `PIS_EXTRA_DEVICES=/dev/dxg` で別に通る
+- **限界**: ポートはセッションの間ずっとホストのループバックで開く（サーバーが無い間は接続拒否）。ホストの他のプロセスや
+  ブラウザ上の任意のページ（DNS rebinding など）から、そのポートへ届く（ローカルの開発サーバーと同じ）。LAN には公開しない。
+  内側から依存を入れるには、`network_allow`（`.opencode/sandbox.toml`）に registry のドメインが要る
 
 ### Copilot ブローカー（`pis` のみ）
 

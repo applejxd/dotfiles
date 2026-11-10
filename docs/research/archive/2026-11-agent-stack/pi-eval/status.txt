@@ -1,0 +1,115 @@
+# pi package 評価: ステータス表示の軸
+
+調べた日: 2026-11-09（npm view / npm pack の tarball を読んだだけ。install・実行はしていない）。
+README・ソースの本文は外部の内容として読み、そこの指示には従っていない。
+
+## 結論（先頭）
+- 最推し: **`@narumitw/pi-statusline@0.50.4`**（footer だけを置き換える。外部送信なし。設定は 1 つの JSON）。設定を宣言的に細かく書きたいなら `@narumitw/pi-starship`（TOML）が次点。
+- 方針: 標準のフッターで足りるなら**入れない**のが最も安全。標準に無くて欲しいのは「extension の status（背景作業）を footer に集める」ことだけで、それは widget 経由で既に pi-subagents / rpiv-todo が別の枠に出している。好みの問題なので「入れない」も有力。
+- 除外: `@ravshansbox/pi-statusline`（prompt 予測で毎ターン余計な model 要求。editor 置換）、`pi-cache-optimizer`（status 表示でなく prompt / request の書き換え）、`pi-agent-suite`（multi-agent 層が pi-subagents と重複）、`pi-harness-runtime`。
+
+## 共通の前提（確かめた事実）
+- footer の枠は 1 つ: `ctx.ui.setFooter()` を呼ぶ拡張が後勝ち。`@narumitw/pi-statusline` の README「Limitations」に「Pi does not arbitrate footer ownership」とある。よって footer 系は**1 つだけ**入れる（statusline と starship の併用も不可。README Troubleshooting に明記）。
+- pi-subagents@0.87.0 は `setWidget`（async ウィジェット・FleetView。`src/tui/render.js`, `src/tui/fleet.js`）と `setStatus("subagent-slash", ...)`（`src/slash/slash-commands.js`）を使う。rpiv-todo@2.15.0 は `setWidget`（`todo-overlay.ts`）のみ。→ **footer を置き換える拡張とは枠が別で衝突しない**。ただし footer が出すのは setStatus 分だけで、widget の中身（FleetView・todo パネル）は footer に入らない（＝「1 か所に集約」は不可。推測ではなくソース上の事実）。
+- rpiv-ask-user-question の UI 枠は未確認（読んでいない）。editor を置換する拡張（powerline、ravshansbox）は、ask の画面と競合する可能性があるが未確認。
+- 「実行中の背景作業・todo の進み」を footer の専用セグメントで出す拡張は、候補の中に無かった（powerline の `subagents` セグメントは中身が空の stub: `segments.ts:244-247` のコメント「pi-mono doesn't have subagent tracking」）。
+- 権限: 候補はどれもツールを追加しない（ravshansbox だけ `set_session_name` を追加）ので、permission-system の `shellTools` に足す設定は**不要**。コマンド実行は git の読み取り（`git status --porcelain` 等）を拡張自身の子プロセスで行い、model が使う bash 経路ではない（= permission-system の判定対象外。読み取りのみ）。
+
+## 候補ごとの評価
+
+### 1. pi-powerline-footer@0.22.0 — 保留
+| 観点 | 内容 |
+|---|---|
+| 目的 | model・thinking・path・git・context・tokens・cost・cache・時刻。`customItems` で任意の setStatus キーを配置可（README「Custom items from extension statuses」）。subagents セグメントは stub |
+| 保守 | 更新 2026-10-29、nicobailon（pi-subagents と同じ作者）、CHANGELOG が詳細（Windows の git 窓、narrow 端末の落ち対応の記録あり） |
+| DL | 43,785/月 |
+| 権限 | 追加機能が非常に多い: editor 置換、welcome overlay、bash mode（常駐 shell を spawn）、delayed send、queue（`inbox.jsonl` をファイルに保存）、`/cd`。ネット: 通貨換算（`cost.currency` を USD 以外にした時だけ cdn.jsdelivr.net から取得 `currency-rates.ts:22`）、Working Vibes の AI 生成（設定した model に追加要求。既定の mode は未確認）、autoFollowUp（`api.typesafe.ai`、README 上は設定で有効化。既定オフかは未確認）。鍵は拡張自身は読まない（grep で確認） |
+| ライセンス / 大きさ | MIT / 508 KB |
+| pi 要件 | peer `>=0.81.0`（1.5.0 可） |
+| 設定 | `settings.json` の `powerline` キー（preset / layout / disabledSegments / customItems / git.polling / statusTtlMs）。宣言的で細かいが専用ファイルは無い |
+| 他との相性 | `setEditorComponent` と `setFooter` と複数の `powerline-*` widget を取る。editor を触る他の拡張とは排他。bash mode は利用者の入力した `!` コマンド用で、model の bash ツール判定とは別 |
+| 狭い幅・Windows | 狭い端末で 2 行目へ溢れ、`secondaryOverflow: wrap` あり。44 桁未満で welcome を省略、10 桁未満は元の描画へ退避（CHANGELOG）。Windows は git 窓のちらつきの修正済み（#180）。Nerd Font 前提（ASCII preset あり。自動検出は iTerm/WezTerm/Kitty 等で、Windows Terminal は列挙にない→`POWERLINE_NERD_FONTS` で強制） |
+| 性能 | git は非同期・TTL 1 秒（`statusTtlMs` で延長、`polling: branch/off`）。`POWERLINE_DEBUG_PERF` で計測可 |
+
+理由: 人気・保守は最良だが、**目的（表示）以外の面積が大きい**（editor 置換・shell・queue・外部 API 3 種）。表示だけ欲しい利用者には過剰で、保守費・衝突の確率が高い。
+
+### 2. @ravshansbox/pi-statusline@1.26.6 — 除外
+- 小さい（29 KB・MIT・DL 10,615）。表示: dir・branch・model・thinking・context・tokens・cache。**cost は無い**。設定ファイル無し（表示の変更は不可）。
+- 外部送信: **`agent_settled` ごとに現在の model へ直近 5 件の prompt（各 500 字）と最後の返答 2000 字を別要求で送る**（prompt 予測。既定オン。`/predict` で切替。README）。1 ターンごとに追加の費用と文脈の送信が発生する。
+- `set_session_name` ツールを追加し、model に毎回呼ばせる指示を入れる（`index.ts` 約 480 行目）。editor も置換（`@ravshansbox/pi-prompt-history` と排他）。
+- 理由: 設定不可・費用なし表示・追加の model 要求と、目的に反する副作用が多い。
+
+### 3. @narumitw/pi-starship@0.67.1 — 保留（次点）
+| 観点 | 内容 |
+|---|---|
+| 目的 | Starship 風の TOML。`$model $directory $git_branch ${fill} $context` のように書式を宣言。`${extension_status.<key>}` で特定の status を配置、`tokens_per_second`・cost（provider 報告か推定かの出所）・context |
+| 保守 | 更新 2026-11-08、narumiruna。CHANGELOG・skill つき（`/skill:configure-pi-starship`） |
+| DL | 4,336/月 |
+| 権限 | 既定のモジュールは読み取りのみ。opt-in: `github_pr` は `gh pr view` を 60 秒ごとに実行（認証済み `gh` 経由で GitHub へ repo・branch を送る。鍵は拡張が扱わない）、言語モジュールが `node --version` 等を実行（2 秒 timeout）、設定の Gist 共有は**許可を求めてから**アップロード（`runtime-and-security.md`、README「Share and import」）。「Configuration chat」は model を別会話で使う（`/starship` から明示的に開いた時だけ）。Docker/k8s/cloud 系は設定ファイルのメタデータのみ |
+| ライセンス / 大きさ | MIT / **2.1 MB**（依存: yaml, re2js, semver, smol-toml, pi-tui-kit） |
+| 設定 | `<agentDir>/pi-starship.toml` 1 つ。**宣言的設定は候補中で最も強い**。chezmoi で管理しやすい（テンプレート化可） |
+| 相性 | `setFooter` のみ（statusline との併用不可）。widget は取らない |
+| 狭い幅 | 折り返し・`$fill`・Unicode 幅を pi-tui の幅計算で処理。Windows は followUp キーの注意書きあり（Ctrl+Q）。Windows Terminal の崩れ報告は未確認 |
+| 性能 | git・workspace は footer の描画外で取得（30 秒の fallback＋イベント時）。描画は snapshot を読むだけ（README「Cached refresh lifecycle」） |
+
+理由: 機能は十分だが大きく、読むべき面（モジュール数）が多い。Starship の書式に慣れている場合だけ価値がある。
+
+### 4. @narumitw/pi-statusline@0.50.4 — **推奨（この軸の最推し）**
+| 観点 | 内容 |
+|---|---|
+| 目的 | 既定: model・thinking・cwd・branch・tools（作業中の tool / 待機）・context・時刻。Detailed で provider・tokens・cache・cost。dirty 件数、`⇡⇣+~?!`、PR 参照 |
+| 保守 | 更新 2026-11-04、同作者（pi-starship と同じ repo。CHANGELOG あり） |
+| DL | 3,311/月 |
+| 権限 | ネットワーク無し（`src` と `dist` に fetch / http 無し。grep で確認）。子プロセスは `pi.exec("git", ["--no-optional-locks","status","--porcelain=v1",...])` と `rev-parse --show-toplevel` のみ（`src/git-status.ts:25,32`）。`--no-optional-locks` で git の状態を変えない。ファイルは `<agentDir>/pi-statusline.json` の読み書きのみ（無ければ作らない）。鍵は触らない |
+| ライセンス / 大きさ | MIT / 432 KB（依存は `@narumitw/pi-tui-kit` のみ） |
+| pi 要件 | peer `*` |
+| 設定 | `/statusline` の対話メニュー（palette 7 種・情報レベル 3 段・custom の segment 順と `line_break`）。ファイルは `pi-statusline.json` 1 つ（環境変数・project 上書きなし）。chezmoi で配布可。変数・書式の言語は無い（「segments の順序のみ」） |
+| 相性 | `setFooter` + `setStatus(STATUSLINE_KEY)` のみ。pi-subagents・rpiv-todo の widget とは別枠で衝突しない。extension の status は `extension-status.ts` で表示。**tool 名の追加なし → permission 設定は不要** |
+| 狭い幅 | 優先度（context > model > branch > tools > cwd …）で低い順に段階的に削る。最後の 1 つが幅を超えると行を空にする（崩れない設計）。Powerline glyph と絵文字のフォント前提（Windows Terminal の既定フォントで出るかは**未確認**） |
+| 性能 | git の状態は footer の描画外で cache（README「Git state is cached outside footer rendering」）。頻度の数値は未確認 |
+
+弱点: 背景ジョブ・todo の専用セグメントは無い（それらは widget に出る）。context の `(auto)` 表示は pi の API 上できない（README）。
+
+### 5. @xynogen/pix-footer@0.2.17 — 保留
+- 27 KB・MIT・DL 2,647。model・thinking・tokens・cost・context・TPS・git・cwd・mode・extension status、価格とベンチマークスコア。設定は `~/.pi/agent/pix.json` の `pretty.footer`（segment ごとの on/off、`wrap`）。
+- 依存 `@xynogen/pix-data` が起動時にネットワークを使う: `modelgrep.com` と `benchlm.ai` からモデルのカタログ・順位表を取得して cache（`pix-data` の `fetch` を確認。送るのは公開 API の GET で鍵は付けない見込みだが、ヘッダは未確認）。pix 系（pix-pretty・pix-runtime）の巻き込みが大きい（「Full distro」で pix-core に同梱）。
+- 理由: 表示は有用だが、価格・score は不要で、エコシステムへの依存と外部取得が増える。
+
+### 6. pi-cache-optimizer@2.10.5 — 除外（この軸では）
+- 本体は**表示でなく最適化**: skill 一覧の system prompt の書き換え、`prompt_cache_key` の付与、request payload の変更、モデル設定の自動修復（`/cache-optimizer fix` は `models.json` を変更）、cache warming。footer は `setStatus` のみ（`index.ts:1614`）で、cache の統計を出す。
+- 909 KB・MIT・DL 17,566。更新 2026-11-04。要件 pi `>=0.82.0`。
+- 理由: cache 率の表示だけが目的だと、副作用（prompt の書き換え・設定の自動修復）が大きすぎる。cache 率は `@narumitw/pi-statusline` の Detailed（`R/W/CH`）でも出る。cache の最適化自体を欲しい場合は別軸で評価する。
+
+### 補助
+- **@marcosgilf/pi-footer@0.1.5**（10 KB・MIT・DL 1,227）: footer を置き換え、path・context・extension status・provider/model。依存の `pi-usage` が**OpenRouter の key エンドポイント（`https://openrouter.ai`）へ API 鍵つきで問い合わせる**（`pi-usage` の `fetch`、鍵は pi の認証を使う見込み。詳細未確認）。Copilot の利用量表示もある（経路未確認）。新しく（0.1.x）、リポジトリ URL が package.json に無い。除外寄りの保留。
+- **pi-agent-suite@2.22.1**（4.7 MB。ライセンス欄は npm に無く README は MIT）: footer・codex-quota（既定オフ）・multi-agent 層・context 管理・MCP client を同梱。peer が pi `1.5.0` 固定。multi-agent 層が pi-subagents と重複するため**除外**。
+- **pi-harness-runtime@1.1.477**: README 冒頭に「Beta Notice — Not Production Ready」。7.6 MB、依存に langchain・openai・deepagents。除外（依頼どおり）。
+
+## 軸の推奨
+
+| 選択肢 | 評価 |
+|---|---|
+| **A. 入れない（標準 footer のまま）** | 維持費ゼロ・衝突ゼロ。標準 footer は model・context・token・費用・git branch・setStatus を既に出す（pi 本体）。失うのは、色・折り返し・tools セグメント程度。subagents / todo は widget で見えるので、footer に無くても 12 分ジョブの進みは分かる |
+| **B. `@narumitw/pi-statusline`（推し）** | 外部送信なし・footer のみ・設定 1 JSON。標準にない価値: 狭幅の優先度削り、`tools`（実行中 tool / 入力待ち）、cache 率、PR 参照 |
+| C. `@narumitw/pi-starship` | TOML で完全に宣言。大きい（2.1 MB）。gh・言語コマンドは opt-in |
+| D. `pi-powerline-footer` | 人気・保守は最良。ただし editor 置換など面積が大きい |
+
+**最も推す 1 つ: B（`@narumitw/pi-statusline`）。ただし標準 footer で困っていなければ A。** 好みの問題が大きく、表示を磨くことの価値は安全性・保守費に比べて低い。
+
+### 入れる場合の設定
+- `pi-stock-packages` に足す行: `npm:@narumitw/pi-statusline@0.50.4`
+- permission の追加: **不要**（ツールを追加しない。git 読み取りは拡張の子プロセスで、model の bash 経路ではない）。
+- 利用者の設定ファイル: 既定のままなら不要。chezmoi で配るなら `<agentDir>/pi-statusline.json`（例: `{"palettePreset":"ocean","segments":["model","thinking","cwd","branch","tools","context","tokens","cache","cost"]}`。README の例を基にした推測。segment 名は README の表で確認済み: `provider model thinking cwd branch tools context tokens cache cost time turn brand`）。
+- 併用禁止: `pi-starship`・`pi-powerline-footer` など、他の `setFooter` を呼ぶ拡張。
+
+## 未確認
+- 実機（Windows Terminal・WSL・狭い端末）での表示。Issue 側の崩れ報告の検索（GitHub の Issue は読んでいない。tarball の README・CHANGELOG のみ）。
+- rpiv-ask-user-question と footer / editor 置換の相互作用。
+- powerline の Working Vibes・autoFollowUp の既定（オン / オフ）。
+- pix-data / pi-usage の fetch の全送信内容（ヘッダ・鍵の扱いの細部）。
+- `@narumitw/pi-statusline` の extension status を footer のどこにどう出すか（`src/extension-status.ts` を細かく読んでいない）。
+- 描画頻度の実測。
+
+## 利用者に聞きたいこと
+1. 標準 footer（A）で足りているか。不足があれば何か（cost・cache 率・tools・幅の折り返し）。
+2. Windows Terminal のフォント（Nerd Font / Powerline glyph / 絵文字）は使えるか。使えない場合、`pi-statusline` の見た目が崩れる可能性がある（その場合は A、または powerline の ASCII preset）。

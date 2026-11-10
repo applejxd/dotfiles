@@ -7,11 +7,13 @@
 // see docs/spec/guard/pi-decide.md#ts-版への移植
 import type { Ctx } from "./context.ts";
 import { tableSet } from "./context.ts";
-import { expandUser, isAbsolute, join, normpath, sep } from "./pathutil.ts";
+import { expandUser, isAbsolute, join, normpath, realpathLoose, sep, strictResolve } from "./pathutil.ts";
 import { basename, pyRegex, shlexSplit, ShlexError, split, stripChars } from "./pystr.ts";
-import { argv } from "./shellparse.ts";
+import { argv, parse } from "./shellparse.ts";
+import type { Command } from "./shellparse.ts";
 import { splitCommandSegments } from "./normalize.ts";
 import { inlineCodeHead } from "./rules_exec.ts";
+import { ledgerCommonDirs, ledgerRoots, underLedgerRoot } from "./ledger_root.ts";
 import {
 	baseName,
 	clip200,
@@ -49,6 +51,11 @@ const GUARD_TARGETS = [
 	"/.git/hooks",
 	".git/config",
 	".git/hooks",
+	// 作業台帳の置き場 (ハーネスだけが fs で書く)。"/.tmp/work/" は "/.tmp/worktrees/" に当たらない
+	"/.git/pi-work",
+	".git/pi-work",
+	"/.tmp/work/",
+	".tmp/work/",
 ];
 
 const guardHits = (token: string): boolean => {
@@ -56,8 +63,467 @@ const guardHits = (token: string): boolean => {
 	return GUARD_TARGETS.some((t) => expanded.includes(t));
 };
 
-const INLINE_PATH_RE = pyRegex(`['"]([^'"]*(?:\\.claude|\\.copilot|/agents|\\.git/|\\.pi/agent|config/pi/harness)[^'"]*)['"]`, "g");
+// 作業台帳の置き場を、成分境界つきで照合する (`.tmp/worktrees` には当たらず、置き場そのもの `.tmp/work` には当たる)。
+// 先頭の境界は付けない: `-o.tmp/work/x` のような短いオプションと値の連結にも当てるため (読み取り専用コマンドは対象外なので偽陽性は出ない)
+const LEDGER_RE = /\.tmp\/work(?:\/|$)|\.git\/pi-work(?:\/|$)/u;
+
+// 台帳のパスが引数に現れても書き込まない、既知の読み取り専用コマンド (これ以外は fail-closed で拒否する)
+const LEDGER_READ_ONLY = new Set([
+	"cat", "ls", "head", "tail", "grep", "egrep", "fgrep", "rg", "wc", "stat", "file", "jq", "find", "diff", "less", "more",
+	"du", "realpath", "readlink", "basename", "dirname", "echo", "printf", "test", "[", "pwd", "sha256sum", "md5sum",
+	"cut", "sort", "tac", "nl", "column",
+]);
+const LEDGER_GIT_READ = new Set(["log", "show", "diff", "status", "rev-parse", "ls-files", "blame", "grep", "cat-file", "rev-list"]);
+const FIND_WRITE_FLAGS = new Set(["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"]);
+
+/** `token` (または `--opt=値` の値) が、cwd 基点の絶対パス・symlink の実体のどちらかで台帳に当たるか。動的な展開は字面だけ見る。 */
+function ledgerHit(token: string, base: string | null): boolean {
+	const raw = stripChars(token, "'\"");
+	const forms = [raw];
+	const eq = raw.indexOf("=");
+	if (eq > 0) forms.push(raw.slice(eq + 1));
+	// 連結した短いオプションの値 (`-oledger/x`・`-aoledger/x`): 先頭の `-` と 1〜3 文字の英字を剥いだ候補を全部加える
+	if (/^-[A-Za-z]/u.test(raw)) {
+		for (let n = 1; n <= 3; n++) {
+			if (!/^[A-Za-z]+$/u.test(raw.slice(1, 1 + n))) break;
+			forms.push(raw.slice(1 + n));
+		}
+	}
+	for (const form of forms) {
+		if (!form) continue;
+		if (LEDGER_RE.test(normalizeGuardPath(form))) return true;
+		if (base === null || Array.from("$`").some((ch) => form.includes(ch))) continue;
+		const expanded = expandUser(form);
+		const abs = normpath(isAbsolute(expanded) ? expanded : join(base, expanded));
+		if (LEDGER_RE.test(abs.replaceAll(sep, "/"))) return true;
+		if (LEDGER_RE.test(realpathLoose(abs).replaceAll(sep, "/"))) return true;
+		// `.git` 以外の名前の git-common-dir (separate-git-dir や GIT_DIR) の実体: fs で解いた置き場と照合する
+		const roots = ledgerRoots(base);
+		if (underLedgerRoot(abs, roots) || underLedgerRoot(realpathLoose(abs), roots)) return true;
+		// symlink と `..` を成分ごとに順に解決する (`link/..` を先に畳まない)。失敗 (循環・権限など) は字面の判定のままにする
+		try {
+			const strict = strictResolve(isAbsolute(expanded) ? expanded : `${base}${sep}${expanded}`);
+			if (LEDGER_RE.test(strict.replaceAll(sep, "/"))) return true;
+			if (underLedgerRoot(strict, roots)) return true;
+		} catch {
+			// 安全側: 上の字面の判定に任せる
+		}
+	}
+	return false;
+}
+
+/** git の読み取り専用のサブコマンドで、`--output` / `-o` を持たないか。`-C` の基点は `bases` へ積む。 */
+function gitReadOnly(tokens: string[], base: string | null): { readOnly: boolean; base: string | null } {
+	let cur = base;
+	let i = 1;
+	while (i < tokens.length && tokens[i].startsWith("-")) {
+		const t = tokens[i];
+		if (t === "-C" && i + 1 < tokens.length) {
+			cur = chdirBase(cur, tokens[i + 1]);
+			i += 2;
+		} else if (t.length > 2 && t.startsWith("-C")) {
+			cur = chdirBase(cur, t.slice(2));
+			i += 1;
+		} else if (t === "-c" && i + 1 < tokens.length) {
+			i += 2;
+		} else {
+			i += 1;
+		}
+	}
+	const sub = tokens[i];
+	const outputFlag = tokens.some((t) => t === "-o" || t.startsWith("--output") || (/^-o./u.test(t) && !t.startsWith("--")));
+	return { readOnly: sub !== undefined && LEDGER_GIT_READ.has(sub) && !outputFlag, base: cur };
+}
+
+/** `git -C <dir>` の基点の更新。 */
+function chdirBase(cur: string | null, dir: string): string | null {
+	const d = expandUser(stripChars(dir, "'\""));
+	if (cur === null && !isAbsolute(d)) return null;
+	if (Array.from("$`").some((ch) => d.includes(ch))) return null;
+	const full = isAbsolute(d) ? d : `${cur ?? ""}${sep}${d}`;
+	const lexical = normpath(full);
+	try {
+		// symlink の後ろの `..` を字句で畳むと実体とずれるので、ずれる・解決できないときは基点を不明 (null) にする
+		return strictResolve(full) === lexical ? lexical : null;
+	} catch {
+		return null;
+	}
+}
+
+/** 値を取るラッパーのオプション (次のトークンを 1 つ食う)。 */
+const WRAPPER_VALUE_OPTS: Record<string, Set<string>> = {
+	env: new Set(["-u", "--unset", "-C", "--chdir"]),
+	timeout: new Set(["-s", "--signal", "-k", "--kill-after"]),
+	time: new Set(["-f", "--format", "-o", "--output"]),
+	nice: new Set(["-n", "--adjustment"]),
+	stdbuf: new Set(["-o", "-i", "-e"]),
+	exec: new Set(["-a"]),
+};
+const WRAPPERS = new Set(["env", "timeout", "time", "nice", "nohup", "command", "stdbuf", "builtin", "exec"]);
+
+/**
+ * 既知のラッパー (env / timeout / time / nice / nohup / command / stdbuf / builtin / exec) 自身のオプションを読み飛ばし、
+ * 実コマンドの argv と、読み飛ばしたトークン (台帳向けの引数があり得るので別に検査する) を返す。解釈できない形は変えずに返す。
+ */
+function unwrapCommand(tokens: string[]): { rest: string[]; skipped: string[] } {
+	let cur = tokens;
+	const skipped: string[] = [];
+	for (let depth = 0; depth < 8 && cur.length > 0; depth++) {
+		const head = baseName(cur[0]);
+		if (!WRAPPERS.has(head)) break;
+		const valueOpts = WRAPPER_VALUE_OPTS[head] ?? new Set<string>();
+		let i = 1;
+		let ok = true;
+		while (i < cur.length) {
+			const t = cur[i];
+			if (head === "env" && (t.startsWith("-S") || t.startsWith("--split-string"))) {
+				ok = false; // 文字列から命令を作る形は解釈しない (読み取り専用に見えず、拒否側へ倒れる)
+				break;
+			}
+			if (head === "env" && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(t)) {
+				i += 1;
+			} else if (t === "--") {
+				i += 1;
+				break;
+			} else if (valueOpts.has(t)) {
+				i += 2;
+			} else if (t.startsWith("-") && t.length > 1) {
+				i += 1;
+			} else {
+				break;
+			}
+		}
+		if (!ok) break;
+		if (head === "timeout" && i < cur.length) i += 1; // DURATION
+		skipped.push(...cur.slice(1, Math.min(i, cur.length)));
+		cur = cur.slice(i);
+	}
+	return { rest: cur, skipped };
+}
+
+/** find の探索起点だけ (先頭の -H/-L/-P/-D…/-O… を読み飛ばし、最初の式 (`-name`・`(`・`!`) の手前まで)。式の値は対象に含めない。 */
+function findStartPoints(args: string[]): string[] {
+	let i = 0;
+	while (i < args.length && /^-(?:[HLP]|D\S*|O\S*)$/u.test(args[i])) i += 1;
+	const out: string[] = [];
+	for (; i < args.length; i++) {
+		const t = args[i];
+		if (t.startsWith("-") || t === "(" || t === "!" || t === ",") break;
+		out.push(t);
+	}
+	return out;
+}
+
+/** common-dir 自身 (台帳を含む `.git` 以外の名前の置き場) と等しい対象か。削除・移動系だけがこれで拒否される。 */
+function commonDirHit(token: string, base: string | null): boolean {
+	if (base === null) return false;
+	const raw = stripChars(token, "'\"");
+	if (!raw || raw.startsWith("-") || Array.from("$`").some((ch) => raw.includes(ch))) return false;
+	const commons = ledgerCommonDirs(base);
+	if (commons.length === 0) return false;
+	const expanded = expandUser(raw);
+	const abs = normpath(isAbsolute(expanded) ? expanded : join(base, expanded));
+	const forms = [abs, realpathLoose(abs)];
+	try {
+		forms.push(strictResolve(isAbsolute(expanded) ? expanded : `${base}${sep}${expanded}`));
+	} catch {
+		// 字面の判定に任せる
+	}
+	return forms.some((f) => commons.includes(f.length > 1 && f.endsWith(sep) ? f.slice(0, -1) : f));
+}
+const LEDGER_REMOVE_MOVE = new Set(["rm", "rmdir", "unlink", "mv", "shred"]);
+
+/** 台帳への書き込み・削除 (リダイレクト・書き込みオプション・symlink の別名・置き場そのものの削除) を、追加の判定として拒否する。 */
+function checkLedgerWrite(ctx: Ctx, cmd: string): string | null {
+	const workspace = workspaceRoot(ctx);
+	const deny = (target: string): string =>
+		`作業台帳の置き場 (\`${target}\`) への書き込み・削除は許可されていません。\n` +
+		"台帳はハーネスだけが書きます (`.tmp/work`・`.git/pi-work`)。読み取りは cat / grep / ls などを使ってください。";
+	for (const target of redirectWriteTargets(ctx, cmd)) {
+		if (ledgerHit(target, workspace)) return deny(target);
+	}
+	for (const command of commands(ctx, cmd)) {
+		const all = argv(command);
+		if (all.length === 0) continue;
+		const { rest: tokens, skipped } = unwrapCommand(all);
+		// ラッパー自身の引数 (`env -C .tmp/work` など) は従来どおり検査する
+		for (const token of skipped) {
+			if (ledgerHit(token, workspace)) return deny(token);
+		}
+		if (tokens.length === 0) continue;
+		const head = baseName(tokens[0]);
+		// 削除・移動は、台帳を含む common-dir 自身が対象でも拒否する (配下だけでは見えない)
+		if (LEDGER_REMOVE_MOVE.has(head) || (head === "find" && tokens.includes("-delete"))) {
+			for (const token of head === "find" ? findStartPoints(tokens.slice(1)) : tokens.slice(1)) {
+				if (commonDirHit(token, workspace)) return deny(token);
+			}
+		}
+		let base = workspace;
+		let readOnly = LEDGER_READ_ONLY.has(head);
+		if (head === "git") {
+			const g = gitReadOnly(tokens, workspace);
+			readOnly = g.readOnly;
+			base = g.base;
+			// `-C` の基点が不明 (symlink の後ろの `..` など) で書き込みうる形は、台帳に当たりうるとして拒否する
+			if (base === null && workspace !== null && !readOnly) return deny("git -C");
+		} else if (head === "find") {
+			readOnly = !tokens.some((t) => FIND_WRITE_FLAGS.has(t));
+		} else if (head === "less") {
+			readOnly = !tokens.some((t) => /^-[oO]/u.test(t) || t.startsWith("--log-file") || t.startsWith("--LOG-FILE"));
+		} else if (head === "sort") {
+			readOnly = !tokens.some((t) => /^-[A-Za-z]*o/u.test(t) || t.startsWith("--output"));
+		} else if (/^python3?(?:\.\d+)?$/u.test(head)) {
+			readOnly = !tokens.includes("-c") && tokens.some((t) => t.endsWith("scripts/work_stats.py"));
+		}
+		// ledger の中へ入ると、以後の相対パスの書き込みを字面で見られない
+		const enters = head === "cd" || head === "pushd" || head === "chdir";
+		if (readOnly && !enters) continue;
+		for (const token of tokens.slice(1)) {
+			if (ledgerHit(token, base)) return deny(token);
+		}
+	}
+	return null;
+}
+
+const INLINE_PATH_RE = pyRegex(`['"]([^'"]*(?:\\.claude|\\.copilot|/agents|\\.git/|\\.pi/agent|config/pi/harness|\\.tmp/work/)[^'"]*)['"]`, "g");
 const HOOK_ENV_RE = pyRegex("\\b(AGENTS_CONFIG_DIR|PYTHONPATH|CLAUDE_[A-Z_]*HOOK[A-Z_]*)=(\\S*)", "g");
+
+// シェルが値をコードとして実行する入口の環境変数 (名前は完全一致。BASH_FUNC_ だけ前方一致)。
+// 検出する形・入れないもの・限界は docs/spec/guard/pi-guard.md#コードの入口になる環境変数
+// 通常の引数は走査しない: 単純コマンドの語の列の、代入になりうる位置だけを見る (同じ規則が rules_guard.py の code_entry_env にある)
+const ENTRY_NAMES = new Set(["PS4", "PROMPT_COMMAND", "BASH_ENV", "LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"]);
+const ENTRY_ASSIGN_WORD_RE = /^([A-Za-z_][A-Za-z0-9_]*|BASH_FUNC_[^=]*)(?:\[[^\]]*\])?\+?=([\s\S]*)$/u;
+const PS4_EXPANSION_RE = /\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*(?:\[(?:[0-9]+|@)\])?\})/gu;
+const ENTRY_KEYWORDS = new Set(["if", "then", "else", "elif", "do", "while", "until", "!", "{", "}"]);
+const ENTRY_WRAPPERS = new Set(["env", "sudo", "doas", "time", "command", "nice", "nohup", "timeout", "stdbuf", "xargs", "exec", "builtin"]);
+const ENTRY_WRAPPER_VALUE_OPTS: Record<string, Set<string>> = {
+	env: new Set(["-u", "--unset", "-C", "--chdir", "--argv0"]),
+	sudo: new Set([
+		"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T", "-U", "-r", "-t",
+		"--user", "--group", "--host", "--prompt", "--chdir", "--close-from", "--role", "--type", "--other-user", "--command-timeout",
+	]),
+	doas: new Set(["-u", "-C"]),
+	time: new Set(["-f", "--format", "-o", "--output"]),
+	nice: new Set(["-n", "--adjustment"]),
+	timeout: new Set(["-s", "--signal", "-k", "--kill-after"]),
+	stdbuf: new Set(["-i", "-o", "-e", "--input", "--output", "--error"]),
+	xargs: new Set([
+		"-I", "-n", "-P", "-s", "-L", "-E", "-d", "-a",
+		"--max-args", "--max-procs", "--max-lines", "--max-chars", "--delimiter", "--arg-file", "--process-slot-var",
+	]),
+	exec: new Set(["-a"]),
+};
+const ENTRY_DECLARE = new Set(["export", "declare", "typeset", "local", "readonly"]);
+const ENTRY_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
+
+const entryName = (name: string): boolean => ENTRY_NAMES.has(name) || name.startsWith("BASH_FUNC_");
+
+/** PS4 の値が、リテラルと単純な展開 (`$NAME`・`${NAME}`・`${NAME[数字]}`・`${NAME[@]}`) だけか。 */
+function ps4Safe(value: string): boolean {
+	return !/[$`\\]/u.test(value.replace(PS4_EXPANSION_RE, ""));
+}
+
+/** `NAME=値`・`NAME+=値` の語が名簿の変数への代入なら名前を返す (値が安全な PS4 は除く)。 */
+function entryAssign(word: string): string | null {
+	const m = ENTRY_ASSIGN_WORD_RE.exec(word);
+	if (m === null || !entryName(m[1])) return null;
+	return m[1] === "PS4" && ps4Safe(m[2]) ? null : m[1];
+}
+
+/** `read`・`printf -v` の設定先の変数名 (`NAME[idx]` の添字は外す)が名簿なら名前を返す。値は取れないので常に拒否側。 */
+function entryTarget(word: string | null): string | null {
+	if (word === null) return null;
+	const name = word.replace(/\[.*$/su, "");
+	return entryName(name) ? name : null;
+}
+
+/** 短いオプションを読む。`valueChars` の文字は値を取る (同じ語の残り、無ければ次の語)。`--` と長いオプションは読み飛ばす。 */
+function shortOpts(args: string[], valueChars: string): { opts: Array<[string, string | null]>; operands: string[] } {
+	const opts: Array<[string, string | null]> = [];
+	let i = 0;
+	for (; i < args.length; i++) {
+		const t = args[i];
+		if (t === "--") {
+			i += 1;
+			break;
+		}
+		if (t.startsWith("--")) continue;
+		if (!t.startsWith("-") || t.length < 2) break;
+		for (let k = 1; k < t.length; k++) {
+			if (valueChars.includes(t[k])) {
+				const rest = t.slice(k + 1);
+				if (rest !== "") {
+					opts.push([t[k], rest]);
+				} else {
+					opts.push([t[k], i + 1 < args.length ? args[i + 1] : null]);
+					i += 1;
+				}
+				break;
+			}
+			opts.push([t[k], null]);
+		}
+	}
+	return { opts, operands: args.slice(i) };
+}
+
+/** `env -S` の文字列 (語の残り・`=` の後・次の語) と、消費した語数。 */
+function envSplitString(args: string[], j: number): { text: string | null; used: number } {
+	const t = args[j];
+	if (t === "-S" || t === "--split-string") return { text: j + 1 < args.length ? args[j + 1] : null, used: 2 };
+	if (t.startsWith("--split-string=")) return { text: t.slice("--split-string=".length), used: 1 };
+	if (t.startsWith("-S") && !t.startsWith("--")) return { text: t.slice(2), used: 1 };
+	return { text: null, used: 0 };
+}
+
+/** 1 つの単純コマンドの語の列から、名簿の変数の設定・コールバックの入口を見つける。 */
+function entryInWords(words: string[], depth: number): string | null {
+	let i = 0;
+	while (i < words.length && ENTRY_KEYWORDS.has(words[i])) i += 1;
+	while (i < words.length && ENTRY_ASSIGN_WORD_RE.test(words[i])) {
+		const hit = entryAssign(words[i]);
+		if (hit !== null) return hit;
+		i += 1;
+	}
+	if (i >= words.length) return null;
+	const head = baseName(words[i]);
+	const args = words.slice(i + 1);
+	if (ENTRY_WRAPPERS.has(head)) {
+		const valueOpts = ENTRY_WRAPPER_VALUE_OPTS[head] ?? new Set<string>();
+		let j = 0;
+		while (j < args.length) {
+			const t = args[j];
+			if (t === "--") {
+				j += 1;
+				break;
+			}
+			if (head === "env" && (t.startsWith("-S") || t.startsWith("--split-string"))) {
+				const s = envSplitString(args, j);
+				if (s.text === null) return null;
+				return entryInWords(["env", ...shlexOrSplit(s.text), ...args.slice(j + s.used)], depth);
+			}
+			if (t.startsWith("-") && t.length > 1) {
+				j += valueOpts.has(t) ? 2 : 1;
+				continue;
+			}
+			break;
+		}
+		if (head === "timeout" && j < args.length) j += 1; // DURATION
+		return entryInWords(args.slice(j), depth);
+	}
+	if (head === "find") {
+		// -exec 系の直後から `;` / `+` の手前までを、コマンドの語の列として見る (`{}` はそのまま)
+		for (let k = 0; k < args.length; k++) {
+			if (!["-exec", "-execdir", "-ok", "-okdir"].includes(args[k])) continue;
+			let e = k + 1;
+			while (e < args.length && args[e] !== ";" && args[e] !== "+") e += 1;
+			const hit = entryInWords(args.slice(k + 1, e), depth);
+			if (hit !== null) return hit;
+			k = e;
+		}
+		return null;
+	}
+	if (ENTRY_DECLARE.has(head)) {
+		for (const t of args) {
+			const hit = entryAssign(t);
+			if (hit !== null) return hit;
+		}
+		return null;
+	}
+	if (head === "printf") {
+		for (const [ch, value] of shortOpts(args, "v").opts) {
+			if (ch === "v") return entryTarget(value);
+		}
+		return null;
+	}
+	if (head === "read") {
+		const { opts, operands } = shortOpts(args, "adinNptu");
+		for (const [ch, value] of opts) {
+			if (ch === "a") {
+				const hit = entryTarget(value);
+				if (hit !== null) return hit;
+			}
+		}
+		for (const t of operands) {
+			const hit = entryTarget(t);
+			if (hit !== null) return hit;
+		}
+		return null;
+	}
+	if (head === "mapfile" || head === "readarray") {
+		const { opts, operands } = shortOpts(args, "dnOsuCc");
+		if (opts.some(([ch]) => ch === "C")) return "mapfile -C";
+		for (const t of operands) {
+			const hit = entryTarget(t);
+			if (hit !== null) return hit;
+		}
+		return null;
+	}
+	if (head === "compgen" || head === "complete") {
+		return shortOpts(args, "AFGWPSXoC").opts.some(([ch]) => ch === "C") ? "compgen -C" : null;
+	}
+	if (ENTRY_SHELLS.has(head) && depth < 3) {
+		for (let k = 0; k < args.length; k++) {
+			const t = args[k];
+			if (!t.startsWith("-") || t.startsWith("--") || t.length < 2) break;
+			if (t.slice(1).includes("c")) {
+				if (k + 1 >= args.length) return null;
+				for (const inner of parse(args[k + 1])) {
+					const hit = entryInCommand(inner, depth + 1);
+					if (hit !== null) return hit;
+				}
+				return null;
+			}
+		}
+	}
+	return null;
+}
+
+/** 単純コマンドの先頭 (キーワード・前置代入を除く) がシェルか。 */
+function isShellCommand(words: string[]): boolean {
+	let i = 0;
+	while (i < words.length && (ENTRY_KEYWORDS.has(words[i]) || ENTRY_ASSIGN_WORD_RE.test(words[i]))) i += 1;
+	return i < words.length && ENTRY_SHELLS.has(baseName(words[i]));
+}
+
+/** 単純コマンド 1 つ。シェルが here-string (`<<<`) を受けるときは、その文字列も `-c` と同じく調べる (深さ 3 まで)。 */
+function entryInCommand(command: Command, depth: number): string | null {
+	const words = argv(command);
+	const hit = entryInWords(words, depth);
+	if (hit !== null || depth >= 3 || !isShellCommand(words)) return hit;
+	for (const r of command.redirects) {
+		if (r.op !== "<<<" || r.target === null) continue;
+		for (const inner of parse(r.target.value)) {
+			const h = entryInCommand(inner, depth + 1);
+			if (h !== null) return h;
+		}
+	}
+	return null;
+}
+
+/** 正規化は here-string の本文を別のセグメントにする。シェル以外が受ける本文はデータなので、そのセグメントは見ない。 */
+function dataHereStrings(cmd: string): Set<string> {
+	const skip = new Set<string>();
+	for (const c of parse(cmd)) {
+		if (isShellCommand(argv(c))) continue;
+		for (const r of c.redirects) {
+			if (r.op === "<<<" && r.target !== null) skip.add(r.target.value.trim());
+		}
+	}
+	return skip;
+}
+
+/** コードの入口になる環境変数の設定・コールバックの入口を見つける。見つからなければ null。 */
+export function codeEntryEnv(ctx: Ctx, cmd: string): string | null {
+	const skip = dataHereStrings(cmd);
+	for (const segment of segments(ctx, cmd)) {
+		if (segment !== cmd && skip.has(segment.trim())) continue;
+		for (const command of parse(segment)) {
+			const hit = entryInCommand(command, 0);
+			if (hit !== null) return hit;
+		}
+	}
+	return null;
+}
 
 const MUTATING = new Set([
 	"rm",
@@ -80,6 +546,8 @@ const CHEZMOI_MUTATING = new Set(["forget", "destroy", "remove", "unmanage"]);
 
 /** hook や permission 設定そのものを無効化しようとしていないか。 */
 export function checkGuardTampering(ctx: Ctx, cmd: string): string | null {
+	const ledger = checkLedgerWrite(ctx, cmd);
+	if (ledger !== null) return ledger;
 	// リダイレクト先がガード設定なら、どのコマンドでも上書きになる
 	for (const target of redirectWriteTargets(ctx, cmd)) {
 		if (guardHits(target)) {
@@ -127,6 +595,15 @@ export function checkGuardTampering(ctx: Ctx, cmd: string): string | null {
 		return (
 			`\`${name}\` を差し替えて hook の設定読み込み先を変えようとしています。\n` +
 			"hook や permission の無効化に繋がるため許可されていません。"
+		);
+	}
+
+	const entry = codeEntryEnv(ctx, cmd);
+	if (entry !== null) {
+		return (
+			`シェルが値をコードとして実行する入口の環境変数 (\`PS4\` など。今回は \`${entry}\`) の設定は許可されていません。\n` +
+			"対象は PROMPT_COMMAND・BASH_ENV・LD_PRELOAD・LD_AUDIT・DYLD_INSERT_LIBRARIES・BASH_FUNC_* と、" +
+			"値にコマンド置換などを含む PS4、`compgen -C` / `complete -C` / `mapfile -C` です。"
 		);
 	}
 

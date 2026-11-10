@@ -13,6 +13,9 @@
 !.config/agents/command_policy.py
 !.config/agents/common.toml
 !.config/agents/agentcore_websearch_mcp.py
+# 検索の核と MCP サーバ (スキル web-search の外の中立な場所)。鍵の同期 (349) も呼ぶので Windows にも配る
+!.config/agents/websearch/
+!.config/agents/websearch/**
 # Git の user (Bitwarden 由来) と global ignore。~/.config/git/config が [include] で読む。
 # ディレクトリだけを戻す。/** で戻すと、下の「一度だけ展開する」除外まで打ち消す
 !.config/git/
@@ -150,12 +153,12 @@ Documents/**
 .vscode-server/**
 {{- end }}
 
-# 会社 PC は検索を AgentCore の MCP に一本化する。web-search skill と、それに依存する imozuru は個人用 (is-work でない機) だけに配る
+# 会社 PC は検索を AgentCore の MCP に一本化する。それに依存しない自作の検索の核と imozuru は個人用 (is-work でない機) だけに配る
 # (LLM のプロバイダ (llm-provider) とは別の軸。会社 PC で Copilot を使っても配らない)
 # see docs/spec/web-search.md#配る範囲、docs/spec/imozuru.md#配る範囲
 {{- if eq (includeTemplate "is-work" .) "true" }}
-.claude/skills/web-search/
-.claude/skills/web-search/**
+.config/agents/websearch/
+.config/agents/websearch/**
 .claude/skills/imozuru/
 .claude/skills/imozuru/**
 {{- end }}
@@ -255,3 +258,37 @@ orca/**
 # 取り込むと版が固定されて本体の更新に追従しなくなる。see docs/spec/structure.md
 .claude/skills/herdr
 .claude/skills/herdr/**
+{{ if eq (includeTemplate "pi-profile" .) "stock" }}
+# pi の stock プロファイル: 自作の拡張・ハーネス・prompts・broker 用の設定を配らない
+# (settings.json と AGENTS.md は中身をプロファイルで切り替える)。
+# 拡張は自作のディレクトリだけ (一覧は pi-own-extensions)。pi-permission-system の設定は配る。
+# see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
+{{ range (includeTemplate "pi-own-extensions" . | splitList "\n") -}}
+{{ $name := trim . -}}
+{{ if and $name (not (hasPrefix "#" $name)) -}}
+.pi/agent/extensions/{{ $name }}
+.pi/agent/extensions/{{ $name }}/**
+{{ end -}}
+{{ end -}}
+.pi/agent/prompts
+.pi/agent/prompts/**
+.pi/agent/models.json
+.config/pi
+.config/pi/**
+{{ else }}
+# custom: stock だけが配る permission-system の設定 (modify_ スクリプト) は配らない
+.pi/agent/extensions/pi-permission-system
+.pi/agent/extensions/pi-permission-system/**
+# plan mode の設定 (@narumitw/pi-plan-mode) も stock の package の設定なので配らない
+.pi/agent/pi-plan-mode.json
+# pi-subagents の設定 (単数形 subagent/。複数形 subagents/ は自作の拡張) も stock の package の設定なので配らない
+.pi/agent/extensions/subagent
+.pi/agent/extensions/subagent/**
+# 圧縮の設定 (@thgilciffart/pi-compaction) も stock の package の設定なので配らない
+.pi/agent/compaction.json
+# stock の MCP 設定 (~/.pi/agent/mcp.json。generate.py --target pi-mcp) も配らない。custom の MCP は harness の rules.json
+.pi/agent/mcp.json
+# cc-safety-net の規則 (~/.cc-safety-net。stock の package の設定) も配らない
+.cc-safety-net
+.cc-safety-net/**
+{{ end -}}

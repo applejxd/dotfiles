@@ -21,7 +21,7 @@ sops (age) に置き、リポジトリにはそれを引くテンプレートと
 | --- | --- | --- |
 | Git の `user.name` / `user.email` | Bitwarden の Login 項目 `gitconfig`（Username と、カスタムフィールド `email`） | `~/.config/git/user` |
 | sops 用の age 秘密鍵 | Bitwarden の Secure Note `SOPS age identity personal`（ノートに鍵の行） | `~/.config/sops/age/keys.txt`（mode 600） |
-| Web 検索の API キー（Brave・Exa・Tavily・OpenAlex） | Bitwarden の Login 項目 `websearch-<名前>`（Password 欄） | `~/.config/agents/websearch-keys.json`（`apply` が `websearch.py sync-keys` で作る。[仕様](web-search.md#鍵)） |
+| Web 検索の API キー（Brave・Exa・Tavily・OpenAlex） | Bitwarden の Login 項目 `websearch-<名前>`（Password 欄） | `~/.config/agents/websearch-keys.json`（`apply` が核の `sync-keys` で作る。[仕様](web-search.md#鍵)） |
 | Hugging Face のアクセストークン | Bitwarden の Login 項目 `huggingface-token`（Password 欄） | `~/.cache/huggingface/token`（`apply` が `uvx hf auth login` で作らせる。[仕様](#hugging-face-のトークンの-login)） |
 | プロジェクトの API キー | 各プロジェクトの `.env.json`（sops で暗号化してコミット） | ファイルには出さない。mise がプロジェクト内でだけ環境変数に載せる |
 | sudo パスワード | どこにも保存しない | スクリプトの `sudo -v` が実行時に尋ねる（`home/.chezmoitemplates/sudo-keepalive.sh.tmpl` を使うスクリプトと、短い `130` の先頭の `sudo -v`。変数に持たない） |

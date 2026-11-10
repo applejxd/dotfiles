@@ -5,7 +5,7 @@
 //   {"config": <judge.common>}   → integrationConfig の結果
 //
 // env を渡すと、自由区の判定の git に渡す環境を置き換える (偽の git で起動回数を数える試験用)。
-// see docs/change/0053-worktree-integration-gate.md
+// see docs/change/closed/0053-worktree-integration-gate.md
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";

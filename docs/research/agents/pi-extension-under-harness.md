@@ -1,8 +1,8 @@
 # ハーネス付きの pi（`pis`）へ、明示の `-e` で拡張を足してよいか
 
-> **用語の注記**: この文書の「ハーネス」は、現在の「フルガード」（`pis` で効くガード）を指す。呼称の整理は [CHG-0023](../../change/0023-guard-terminology.md)、対応表は [pi のガード](../../spec/guard/pi-guard.md#用語)。
+> **用語の注記**: この文書の「ハーネス」は、現在の「フルガード」（`pis` で効くガード）を指す。呼称の整理は [CHG-0023](../../change/closed/0023-guard-terminology.md)、対応表は [pi のガード](../../spec/guard/pi-guard.md#用語)。
 
-<!-- 現在の総合判断は docs/change/0020-pi-migration.md と docs/spec/guard/pi-guard.md が正本。
+<!-- 現在の総合判断は docs/change/closed/0020-pi-migration.md と docs/spec/guard/pi-guard.md が正本。
      ここは「いつ何を観測したか」を積む場所 -->
 
 ## 記録 E5 — 2026-10-11

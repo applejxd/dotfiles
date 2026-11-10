@@ -3,7 +3,7 @@
 `pis`（pi を Fence で囲う起動）の、認証ブローカー（Copilot・GitHub・検索）の正本。
 ホスト側の Envoy が本物の認証情報を持ち、境界の内側にはダミーか、ポートとソケットの在りかだけを渡す。
 実装は `home/dot_local/share/ocs/broker.py`（Envoy の設定と寿命）、`pi.py`（起動の組み立て）、`pis.py`（`--no-broker`）。
-経緯は [CHG-0037](../../change/0037-pis-usability-and-telemetry.md)、調べた記録は
+経緯は [CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md)、調べた記録は
 [調査 D2〜D6](../../research/agents/agent-auth-delegation.md)。
 
 ## 目的と責務
@@ -120,7 +120,7 @@ CLI: `pis --no-broker` は**3 つとも**無効にする（設定が `auto` で�
   - 値: 1 行・ASCII の印字可能文字・空白なし・255 文字以下（違反は起動拒否）。値は例外・ログ・標準エラーに出さない
 - **個人の機**は `gh auth token`（`gh auth login` のブラウザ認証で保存された OAuth トークン）。権限が広く、**絞れない**（個人用の割り切り）
 - **`git` の https（clone・push）には使えない**。push は現行のガードが拒否し、境界の外で行う
-- **PAT の設計**（[CHG-0038](../../change/0038-guard-reclassification.md) の段 G10 の要約。**実機での確認前**で、
+- **PAT の設計**（[CHG-0038](../../change/closed/0038-guard-reclassification.md) の段 G10 の要約。**実機での確認前**で、
   特に fine-grained PAT で `gh` の各コマンドが通るかは未確認。通らないコマンドが多ければ個人機の絞り込みは取りやめる）:
 
   | 機 | 方針 |
@@ -169,7 +169,7 @@ CLI: `pis --no-broker` は**3 つとも**無効にする（設定が `auto` で�
 
 ### `websearch.py` 側の挙動
 
-`home/dot_claude/skills/web-search/scripts/websearch.py`。`WEBSEARCH_BROKER_URL` があるときは、`http://127.0.0.1:<port>` の形だけを受け付け
+`home/dot_claude/skills/web-search/scripts/websearch.py`（スキル web-search は 2026-11-09 に廃止。この節は凍結した自作基盤の記述で、挙動は核 `~/.config/agents/websearch/core.py` に残る）。`WEBSEARCH_BROKER_URL` があるときは、`http://127.0.0.1:<port>` の形だけを受け付け
 （それ以外は終了コード 2）、各プロバイダーの URL を接頭辞つきに組み替える。鍵は探さず（ファイル・環境変数・`bw` を見ない）、
 鍵が要るプロバイダーにはダミー（`broker`）を付ける。503（`pis-broker: no key for`）は「鍵が無い」と同じ扱いで、次のプロバイダーへ回る。
 
@@ -225,5 +225,5 @@ GitHub は起動拒否か縮退の経路に当たる。未確認: この機で�
 
 2026-10 の実機での実測と、共通化の前後での出力の同値確認は
 [ブローカー仕様の実測と経緯](../../research/agents/broker-spec-notes.md)。
-詳しい経緯は [CHG-0037](../../change/0037-pis-usability-and-telemetry.md)、方式の調査は
+詳しい経緯は [CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md)、方式の調査は
 [調査 D2〜D6](../../research/agents/agent-auth-delegation.md)。

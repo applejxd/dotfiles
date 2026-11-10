@@ -1,0 +1,13 @@
+# 自作の pi 拡張のディレクトリ名 (home/dot_pi/agent/extensions/ の直下)。単一の編集点。
+# stock プロファイルは、このディレクトリだけを配らず・消す (.chezmoiremove / .chezmoiignore.tmpl が読む)。
+# ここに無いもの (pi-permission-system など package の設定・利用者が置いたもの) は消さない。
+# 自作の拡張を足したら、この一覧にも足す (test/test_pi_profile.py が実物と突き合わせる)。
+activity
+ask
+btw
+delegate-nudge
+notify
+plan
+speed
+subagents
+todo

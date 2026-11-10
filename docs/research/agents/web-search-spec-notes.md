@@ -63,4 +63,4 @@ DuckDuckGo: HTML 版の検索フォームへ `POST`。`GET` は bot の確認（
 
 ## 記録 W6 — URL 中の長い文字列の誤検知（CHG-0032）
 
-経緯は [CHG-0032](../../change/0032-guard-url-false-positive.md)。仕様側（`docs/spec/web-search.md#安全策`）には、現行の規則と限界だけを残した。
+経緯は [CHG-0032](../../change/closed/0032-guard-url-false-positive.md)。仕様側（`docs/spec/web-search.md#安全策`）には、現行の規則と限界だけを残した。

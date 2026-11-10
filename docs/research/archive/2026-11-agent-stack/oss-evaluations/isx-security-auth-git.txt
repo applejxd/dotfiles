@@ -1,0 +1,107 @@
+#61 起動 15:47:34 / 完了 15:50:52
+
+child explore: completed [197s, 30 calls, 4221.5k tokens, $1.119]
+- model: github-copilot/claude-sonnet-5.5, effort: (pi default), role default
+- 文脈: inherit
+format check (the answer lacks the standard sections; verify its claims yourself):
+- missing: 根拠
+- calls: grep×36 read×22 find×3 ls×1
+
+answer:
+**結論（isx と kcage の比較）**
+
+- **git（最重要）**: isx の方式のほうが安全。isx は箱ごとに独立した clone を持ち、ホストの `.git` を箱へ見せない。成果は `git fetch` の pack プロトコルで取り出す。kcage の「共有 `.git` を重ねる」方式は、refs・objects・index・`info/`・`modules/` が箱から書ける（incus-box.md の「共有の `.git` に残る信頼の前提」）。isx にはその共有面が無い。代わりに「作業ツリーを live に見られない」費用がある。
+- **ホストの特権**: isx のほうが弱い。利用者は `incus-admin`（root 相当）のままで、特権の補助への分離が無い。kcage は `kcage-root` と許可表で分離している。
+- **認証**: 設計思想は同等（実トークンを箱に入れず、ダミー/proof だけを渡す）。ただし isx は TLS 傍受（MITM）+ IP 識別で、kcage の unix ソケット単位の broker より複雑で、前提も多い。
+- **ネットワーク**: 強い点と弱い点が混在。強い点は、ホスト側の Incus ACL による proxy-only と NIC マスクの airgap。弱い点は、既定が全開の NAT であること。
+- **箱の堅さ**: 弱い（根拠は項目 2）。
+
+**1. ホストの特権**
+- 利用者を `incus-admin` に入れ、Incus の unix ソケットを直接叩く。`isx init` が追加する（README.md:86、DESIGN.md:44）。
+- ソケットは認証なしで、権限はグループだけで決まる（design/macos-and-vms.md:11）。
+- setuid や特権補助は未確認で、見つからなかった。
+- sudo 規則は、btrfs の読み取り専用コマンドを許す NOPASSWD の 1 本だけ（design/storage.md:113）。
+- proxy は systemd の user service（docs/CLI.md:402）。443→18443 の PREROUTING 転送は `isx init` が firewall に入れる（design/proxy.md:43）。
+
+**2. コンテナの作り方とマウント**
+- 非特権のまま、次の設定を入れる（cli/.../BuildCommand.java:1423-1431、1633-1639）。
+  - `security.nesting=true`
+  - `raw.idmap "both 1000 1000"`
+  - `security.idmap.size=165536`
+  - setxattr の intercept
+  - **`raw.lxc "lxc.cap.drop ="`**（capability を落とさない）
+  - `/dev/net/tun`（mode 0666）
+- `security.idmap.isolated` は未設定（grep で見つからず）。
+- ホストからのマウントは、readonly / overlay（下層 ro）/ copy の 3 種（design/host-resources.md:10-18）。`/etc`・`/usr`・`/var` などへのマウントは拒否（同:134）。
+- 箱の root に書き込める rw のホストマウントは設計上持たない（SANDBOXES.md:204、docs/FAQ.md:52-59）。例外は、箱ごとの zmx セッション用ディレクトリ（`~/.local/state/incus-spawn/zmx/<name>`、0700、host-resources.md:105）。
+- GUI/GPU は opt-in。Wayland と audio のソケットだけを渡し、`XDG_RUNTIME_DIR` 全体は渡さない（GuiPassthrough.java:63-70, 175）。repo 由来のテンプレートでは既定で無効（host-resources.md:200）。
+
+**3. git とコードの出入り**
+- **入れ方**: 箱の中で clone する。ホストの checkout は mount しない（git.md:19）。
+  - `host-source` は、ブランチ/タグの先端から届く objects だけを新しい独立 repo へ詰める。hooks・config・作業ファイルは入れない（git.md:15-19）。
+  - ホストのスナップショットを箱へ貸すときは、最小の bare repo を **ro** で mount する。箱側は `clone --no-hardlinks` で複製し、alternates を拒否し、SHA-256 を検証する（docs/dev/GIT-PREPARATION.md:172-173, 276-281）。
+  - 弱点が 1 つ: shallow の参照経路だけは、ホストの作業ツリー全体を mount しうる（git.md:63）。
+- **取り戻し方**: `isx://<箱>/<path>` の remote helper を使う。ホストの git が pack プロトコルで、箱の中の `git-upload-pack` / `git-receive-pack` と直接やり取りする（git.md:154-163）。
+  - サービスは allowlist で、この 2 つだけ（GitRemoteHelperCommand.java:24）。
+  - 箱の中では uid 1000 で実行する（同:44-46）。
+  - ホストには hooks・config が転送されない。
+  - ホストで見る手順は `git diff main..fix-auth/main` や `cherry-pick`（README.md:237-251）。
+- **`isx branch`**: CoW で箱ごと複製する（rootfs とその中の repo を含む。README.md の Branching 節）。ホストの repo には、箱名の remote を `.git/config` へ追加する（git.md:182-190）。
+- **worktree/feature の merge**: 概念は無い。箱ごとに独立した clone で、merge はホスト側の通常の git で行う。
+- **ホスト git の自動実行**: 箱が書いた設定で自動実行される経路は構造上無い。ただし、ホストの fetch に `fetch.fsckObjects` を強制する実装は未確認（強制しているのは、準備時の clone だけ）。
+
+**4. 認証（proxy）**
+- ホスト側の MITM TLS proxy が、箱の DNS 上書き（`raw.dnsmasq`）と CA で傍受し、ヘッダを差し替える（design/proxy.md:13, 43-47, 257-259）。
+- 箱が持つのは placeholder と、箱ごと・namespace ごとの proof（`gho_isx_<digest>`）。proof は HMAC で、ホストの鍵から導く（docs/CREDENTIAL-PROOFS.md、accounts.md:286）。
+- proxy が注入するのは、「送信元アドレス＋その箱の proof」が合ったときだけ（CREDENTIAL-PROOFS.md:11-16）。
+- アドレス詐称は `security.ipv4_filtering` で防ぐ（accounts.md:165-167）。
+- 箱の root は proof を読める。`/dev/incus` 経由で `user.*` も読める（accounts.md:197）。ただし proof は他アドレスからは無効。
+- isx 自身の前提は「箱は侵害済みとみなす」（SANDBOXES.md:105）。
+- 対象は Anthropic、OpenAI、Gemini、GitHub、Vertex、IBM Bob、Atlassian。npm・Maven・docker レジストリは認証なしのキャッシュ中継。
+- GitHub の注入は、`paths:` で絞らない限りドメイン全体に効く（docs/TOOLS.md:326-331）。絞りの既定は確認できなかった。
+
+**5. ネットワーク**
+- 既定は full（NAT）。
+- `--proxy-only`: **ホスト側の Incus NIC ACL**（`isx-proxy-only`）で、出力は既定 drop。許可は、ゲートウェイの 443/18443/18080、DNS、ICMP だけ（network.md:13-27）。
+  - nftables ドライバと `network_bridge_acl_devices` が無いホストでは、fail closed で拒否する（network.md:59-69）。
+  - pci/usb passthrough や `bind: instance` の proxy device は拒否する（network.md:29）。
+- `--airgap`: NIC などを `type: none` でマスクする（network.md:83）。
+- 対象外の抜け道: `raw.lxc`/`raw.qemu`、unix-char、ソケットを共有する disk device（network.md:100）。
+
+**6. doctor（DoctorCommand.java）**
+- Proxy ownership（他ユーザーの proxy がポートを保持していれば FAIL、:1402）。
+- config.yaml の権限（:572）。
+- Credential proof / secret の欠落・ずれ（:432-511）。
+- Bridge DNS 上書きの欠落（傍受の迂回、:1655-1666）。
+- PREROUTING 転送、CA の期限、Proxy drift。
+- 状態は OK/WARN/FAIL/NOTE の 4 値。NOTE は終了コードに影響しない（design/doctor.md:5-10）。
+- `--bundle` は、宣言から導いた場所を構造的に伏せて出力する（doctor.md の「Support bundles」節）。
+
+**kcage に取り入れる価値のある点**
+1. 成果の取り出し口を `git fetch` 経由（箱の中の upload-pack へ接続）にする、opt-in の「clone 方式」。共有 `.git` の信頼前提（`doctor` 必須）をなくせる。ホスト側の fetch は `transfer.fsckObjects=true` を付ける。
+2. 起動のたびに、制限を再適用・検証する。許可していない NIC・pci/usb・proxy device が加わっていれば拒否する。機能が足りなければ fail closed にし、箱の中の規則へは降格しない。
+3. selftest/doctor に追加する項目:
+   - 他ユーザーの holder の検出
+   - 秘密を置くファイルの権限
+   - proof（箱ごとの識別）の欠落
+   - 傍受の迂回
+4. 4 値の状態（NOTE を終了コードに影響させない）と、`--bundle` の構造的な伏せ字。
+5. repo 由来の定義は、その repo の中に閉じ込める（kcage.toml の方針と同じ。確認の裏付けとして使える）。
+
+**懸念**
+- `incus-admin` を直接使う構成。kcage が避けている root 相当を、isx は受け入れている。
+- `lxc.cap.drop =`、nesting、tun（0666）、idmap の isolated 無し。非特権とはいえ、箱の攻撃面が広い。
+- 既定が NAT で、コードを外へ出せる。
+- 実トークンはホストの `config.yaml`（ユーザー所有）に平文で置かれる。isx はホスト側を信頼しており、kcage の「ホストの pi からも秘密を隔てる」設計とは前提が違う。
+- MITM の CA と DNS 上書きに依存する。IP 識別は Incus の nftables ドライバが前提。
+
+**未確認**
+- 実機での挙動と試験は未実行（読み取りのみ）。
+- GitHub の注入について、既定の `paths:` があるか。
+- ホスト fetch への fsck の強制。
+- privileged や idmap の isolated の既定値（grep で見つからなかったのは「未設定」の根拠として弱い）。
+- `design/instances.md` と `proxy.md`（359 行以降）、`docs/CONFIGURATION.md` の全文は読んでいない。
+
+**次の候補**
+- `DoctorCommand` の `--deep` 検査を詳しく読む。
+- 「clone＋fetch」方式を kcage の ADR の選択肢として起こす。

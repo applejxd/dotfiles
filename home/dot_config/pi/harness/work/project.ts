@@ -20,7 +20,7 @@ const estUsd = (n: Node): number => {
 };
 
 /** 臨界路の長さ: 自分の見積り + 後続 (自分を after に持つ未完了の task) の臨界路の最大。DAG 前提 (循環は I1 が拒否する) */
-export const criticalPaths = (state: LedgerState): Map<string, number> => {
+export const criticalPaths = (state: LedgerState, estimateMs: (n: Node) => number = estMs): Map<string, number> => {
 	const dependents = new Map<string, string[]>();
 	for (const n of state.nodes.values()) {
 		if (!isTaskLike(n) || TERMINAL.includes(n.state)) continue;
@@ -37,7 +37,7 @@ export const criticalPaths = (state: LedgerState): Map<string, number> => {
 		let best = 0;
 		for (const d of dependents.get(id) ?? []) best = Math.max(best, f(d));
 		visiting.delete(id);
-		const v = estMs(n) + best;
+		const v = estimateMs(n) + best;
 		memo.set(id, v);
 		return v;
 	};
@@ -50,6 +50,8 @@ export interface ReadyOptions {
 	limit?: number;
 	/** 今流している bundle の名前。attrs.bundle がこれに等しい task を優先する */
 	bundle?: string;
+	/** 臨界路の見積り (ms)。省略時は attrs.estimateMs (無ければ 1)。adapt.ts がスケジューラと同じ見積りを渡す */
+	estimateMs?: (node: Node) => number;
 }
 
 /**
@@ -57,7 +59,7 @@ export interface ReadyOptions {
  * 実行中の task および先に選んだ task と writes が重ならない。順序: ①臨界路の長さの降順 ②bundle を満たすもの ③費用の昇順 ④id。
  */
 export const ready = (state: LedgerState, opts: ReadyOptions = {}): Node[] => {
-	const crit = criticalPaths(state);
+	const crit = criticalPaths(state, opts.estimateMs);
 	const active = [...state.nodes.values()].filter((n) => (n.kind === "task" || n.kind === "integrate") && ACTIVE.includes(n.state));
 	const cands = [...state.nodes.values()].filter((n) => {
 		if (!isTaskLike(n) || n.state !== "ready") return false;

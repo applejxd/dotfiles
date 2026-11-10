@@ -241,7 +241,7 @@ OpenShell の対応表では Windows は「WSL 2 + Docker Desktop」の Experime
 
 ### 次の問い
 
-- `srt` の Windows alpha の既知の制限と、`pi` を包む使い方（`explore` の子が Web 検索中。[CHG-0033](../../change/0033-sandbox-build-value-assessment.md) の「重要な更新」）
+- `srt` の Windows alpha の既知の制限と、`pi` を包む使い方（`explore` の子が Web 検索中。[CHG-0033](../../change/closed/0033-sandbox-build-value-assessment.md) の「重要な更新」）
 - Windows ネイティブの境界で、Windows のサーバ・アプリを起動できるか（子プロセスへの制限の伝播、ポートの待ち受け、ファイアウォールの扱い）
 
 ## 記録 I4 — 2026-10-24（Windows ネイティブで `pi` を包む候補の、Web 検索による確認）
@@ -266,7 +266,7 @@ Windows ネイティブ（PowerShell）で、`pi` を OS の境界つきで動�
 
 ### 次の問い
 
-[CHG-0034](../../change/0034-windows-native-pi-boundary.md) の段 W1（Windows 実機で `srt` に `pi` を包む）。`agent-win-sandbox` の README とライセンス。
+[CHG-0034](../../change/closed/0034-windows-native-pi-boundary.md) の段 W1（Windows 実機で `srt` に `pi` を包む）。`agent-win-sandbox` の README とライセンス。
 
 ### 参照
 
@@ -276,7 +276,7 @@ Windows ネイティブ（PowerShell）で、`pi` を OS の境界つきで動�
 
 ## 記録 I5 — 2026-10-31（peer の Windows 対応の現状と、WSL interop の観測）
 
-[CHG-0054](../../change/0054-containment-and-async-approval.md) の議論（封じ込めを主にするなら、Windows ネイティブの境界が無いことが障害になる）を受けて、他社の現状を確認し、WSL から Windows のプロセスを起動できるかを観測した。動かした範囲は、読むだけのコマンドに限る。
+[CHG-0054](../../change/closed/0054-containment-and-async-approval.md) の議論（封じ込めを主にするなら、Windows ネイティブの境界が無いことが障害になる）を受けて、他社の現状を確認し、WSL から Windows のプロセスを起動できるかを観測した。動かした範囲は、読むだけのコマンドに限る。
 
 ### 他社の Windows ネイティブの現状（Web 検索。観測日 2026-10-31）
 
@@ -285,7 +285,7 @@ Windows ネイティブ（PowerShell）で、`pi` を OS の境界つきで動�
 | Claude Code | サンドボックスは **macOS・Linux・WSL2** で動く。「**ネイティブ Windows では、コマンドはサンドボックスなしで実行される**」。ネイティブ Windows のサンドボックスは機能要望（issue #46740）として、出ている。サンドボックスが要るなら WSL2 を使う、というのが公式の案内 | <https://code.claude.com/docs/en/sandboxing>、<https://github.com/anthropics/claude-code/issues/46740> |
 | Codex CLI | Windows ネイティブのサンドボックスを持つ。2 種類: **elevated**（専用のサンドボックスユーザー + ファイアウォールの規則。初回に UAC）と、**unelevated**（現在のユーザーから派生させた制限トークン + ACL によるファイルの境界 + 環境レベルのオフライン制御）。管理者権限やユーザー作成が止められている環境では、後者が代替になる | <https://developers.openai.com/codex/windows>、<https://openai.com/index/building-codex-windows-sandbox/>。**検索結果の抜粋だけ**で、本文は取得できなかった（OpenAI のページは 403、docs はナビゲーションのみ）。第三者の解説（PowerShell の AST による安全判定を含む）: <https://codex.danielvaughan.com/2026/07/18/codex-cli-windows-sandbox-architecture-powershell-ast-safety-elevated-unelevated-appcontainer-restricted-tokens/>（未確認） |
 
-含意（推測）: ネイティブ Windows で、OS の境界を持つ CLI は、確認できた範囲では Codex だけ。このリポジトリの候補 C（Codex 型を自作）は、Codex 専用の方式を、他の CLI に使う公式手順が見つからないという理由で、見送り中（[CHG-0034](../../change/0034-windows-native-pi-boundary.md)）。
+含意（推測）: ネイティブ Windows で、OS の境界を持つ CLI は、確認できた範囲では Codex だけ。このリポジトリの候補 C（Codex 型を自作）は、Codex 専用の方式を、他の CLI に使う公式手順が見つからないという理由で、見送り中（[CHG-0034](../../change/closed/0034-windows-native-pi-boundary.md)）。
 
 ### WSL から Windows のプロセスを起動できるか（観測）
 

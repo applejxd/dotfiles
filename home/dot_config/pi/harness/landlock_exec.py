@@ -4,7 +4,7 @@
         landlock_exec.py --check
 終了コード: 2 = 使い方の誤り、3 = Landlock を適用できない (ABI 3 未満を含む)、127 = COMMAND を実行できない。
 ラッパー自身の標準エラーはすべて `landlock_exec: ` で始まる 1 行。
-see docs/change/0029-worktree-isolation.md
+see docs/change/closed/0029-worktree-isolation.md
 """
 
 from __future__ import annotations

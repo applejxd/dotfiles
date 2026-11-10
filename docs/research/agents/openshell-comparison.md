@@ -66,7 +66,7 @@ OpenShell は、現行の `pis` のサンドボックス（Fence + `ocs` + ハ�
 - 公式は「基準線を強制できなければ起動に失敗する」と書くが、利用者の報告（#3911、Open）は、`hard_requirement` でも ABI 0 で起動すると言う
 - 比較記事は OpenShell を「Alpha」とするが、公式の対応表は「stable を毎週」と書く（版の時点が違う）
 
-**届かなかったもの**: OpenShell-Research の記事（形式検証の経緯）、Z3 の prover を試した記事、Windows と WSL2 の運用記事、資格情報の付け足しの先行例の記事（3 本）、NVIDIA の脆弱性アドバイザリ（修正済みの版）。理由は、URL が長い・URL の語が保護対象のパスの規則に当たる、で取得を見送ったため（[CHG-0032](../../change/0032-guard-url-false-positive.md)）。pi を OpenShell で動かした事例は、探した範囲では無かった。
+**届かなかったもの**: OpenShell-Research の記事（形式検証の経緯）、Z3 の prover を試した記事、Windows と WSL2 の運用記事、資格情報の付け足しの先行例の記事（3 本）、NVIDIA の脆弱性アドバイザリ（修正済みの版）。理由は、URL が長い・URL の語が保護対象のパスの規則に当たる、で取得を見送ったため（[CHG-0032](../../change/closed/0032-guard-url-false-positive.md)）。pi を OpenShell で動かした事例は、探した範囲では無かった。
 
 ### 考察
 
@@ -76,7 +76,7 @@ OpenShell は、現行の `pis` のサンドボックス（Fence + `ocs` + ハ�
 
 ### 次の問い
 
-取れなかった一次資料の再取得（修正済みの版、形式検証の経緯、資格情報の代理の先行例）、候補ごとの WSL2・複数 CLI・子エージェント隔離への対応、現行の保守の費用の実測。これらは [CHG-0033](../../change/0033-sandbox-build-value-assessment.md) で扱う。
+取れなかった一次資料の再取得（修正済みの版、形式検証の経緯、資格情報の代理の先行例）、候補ごとの WSL2・複数 CLI・子エージェント隔離への対応、現行の保守の費用の実測。これらは [CHG-0033](../../change/closed/0033-sandbox-build-value-assessment.md) で扱う。
 
 ### 参照
 
@@ -94,7 +94,7 @@ OpenShell は、現行の `pis` のサンドボックス（Fence + `ocs` + ハ�
 ## 記録 O2 — 2026-10-24（O1 で取れなかった資料の取り直し）
 
 - **対象**: OpenShell v0.1.5 と、NVD の CVE 2 件。取得日はすべて 2026-10-24
-- **前提**: O1 で「URL が長い・URL の語が保護対象の規則に当たる」ため取れなかった資料を、[CHG-0032](../../change/0032-guard-url-false-positive.md) で判定器と取得スクリプトを直した後に取り直した（修正の実機確認を兼ねる）。原文は `.tmp/research/openshell-vs-pis-sandbox/sources/`（リポジトリには入れない）。下の「ファイル:行」はそこのファイル
+- **前提**: O1 で「URL が長い・URL の語が保護対象の規則に当たる」ため取れなかった資料を、[CHG-0032](../../change/closed/0032-guard-url-false-positive.md) で判定器と取得スクリプトを直した後に取り直した（修正の実機確認を兼ねる）。原文は `.tmp/research/openshell-vs-pis-sandbox/sources/`（リポジトリには入れない）。下の「ファイル:行」はそこのファイル
 
 ### 問い
 

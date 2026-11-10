@@ -6,7 +6,11 @@
 ## 置き場
 
 `<git-common-dir>/pi-work`。書けなければ `<cwd>/.tmp/work` へ退避する（`resolveStoreRoot`。`canWrite` は注入。どちらを選んだかと書けるかを返す）。
+
+**書き込みの保護**: `**/.git/pi-work/**` と `**/.tmp/work/**` は、モデルからは書けない（ハーネスだけが fs で書く）。ファイルツールは `[file] write_deny_globs`、bash のリダイレクト・`mv` / `cp` / `rm` / `tee`・インラインコードは `judge/rules_guard.ts` の `GUARD_TARGETS` で拒否する（読み取りは許す。試験は `test_pi_control_files_bash.py`）。サンドボックスの `denyWrite` には足さない（ハーネス自身が内側で書くため）。
+**bash の判定**（`rules_guard.ts` の `checkLedgerWrite`。追加の判定で、既存の拒否は変えない）: 置き場は成分境界で照合する（`.tmp/work` そのもの・末尾の `/` なし・絶対パスを含み、`.tmp/worktrees` は当たらない）。引数が cwd 基点の絶対パスか symlink の実体で置き場に当たるとき、コマンドが**既知の読み取り専用**（`cat`・`ls`・`grep`・`find`〔`-delete`・`-exec`・`-fprint*` なし〕・`git log` など）でなければ拒否する（`git --output`・`sort -o`・`curl -o`・`dd of=`・`sed -i`・`touch` も該当）。`git -C` の基点は反映し、置き場へ `cd` した後は相対パスを字面で見られないので拒否する。
 `pis` のサンドボックスで前者へ書けるかは未確認のため、退避を残している。
+**`.git` 以外の名前の common-dir**（`--separate-git-dir`・`GIT_DIR`・worktree）: 判定器は新しい文脈を受けず、`judge/ledger_root.ts` の `ledgerRoots(cwd, env)` が fs だけで置き場の実体を解く（プロセスは起動しない）。cwd から上へ `.git` を探し、ファイルなら `gitdir:`（相対は `.git` の場所基点）を読み、`commondir` があれば common-dir を求める。`GIT_COMMON_DIR`・`GIT_DIR` の環境変数も加え、`<common>/pi-work` と cwd 直下の `.tmp/work` を返す。結果は cwd・環境変数ごとに最大 64 件、**2 秒の TTL** でキャッシュし（期限後に `.git` の出現・変更を拾う。置き場を 1 件も解けなかった結果は保持しない）、読めない・不正な形は例外にせず解決できた分だけ返す（名前の照合は常に残る）。`.git` の探索は元の cwd と symlink を解いた実体の両方から行い、見つかった common-dir を合算する。bash（`ledgerHit`）と、ファイルツールの write / edit（`decide.ts` の `decideFile`。pi のパス解釈の各形 `@`・`file://`・Unicode 空白・`~` の全てを候補にする）が、名前の照合に加えて成分境界つきで照合する。**common-dir 自身**（`rm -rf git-meta`・`mv`・`find -delete`。`.git` 名の通常構成は既存の判定に任せる）の削除・移動も bash で拒否する（`checkLedgerWrite`。読み取りと兄弟のパスは対象外）。
 
 ## ログの形式
 
@@ -43,3 +47,7 @@ ENOSPC・EROFS・EACCES など書き込みの失敗は例外（`IO`）を投げ�
 
 - fsync の実効性はファイルシステム依存。pid の再利用と、append の直前の lease 確認から書き込みまでの間の引き継ぎは防げない。
 - Windows は対象外。
+- 台帳の書き込み保護は**判定器の層**で、OS の境界ではない。任意のスクリプトの中の書き込み（`python -c`・シェルの変数・動的な展開・コマンド置換）は防げない。symlink の実体の照合は、判定時に実体が引ける範囲だけ。
+- 読み取り専用コマンドの一覧と書き込みオプションの一覧は網羅ではない（新しいコマンドは fail-closed なので拒否側へ倒れる）。ラッパー（`env`・`timeout` など）は自身のオプションを読み飛ばして実コマンドを判定するが、`env -u NAME`・`stdbuf -o MODE` の分離形は正規化の段で名前が実コマンドに見えるため、読み取りでも拒否側へ倒れる。
+- ファイルツールの判定は pi のパス解釈（`@` の除去・`~`・`file://`・Unicode 空白）を候補に含めるが、Windows のドライブ表記（`/c/…`・`/mnt/c/…` を `C:\…` へ変える変換）は含めない。Windows で `.git` 以外の名前の common-dir を使う構成の台帳は、実機で確認するまで保護の外とみなす。
+- common-dir 自身の削除・移動の拒否は、対象が common-dir と等しいときだけ（ワイルドカード `git-meta/*` や広い祖先は対象外。`find` は探索起点だけを見る）。

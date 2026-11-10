@@ -26,7 +26,7 @@ home/dot_claude/
     modify_settings.json.py.tmpl             ~/.claude/settings.json を更新
 home/dot_claude/hooks/                       Python 版の判定器。Claude / Copilot への登録は撤去済みで
                                              実行時は呼ばれず、TS の判定器の正解データの書き出し元
-                                             (オラクル) として残る ([CHG-0035](../change/0035-retire-python-judge-oracle.md))
+                                             (オラクル) として残る ([CHG-0035](../change/closed/0035-retire-python-judge-oracle.md))
     executable_check_bash.py                 入出力とループのみ (fail-closed)
     executable_decide.py                     判定 API (decide) の入口
     lib/policy_loader.py                     command_policy の import と設定ディレクトリの解決
@@ -197,7 +197,7 @@ ID は `copilot help config` の候補一覧に無くても、API 側にあれ�
 ### pi と共有する節
 
 次の 5 つは `[pi]` が正本で、pi のフルガードの判定器と OpenCode の生成の両方が読む（移行の計画は
-[CHG-0020](../change/0020-pi-migration.md)）。
+[CHG-0020](../change/closed/0020-pi-migration.md)）。
 
 | `[pi]` の節 | 中身 | OpenCode での位置 |
 | --- | --- | --- |
@@ -335,7 +335,7 @@ subcommands = ["paths", "lint", "read"]
   リポジトリの設定（`.git/config`・`.python-version` など）からコマンドを起動しないか。
   足すときは `test_skill_script_allow_is_not_widened_silently` も更新する
 - **away-shift。** `away_guard.py` の `init` / `check` / `log` / `status` / `sleep` / `snapshot` と `preflight.py` を載せた（`preflight.py` は渡された文字列を判定器へ渡すだけで実行しない。コードを読んで確認）。
-  `snapshot` は、リポジトリの作業用コピーを `work/src/` へ作る（追跡と ignored でない未追跡。`[file] read_deny_globs` に当たるもの・リンク・サブモジュール・容量超過は除外し、一覧が読めなければ拒否する）。**隔離ではない**（[CHG-0030](../change/0030-away-shift-on-pi.md)）。
+  `snapshot` は、リポジトリの作業用コピーを `work/src/` へ作る（追跡と ignored でない未追跡。`[file] read_deny_globs` に当たるもの・リンク・サブモジュール・容量超過は除外し、一覧が読めなければ拒否する）。**隔離ではない**（[CHG-0030](../change/closed/0030-away-shift-on-pi.md)）。
   書き込みは `.tmp/away-shift/` の中に閉じる（run_id の検査、リンクの拒否、`--note-file` は `work/` 直下のみ。`test_away_guard.py` が固定）。
   待機は `sleep <秒>`（1〜7200 の整数。何も読み書きしない）を許可し、生の `sleep` は `[pi.shell] allow` に足さない（OpenCode の全体許可へ複写され、`sleep … > ファイル` が書き込み経路になるため）。
   `skill_scripts` は `shell_allow` を持つ探索・レビュー役からも到達するが、書き込み先が閉じているので受け入れる。読み取り専用と説明している役割に書き込みの例外ができることを今回受け入れる。許可の期待値は `test_decide.py` の `test_away_shift_scripts_allow_only_the_listed_subcommands` が固定している。実際の pis（TS 版）での挙動は未確認
@@ -476,3 +476,217 @@ feat(opencode): git commit の確認に件名と本文を抜き出して出す  
   引用符や変数で書き換えた形（`g"it" commit` など）はすり抜ける
   （[静的パターンの回避](../research/opencode/permission/shell-allow-and-plugin-gate.md)）。
   確認で「常に許可」を選ぶと `git commit *` がプロジェクトに保存され、以後は確認なしでコミットする
+
+## pi のプロファイル（custom と stock）
+
+pi の設定は 2 つのプロファイルを切り替えられる。**既定は `stock`**（2026-11-10 に `custom` から変更。[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md) の追記）。
+`stock` は、pi の公式の既定に、人気の拡張（pi の package）だけを入れた構成。`custom` は、凍結した自作ハーネスの配備で、旗で選ぶ（[custom へ戻す](#custom-へ戻す)）。
+
+**この切り替えは可逆で、自作部分（拡張・ハーネス・docs・試験）はリポジトリに凍結して残っている。**
+stock にしても何も消えず、`chezmoi apply` が配備しなくなり、配備済みのものを片付けるだけ。**旗の無い機（新しい機・他のマシン）は、`chezmoi update` で stock になる。**
+
+判定は共有テンプレート `home/.chezmoitemplates/pi-profile`（単一ソース）。次のどちらかが `custom` なら custom、
+それ以外（ファイルが無い・空・不正な値）は stock。`chezmoi.toml` の `[data]` には置かない
+（`chezmoi update` は `init` を呼ばないため）。
+
+- 環境変数 `CHEZMOI_PI_PROFILE`
+- ファイル `~/.config/chezmoi/pi-profile` の中身（前後の空白を除く）
+
+| 対象 | custom（凍結した自作ハーネス） | stock（既定） |
+| --- | --- | --- |
+| 自作の拡張 `~/.pi/agent/extensions/` の各ディレクトリ（`activity`・`ask`・`btw` など。一覧は `pi-own-extensions`） | 配る | 配らない・配備済みは自作のディレクトリだけ削除（`extensions/` 全体は消さない） |
+| `~/.pi/agent/extensions/pi-permission-system/config.json`（確認画面の方針） | 配らない（拡張が無い） | `modify_` スクリプトで配る（下の「permission-system の設定」） |
+| `~/.pi/agent/pi-plan-mode.json`（plan mode の設定） | 配らない | `modify_` スクリプトで配る（下の「追加の 4 つの package」） |
+| `~/.pi/agent/prompts/` | 配る | 配らない・配備済みは削除 |
+| ハーネス `~/.config/pi/`（harness・commit-confirm） | 配る | 配らない・配備済みは削除 |
+| `~/.pi/agent/models.json`（pis の broker 用） | 配る | 配らない・配備済みは削除（認証は公式の `/login`） |
+| `~/.pi/agent/settings.json` | 生成器が管理 | ハーネスの `extensions`・`skills` を取り除き、`defaultTools` を `["+grep", "+find", "+ls"]`（pi の既定 read・bash・edit・write に読み取り専用の探索ツールを足す増分指定。plan mode の探索にも使う。利用者が `+`/`-` だけの増分指定にしたら保つ）にし、`packages` を設定。テーマ・既定のモデルなど利用者のキーは触らない |
+| `~/.pi/agent/mcp.json`（MCP サーバ） | 配らない（custom は harness の `rules.json`） | `modify_mcp.json.py.tmpl` が `generate.py --target pi-mcp` で配る（下の「MCP 設定（stock）」） |
+| `~/.pi/agent/AGENTS.md` | 共通の指示（`agent-instructions.md`。平らな 25 行） | ツール非依存の短い版（`agent-instructions-stock.md`） |
+| `~/.pi/agent/keybindings.json` | 配る | 同じ（自作の拡張のキーを含まないため） |
+| 他の CLI（Claude・Codex・OpenCode など）・`pis`・`pk` | そのまま | そのまま（触らない） |
+
+### permission-system の設定（stock）
+
+stock の確認画面は package `@gotgenes/pi-permission-system`。設定ファイルが無いと**全部のツール呼び出しを ask にする**ので、
+方針を `~/.pi/agent/extensions/pi-permission-system/config.json` へ配る。
+
+- **消す範囲**: stock が消す・配らないのは、`home/dot_pi/agent/extensions/` 直下の**自作の拡張のディレクトリだけ**（一覧は `home/.chezmoitemplates/pi-own-extensions`）。`.pi/agent/extensions` を丸ごと消さないので、`pi-permission-system/`・package 由来のもの・利用者が置いた拡張は残る。custom は `pi-permission-system` を無視する（配らない）。
+- **配り方**: `modify_config.json.py.tmpl`（`modify_pi_stock_settings.py.tmpl` と同じ流儀）。リポジトリが持つのは `permission`・`commandEffects`・`shellTools` の自分の項目だけで、`permission`・`commandEffects` は毎回その値で置き換える。`yoloMode`・`debugLog`・`permissionReviewLog`・`doublePressToConfirm`・`promptTimeoutMs` など実行時の値は**既存のファイルの値を保つ**（無ければ拡張の既定: `yoloMode: false` など）。壊れた JSON はそのまま返す。
+- **方針（元データは `home/.chezmoitemplates/pi-permission-policy.json`。2026-11-09 に「bash は ask が既定」から、YOLO を切る前提の「bash は allow が既定」へ変えた）**:
+  - **運用は YOLO を切る前提**。YOLO が入っていると下の ask が全部自動承認になり、強制 ask は意味を持たない（下の「YOLO mode」）。リポジトリは `yoloMode` を配らないので、機械ごとに `/permission-system` で OFF にする。
+  - 作業ツリーの中の `read`・`write`・`edit`・`grep`・`find`・`ls` は allow。作業ツリーの外（`external_directory`）は、**読み書きとも allow は `/tmp/*` だけ**、**読み取りだけ allow は下の許可リスト**、それ以外は ask。プロジェクトごとの事前許可（データセットの読み取りなど）は [プロジェクト単位でデータセットを読み取り専用にする](#プロジェクト単位でデータセットを読み取り専用にする)。
+    - **読み取りの許可リスト**（2026-11-10。承認の手間を下げるため最優先で足した）: pi 自身のディレクトリ（`~/.pi/agent/` の `npm/`・`install/`・`extensions/`・`agents/`・`git/`・`prompts/`・`skills/`・`themes/`、`AGENTS.md`・`settings.json`）と、Orca の貼り付け画像（Windows の Temp の `orca-paste-*`）。拡張が `read`・`grep`・`find`・`ls` のツールにだけ自動許可する「基盤のパス」と同じ範囲を、bash にも広げた形。**`extensions/*/logs` だけは ask のまま**（レビューログにはコマンドの文字列が残り、秘密が混ざりうるため。拡張も、ここは自動許可しない設計）。`~/.pi/agent/` の認証情報・`models.json`・`mcp.json`・`sessions/` は許可リストに無く、ask のまま。
+    - **広く許可（`external_directory_read` の `*` を allow）にしない理由**: ① `path` の deny は 14 件で、秘密の置き場（pi の認証情報、`.npmrc`、`.docker`、クラウドの認証、ブラウザのデータなど）を網羅していない。② 外部への送信は `curl` などを止めていない（bash の既定が allow）ので、読み取りと送信が連鎖しうる。③ 実測では、yolo を切った後の最初の 13 分間に出た確認 8 件が、すべて許可リストの範囲に収まった。広げる必要が実測で無い。
+    - **広げたいとき**: 規則を 1 行足す（`~/src/*` など）か、確認画面の「このセッション中は許可」を使う。足したら、判定表に例を足して試験を回す。Windows の Temp を全体に広げるなら、`/mnt/c/Users/<名前>/AppData/Local/Temp/*` と `…/Temp` を足す（他のアプリの一時ファイルも読めるようになる）。
+  - `bash` の既定は **allow**。止めるものだけを、後ろに書いた規則で決める（後勝ち）。判定は 2 つの拡張の組み合わせで、役割を分ける: **deny と強制 ask はこの方針（`pi-permission-system`。tree-sitter で複合コマンドを分解し、1 コマンドずつ前方一致で照合する）**、**破壊的な操作（`git reset --hard`・`rm -rf` の危険な対象・`find -delete` など）の意味解析は `cc-safety-net`**（[規則](#cc-safety-net-の規則stock)）。
+    - **deny**: `sudo`・`git push`・スクリプトをシェルへ渡す形（`sh`・`bash`・`sh -s` など）、**秘密を取るコマンド**（`gh auth token`・`gh secret set|list`・`bw get|list|export`・`op read`・`op item get`・`vault read`・`vault kv get`・`chezmoi secret`）、環境変数の一覧（`printenv`・`env` の単独。`printenv <名前>` は許す）。`path` の deny はファイルの読み書きを止めるだけで、コマンド経由の取得は止めないので別に置く。**`rm -rf` の一律 deny は置かない**: 過去のコマンドの 2.0% を誤って止めていた。`cc-safety-net` が対象（作業ツリーの外・home・root・`.git`）で判定する。
+    - **強制 ask**（YOLO を切ると、毎回確認が出る）: ① 外部への投稿・変更（`gh` の `pr`・`issue`・`workflow`・`variable`・`gist` の変更系、`gh repo fork|rename|archive|unarchive`、`chezmoi apply|update`）、② 公開・配布・統合（`gh pr merge`・`gh release create|edit|delete|upload`・`gh repo create|edit|delete`・`gh gist create`・各種 `publish`・`twine upload`・`gem push`・`docker push`）、③ 履歴・設定の改変（`git rebase|config|filter-branch|update-ref -d|reflog expire|worktree remove|remote add|remote set-url`。`git config --get|--list|-l` だけは allow）、④ 外部送信・永続化（`scp`・`sftp`・`ssh`・`rsync`・`socat`・`ncat`・`nc`・`telnet`・`aws s3 cp|sync`・`gsutil cp`・`az storage blob upload`・`crontab`・`at`・`batch`・`systemctl` の変更系・`systemd-run`・`fdisk`・`parted`）。
+    - **サブコマンドの前に付くオプションを読み飛ばすため、規則を広げてある**: `gh` と `chezmoi` は `gh *pr create*`・`chezmoi *apply*` の形（`gh -R o/r pr create`・`chezmoi --force apply` を拾う）。`git` は `git -C <dir> <サブコマンド>` の形を別に足す（過去のコマンドの 3.4% が `git -C` を使う）。広げた分は、余分に ask が出ることはあっても、見逃しは減る。`git` の ask に `git *rebase*` のような広い形を使わないのは、コミットメッセージや `--grep` の語まで拾うため（試験で確認する）。
+    - **`gh api` の書き込み**は、フルガードの `check_gh_api_mutation`（意味解析）を再現できないので、`-X`・`--method`・`-f`・`-F`・`--field`・`--raw-field`・`--input` を含む形を ask にする近似にした（GraphQL の読み取り `-f query=…` も ask になる）。
+    - 出典は、凍結したフルガードの deny・confirm の一覧から利用者が選んだもの（2026-11-09）。`git reset --hard`・`git stash drop`・`git branch -D`・`git clean -f`・`mkfs` などは `cc-safety-net` が既に止めるので足さない（[評価の記録](../research/agents/pi-stock-packages-evaluation-2026-11.md)）。
+    - **受容するもの**: 変数経由（`cmd=push; git $cmd`）・インラインコード（`python -c`・heredoc の中のスクリプト）での迂回は検出しない。ガードは意図的な迂回を保証しない（[ガードの範囲](guard/index.md#目的と保証の範囲)）。フルガードの判定器はこれらを検出したが、インラインコードから外部コマンドを実行する形を一律に deny するため、過去のコマンドの 1.3% を誤って止めた。凍結した判定器を再び載せる（独自の判定機）案は、この誤判定と維持費で見送った。
+  - `path`（全ツール・bash 共通）の deny: `.env`・`*.env.*`（`*.env.example` は allow）・`~/.ssh`・`~/.aws`・`~/.gnupg`・`~/.netrc`・`~/.config/gh`・`~/.config/agents/websearch-keys.json`（検索の鍵ファイル。Bitwarden から同期される）・秘密鍵（`*.pem`・`*.key`・`id_rsa*` など）。**pi 自身の認証情報・設定（`~/.pi/agent/` の認証・信頼・モデル設定・MCP の設定、`ayu/` = pi-rewind のスナップショット）も deny**（2026-11-10）。利用者はいつも拒否するものなので、ask にせず deny にして確認で待たせない（理由をモデルへ返す）。`sessions/`・`extensions/*/logs` は、振り返りの分析で読むことがあるので ask のまま。
+  - `mcp` は ask（検索の `websearch`・`agentcore-websearch` だけ allow。上の「MCP 設定（stock）」）、`skill` は allow。入れる拡張の自分のツール（`todo`・`ask_user_question`・`subagent`・`subagents_enable`・`bg_wait`）は毎回の確認を出さないよう allow。上のどれにも当たらないツール（`*`）は ask。
+  - **`subagent_launch` は allow**（2026-11-09。当面の運用）。これは pi-subagents が、ワークフロー（`workflow`・`chain`・`tasks` で複数の子を組み合わせて起動する形）で子を起動する直前に出す入れ子の呼び出しで、ask のままだと子ごとに確認が出る。子の終了後に走る `gate`・`acceptance.verify` のシェルコマンドも載るが、**この呼び出しの時点では bash の規則で検査されない**（pi-subagents の docs `workflows.md`。この拡張が `commands` を検査するかは未確認）。運用では `gate`・`acceptance.verify` を使わない（[feature-orchestration の運用](../../.agents/skills/feature-orchestration/references/pi-subagents.md)）ので、実害は出にくい。`ask` へ戻せば、毎回その内容を見られる。
+  - 子と親の連絡用のツール（`contact_supervisor`・`intercom`・`structured_output`・`subagent_command`）も allow。YOLO を切ると、規則の無いツールは `*` の ask になり、子が進捗を連絡するたびに確認が出るため。
+  - 追加の 4 つの package のツール（下の「追加の 4 つの package」）: `bg_status`・`bg_kill`・`plan_mode_question`・`plan_mode_complete`・`goal_complete`・`goal_blocked`・`goal_wait` も allow（状態を記録するだけ、または読み取りのツール）。`bg_run` は allow にしない（`shellTools` で bash と同じ判定に通す）。
+- **`shellTools`（マージ）**: `pi-permission-policy.json` の `shellTools`（`bg_run` の `commandArgument: command`・`workdirArgument: cwd`）を、既存の `shellTools` にマージする。リポジトリが持つキーだけをこの値にし、利用者が足した他のキーは保つ（`permission`・`commandEffects` は従来どおり置き換え）。
+- **YOLO mode**: 拡張の `/permission-system` で ON / OFF できる。ON は ask を自動で承認するだけで、**明示の deny は YOLO でも効く**（上の deny・`path` の deny は残る）。**強制 ask は表現できない**（YOLO が全部 allow に戻す。`cc-safety-net` も ask にはできない）ので、強制 ask を使うなら YOLO を切る。切り替えた `yoloMode` は `chezmoi apply` で戻らない（上の「実行時の値は保つ」）。
+  - **YOLO を切ると、規則に無くても ask になるもの**（拡張の `docs/configuration.md` の「Fail-closed behavior」）: `bash -c`・`eval`（中身を再解析しない）、`sudo`・`env`・`xargs`・`nohup`・`parallel`・`watch`・`flock`・`find -exec` など別のコマンドを実行する前置き（`time`・`timeout`・`nice`・`stdbuf`・`setsid` は中のコマンドで判定）、パースできないコマンド（例: heredoc と `2>&1` とパイプを同時に使う形）。YOLO が入っているときは、これらも自動承認されていた。確認画面の「このセッション中は許可」で、同じパターンは再質問されない。
+- **確認で待たせない方針（2026-11-10）**: 確認（ask）が利用者待ちで自律稼働を止めるのを避ける。① **誰も答えない確認は 5 分で拒否して先へ進む**（`promptTimeoutMs: 300000`。2 分では焦るため 5 分にした。初期値だけで、変えた値は apply で戻らない。拒否しても承認にはならない。モデルには「誰も答えなかった」と伝わるので、他の作業を続けられる。答え始めると（キーを押すと）時計は止まる。拡張の docs の「Unanswered prompts」）。② **いつも拒否するものは ask にせず deny にする**（上の `path`）。③ 許可リストで、確認を出さない読み取りを増やす（上の `external_directory`）。④ エージェントの振る舞い（指示に追記）: 確認が出る操作を避ける。拒否・誰も答えなかった操作は繰り返さず、他の作業を続けて、最後に「承認待ち」として一覧で報告する。**実測**（yolo を切って約 1 時間、レビューログ）: 確認 16 件のうち 13 件が作業ツリー外の読み取り（pi 自身のファイルを bash で読んだもの）、強制 ask は 1 件（`chezmoi apply`）、床（`bash -c` など）は 0 件。頑度はエージェントの読み方と許可の不足が原因だった。
+- **承認待ちの通知（BEL）**: 確認ダイアログが開くとき、端末の BEL を鳴らす（`promptNotifications: ["bell"]`。初期値だけで、変えた値は apply で戻らない）。Zed の Terminal Threads や Orca が、フォーカス外の端末の BEL を通知にする。`ask_user_question`（rpiv-ask-user-question）も、質問を待つときに BEL を 1 回鳴らす（拡張の仕様）。**完了時の BEL は、評価した package（pi-notify 系）に無い**。
+- **方針の変え方**: `pi-permission-policy.json` を編集して `chezmoi apply`（書式は拡張の docs の configuration.md。後に書いた規則が勝つので、全許可の `*` は先頭、例外は後ろに置く）。**変えたら、判定表（`test/agents/pi/permission_cases.json`）に例を足して試験を回す**（[権限の方針の試験](#権限の方針の試験stock)）。`~/.pi/agent/extensions/pi-permission-system/config.json` を手で書き換えた `permission` は、次の apply でリポジトリの値へ戻る。
+- bash のパターンは 1 コマンドずつ照合される（`curl … | sh` のような連結は書けない）。パイプ先の `sh`・`bash` を deny して防ぐ。
+
+### cc-safety-net の規則（stock）
+
+package `cc-safety-net` は、破壊的なコマンド（`git reset --hard`・`rm -rf` の危険な対象・`find -delete`）と秘密のパスへのアクセスを、コマンドを解析して止める（設定なしで動く。標準の水準）。リポジトリは次の 2 つを足す。配り先は `~/.cc-safety-net/rules/`（stock だけ。custom は `.chezmoiignore.tmpl` で除外）。
+
+- **`git push` を全て止める**（`home/dot_cc-safety-net/rules/dotfiles-guard/rulebook.json`）。`pi-permission-policy.json` の `git push*` は前方一致なので `git -C <dir> push` を読み飛ばせない。`cc-safety-net` は git の前置きオプション（`-C`・`-c`・`--git-dir` など）を読み飛ばしてサブコマンドを見るので、これらと、`env`・`xargs`・`bash -c`・`$(…)` 経由も止める。`git log --grep push` や `git commit -m 'fix push'` は止めない（試験で確認）。
+  - 規則は `rulebook_version: 1` の形（`subcommand: "push"`・`block_args: ["push"]`。サブコマンド自身を必ず現れる引数にして、全ての push を止める）。`rulebook_version: 2` の `match.command_path` は `git -C <dir>` を読み飛ばせず、見逃すので使わない。
+  - 止めるだけで、確認（ask）にはできない（`cc-safety-net` の仕様）。
+- **`bg_run` を shell ツールとして宣言する**（`rule.json` の `command_tools`）。pi-background の `bg_run` は `cc-safety-net` が知らない shell ツールで、宣言しないと中のコマンドを解析しない（`cc-safety-net` の docs の記述。宣言前の挙動は実機で確かめていない）。**宣言した後は、実機で `bg_run` も block された**（2026-11-10。作業ツリーの中の使い捨てリポジトリで `git reset --hard` を、`bash` と `bg_run` のどちらでも止めた）。**試験の注意**: `/tmp` の一時リポジトリでは、`cc-safety-net` が「一時リポジトリの緩和」で `git reset --hard` を通す。最初の試験（2026-11-09。`/tmp` で実行されたのを「解析されない」と読んだ）はこの緩和に当たっていて無効だった。block を確かめる試験は、作業ツリーの中（`.tmp/` など）で行う。`pi-permission-system` は `shellTools` で `bg_run` にも効く。
+- 配備した規則の確認は `cc-safety-net rule verify`（`$schema` を足すことがある）と `rule list`。規則を足すときは、rulebook に書いて、判定表に例を足す。
+
+### 権限の方針の試験（stock）
+
+`test/test_pi_permission_decisions.py` が、方針を**実際の判定エンジンに通して**、表 `test/agents/pi/permission_cases.json`（コマンド → 判定）と照合する。規則の書き間違い・通常の作業を止める誤判定・危険な形の見逃しを、開発の段階で見つけるため。
+
+- `pi-permission-system` の判定エンジンを、YOLO を切った状態で直接呼ぶ（`test/agents/pi/permission_check.mjs`）。bash は複合コマンドの分解とラッパーの床（`<opaque-bash-wrapper>` など）を含む。`cc-safety-net` は `explain` に、リポジトリの規則を `CC_SAFETY_NET_HOME` で渡して通す。
+- 方針の bash の規則は、表のどれかの例が当たること（当たらない規則は書き間違いか、表の不足）を検査する。
+- プロジェクト単位の設定（下の節）が、グローバルの方針と合成されることも確かめる。
+- **範囲外**: bash のトークンを `path` と `external_directory` へ投影するゲート（`cat <秘密のパス>` など。規則の評価だけは surface の表で見る）。エンジンの内部 API を直接呼ぶので、package の版を上げたときに壊れることがある（版は `pi-stock-packages` で固定）。pi の package が無い環境では skip する（skip は通過ではない）。
+
+### プロジェクト単位でデータセットを読み取り専用にする
+
+作業ツリーの外にあるデータセット（例: `/data/datasets`）を、**そのプロジェクトでだけ**、読み取りを確認なしにし、書き込みは確認（ask）のままにする手順。グローバルの方針は `/tmp/*` だけを事前許可している。前提は YOLO を切っていること（切っていると ask は自動承認され、事前許可の意味がない）。
+
+1. プロジェクトを、pi の信頼の確認で許可しておく。**未信頼のプロジェクトの設定は読まれない**（警告が出る。拡張の仕様。プロジェクトの設定でグローバルの方針を緩められないようにするため）。
+2. プロジェクトの直下に `.pi/extensions/pi-permission-system/config.json` を作る。
+
+   ```json
+   {
+     "permission": {
+       "external_directory_read": { "/data/datasets/*": "allow" }
+     }
+   }
+   ```
+
+3. pi を起動し直す（または `/reload`）。
+
+- **パターンの書き方**: 末尾の `/*` が必須。`*` はサブディレクトリを含めて一致する（`**` は書かない）。`/data/datasets` 自体（ディレクトリの一覧など）も許すなら、`"/data/datasets": "allow"` を足す。`~/datasets/*` のように `~` も使える。シンボリックリンクは、参照したパスと実体のどちらにも一致する（作業ツリー内のリンクが外を指す場合も、実体で「外」と判定される）。
+- **読み取りだけ許し、書き込みは禁止にする**: `external_directory_write` に同じパターンを `deny` で足す。足さなければ、書き込みはグローバルの `ask` のまま。
+- **bash からの読み取り**: `cat`・`head`・`tail`・`wc`・`rg`・`grep`・`ls`・`sed`・`awk`・`sort`・`diff`・`stat`・`find` などの読み取り専用のコマンドと、`read`・`grep`・`find`・`ls` のツールは、読み取りと分かるので許可される。`python train.py --data /data/datasets/x` のように**読み書きを判別できない**ものは、書き込みの面も見て ask になる。確認画面の「このセッション中は許可」で通すか、書き込みも許すなら `external_directory`（読みと書きの両方）を使う。
+- **他の判定は変わらない**: `path` の deny（`.env`・秘密鍵など）は、この許可よりも優先して効く。
+- 確認済み: グローバルの方針との合成（読みは許可・書きは ask・他の場所は ask）と書き込みの deny は `test_pi_permission_decisions.py` の表（`project`・`project_deny_write`）。bash 経由の判別は拡張の docs による（実機では未確認）。
+
+### MCP 設定（stock）
+
+- `~/.pi/agent/mcp.json` を `modify_mcp.json.py.tmpl`（stock だけ。custom は `.chezmoiignore.tmpl` で除外）が配る。`[[mcp]]`（`clis` に `pi` を含むもの）から `mcpServers` を作る。仕様は [MCP サーバの設定](mcp-servers.md)。
+- 宣言したサーバだけを更新し（`command` / `args`）、利用者が足したサーバと利用者のキーは保つ。壊れた JSON は触らない。何度流しても同じ結果。
+- **package の一覧の変更**: `pi-web-access` を外した（家の検索は自作の MCP `websearch`）。`pi-mcp-adapter` は `is-work` の機だけ入れる（他の機は pi 組み込みの MCP で足りる）。評価は [記録](../research/agents/pi-stock-packages-evaluation-2026-11.md)。
+- **permission**: `mcp` は `"*": "ask"` のまま、`websearch`・`agentcore-websearch`（サーバ名だけのルール）を allow。他の MCP は ask。
+- **未確認**（実機）: permission-system は `mcp` に allow が 1 つでもあると `mcp_status` などの探索系を自動で allow にする、と docs にある。実挙動は未確認。
+
+### 追加の 4 つの package（background・plan mode・goal・rewind）
+
+評価と決定は [評価の記録](../research/agents/pi-stock-packages-evaluation-2026-11.md)。いずれも `pi-stock-packages` で版を固定して参照する（コードは取り込まない。自作のコードも足さない）。表の `@narumitw/pi-btw` と `pi-show-token-rate` は後から足した 5 つ目・6 つ目（2026-11-09。見出しの「4 つ」は、他の節からの参照の見出しリンクを保つためそのままにした）。
+
+| package | 役割 | 設定・permission |
+| --- | --- | --- |
+| `pi-background@0.4.2` | 背景シェル実行。`bg_run`・`bg_status`・`bg_kill`・`/bg`。bash が 120 秒を超えると自動で背景化し、終了で親を起こす | 設定項目は無い。`shellTools` に `bg_run`、`bg_status`・`bg_kill` は allow |
+| `@narumitw/pi-plan-mode@0.60.0` | `/plan`。`tool_call` の block で読み取り専用にし、計画を保存・承認・実装する | `~/.pi/agent/pi-plan-mode.json`（下。stock だけ）。`plan_mode_question`・`plan_mode_complete` は allow |
+| `@narumitw/pi-goal@0.55.0` | `/goal`。目的を自走で続ける。token 予算・自動応答数・無進捗の上限 | 既定のまま（`pi-goal.json` は配らない）。`goal_complete`・`goal_blocked`・`goal_wait` は allow |
+| `@narumitw/pi-btw@0.63.5` | `/btw <質問>`。本体と別のスレッドで質問する（モデル・思考レベルは別に指定可）。ツールは登録せず、モデル呼び出しもツールなし。本体へは明示したときだけ戻せる | 既定のまま（`pi-btw.json` は配らない）。ツールを足さないので permission は不要 |
+| `pi-show-token-rate@0.3.0` | ステータス行に TPS（ストリーム中は直近の窓の値）と TTFT を出す。コマンド `/token-rate` で表示を切り替える。ツールは登録しない。ファイル・ネットワーク・子プロセスを使わない | 設定ファイルは配らない（既定のまま）。permission は不要。自作の `speed` は stock では配らないので、ステータスの競合は無い |
+| `@ayulab/pi-rewind@0.4.6` | `/rewind`・`/checkpoint`。ターンごとの作業ツリーのスナップショットを、別の bare repo に保存する（利用者の `.git` には書かない） | ツールを足さないので permission は不要 |
+
+- **plan mode の設定**: `home/dot_pi/agent/modify_pi-plan-mode.json.py.tmpl` が `~/.pi/agent/pi-plan-mode.json` を配る（stock だけ。custom は `.chezmoiignore.tmpl` で除外）。拡張が `/plan settings` で書き換えるので、既存のキーはすべて保ち、次の 2 つだけ無いときに補う。`defaultPlanTools` = `["read","bash","grep","find","ls","ask_user_question"]` に検索 MCP の完全名 4 つ（`mcp__websearch__web_search`・`mcp__websearch__fetch_page`・`mcp__websearch__search_papers`・`mcp__agentcore_websearch__web_search_tool__WebSearch`）を足したもの（許可リストは完全一致の名前だけ。この 4 つは [MCP の `pi_exposure = "direct"`](mcp-servers.md#pi_exposurepi-への見せ方) でモデルへ直接見せている。**既存の `defaultPlanTools` を持つファイルにも**、無い名前だけ末尾へ追記する（和集合。順序・利用者の名前は保つ。リストでない値は触らない）。`subagent` は入れない。子は別プロセスで plan mode の block が及ばないため）、`defaultPlanExportPath` = `.tmp/keep/plan/`（既定の `PLAN.md` で作業ツリーを汚さない）。拡張の側で `grep`・`find`・`ls` を使うには pi 本体の settings での有効化が要る（未実施）。
+- **goal の運用**: 設定は拡張の既定（`continuationLimits.automaticTurns` = 25・`noProgressTurns` = 3・`rpc.enabled` = false・`retryUsageLimits` = false）。**`/goal` は必ず `--tokens` つきで使う**（例: `/goal --tokens 500k <目的>`）。**時間の上限は無い**ので、離席中は外側の `timeout` と合わせる。
+- **限界**:
+  - `bg_run` は、`cc-safety-net` の tool 名の既定（`bash`・`powershell` だけ）には入っていないが、`rule.json` の `command_tools` で宣言すれば解析される（[cc-safety-net の規則](#cc-safety-net-の規則stock)。宣言した状態で、`bg_run` 経由の `git reset --hard` が block されることを実機で確かめた）。`pi-permission-system` の deny・ask は `shellTools` 経由で効く。
+  - pi-background の自動背景化は、pi 組み込みの bash のときだけ効く。**bash を置き換える拡張（サンドボックス系・`pi-patty-bg-tasks` など）を入れない**。入れると無効になる。pi を閉じると実行中の job は死ぬ。
+  - `/goal` の完了は同じエージェントの**自己申告**（`goal_complete`）。独立した検証ではない。独立性が要るときは review の子を手順に入れる。
+  - `pi-rewind` は **GPL-3.0**。npm で参照するだけで、このリポジトリにコードを取り込まない。戻せるのは作業ツリーのファイルだけ（`git commit`・ブランチ操作・push は戻らない）。
+- **導入の条件（実機での確認。すべて未確認）**:
+  - pi-rewind: worktree の中で `/rewind` して、`git status`・`git reflog`・`git stash list` が変わらないこと。
+  - pi-background: 12 分のコマンドで、終了時に親が起きること。
+  - pi-btw: `chezmoi apply` 後に pi 1.5.0 が package を取得して `/btw` が動くこと。Orca の端末での表示。`/plan`・`/goal` との共存。**質問と選んだ文脈は、選んだモデルの提供元へ送られる**（README の記述。未検証）。
+  - pi-show-token-rate: `chezmoi apply` 後に pi 1.5.0 が package を取得してステータス行に出ること。Copilot 経由（reasoning がストリームに出ない場合）で数値が極端に過小にならないこと。Orca の端末での表示。他のステータス表示と競合しないこと。（すべて未確認）
+  - plan と goal: permission-system との `tool_call` の実行順（plan mode が block する呼び出しで ask が先に出ないか）。
+
+### stock にする（既定。旗を置いた機は、旗を消す）
+
+既定が stock なので、旗（`~/.config/chezmoi/pi-profile`）が無ければ何もしなくてよい。`custom` の旗を置いてある機は、旗を消す（環境変数で選んだときは外す）。
+
+```sh
+chezmoi apply
+```
+
+その後 pi を起動すると、`settings.json` の `packages` を pi が取得する。
+
+### custom へ戻す
+
+```sh
+mkdir -p ~/.config/chezmoi && printf 'custom\n' > ~/.config/chezmoi/pi-profile
+chezmoi apply
+```
+
+環境変数 `CHEZMOI_PI_PROFILE=custom` でもよい。
+自作の拡張・ハーネス・prompts・`models.json` は `chezmoi apply` が再配備する。
+`settings.json` はハーネスのキーを生成器が書き直す。`packages` は生成器の持ち物ではないので残る
+（不要なら `pi remove` か手で消す）。
+
+### 拡張の追加と削除
+
+`home/.chezmoitemplates/pi-stock-packages` を編集して `chezmoi apply`（1 行に 1 つ、`npm:<名前>@<版>`）。
+版を固定した npm の package は再取得されない。版を上げるときは書き換える。
+
+### Windows
+
+プロファイルの判定は Windows でも同じ（`%USERPROFILE%\.config\chezmoi\pi-profile` か環境変数）。
+Windows 実機では未検証（`.chezmoiignore.tmpl` の Windows 向けの戻し `!.config/pi/` との兼ね合いを含む）。
+
+試験は `test/test_pi_profile.py`（`chezmoi execute-template` で描画して確かめる。実機の apply は行わない）。
+
+### テーマ（iceberg。stock）
+
+pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読みやすさ（タイトル・選択行・警告のコントラスト）を上げること。テーマは JSON の設定ファイルだけで、拡張（コード）は足さない。
+
+- **配るファイル**: `home/dot_pi/agent/themes/iceberg.json`（配備先は `~/.pi/agent/themes/iceberg.json`）。組み込みの `dark.json` と同じキー構成（`colors` は全トークン）。`.chezmoiignore.tmpl` では除外しないので、custom / stock のどちらでも配られる。
+- **選び方**: `/settings` の Theme で `iceberg` を選ぶ。または `~/.pi/agent/settings.json` に `"theme": "iceberg"` を書く。**リポジトリは `theme` を配らない**（利用者のキーなので、利用者が選ぶ）。
+- **何を変えるか**: 配色だけ。**確認画面に枠や背景は付かない**（それは別の問題で、このテーマでは直せない）。
+  - `text` は `#c6c8d1`。`muted` は Iceberg のグレー `#6b7089` では暗いので、`#9399b2` に明るくした。
+  - `accent`（確認画面のタイトルと選択行）は暖色の橙 `#e2a478`、`warning`（規則に当たったコマンドの強調）は明るい橙 `#e9b189`、`error` は赤 `#e27878`、`success` は緑 `#b4be82`。
+  - 背景系（選択行・ユーザー発言・ツールの状態）は `#161821` より少し明るい暗色（`#1e2132`・`#272c42`、緑・赤・紫の薄い暗色）。
+  - **入力欄の枠は、思考の深さで色が変わる**（pi 本体の仕様。`thinking*`）。常用する `xhigh` がエラーの赤に見えないよう、寒色から暖色へ順に: `off` グレー `#6b7089` → `minimal` スレート `#7788a7`（グレーと青の中間）→ `low` 青 `#84a0c6` → `medium` シアン `#89b8c2` → `high` 紫 `#a093c7` → `xhigh` 明るい紫 `#ada0d3` → `max` 明るい橙 `#e9b189`。`xhigh` までは赤系を使わない。`high` と `xhigh` の差は小さい（同じ紫の明るさ違い）。枠としての見え方は実機で未確認。
+- **出典**: [Iceberg](https://github.com/cocopon/vscode-iceberg-theme)（cocopon。MIT）の terminal の色（2026-11-10 取得）。パレットに無い色は、`muted`・`dimText` と、背景系の暗色（パレットの色を `#161821` と混ぜたもの）だけ。
+- **コントラストの実測**（WCAG。背景 `#161821`。`test/test_pi_theme.py` が検査する）: `text` 10.6（要 7 以上）・`muted` 6.27・`accent` 8.27・`warning` 9.37・`error` 6.06・`success` 8.96・`mdLink` 8.17（いずれも要 4.5 以上）。`dim`（`#7a8099`）は 4.53。
+- **未確認**: iPhone の Orca での見え方。`system` テーマ（端末のパレットから自動で作る既定）との比較。
+- **戻し方**: `settings.json` の `theme` を消すか、`/settings` で `system` を選ぶ。
+- 試験は `test/test_pi_theme.py`（pi 本体が無くても動く。組み込み `dark.json` が見つかるときだけ `colors` のキー集合の一致も見る。見つからなければ skip で、skip は通過ではなく未検査）。
+
+### 圧縮の設定（stock）
+
+方針と根拠は [記録](../research/agents/long-context-compaction-paper-2026-11.md)（70 万トークンで圧縮・指示だけを package で恒久設定・自作なし）。
+
+- **package**: `npm:@thgilciffart/pi-compaction@0.3.1`（`pi-stock-packages`）。要約の指示の恒久設定だけに使う。
+- **`~/.pi/agent/compaction.json`**: `home/dot_pi/agent/modify_compaction.json.py.tmpl`（stock だけ。custom は `.chezmoiignore.tmpl` で除外）が配る。
+  - `defaults.instructions`: 続きの作業のための brief を作る指示（日本語 10 項目）。リポジトリの値に**強制**する（変えたら apply で更新される）。
+  - `defaults.onError`: `"default"`（無いときだけ補う。要約に失敗したら本体の既定で圧縮する）。
+  - `auto`・`model`・`effort`・`style` は配らない（利用者が `/compaction-settings` で足したキーは保つ。`models` など他のキーも保つ）。壊れた JSON は触らない。何度流しても同じ結果。
+- **`compaction.modelOverrides`（`~/.pi/agent/settings.json`）**: `modify_pi_stock_settings.py.tmpl` が、窓が 100 万のモデル（`github-copilot/` の `claude-sonnet-5.5`・`claude-opus-5.5`・`claude-sonnet-5`・`gpt-6-sol`・`gpt-5.3-codex`・`gemini-3.8-flash`）に `reserveTokens = 300000` を、**無いときだけ**補う（利用者が別の値を書いていれば保つ。`compaction` の他のキーも保つ）。`reserveTokens` = 窓 − 発動点なので、発動点は 70 万トークン（窓の 7 割）。
+- 試験は `test/test_pi_compaction_config.py`。
+
+### pi-subagents の設定（stock）
+
+子エージェントは package `pi-subagents`（nicobailon。`pi-stock-packages` で版固定）。評価は [評価の記録](../research/agents/pi-stock-packages-evaluation-2026-11.md) の「オーケストレーションの評価と決定」、運用は `.agents/skills/feature-orchestration/references/pi-subagents.md`。自作のコードは足さない（既存の `modify_` スクリプトと設定だけ）。複数形の `extensions/subagents/` は凍結した自作拡張で、ここの対象ではない。
+
+- **`~/.pi/agent/extensions/subagent/config.json`**（単数形。stock だけ。custom は `.chezmoiignore.tmpl` で除外）: `home/dot_pi/agent/extensions/subagent/modify_config.json.py.tmpl` が配る。
+  - **`forceTopLevelAsync: true` は強制**（利用者が false にしても apply で戻る）。前景の子には親の拡張が載らず permission-system と cc-safety-net が効かないため。
+  - 無いときだけ補う: `worktreeProvider: "native"`・`maxActiveAsyncRunsPerSession: 4`（同時数）・`maxSubagentDepth: 1`（入れ子なし）・`maxSubagentSpawnsPerRun: 32`（1 run の子の累計。既定は 64）。
+  - 利用者が足した他のキーは保つ。壊れた JSON は触らない。何度流しても同じ。
+- **settings の `subagents.agentOverrides`**（`modify_pi_stock_settings.py.tmpl`）: 組み込みの `scout`（`read`・`grep`・`find`・`ls`・`contact_supervisor`）と `oracle`（`read`・`grep`・`find`・`ls`）の `tools` を読み取り専用に絞る（組み込みの既定は `bash`・`write` を持つ）。`reviewer`（読み取り専用）・`worker` は変えない。利用者が同じ役の `tools` を書いていれば保つ（無いときだけ補う）。他の `subagents` のキー・他の役の上書きも保つ。
+- **permission**（`pi-permission-policy.json`）: `subagent_supervisor` は allow、`subagent_launch`（workflow の子の起動ごとの確認）は **ask**。`gate`・`acceptance.verify` のシェルは bash の規則の外なので使わない。
+- 試験は `test/test_pi_subagents_config.py`（描画して確かめる。実機の apply は行わない）。

@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""pi の stock プロファイルの ~/.pi/agent/settings.json。標準入力の現状を変換して出す。
+
+自作ハーネスが入れた設定だけを取り除き、packages を pi-stock-packages の内容にする。
+利用者のキー (テーマ・既定のモデルなど) は触らない。何度流しても同じ結果になる。
+see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
+"""
+from __future__ import annotations
+
+import json
+import sys
+
+PACKAGES_TEXT = {{ .packages | toJson }}
+
+# 自作ハーネスだけが入れる extensions / skills の項目 (scripts/agents/generate.py の宣言に対応)
+HARNESS_EXTENSION_MARKS = (".config/pi/harness", "!extensions/**", "+extensions/", "-builtin:")
+HARNESS_SKILL_MARKS = ("~/.claude/skills", "-~/.agents/skills/", "-~/.claude/skills/")
+
+# pi の既定 (read・bash・edit・write) に、読み取り専用の探索ツールを足す (増分指定)。plan mode の探索と通常の探索で使う
+# 利用者が +/- だけの増分指定に変えていたら保つ。自作ハーネスの全置換の値 (["read"] など) は初期値に置き換える
+DEFAULT_TOOLS = ["+grep", "+find", "+ls"]
+
+# 圧縮 (compaction): 窓が 100 万のモデルは 70 万で圧縮する。reserveTokens = 窓 - 発動点 = 300000 (窓の 3 割)
+# 窓の大きさが違うモデルは補わない。利用者が別の値を書いていれば保つ (無いときだけ補う)
+COMPACTION_RESERVE_TOKENS = 300000
+COMPACTION_MODELS = (
+    "github-copilot/claude-sonnet-5.5",
+    "github-copilot/claude-opus-5.5",
+    "github-copilot/claude-sonnet-5",
+    "github-copilot/gpt-6-sol",
+    "github-copilot/gpt-5.3-codex",
+    "github-copilot/gemini-3.8-flash",
+)
+
+
+def add_compaction_overrides(data: dict) -> None:
+    compaction = data.get("compaction")
+    if compaction is None:
+        compaction = {}
+    if not isinstance(compaction, dict):
+        return  # 想定外の形は触らない
+    overrides = compaction.get("modelOverrides")
+    if overrides is None:
+        overrides = {}
+    if not isinstance(overrides, dict):
+        return
+    for model in COMPACTION_MODELS:
+        entry = overrides.get(model)
+        if entry is None:
+            entry = {}
+        if not isinstance(entry, dict):
+            continue
+        entry.setdefault("reserveTokens", COMPACTION_RESERVE_TOKENS)
+        overrides[model] = entry
+    compaction["modelOverrides"] = overrides
+    data["compaction"] = compaction
+
+
+# pi-subagents の組み込みの子の tools を読み取り専用に絞る (subagents.agentOverrides.<name>.tools 。docs/agents.md)。
+# 組み込みの既定: scout = read, grep, find, ls, bash, write, contact_supervisor / oracle = read, grep, find, ls, bash。
+# bash・write を外す (scout は親への問い合わせ contact_supervisor を残す)。reviewer (読み取り専用) と worker は変えない。
+# 利用者がすでに同じ役の tools を書いていれば保つ (無いときだけ補う)。
+AGENT_TOOL_OVERRIDES = {
+    "scout": ["read", "grep", "find", "ls", "contact_supervisor"],
+    "oracle": ["read", "grep", "find", "ls"],
+}
+
+
+def is_incremental(value: object) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) > 0
+        and all(isinstance(i, str) and i.startswith(("+", "-")) for i in value)
+    )
+
+
+def packages() -> list[str]:
+    lines = (line.strip() for line in PACKAGES_TEXT.splitlines())
+    return [line for line in lines if line and not line.startswith("#")]
+
+
+def drop_marked(items: object, marks: tuple[str, ...]) -> list[object]:
+    if not isinstance(items, list):
+        return []
+    return [i for i in items if not (isinstance(i, str) and any(i.startswith(m) or m in i for m in marks))]
+
+
+def main() -> int:
+    raw = sys.stdin.read()
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        sys.stdout.write(raw)  # 壊れた入力は触らない
+        return 0
+    if not isinstance(data, dict):
+        sys.stdout.write(raw)
+        return 0
+    if not is_incremental(data.get("defaultTools")):
+        data["defaultTools"] = list(DEFAULT_TOOLS)
+    for key, marks in (("extensions", HARNESS_EXTENSION_MARKS), ("skills", HARNESS_SKILL_MARKS)):
+        if key in data:
+            kept = drop_marked(data[key], marks)
+            if kept:
+                data[key] = kept
+            else:
+                del data[key]
+    data["packages"] = packages()
+    subagents = data.get("subagents")
+    if not isinstance(subagents, dict):
+        subagents = {}
+    overrides = subagents.get("agentOverrides")
+    if not isinstance(overrides, dict):
+        overrides = {}
+    for name, tools in AGENT_TOOL_OVERRIDES.items():
+        entry = overrides.get(name)
+        if not isinstance(entry, dict):
+            entry = {}
+        entry.setdefault("tools", list(tools))
+        overrides[name] = entry
+    subagents["agentOverrides"] = overrides
+    data["subagents"] = subagents
+    add_compaction_overrides(data)
+    json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

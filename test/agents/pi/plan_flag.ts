@@ -2,7 +2,7 @@
 //   PLAN_FLAG=1                    起動時から立てる
 //   PLAN_FLAG_AFTER_FIRST_TASK=1   最初の guarded_task の結果のあとで立てる (計画の前から動いている子を作る)
 // `/planflag` は、いまの印を PLANFLAG <値> の 1 行で出す。
-// see docs/change/0044-plan-agent.md
+// see docs/change/closed/0044-plan-agent.md
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {

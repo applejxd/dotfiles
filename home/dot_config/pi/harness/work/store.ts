@@ -88,6 +88,9 @@ export function encodeLine(ev: LedgerEvent): Buffer {
 	const o: Record<string, unknown> = { seq: ev.seq, ts: ev.ts, type: ev.type };
 	if (ev.node !== undefined) o.node = ev.node;
 	o.data = ev.data;
+	// 出所と保持者 (I8・I10)。落とすと再起動後の再生で利用者専用イベントが拒否される
+	if (ev.source !== undefined) o.source = ev.source;
+	if (ev.holder !== undefined) o.holder = ev.holder;
 	if (ev.aux !== undefined) o.aux = ev.aux;
 	const body = Buffer.from(JSON.stringify(o), "utf8");
 	return Buffer.concat([body, Buffer.from(`\t${crcHex(body)}\n`, "latin1")]);

@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""pi の stock プロファイルの ~/.pi/agent/compaction.json。標準入力の現状を変換して出す。
+
+@thgilciffart/pi-compaction の設定。要約の指示 (brief) を恒久設定するためだけに使う。
+- defaults.instructions: 続きの作業のための brief を作る指示。リポジトリの値に強制する (正本はここ)
+- defaults.onError: "default" (無いときだけ補う。要約に失敗したら本体の既定で圧縮する)
+auto・model・effort・style は配らない (しきい値は本体の compaction.modelOverrides。
+利用者が /compaction-settings で足したキーと、models などの他のキーは保つ)。
+壊れた入力は触らない。何度流しても同じ結果になる。
+stock でだけ配る (custom は .chezmoiignore.tmpl で除外)。
+see docs/spec/agent-config-generation.md#圧縮の設定stock
+"""
+from __future__ import annotations
+
+import json
+import sys
+
+INSTRUCTIONS = """\
+要約は、経過の物語ではなく、続きの作業のための brief にする。次の項目を、この順で、短く具体的に書く。
+1. 利用者の依頼・目的（ほぼ逐語で）
+2. 利用者の指示・好み・制約・確定した決定（最新のものだけ。決定の理由を一言）
+3. 未回答の判断・確認待ち（誰の何待ちか）
+4. 現在の作業・意図・次の一手（実行するコマンドか編集）と、完了の条件
+5. 残りの計画（順序つき）と todo の状態
+6. 確かめた事実（正確なパス・コマンド・値・エラー。観察と、未検証の推測を分ける）
+7. 変えたファイル（何を変えたか・検証済みか）と、実行した検査の結果
+8. 行き止まり（試して失敗した方法・繰り返さないこと）
+9. 実行中の子エージェント・背景ジョブ（id・目的・完了後にやること）
+10. 参照すべきファイル（契約・引き継ぎ文書・ログのパス）
+観察を作らない。切り詰められた出力は、取り直す狭いコマンドを書く。利用者の指示と好みは、削らない。"""
+
+
+def main() -> int:
+    raw = sys.stdin.read()
+    try:
+        data = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        sys.stdout.write(raw)  # 壊れた入力は触らない
+        return 0
+    if not isinstance(data, dict):
+        sys.stdout.write(raw)
+        return 0
+    defaults = data.get("defaults")
+    if not isinstance(defaults, dict):
+        defaults = {}
+    defaults["instructions"] = INSTRUCTIONS
+    defaults.setdefault("onError", "default")
+    data["defaults"] = defaults
+    json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

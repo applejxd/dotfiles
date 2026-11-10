@@ -2,7 +2,7 @@
 
 観測日: 2026-10-30。依頼: 親エージェントを、命令（プロンプト）ではなく仕組み（ツールの分離・権限・フック）で、計画・判断・委譲・承認に絞る設計。
 作成: `plan` の子（深く考える階層）。pi 本体の docs（作業ツリーの外）は、子の権限で読めず、挙動は、このリポジトリでの使用実績と試験に基づく（**未確認**）。
-案件は [CHG-0045](../../change/0045-orchestrator-parent.md) 段 6。今の実装の仕様は [親の絞り込み](../../spec/guard/pi-subagents.md#親の絞り込みorchestrate)。
+案件は [CHG-0045](../../change/closed/0045-orchestrator-parent.md) 段 6。今の実装の仕様は [親の絞り込み](../../spec/guard/pi-subagents.md#親の絞り込みorchestrate)。
 
 ## 核となる仕組み
 

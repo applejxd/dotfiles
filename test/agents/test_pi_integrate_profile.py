@@ -2,7 +2,7 @@
 
 保護は全体設定のまま: 接頭辞・統合先が保護と交差する設定は拒否し、拒否したら全体の既定に倒す。
 診断には入力の本文・値を入れない。fixture には架空の名前だけを使う。
-see docs/change/0057-per-project-integrate.md
+see docs/change/closed/0057-per-project-integrate.md
 """
 
 from __future__ import annotations

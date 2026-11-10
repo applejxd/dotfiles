@@ -3,7 +3,7 @@
 `docs/spec/development.md` から移した記録（gitleaks のプレビルド、検証の所要時間、hook の stage、Windows Sandbox の実測）。
 移設時点で再測定していない。
 
-> **現行の仕様**: [開発ガイド](../../spec/development.md)。検証コマンドの正本は [AGENTS.md の検証表](../../../AGENTS.md#検証)。
+> **現行の仕様**: [開発ガイド](../../spec/development.md)。検証コマンドの正本は [dotfiles-conventions スキルの検証表](../../../.agents/skills/dotfiles-conventions/SKILL.md#検証)。
 
 ## 記録 E1 — 全件検証の所要時間（2026-10-22）
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 # CHG-0029 W0b: Fence の下で、linked worktree を cwd にした子の書込境界を確かめる使い捨ての検査。
-# 手順と読み方は docs/change/0029-worktree-isolation.md の「W0b の手順」。
+# 手順と読み方は docs/change/closed/0029-worktree-isolation.md の「W0b の手順」。
 # 使い捨てのリポジトリ ($W0B_BASE、既定 ~/worktrees/w0b) だけを触り、本物のリポジトリには書かない。
 set -eu
 

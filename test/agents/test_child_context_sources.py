@@ -1,4 +1,4 @@
-"""正本 (共通指示・リポジトリの AGENTS.md) の子向けの印が、規則ごとに期待どおりの役割へ渡ることを固定する。
+"""固定サンプル (旧: 共通指示・リポジトリの AGENTS.md の写し) の子向けの印が、規則ごとに期待どおりの役割へ渡ることを固定する。
 
 ``test/agents/pi/child_context_sources_driver.mjs`` が ``resolveContext`` / ``lint`` を実物の 2 ファイルに当てる。
 規則は「原文の箇条書き (継続行を含む) 全体」を切り出して、抜粋に入る / 入らないを役割ごとに確かめる。
@@ -18,7 +18,11 @@ from test_pi_judge_ts import _node
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 DRIVER = HERE / "pi" / "child_context_sources_driver.mjs"
-FILES = {"global": "home/.chezmoitemplates/agent-instructions.md", "repo": "AGENTS.md"}
+# 凍結 (ADR-0030): 実物は印なしの平らな文書になったので、印つきの固定サンプル (旧正本の写し) を検証する
+FILES = {
+    "global": "test/agents/fixtures/child_context/agent-instructions.md",
+    "repo": "test/agents/fixtures/child_context/repo-instructions.md",
+}
 ROLES = ("explore", "review", "plan", "worker")
 
 pytestmark = pytest.mark.skipif(_node() is None, reason="型除去に対応した node (22.18 以上) が無い")
@@ -42,11 +46,13 @@ RULES: tuple[tuple[str, str, frozenset[str]], ...] = (
     ("global", "- コミットの承認も `ask` で取る", NONE),
     ("global", "- **例外: ツール `guarded_action`", NONE),
     ("global", "- hook / rules / 承認プロンプトなど", ALL),
-    ("global", "- **止まってよいのは", NONE),
+    ("global", "- **今着手できる契約内の作業が", NONE),
     ("global", "- 止まるときは、最終報告に", NONE),
     ("global", "- **待つ間（承認・確認・子の完了）", NONE),
     ("global", "- 完了を報告する前に", W),
     ("global", "- 実行していないチェックの結果を推測で書かない", ALL),
+    ("global", "- 報告は、先頭に結論を", ALL),
+    ("global", "- 契約（I/F・担当ファイル・守る条件）の変更が必要になったら", W),
     ("global", "- 使い捨て（試験・実験のスクリプトや出力）", W),
     ("global", "- 後で `docs/` などへ取り込むもの", NONE),
     ("global", "- `.tmp` 自体と `.tmp/keep` は消さない", W),
@@ -97,6 +103,11 @@ RULES: tuple[tuple[str, str, frozenset[str]], ...] = (
     ("repo", "初回のみ `mise install", NONE),
     ("repo", "`*.ps1` / `*.ps1.tmpl`、", W),
     ("repo", "このリポジトリ固有の約束で定めない事項は", WRP),
+    ("repo", "- **公開情報（主流の実装・公式の推奨・先行事例）に無いことをするときは", WRP),
+    ("repo", "  (1) 主流が何をしているかを", WRP),
+    ("repo", "  (2) 違う設計にするなら、", WRP),
+    ("repo", "  (3) 固有で本当に要るものだけを、", WRP),
+    ("repo", "  自作は、標準品・既製品で足りないと", WRP),
     ("repo", "- 実ファイルを直接編集したら", NONE),
     ("repo", "- `home/.chezmoiscripts/` は", WRP),
     ("repo", "- シェルスクリプトは先頭に `set -eu`", WRP),

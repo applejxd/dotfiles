@@ -135,6 +135,51 @@ def test_rejects_missing_branch(repo: Path) -> None:
     assert "存在しません" in r.stderr
 
 
+def test_add_merges_more_branches_into_existing_bundle(repo: Path) -> None:
+    assert _bundle(repo, "start", "a").returncode == 0
+    wt = repo / ".tmp" / "worktrees" / "bundle-1"
+    assert not (wt / "b.txt").exists()
+    r = _bundle(repo, "add", "--name", "bundle-1", "b", "feature/c", "a")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (wt / "b.txt").is_file() and (wt / "c.txt").is_file()
+    # a は既に取り込み済みなので重複しない
+    assert _bundle(wt, "status").stdout.count("取り込み済み") == 3
+    again = _bundle(repo, "add", "--name", "bundle-1", "b")
+    assert again.returncode == 0 and "足す枝はありません" in again.stdout
+
+
+def test_add_skips_branch_already_merged_by_hand(repo: Path) -> None:
+    assert _bundle(repo, "start", "a").returncode == 0
+    wt = repo / ".tmp" / "worktrees" / "bundle-1"
+    _git(wt, "merge", "-q", "--no-edit", "feature/b")  # 手で取り込んだ
+    r = _bundle(repo, "add", "--name", "bundle-1", "b", "c")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "スキップ" in r.stdout
+    assert (wt / "c.txt").is_file()
+
+
+def test_add_conflict_stops_then_continue_finishes(repo: Path) -> None:
+    _conflicting(repo)
+    assert _bundle(repo, "start", "a").returncode == 0
+    wt = repo / ".tmp" / "worktrees" / "bundle-1"
+    r = _bundle(repo, "add", "--name", "bundle-1", "b", "c")
+    assert r.returncode == 3, r.stdout + r.stderr
+    # 衝突中は add を断る
+    again = _bundle(repo, "add", "--name", "bundle-1", "c")
+    assert again.returncode == 2 and "衝突" in again.stderr
+    (wt / "shared.txt").write_text("resolved\n", encoding="utf-8")
+    _git(wt, "add", "-A")
+    assert _bundle(wt, "continue").returncode == 0
+    assert (wt / "c.txt").is_file()
+
+
+def test_add_rejects_missing_branch_and_unknown_bundle(repo: Path) -> None:
+    assert _bundle(repo, "start", "a").returncode == 0
+    r = _bundle(repo, "add", "--name", "bundle-1", "nope")
+    assert r.returncode == 2 and "存在しません" in r.stderr
+    assert _bundle(repo, "add", "--name", "bundle-9", "b").returncode == 2
+
+
 def test_picks_free_number(repo: Path) -> None:
     _git(repo, "branch", "feature/bundle-1", "develop")
     r = _bundle(repo, "start", "a")

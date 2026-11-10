@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "rules": ["dotfiles-guard"],
+  "overrides": {},
+  "transparent_wrappers": [],
+  "command_tools": [{ "name": "bg_run", "cwd": "cwd" }]
+}

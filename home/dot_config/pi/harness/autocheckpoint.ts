@@ -51,6 +51,49 @@ export interface AutoCheckpointOptions {
 
 type Phase = "idle" | "saving" | "compacting";
 
+// 調停 (work/settle.ts) の旗。有効なときだけ、自分の agent_before_settle を登録せず、事実と効果の入口を公開する
+// see docs/spec/work/settle.md
+export const ARBITER_FLAG = "PI_WORK_ARBITER";
+export const arbiterEnabled = (env: Record<string, string | undefined> = process.env): boolean => env[ARBITER_FLAG] === "1";
+
+/** 調停へ渡す事実 (Facts.checkpoint と phase の元) */
+export interface CheckpointSnapshot {
+	phase: Phase;
+	percent: number | null;
+	threshold: number;
+	cooldown: boolean;
+	disabled: boolean;
+	llmStep: boolean;
+	prompt: string;
+}
+
+interface Bridge {
+	snapshot(): CheckpointSnapshot;
+	compact(): void;
+	cancel(): void;
+	markSaving(): void;
+	notify(kind: "silent" | "line" | "alert", text: string): void;
+	wake(text: string): void;
+}
+let bridge: Bridge | undefined;
+
+/** 旗が有効で登録済みのときの事実。未登録なら無効の値 */
+export function checkpointSnapshot(): CheckpointSnapshot {
+	return (
+		bridge?.snapshot() ?? { phase: "idle", percent: null, threshold: DEFAULT_PERCENT, cooldown: false, disabled: true, llmStep: true, prompt: CHECKPOINT_PROMPT }
+	);
+}
+
+/** 調停から呼ぶ効果。compact は保存の開始ではなく圧縮の起動 (保存の指示は調停の entry)。markSaving は保存の指示が勝ったときに呼ぶ */
+export const checkpointExec = {
+	compact: () => bridge?.compact(),
+	cancel: () => bridge?.cancel(),
+	markSaving: () => bridge?.markSaving(),
+	notify: (kind: "silent" | "line" | "alert", text: string) => bridge?.notify(kind, text),
+	/** 再開の起床 (RESUME_PROMPT)。既定の経路 (圧縮完了後) は今のまま。調停へ移すのは実機で確かめてから */
+	wake: (text: string = RESUME_PROMPT) => bridge?.wake(text),
+};
+
 export function thresholdPercent(env: Record<string, string | undefined>): number {
 	const n = Number(env.PI_AUTOCHECKPOINT_PERCENT);
 	return env.PI_AUTOCHECKPOINT_PERCENT && Number.isFinite(n) && n > 0 && n <= 100 ? n : DEFAULT_PERCENT;
@@ -77,6 +120,7 @@ export function createAutoCheckpoint(opts: AutoCheckpointOptions) {
 		coolUntil = now() + cooldownMs;
 	};
 	const disabled = (ctx: any) => opts.child || env.PI_AUTOCHECKPOINT === "0" || ctx.mode === "print" || ctx.mode === "json";
+	let lastCtx: any; // 調停の旗が有効なときだけ使う (事実と効果は ctx が要る)
 
 	// 圧縮の成功後に 1 回だけ再開を送る。待つ間に状態が変わった (別の周期・無効化) ら送らない
 	const scheduleResume = (ctx: any) => {
@@ -93,7 +137,30 @@ export function createAutoCheckpoint(opts: AutoCheckpointOptions) {
 		}, opts.resumeDelayMs ?? DEFAULT_RESUME_DELAY_MS);
 	};
 
-	return (event: any, ctx: any): { entries?: any[]; continue?: boolean } | undefined => {
+	// 圧縮の起動 (ハンドラの saving 側と調停の効果で共通)
+	const startCompact = (ctx: any) => {
+		phase = "compacting";
+		notify(ctx, "保存が終わったので圧縮を起動する");
+		try {
+			ctx.compact({
+				customInstructions: opts.compactInstructions,
+				onComplete: () => {
+					finish();
+					notify(ctx, "圧縮が完了");
+					scheduleResume(ctx);
+				},
+				onError: (e: Error) => {
+					finish();
+					notify(ctx, `圧縮に失敗: ${e?.message ?? e}`);
+				},
+			});
+		} catch (e: any) {
+			finish();
+			notify(ctx, `圧縮を起動できない: ${e?.message ?? e}`);
+		}
+	};
+
+	const handler = (event: any, ctx: any): { entries?: any[]; continue?: boolean } | undefined => {
 		if (disabled(ctx)) return undefined;
 		if (phase === "compacting") return undefined;
 		if (phase === "saving") {
@@ -103,25 +170,7 @@ export function createAutoCheckpoint(opts: AutoCheckpointOptions) {
 				notify(ctx, "中断されたので、圧縮は起動しない");
 				return undefined;
 			}
-			phase = "compacting";
-			notify(ctx, "保存が終わったので圧縮を起動する");
-			try {
-				ctx.compact({
-					customInstructions: opts.compactInstructions,
-					onComplete: () => {
-						finish();
-						notify(ctx, "圧縮が完了");
-						scheduleResume(ctx);
-					},
-					onError: (e: Error) => {
-						finish();
-						notify(ctx, `圧縮に失敗: ${e?.message ?? e}`);
-					},
-				});
-			} catch (e: any) {
-				finish();
-				notify(ctx, `圧縮を起動できない: ${e?.message ?? e}`);
-			}
+			startCompact(ctx);
 			return undefined;
 		}
 		// idle
@@ -138,6 +187,52 @@ export function createAutoCheckpoint(opts: AutoCheckpointOptions) {
 			continue: true,
 		};
 	};
+
+	// 調停の旗が有効なときの入口 (既定の経路では使わない)
+	const api: Bridge & { setCtx(ctx: any): void } = {
+		setCtx: (ctx) => {
+			lastCtx = ctx;
+		},
+		snapshot: () => {
+			const c = lastCtx;
+			let percent: number | null = null;
+			try {
+				const p = c?.getContextUsage?.()?.percent;
+				percent = typeof p === "number" ? p : null;
+			} catch {
+				percent = null;
+			}
+			return {
+				phase,
+				percent,
+				threshold: thresholdPercent(env),
+				cooldown: now() < coolUntil,
+				disabled: !c || disabled(c),
+				llmStep: true,
+				prompt: CHECKPOINT_PROMPT,
+			};
+		},
+		markSaving: () => {
+			if (phase !== "idle") return;
+			phase = "saving";
+			cycle++;
+		},
+		compact: () => {
+			if (phase !== "saving" || !lastCtx) return;
+			startCompact(lastCtx);
+		},
+		cancel: () => {
+			if (phase !== "saving") return;
+			finish();
+			if (lastCtx) notify(lastCtx, "中断されたので、圧縮は起動しない");
+		},
+		notify: (kind, text) => {
+			if (kind === "silent" || !lastCtx) return;
+			notify(lastCtx, text);
+		},
+		wake: (text) => opts.resume?.(text),
+	};
+	return Object.assign(handler, { api });
 }
 
 export function registerAutoCheckpoint(pi: ExtensionAPI, opts: AutoCheckpointOptions): void {
@@ -149,5 +244,16 @@ export function registerAutoCheckpoint(pi: ExtensionAPI, opts: AutoCheckpointOpt
 			Promise.resolve(pi.sendUserMessage(text, { deliverAs: "followUp" })).catch(() => {});
 		});
 	const handler = createAutoCheckpoint({ ...opts, resume });
+	if (arbiterEnabled(opts.env ?? process.env)) {
+		// 旗が有効: 自分の agent_before_settle は登録せず、調停 (work/settle.ts) が事実と効果の入口を使う
+		const api = handler.api;
+		bridge = api;
+		for (const name of ["session_start", "before_agent_start", "turn_end"]) {
+			pi.on(name as any, (async (_e: any, ctx: any) => {
+				api.setCtx(ctx);
+			}) as any);
+		}
+		return;
+	}
 	pi.on("agent_before_settle", handler as any);
 }

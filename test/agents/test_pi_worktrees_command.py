@@ -3,7 +3,7 @@
 コマンドの本体は ``test/agents/pi/worktrees_command_driver.mjs`` が直接呼ぶ (スラッシュコマンドは対話専用で、print モードでは
 呼べないため)。起動時の照合は、``pi`` を print モードで起動して標準エラーを見る。記録と worktree は
 ``worktree_driver.mjs`` (``test_pi_worktree.Env``) で手で作り、子は起動しない。node の型除去 (22.18 以上) と /usr/bin/git が要る。
-see docs/change/0029-worktree-isolation.md#w1-の実装計画
+see docs/change/closed/0029-worktree-isolation.md#w1-の実装計画
 """
 
 # ruff: noqa: F811  (env はインポートしたフィクスチャ。引数名で使うので再定義に見える)

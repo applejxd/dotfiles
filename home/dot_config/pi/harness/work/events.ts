@@ -3,7 +3,7 @@
 import { USER_ONLY_EVENTS } from "./types.ts";
 import type { EventType, Money, NewEvent } from "./types.ts";
 
-/** イベントの出所。利用者専用のイベントは "user" でしか出せない (I10)。台帳には data.source として残る */
+/** イベントの出所。利用者専用のイベントは "user" でしか出せない (I10)。台帳にはイベントの source 欄として残る */
 export type Source = "user" | "model" | "system";
 
 export type WaitKind = "run" | "job" | "merge" | "user" | "time";
@@ -27,7 +27,7 @@ export interface Payloads {
 	/** node = goal。hash は計画の内容の hash */
 	"plan.proposed": { hash: string };
 	/** node = goal。利用者専用。hash は直近の plan.proposed と一致しなければならない */
-	"plan.approved": { hash: string };
+	"plan.approved": { hash: string; approvalIds?: string[] };
 	/** node = 新しいノードの id */
 	"node.added": { node: NodeInit };
 	/** node = from (依存する側)。from.after に to を足す。循環なら edge.rejected になる */
@@ -96,9 +96,14 @@ export const displayWidth = (s: string): number => {
 export const ZERO: Money = { usd: 0, tokens: 0, ms: 0 };
 
 export const isMoney = (x: unknown): x is Money =>
-	isObj(x) && ["usd", "tokens", "ms"].every((k) => isNum(x[k]) && (x[k] as number) >= 0);
+	isObj(x) &&
+	["usd", "tokens", "ms"].every((k) => isNum(x[k]) && (x[k] as number) >= 0) &&
+	(x.rounds === undefined || (isNum(x.rounds) && x.rounds >= 0));
 
-/** 利用者専用か。user 待ちの解除 (wait.resolved by:"user") も出所は利用者でなければならない */
+/**
+ * 利用者専用か。user 待ちの解除 (wait.resolved by:"user") も出所は利用者でなければならない。
+ * goal の cancel (verdict) は対象の種類 (goal か task か) を知る reducer が拒否する (task の cancel はモデルでも通る)
+ */
 export const isUserOnly = (type: EventType, data?: Record<string, unknown>): boolean =>
 	USER_ONLY_EVENTS.includes(type) || (type === "wait.resolved" && data?.by === "user");
 
@@ -112,7 +117,11 @@ export const validatePayload = (type: EventType, d: Record<string, unknown>): st
 			return null;
 		case "plan.proposed":
 		case "plan.approved":
-			return isStr(d.hash) ? null : "hash が必要";
+			if (!isStr(d.hash)) return "hash が必要";
+			if (d.approvalIds !== undefined && !(Array.isArray(d.approvalIds) && d.approvalIds.every((x) => typeof x === "string"))) {
+				return "approvalIds は文字列の配列";
+			}
+			return null;
 		case "node.added": {
 			const n = d.node;
 			if (!isObj(n)) return "node が必要";
@@ -188,21 +197,29 @@ export const validatePayload = (type: EventType, d: Record<string, unknown>): st
 };
 
 /** 台帳に載る形のイベントの検証 (形と出所)。aux は常に通す。不正なら理由を返す */
-export const validateEvent = (ev: { type: EventType; node?: string; data: Record<string, unknown>; aux?: boolean }): string | null => {
+export const validateEvent = (ev: {
+	type: EventType;
+	node?: string;
+	data: Record<string, unknown>;
+	aux?: boolean;
+	source?: Source;
+	holder?: string;
+}): string | null => {
 	if (isAux(ev)) return null;
 	if (!isStr(ev.node)) return "node が必要";
 	const bad = validatePayload(ev.type, ev.data);
 	if (bad) return bad;
-	if (isUserOnly(ev.type, ev.data) && ev.data.source !== "user") {
-		return `${ev.type} は利用者専用 (出所が user でない: ${String(ev.data.source)}) [I10]`;
+	if (isUserOnly(ev.type, ev.data) && ev.source !== "user") {
+		return `${ev.type} は利用者専用 (出所が user でない: ${String(ev.source ?? "system")}) [I10]`;
 	}
-	if (ev.data.holder !== undefined && !isStr(ev.data.holder)) return "holder が文字列でない";
+	if (ev.holder !== undefined && !isStr(ev.holder)) return "holder が文字列でない";
 	return null;
 };
 
 /**
  * イベントの作成ヘルパ。形を検証し、利用者専用のイベントは出所が user でなければ拒否する (I10)。
- * 出所は data.source に残す (LedgerEvent に出所の欄が無いため。型への追加は報告参照)。holder は store が付ける (I8)。
+ * 出所は引数から、イベントの source 欄に設定する。data の中の source / holder は常に捨てる (偽装を効かせない)。
+ * ただし lease.* の data.holder はペイロードそのものなので残す。holder 欄は store が付ける (I8)。
  */
 export const makeEvent = <T extends keyof Payloads>(
 	type: T,
@@ -211,11 +228,12 @@ export const makeEvent = <T extends keyof Payloads>(
 	source: Source = "system",
 	opts: { holder?: string } = {},
 ): NewEvent => {
-	const full: Record<string, unknown> = { ...(data as Record<string, unknown>), source };
-	if (opts.holder !== undefined) full.holder = opts.holder;
-	const bad = validateEvent({ type, node, data: full });
+	const { source: _s, holder: h, ...rest } = data as Record<string, unknown>;
+	const full: Record<string, unknown> = type.startsWith("lease.") && h !== undefined ? { ...rest, holder: h } : rest;
+	const top = { source, ...(opts.holder !== undefined ? { holder: opts.holder } : {}) };
+	const bad = validateEvent({ type, node, data: full, ...top });
 	if (bad) throw new EventError(`${type}: ${bad}`);
-	return { type, node, data: full };
+	return { type, node, data: full, ...top };
 };
 
 /** 観測用イベントの作成 (aux)。検証しない */

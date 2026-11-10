@@ -1,7 +1,7 @@
 # 開発ガイド
 
 このリポジトリを変更するときの準備と検証の手順。
-各検証のコマンドは [AGENTS.md の検証表](../../AGENTS.md#検証)、テストの種類と入口は
+各検証のコマンドは [dotfiles-conventions スキルの検証表](../../.agents/skills/dotfiles-conventions/SKILL.md#検証)（常時の 3 コマンドは [AGENTS.md](../../AGENTS.md#検証)）、テストの種類と入口は
 [test/README.md](../../test/README.md)、Docker ハーネスと GitHub Actions の仕組みは
 [テストと検証の仕組み](testing.md) にある。dotfiles の編集・反映の手順は
 [README の「設定ファイルの編集」](../../README.md#設定ファイルの編集)。
@@ -45,7 +45,7 @@ Raspberry Pi 4 ではメモリが尽きて SSH も応答しなくなる
 
 ## 変更の種類ごとの検証
 
-「検証表の行」は [AGENTS.md の検証表](../../AGENTS.md#検証) の行で、
+「検証表の行」は [dotfiles-conventions スキルの検証表](../../.agents/skills/dotfiles-conventions/SKILL.md#検証) の行で、
 コマンドはそちらにある。
 
 | 変更したもの | 検証表の行 | 補足 |
@@ -69,14 +69,30 @@ Raspberry Pi 4 ではメモリが尽きて SSH も応答しなくなる
 - **T1**: 変更に当たる試験（規則・試験が読むファイル・試験ファイル自身。`verify:all` でも先に回す）
 - **T2**: 残りの全件。T0 と T1 の試験（pre-push の hook が走らせる `test_raspi_detection` を含む）を `--ignore` した補集合。補集合が空なら省く
 
+#### 閉じたモジュールの規則
+
+依存が閉じたモジュール（初期は kcage だけ。正本は `scripts/verify.py` の `CLOSED_MODULES`）だけを変えたときは、`verify:all` が **T0 + そのモジュールの T1 で終わる**（T2 を省く。約 11 分 → 約 1 分）。
+省くのは、変更パス（merge-base との差分。`--changed` と同じ）が**すべて**モジュールの範囲（コードと、モジュールの文書 `docs`。文書の lint は T0 が全件で回す）に入り、他の規則・全件領域に当たらず、削除もなく、モジュール外の試験が読むパスでもないときだけ。
+merge-base を決められない・git でないときは全件。省いたときは実行前に「閉じたモジュール (kcage) だけの変更のため T2 を省略」と表示する（`--dry-run` でも同じ）。
+
+- **必ず全件を回す手段**: `mise run verify:full`（= `verify.py --all --full`。省略を一切しない）。**`main` への統合の前（`git flow integrate develop` の前）はこれを使う**
+- 印（`verify-stamp`）: T2 を省いた成功も、従来の `--all` と同じ意味で書く。省いた分は変更の範囲外で、基準の内容は統合時に検査済みなので、pre-commit の警告は出なくてよい。省いた実行は印の `scope`（`closed:kcage`。全件は `full`）で追える（照合は `scope` を見ない）
+- 閉じていることの機械検査（`test/test_verify.py`）: モジュールの試験が読むパスがモジュールの範囲（と `shared_reads`）に収まる・モジュール外の試験がモジュールのパスを読まない（`ignored_readers` は文字列で名指すだけの偽陽性に限る。`scanners` はリポジトリ全体を走査する試験で、モジュールの変更では必ず T1 で回す）・表の glob が実在のパスに当たる
+- 実測（2026-11-08、監査つきの全件、試験 12847 件）: kcage のファイルを開いたモジュール外の試験は、`test_bootstrap_scripts`・`test_windows_assets`（どちらもリポジトリ全体の走査）と、`test_pi_boundary`・`test_imozuru`（`test/kcage` のディレクトリの参照だけ）と、検証の入口の試験（常に回る）だけだった。前の 4 つを `scanners` に宣言している（合計約 5 秒）。この監査が無ければ、kcage の変更がリポジトリ全体の走査の試験を壊すことを見落とすところだった
+- 限界: 静的な走査は、subprocess の中・実行時に組み立てるパスの参照を見ない。実測は監査プラグイン `scripts/verify_audit.py` で行う（`open` と `scandir`/`listdir` の audit hook。subprocess の中は拾えない）:
+  `VERIFY_AUDIT_OUT=<ログ> PYTHONPATH=scripts uv run --with pytest --with pytest-xdist --with pyyaml --no-project pytest -p verify_audit test/ -n 8` のあと、`python3 scripts/verify_audit.py report <ログ>` でモジュール外の試験が開いたものを一覧する（あれば終了コード 1）。`-p` で明示したときだけ有効
+- モジュールの追加: `CLOSED_MODULES` に足し、上の機械検査を通す（閉じていなければ足さない）
+
 前の段で失敗したら次の段を始めない（`--keep-going` で続行）。並列度の既定はコア数の半分で、`VERIFY_JOBS` や `--jobs` で変えられる。
 `nice` で低優先度にする。全件の印は、開始時の作業ツリーを記録し、終わりに同じ状態のときだけ書く（開始と終了の 2 点の比較で、実行中に編集して元に戻す変更は見つけられないので、検証中は編集しない）。実測は
 [開発ガイドの実測メモ](../research/testing/development-timing-notes.md)。
 CI の範囲は [テストと検証の仕組み](testing.md#いつ回すか)。
+**試験は実行者の環境（環境変数・入っているツール・ネットワーク）に依存させない。** `pis`（Fence の sandbox）の内側でも外でも通す。
+実行者の変数（`WEBSEARCH_*`、`GH_CONFIG_DIR` など）は試験側で遮断し、必要な値は各試験で設定する。`skip` は必要なツールが無い・起動できないと明確に判定できる場合だけ、理由つきで使う（sandbox かどうかで判定しない）。
 **「いつ・何を回すか」の選択規則の正本はこの節**で、Docker ハーネスの契約は testing.md が正本。
 
 ```text
-python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
+python3 scripts/verify.py [--changed | --all [--full]] [--dry-run] [--list]
 ```
 
 - `--changed`（既定。`mise run verify`）: 変更したパスを、**統合先（git-flow の startpoint → develop → main → master の順に存在するもの）との merge-base** から数える（commit 済みの差分 ∪ 作業ツリーの差分 ∪ 未追跡）。
@@ -86,7 +102,8 @@ python3 scripts/verify.py [--changed | --all] [--dry-run] [--list]
   - 対象 0 件は、HEAD が基準と同一なら「変更なし (基準と同一)」（exit 0）。commit があるのに 0 件なら警告つき
   - 選んだ試験に PR ビューアの試験（`test_pr_viewer_*`）があり、`node`（22.18 以上）が使えないときは、skip で通ったように見えるため、**「未検証（前提不足: node）」として失敗**にする。
     `VERIFY_ALLOW_SKIP=1` で警告に下げられる。意図的に skip される試験（ブラウザ smoke など）は対象にしない
-- `--all`（`mise run verify:all`）: 全件
+- `--all`（`mise run verify:all`）: 全件（閉じたモジュールだけの変更は [T2 を省く](#閉じたモジュールの規則)）
+- `--all --full`（`mise run verify:full`）: 省略なしの全件。`main` への統合の前はこれ
 - `--dry-run`: 実行せずコマンドを列挙する
 - `--list`: 変更パスごとの対応を表示する
 
@@ -339,10 +356,10 @@ chezmoi apply --exclude=scripts
 
 このリポジトリは、`main`（リリース。他のマシンの `chezmoi update` が見る）・`develop`（統合。この PC の chezmoi のソースが指す）・`feature/<名前>`（作業。専用の worktree）で運用する（[CHG-0047](../change/0047-gitflow.md)）。`release`・`hotfix` は使わない。
 
-- **feature**: 親が `git flow feature start <名前> --worktree --no-fetch` で起票する。AI は feature の worktree（`.tmp/worktrees/<名前>`）で起動した `pi` から、`guarded_action` の `git_commit` で細かくコミットする（**feature の linked worktree では確認なし**。それ以外は確認あり。[`git_commit`](guard/pi-extensions.md#guarded_action承認つきの外部操作)）。**develop への統合は利用者が PR ビューアの「統合する」を押す**（merge commit。AI は `finish`・`merge` を実行しない。正本は [運用モード](operation-modes.md)）。AI の `gitflow_feature_*` の操作は 2026-10-31 に撤去した（[CHG-0050](../change/0050-slim-guarded-action.md)、[ADR-0021](../adr/0021-conventions-as-instructions-slim-guarded-action.md)）
+- **feature**: 親が `git flow feature start <名前> --worktree --no-fetch` で起票する。AI は feature の worktree（`.tmp/worktrees/<名前>`）で起動した `pi` から、`guarded_action` の `git_commit` で細かくコミットする（**feature の linked worktree では確認なし**。それ以外は確認あり。[`git_commit`](guard/pi-extensions.md#guarded_action承認つきの外部操作)）。**develop への統合は利用者が PR ビューアの「統合する」を押す**（merge commit。AI は `finish`・`merge` を実行しない。正本は [運用モード](operation-modes.md)）。AI の `gitflow_feature_*` の操作は 2026-10-31 に撤去した（[CHG-0050](../change/closed/0050-slim-guarded-action.md)、[ADR-0021](../adr/0021-conventions-as-instructions-slim-guarded-action.md)）
 - **main へ**: 検証（`mise run verify:all`）の後、利用者が `git flow integrate develop` で `develop` を `main` に merge し、`push` する。AI は `integrate` と `push` を行わない
 - **設定**: 共有の `.gitflow`（`gitflow.worktreePath` を含む）を、`scripts/gitflow-setup.sh` で作る・取り込む。グローバルの `~/.gitconfig` に旧キー `gitflow.branch.master` が残っていると、`git flow` が期待どおり動かないことがある（`dot_config/git/config.tmpl` からは消してあり、`chezmoi apply` で反映する）。**サンドボックスの外で、利用者が一度だけ**行う（`.git/config` を書くため）。新しい clone や別のマシンでは、同じスクリプトで `git flow config sync` する
-- **ガード**: develop / main の作業ツリーへの直接の編集・コミットは、機械では止めない（pi のガードの gate は 2026-10-31 に撤去。[CHG-0050](../change/0050-slim-guarded-action.md)）。`AGENTS.md` と `commit` スキルの指示で、feature の worktree で作業する運用にしている
+- **ガード**: develop / main の作業ツリーへの直接の編集・コミットは、機械では止めない（pi のガードの gate は 2026-10-31 に撤去。[CHG-0050](../change/closed/0050-slim-guarded-action.md)）。`AGENTS.md` と `commit` スキルの指示で、feature の worktree で作業する運用にしている
 - **検査**: スタンプは worktree ごと。push の基準は `origin/develop`（あれば）、無ければ `origin/main`。CI は `main` と `develop` への push と、全ての pull request で動く
 
 ## 作業ツリーの一時領域（`.tmp/`）

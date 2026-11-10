@@ -4,7 +4,9 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 
 ## 拡張の方針
 
-**拡張は自作を基本とする**（[ADR-0016](../../adr/0016-pi-extensions-own-first.md)）。外部の拡張は、**どうしても必要で、自前実装が困難で、振る舞いを十分に確認したもの**だけを、
+> **2026-11-09 の注記**: 自作基盤は凍結し、方針は [ADR-0031](../../adr/0031-evaluate-existing-extensions-first.md)（既存の拡張・設定の評価を先にし、自作は最後の手段）に置き換えた。以下は、凍結した自作ハーネス（custom プロファイル）のときの記録。
+
+**拡張は自作を基本とする**（[ADR-0016](../../adr/0016-pi-extensions-own-first.md)。Superseded）。外部の拡張は、**どうしても必要で、自前実装が困難で、振る舞いを十分に確認したもの**だけを、
 例外として導入する。手順は ADR-0016 の「例外の手順」（審査・版の固定・偽のモデルでの試験・配備・記録）。
 
 - `pis` は `-ne` を維持し、足す拡張は必ず `-e <パス>` で明示する（自動発見はしない）
@@ -45,13 +47,13 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 
 | 拡張 | 中身 |
 | --- | --- |
-| `todo` | `todo` ツールと `/todos`。**リストは 1 つで、勝手には消さない**（同じ目標のための別目標は同じリストへ足していく）。ツールの操作は `list`（`all` で完了・中止も）/ `add`（`text` か `texts` で複数）/ `set`（`id` と `status`: `pending`・`in_progress`・`blocked`・`done`・`cancelled`。何度呼んでも同じ結果で、旧 `toggle` の取り違えが起きない）/ `update`（`text` か `note`）/ `remove` / `clear` / **`batch`**（`ops` に操作の配列。順に適用し、1 件でも失敗したら全体を適用せず、失敗した `ops[i]` を返す）/ **`replace`**（`items` でリスト全体を置き換える。`id` を付けた項目は引き継ぎ、載せない既存の項目は消える。Claude Code の `TodoWrite` 相当）。項目には**メモ `note`**（完了の根拠・引き継ぎ。80 字まで表示）を付けられる。変更の結果としてモデルへ返すのは、**変更の要約と、未完了の先頭 3 件・件数だけ**（全件は `list`）。`list` が返す一覧は未完了だけで、完了・中止は件数にたたむ。`in_progress` は同時に 1 件までが指示で、超えると結果に注意を出すが止めない。**`blocked`（`[~]`）は、ジョブ・子・利用者の返答など外部の完了待ち**で、未完了には数えるが、`in_progress` の同時 1 件の数と終了時の `in_progress` のリマインドの対象には入れない（代わりに、`in_progress` が無く `blocked` があり、着手できる `pending`（「【将来」を含まないもの）も残るときは、利用者の発言ごとに 1 回だけ、依存しない作業を続けるよう促す。止まってよいのは、利用者の方針決定がないと進められる作業が無いときだけ。承認・実機や操作の確認の待ちは理由にしない）。note なしで `blocked` にすると、待ち先を書く旨の注意を返す（拒否はしない）。**`in_progress` が残ったまま応答を終えようとしたとき、`agent_before_settle` で確認を促すメッセージ（`custom_message`）を足して続行を 1 回だけ要求する**（利用者の発言ごとに 1 回。中断・エラーで終わったときは出さない。切るには環境変数 `PI_TODO_NO_REMINDER=1`）。子の完了は `guarded_task` の `todo` で項目へ反映できる。`/todos` は全件を表示し、`/todos tidy`（完了・中止を片付ける）・`/todos clear` は**利用者専用**（モデルは呼べない）。状態はツール結果の `details` と、利用者の操作の custom エントリ（`todo-state`）に持つので、分岐・再開・圧縮のあとも、その時点に戻る（旧形式 `{ id, text, done }` も読む）。フッターに `📌 完了/全体 ▶ 作業中の項目`（全部完了なら `✅`）を出す |
-| `plan` | `/plan` で切り替え。計画中は **`edit` / `write` / `bash` / MCP などのツールを外し**、`read` / `grep` / `find` / `ls` / `todo` / `task` だけを残す（`guarded_` 付きも同じ）。計画の指示を毎ターン注入し、番号付きの手順で終わったら「実行する / 続ける / 直す」を尋ねる。「実行する」でツールを戻し、実行を依頼する。**計画の間は、`guarded_task` が読み取り専用の役割（`reader`・`explorer`）の子しか起動・続行させない**（`globalThis.__piPlanMode` の印。単発・並列・続きの依頼・steer を拒否し、状態・abort・close は通す。計画の前から動いている書き込みの子は止めず、利用者へ知らせる。[CHG-0044](../../change/0044-plan-agent.md)） |
+| `todo` | `todo` ツールと `/todos`。**リストは 1 つで、勝手には消さない**（同じ目標のための別目標は同じリストへ足していく）。ツールの操作は `list`（`all` で完了・中止も）/ `add`（`text` か `texts` で複数）/ `set`（`id` と `status`: `pending`・`in_progress`・`blocked`・`done`・`cancelled`。何度呼んでも同じ結果で、旧 `toggle` の取り違えが起きない）/ `update`（`text` か `note`）/ `remove` / `clear` / **`batch`**（`ops` に操作の配列。順に適用し、1 件でも失敗したら全体を適用せず、失敗した `ops[i]` を返す）/ **`replace`**（`items` でリスト全体を置き換える。`id` を付けた項目は引き継ぎ、載せない既存の項目は消える。Claude Code の `TodoWrite` 相当）。項目には**メモ `note`**（完了の根拠・引き継ぎ。80 字まで表示）を付けられる。変更の結果としてモデルへ返すのは、**変更の要約と、未完了の先頭 3 件・件数だけ**（全件は `list`）。`list` が返す一覧は未完了だけで、完了・中止は件数にたたむ。`in_progress` は同時に 1 件までが指示で、超えると結果に注意を出すが止めない。**`blocked`（`[~]`）は、ジョブ・子・利用者の返答など外部の完了待ち**で、未完了には数えるが、`in_progress` の同時 1 件の数と終了時の `in_progress` のリマインドの対象には入れない（代わりに、`in_progress` が無く `blocked` があり、着手できる `pending`（「【将来」を含まないもの）も残るときは、利用者の発言ごとに 1 回だけ、依存しない作業を続けるよう促す。`pending` は「契約が確定して着手できる」項目だけで、利用者の判断が未回答の設計・確認されていない計画は `blocked` にする（共通指示の「計画と契約」の「着手の条件は確認済みの契約」）。止まってよいのは、契約の範囲に進められる作業が無く、利用者の決定が要るときだけ。承認・実機や操作の確認の待ちは理由にしない）。note なしで `blocked` にすると、待ち先を書く旨の注意を返す（拒否はしない）。**`in_progress` が残ったまま応答を終えようとしたとき、`agent_before_settle` で確認を促すメッセージ（`custom_message`）を足して続行を 1 回だけ要求する**（利用者の発言ごとに 1 回。中断・エラーで終わったときは出さない。切るには環境変数 `PI_TODO_NO_REMINDER=1`）。子の完了は `guarded_task` の `todo` で項目へ反映できる。`/todos` は全件を表示し、`/todos tidy`（完了・中止を片付ける）・`/todos clear` は**利用者専用**（モデルは呼べない）。状態はツール結果の `details` と、利用者の操作の custom エントリ（`todo-state`）に持つので、分岐・再開・圧縮のあとも、その時点に戻る（旧形式 `{ id, text, done }` も読む）。フッターに `📌 完了/全体 ▶ 作業中の項目`（全部完了なら `✅`）を出す |
+| `plan` | `/plan` で切り替え。計画中は **`edit` / `write` / `bash` / MCP などのツールを外し**、`read` / `grep` / `find` / `ls` / `todo` / `task` だけを残す（`guarded_` 付きも同じ）。計画の指示を毎ターン注入し、**計画が詰まったと判断した応答（見出し「## 実行計画」と番号付きの手順の両方があるもの）だけ**「実行する / 続ける / 直す」を尋ねる（番号付きの行だけでは尋ねない。相談の途中の応答で毎回聞かれないようにする。判定は `isPlanReady`、試験は `test/agents/test_pi_plan_ready.py`）。「実行する」でツールを戻し、実行を依頼する。**計画の間は、`guarded_task` が読み取り専用の役割（`reader`・`explorer`）の子しか起動・続行させない**（`globalThis.__piPlanMode` の印。単発・並列・続きの依頼・steer を拒否し、状態・abort・close は通す。計画の前から動いている書き込みの子は止めず、利用者へ知らせる。[CHG-0044](../../change/closed/0044-plan-agent.md)） |
 | `btw` | `/btw [--plain] <質問>`。いまの会話（user / assistant の本文とツール呼び出しの要約）を文脈に答える。**既定は、読み取り専用の子（`explore`）が、必要ならファイルを読んで確かめてから答える**（会話は新しい側 2 万文字まで。子の起動は、フルガードか Windows の `subagents` 拡張が `globalThis.__piAskReadChild` に置く入口を使い、上限は 3 分）。`--plain` は、ツールなしで**現在のモデル**が 1 回だけ答える（速い。会話は新しい側 6 万文字まで、上限 2 分）。**子が失敗したときは、理由を表示して終わる**（調べていない推測を答えとして出さない。ファイルを見ずに答えさせるなら `--plain`）。子の入口が無いときだけ `--plain` と同じ動きになる。答えは、端末の高さに合わせて**本文の窓だけを描くスクロールできる表示**に出し（↑↓ / j k で 1 行、Space / b で 1 ページ、g / G で先頭・末尾、Enter / Esc / q で閉じる。位置と閉じる案内は最下行）、会話履歴にもモデルの文脈にも残さない。返信はどの経路でも **2 万文字**で切り、「省略あり」を末尾に書く。子と `--plain` の指示は「画面 1 枚（約 20 行）に収める」。エージェントの応答中でも使える |
 | `ask` | `ask` ツール。利用者へ選択肢つきの質問を**最大 4 問まとめて**尋ねる（`questions`: `question`・`header`・`options` 2む4 個（`label` と `description`）・`multi`）。画面は、**TUI では自前のパネル**（`ctx.ui.custom()`。問が複数のときは問ごとのタブと最後の「確認」タブ（Tab / Shift+Tab で移動。回答は保持して戻って直せる。確認タブで未回答を警告し、Enter で送信。Esc は全体の中止）。問が 1 つだけならタブも確認も無く、答えたらすぐ送る。選択肢と説明を縦に並べ、カーソルは ❯。複数選択は Space でカーソルを動かさずに切り替え、Enter で確定（チェックしたまま Tab で離れても回答として扱う）。`Type something.` はその行の下でその場で書き、Enter で確定（複数選択でもこの Enter で、チェックと自由記述をまとめて確定する）・Esc で一覧へ戻る。数字キーで行へ移動。IME のためフォーカスをエディタへ渡す）、**RPC（Orca・Zed）では 1 問ずつの `select` / `input`**（選択行は「1. ラベル」の 1 行だけで、説明は質問文の下に番号つきの一覧として出す。表示幅 64 カラムで自前に折り返して字下げし、選択肢の間に空行を入れる。RPC の複数選択は、チェックを切り替えるたびにカーソルが 1 個目に戻る）。長い行の折り返しで境界とカーソルが分からなくなったため）（TUI と RPC で共通。Orca と Zed でも動く）。全問に自由記述の行 `Type something.` を自動で足す（空の入力は記録せず選択肢へ戻る）。`Other` / `Type something.` / `Next` は選択肢のラベルに使えない（`reserved_label`。ほかに `no_questions`・`too_many_questions`・`duplicate_question`・`empty_options`・`duplicate_option_label`・`no_ui`）。**推奨の検査**: 各質問は推奨の選択肢をちょうど 1 つ（multi は 1 つ以上）持ち、先頭に置く。印は label の末尾の `(推奨)` か `(recommended)`（直前に空白を置く。全角括弧・大文字小文字可。label に残り、答えもそのまま返す）。違反は `missing_recommended`・`multiple_recommended`（multi 以外で 2 つ以上）・`recommended_not_first` で、違反した質問を全部 1 つのエラーにまとめ、直し方を添えて返す（形の検査の後。label は 60 字までなので短くする）。試験は `test_pi_harness.py`。戻りは `answers`・`unanswered`（0 始まりの番号）・`cancelled`。中断や時間切れのところから先は未回答として返る。**1 回の画面の待ち上限は 5 分**（試験用に `PI_ASK_TIMEOUT_MS`）。**UI が無い実行（print・子エージェント）では、`before_agent_start` でツールを外す**。`plan` 中も残る。設計は公開拡張（`rpiv-ask-user-question`・`pi-ask-user`）の README を参考にした（[調査 P3・P4](../../research/agents/pi-public-extensions-survey.md)）。タブ画面・プレビュー・メモは作らない（`ctx.ui.custom()` が必要で、RPC では出せない） |
 | `notify` | **利用者の入力を待つとき、端末へ BEL（`\x07`）を 1 回送る**。送るのは、作業が完全に終わったとき（`agent_settled`。`agent_end` ではない）、フルガードの確認（`confirmInOrder`）を出す直前、`ask` の質問を出す直前。Zed の Terminal Threads は、フォーカス外の端末の BEL を通知にする（[Terminal Threads](https://zed.dev/docs/ai/terminal-threads)）。**TUI（`ctx.mode === "tui"`）のときだけ書く**。RPC では stdout が JSON 行の通信なので汚さない。試験は `test_the_bell_is_written_only_in_the_tui_not_in_print_mode`（鳴らさないことだけ。鳴ること自体は未確認）。ACP 経由の Zed（pi-acp）には効かない（[Z1・Z2](../../research/agents/zed-orca-pis-integration.md)）。**pi 1.4.0 は、これとは別に OSC 7501 を内蔵している**（`working` / `blocked` / `done` / `error` / `idle`。端末が問い合わせに答えたときだけ送る。`PI_PROGRAM_STATUS=1` で強制、`0` で停止。tmux と screen は通さない）。拡張の `select` / `input` / `editor` は `blocked`（`kind=question`）、`confirm` は `kind=permission` になるが、**`ctx.ui.custom()` は対象外**で、自作の `ask` の質問パネルと確認の全文ビューアは `blocked` にならない（コードの読み。実機の送信は未検証。[調査 HO1](../../research/agents/host-integration-survey.md)） |
 | `activity` | 動いている子エージェント（`task` / `guarded_task`）とバックグラウンドジョブの数を、入力欄の下の専用の 1 行（ウィジェット。起動モード・ToDo のステータス行とは別の行）に `🤖 2 subagents / ⚙️ 1 jobs` の形で常時出す（0 件の側は出さず、どちらも 0 なら消す）。1 秒ごとに数え直し、表示が変わったときだけ `setStatus` する。子は起動する側（`subagents` とフルガード）が `globalThis.__piChildren` に登録し、ジョブは `bg_run` が `globalThis.__piJobs` に登録する。ツールは `bg_run`（コマンドを切り離して起動し、ID を返す（ログのパスは見せない。`read_deny_globs` で読めないので、教えるとモデルが行き止まる。[実験 B1 の F4](../../research/agents/pi-bg-experiments.md)））・`bg_log`（状態とログの末尾と総行数。ID なしで一覧）・`bg_kill`（プロセスの木ごと止める）。pi の終了時には動いているジョブも止める。**ジョブが終わると `pi.sendMessage`（`triggerTurn: true`、`deliverAs: "followUp"`）で LLM へ終了を知らせる**（ID・exit・コマンド・ログ末尾 20 行）。 **2.5 秒の間に終わった分は 1 通にまとめる**（2 件以上は各ログの末尾 5 行。同時に終わる 12 件で 12 ターンになっていた。[B1 の F3](../../research/agents/pi-bg-experiments.md)）。 **終了後に `bg_log` で読んだジョブは通知から外し、全部が読み済みならターンを起こさない**（画面の通知だけ。B1 の F2）。 親が作業中は届けず、「まとめる窓が閉じた」と「`agent_settled`（`agent_end` ではない。再試行・圧縮・続行がその後に続くことがある）」の両方を満たしてから、読み済みを除いて届ける。アイドルなら、窓が閉じたときにすぐターンを起こす。 試験は `test_jobs_that_finish_together_wake_the_agent_once` / `test_a_job_read_with_bg_log_after_it_finished_does_not_wake_the_agent` / `test_a_job_not_read_still_wakes_the_agent_after_the_turn`（外すと落ちることを確認）。 ないとジョブ待ちで止まったターンが再開しない。`bg_kill` で止めたときと終了時の停止では送らない。一覧のコマンドは作らない（数だけ）。**待ち方の案内はツール側に置く（AGENTS.md には書かない）**: `bg_run` の `description` / `promptGuidelines` / 戻り値と、実行中のジョブの `bg_log` の戻り値に、「終了すると自動で通知が届く。`sleep` や `bg_log` の連打で待たず、他の作業を進めるか応答を終える」を入れた。試験は `test_bg_run_and_a_running_bg_log_tell_the_model_not_to_wait_by_sleeping_or_polling`。旧 `/agents` はこれに置き換えた |
-| `delegate-nudge` | 親が委譲を忘れない契機の第一歩として、**通知なしで統計だけを取る**試作（N1a）。利用者の発言ごとに、読み取り系ツール（`guarded_read` / `guarded_grep` / `guarded_find` / `guarded_ls`、素の pi の `read` / `grep` / `find` / `ls`）の呼び出し回数・結果の行数と文字数・エラー数・ツール名ごとの回数、`guarded_task` の新規の子の起動数（agent ごと。status・steer・追加依頼は数えない）、それ以外のツール呼び出しの数を、`appendEntry("delegate-stats", …)` でセッションに 1 件残す（モデルの文脈には入らない）。**読んだ内容・パス・引数は入れない**。通知もツール結果の変更もしない（ハンドラは常に `undefined` を返し、例外は黙って無視する）。**子（`PI_HARNESS_CHILD=1`）では動かず**、`PI_DELEGATE_NUDGE=0` で止められる。`/delegate-stats` で直近 10 発言の要約と合計を出す。案件は [CHG-0031](../../change/0031-delegate-nudge.md)。**`own_extensions` に登録済み**（`common.toml.tmpl`）。試験は `test_pi_harness_extensions.py` の `test_delegate_nudge_*`（5 件） |
+| `delegate-nudge` | 親が委譲を忘れない契機の第一歩として、**通知なしで統計だけを取る**試作（N1a）。利用者の発言ごとに、読み取り系ツール（`guarded_read` / `guarded_grep` / `guarded_find` / `guarded_ls`、素の pi の `read` / `grep` / `find` / `ls`）の呼び出し回数・結果の行数と文字数・エラー数・ツール名ごとの回数、`guarded_task` の新規の子の起動数（agent ごと。status・steer・追加依頼は数えない）、それ以外のツール呼び出しの数を、`appendEntry("delegate-stats", …)` でセッションに 1 件残す（モデルの文脈には入らない）。**読んだ内容・パス・引数は入れない**。通知もツール結果の変更もしない（ハンドラは常に `undefined` を返し、例外は黙って無視する）。**子（`PI_HARNESS_CHILD=1`）では動かず**、`PI_DELEGATE_NUDGE=0` で止められる。`/delegate-stats` で直近 10 発言の要約と合計を出す。案件は [CHG-0031](../../change/closed/0031-delegate-nudge.md)。**`own_extensions` に登録済み**（`common.toml.tmpl`）。試験は `test_pi_harness_extensions.py` の `test_delegate_nudge_*`（5 件） |
 
 - **`speed`**（同じ表の拡張。`own_extensions` に登録済み）: 直近 1 回のモデル呼び出し（1 つの assistant メッセージ。ツール実行の時間は含めない）の速度を、ステータス行 `speed` に `📝58t/s 1.2s`（decode と TTFT）で出す。記録・コマンド・ツール・通信は無い。時刻は、`before_provider_request` を t0、最初の `message_update` の `*_delta`（thinking・text・toolcall のどれでもよい）を t_first、assistant の `message_end` を t_end とする。**`provider_stream_event` は使わない**（`data` は提供元ごとの生の値で、最初の 1 件が内容か接続開始かを型から区別できない）。TTFT = t_first − t0、decode = `usage.output` ÷ (t_end − t_first)。**`—` は、取れない値**（t0 か t_first が無い、出力 30 トークン未満、decode 区間 0.3 秒未満）。**取れなかった項目は、直近の有効な値を表示し続ける**（短い応答で decode だけが取れないときも、`—` に戻らず、前の decode を残して TTFT だけ今回の値にする。`~` も直近の値のものを残す。`—` を出すのは、セッションを開いてから一度も取れていない間だけ）。**`~` は、確定値でないしるし**（`usage.reasoning` が 0 より大きいのに thinking のデルタを 1 件も見ていない = reasoning がストリームに出ない経路で、decode が過小になりうる）。エラー・中断の応答は更新せず、`session_start`（切り替えを含む）で消し（直近の値も捨てる）、UI が無いモード・子（`PI_HARNESS_CHILD=1`）では何もしない。prefill 速度は出さない。faux のプロバイダは `before_provider_request` を呼ばないので、統合試験では TTFT を測れない（純関数と、時計を差し替えたイベント列の試験で補う）。未確認: 実際のストリームの時刻の精度、TUI・Orca での見え方、Copilot 経由の reasoning。比較の根拠は [記録 P8](../../research/agents/pi-public-extensions-survey.md#記録-p8--2026-10-31-tok-s-の拡張speed-の測り方の比較)。試験は `test_pi_speed.py`
 - **モデルに存在を知らせる**: `todo` / `bg_run` / `bg_log` / `bg_kill` にも `promptSnippet`（と `todo` / `bg_run` の `promptGuidelines`）を付けた。無いと「Available tools」に載らず、モデルが使い忘れる（[子エージェント](pi-subagents.md#子エージェント)と同じ対処）。試験は `test_todo_and_activity_tools_are_listed_in_the_system_prompt`
@@ -78,14 +80,14 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 
 ### guarded_action（承認つきの外部操作）
 
-`git commit`・`gh issue comment`・`gh issue edit`（本文とタイトル）を、**1 回の承認で、ハーネスが組み立てた argv を、シェルを通さずに実行する**ツール（[CHG-0038 段 G11](../../change/0038-guard-reclassification.md)）。通常の ask（コマンドを見せて判断）と違い、内容を見せて承認を取り、承認した内容がそのまま使われる。
+`git commit`・`gh issue comment`・`gh issue edit`（本文とタイトル）を、**1 回の承認で、ハーネスが組み立てた argv を、シェルを通さずに実行する**ツール（[CHG-0038 段 G11](../../change/closed/0038-guard-reclassification.md)）。通常の ask（コマンドを見せて判断）と違い、内容を見せて承認を取り、承認した内容がそのまま使われる。
 ガードは境界ではなく「うっかり防止」なので、**誤った経路（bash の直接実行）へ行かないよう寄せる**仕組みであって、経路の強制ではない（Python や curl 経由は迂回できる。強制が要る GitHub 操作は、トークンの権限側で行う）。
 
-- **操作の表**: `common.toml` の `[[pi.actions]]`（`id`・`label`・`argv`・`fields`・`replaces`・`preview`）。生成器が検証して `rules.json` の `judge.common.pi.actions` へ出す。操作の追加は、表に項目を足すだけ（ツールは増えない）。今は `gh_issue_comment`（`repo`・`number`・`body`）、`gh_issue_edit_body`（`repo`・`number`・`body`）、`gh_issue_edit_title`（`repo`・`number`・`title`）、`git_commit`（`message`、任意の `dir`）。feature の起票・クローズ（`git flow`）と規約の強制は、この表から外した（[CHG-0050](../../change/0050-slim-guarded-action.md)、[ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md)。下の「撤去した操作と gate」）。フィールドの型は `repo`・`int`・`line`（1 行の短い文字列。`title` など。`argv` の 1 要素として直接渡す）・`text`（`file = true` の本文）。`line` は改行・制御文字を含められない（確認画面と `argv` の見え方がずれないように）。`gh` にタイトルのファイル渡しが無いので `line` を足した。issue の編集は、本文とタイトルを別の操作にしてある（片方だけ直すときに、もう片方を渡し直さなくてよい）。ラベル・担当者・状態の変更は対象外
+- **操作の表**: `common.toml` の `[[pi.actions]]`（`id`・`label`・`argv`・`fields`・`replaces`・`preview`）。生成器が検証して `rules.json` の `judge.common.pi.actions` へ出す。操作の追加は、表に項目を足すだけ（ツールは増えない）。今は `gh_issue_comment`（`repo`・`number`・`body`）、`gh_issue_edit_body`（`repo`・`number`・`body`）、`gh_issue_edit_title`（`repo`・`number`・`title`）、`git_commit`（`message`、任意の `dir`）。feature の起票・クローズ（`git flow`）と規約の強制は、この表から外した（[CHG-0050](../../change/closed/0050-slim-guarded-action.md)、[ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md)。下の「撤去した操作と gate」）。フィールドの型は `repo`・`int`・`line`（1 行の短い文字列。`title` など。`argv` の 1 要素として直接渡す）・`text`（`file = true` の本文）。`line` は改行・制御文字を含められない（確認画面と `argv` の見え方がずれないように）。`gh` にタイトルのファイル渡しが無いので `line` を足した。issue の編集は、本文とタイトルを別の操作にしてある（片方だけ直すときに、もう片方を渡し直さなくてよい）。ラベル・担当者・状態の変更は対象外
 - **ツール**: `guarded_action`（引数 `action` と `params`）。登録されるのは、役割の `tools` に `action` がある親の役割（`implementer`）だけ。子エージェント・読み取り役・探索役には無く、実行時にも拒否する。判定器は `action` を役割の許可だけで通し、**汎用の ask・確認は出さない**（確認は `execute()` が 1 回だけ行う）。
 - **確認**: `select` で「承認して実行 / 編集して承認 / 拒否」。内容（`content` のフィールド）の全文、プレビュー、**実行する argv** を表示する（表示と実行は同じ配列）。**RPC（Orca・Zed など TUI 以外）では、詳細をチャットに出し、承認ダイアログは要点だけにする**: RPC の `select` は `title` と選択肢しか持たず、全部を詰めると chat UI（特にスマホ）ではみ出して承認の選択肢に届かないため。確認の前に、今までの詳細（全文・プレビュー・統計・argv）を**ツールの途中経過**（`execute` の `onUpdate`。RPC では `tool_execution_update`）として出し、ダイアログの `title` は「上記の内容で実行しますか」の 1 文だけにする（要点を繰り返さない。利用者の決定）。詳細には、対象のリポジトリ（作業ツリーの実体パス）・ブランチ・HEAD・本文の全文・ステージ済みの統計・argv と、退避の注意書き（`git_commit`）を出す。途中経過のイベントは pi が非同期に流し、ダイアログの要求より後に出ることがあるので、詳細を出した後に 300 ms 待ってからダイアログを出す（待たないと「上記」が見えない順になる。実測）。全文は「編集して承認」のエディタでも見られる。`argv` の中で `content` の値を含む要素は `<名前>` に置き換える（本文が 2 回出るのを避ける。実際に実行する配列は変えない）。**途中経過を出せないときは、詳細を見せずに承認させないよう、スマホ向けに縮めた詳細（本文は先頭 10 行・800 字、統計は先頭 8 件、空行なし、1 行 100 字）をダイアログに出す。** TUI はこれまでどおりダイアログに全部出す。**Orca が途中経過をチャットに表示するか、スマホで見やすいかは、実際の Orca では未検証**（公開の情報では確認できなかった）。子は拒否（`not approved:`）。**`git_commit` の無反応（`[pi.confirm] timeout_seconds`）・UI 無し・不在は、拒否ではなく退避して続行**（下の「退避」）。取消・中断・拒否と、`git_commit` 以外の操作の無反応・UI 無しは、拒否のまま。bypass でも省略できない。「編集して承認」は `editor`（timeout が無いので、選んだ後にだけ開く）、「拒否」は `input` で理由を任意に取る。
 - **TUI の `git_commit` の確認は、要約が既定（CHG-0050 の後続）**: TUI では常に、小さい変更も含めて、確認の title はラベル付きの箇条書きの要約（**リポジトリ名・ブランチ（短縮 HEAD つき）・件名（本文の 1 行目。**切らずに字下げして折り返す**。最大 5 行）の順**、本文の大きさの行は出さない（本文の全文はチャットと「全文を見る」で見る）、変更（合計の行を見出しにし、上位 5 ファイルを字下げで。同名が無いファイルは最後の要素だけ。変更行の合計。棒グラフは出さない）と残りの件数。リポジトリ名は**本体のリポジトリ名**（git の共通ディレクトリの親。worktree の名前はブランチ名と重複するので出さない。git が使えないときは `dir` の指定の最後の要素、無ければ作業ツリーの最後の要素）。約 12 行。絶対パスは出さない）にし、行は端末の幅（`process.stdout.columns`。全角を 2 桁と数える）で切る。注意書きも 1 行に縮める。Orca のスマホ（約 46 桁）で旧版の全文が画面を埋め、選択肢が画面の外に出た実測による。詳細（本文全文・argv など）はツールの途中経過としてチャットにも出す（Orca のスマホの TUI で、途中経過が描かれ、`ctrl+o` で展開できることを実機で確認。ダイアログの要約は残す）。選択肢は「承認して実行 / 全文を見る / 編集して承認 / 拒否」の 4 つにする。「全文を見る」は、**先頭から読める自前のビューア**（`harness/text-viewer.ts`。`ctx.ui.custom`。本文・プレビュー・argv・退避の注意を読むだけ。↑↓/j/k・Space/b・g/G でスクロールし、q / Enter / Esc で閉じる。位置を案内の行の先頭に出す）で開き、閉じると同じ確認に戻る（期限は select ごとに仕切り直し。ビューアは期限の対象外）。pi の `ctx.ui.editor` は開いたときにカーソルを末尾に置く（`pi-tui` の `setText`。開始位置の指定が無い）ので末尾から見え、使わない。`custom` が無い画面では editor に戻す。`gh_issue_*`・RPC は、従来どおり全文を出す。表示だけを変え、同一性の照合・実行の argv・時間切れ・退避は変えない。見えない範囲は、本文の 2 行目以降と下位のファイルで、承認前に AI がチャットへ書く全文が補う。**成功結果は、編集したときだけ「実際に使った最終の内容」を返す**（編集しないときは「承認した内容のとおり」）。Zed など `editor` が使えない画面では「全文を見る」が機能しないが、RPC は要約しない。試験: `test_pi_action_view.py`。実機の Orca スマホ TUI で、要約が 1 画面に収まり、選択肢の 4 つまで見えることを確認（2026-10-31、箇条書きにする前の並び。長い行は「…」で切れる）。未確認: 箇条書きの並び・全文ビューア（先頭からの表示とキー操作）の実機での見え方、Zed での「全文を見る」
-- **確認の省略（自由区。[CHG-0053](../../change/0053-worktree-integration-gate.md)）**: `[pi.integrate] skip_confirm_in_free_zone`（**同梱の設定は true**。生成器の既定は false）が真のときだけ、`git_commit` の cwd（`dir` を解決した対象）が**自由区**（リンクされた worktree で、HEAD が保護でない `refs/heads/feature/*`。`freezone.ts`。接頭辞は [`pi.json`](#プロジェクトごとの設定pijson) で変えられる）なら、確認（select）を出さずに実行する。UI が無い実行でも進む（退避しない）。子は従来どおり拒否。**実行直前に、自由区かをもう一度判定し**、なくなっていれば未実行で返す。結果は「承認した内容のとおり」ではなく、「確認なしで実行した (自由区: ブランチ。実行後の HEAD: …)」を返し、`details.freeZone` に判定と省略したかを入れる。**設定が偽の間は判定を「自由区の判定 (観測中。確認は省略していない)」として、真で自由区でないときは「自由区の判定: not free (理由)。確認を省略せず、承認を取って実行した」を結果に添える**（誤判定を見る）。自由区の外・判定できないとき・設定が無い／不正なときは、従来どおり確認する（deny にしない）。試験: `test_pi_free_zone_commit.py`
+- **確認の省略（自由区。[CHG-0053](../../change/closed/0053-worktree-integration-gate.md)）**: `[pi.integrate] skip_confirm_in_free_zone`（**同梱の設定は true**。生成器の既定は false）が真のときだけ、`git_commit` の cwd（`dir` を解決した対象）が**自由区**（リンクされた worktree で、HEAD が保護でない `refs/heads/feature/*`。`freezone.ts`。接頭辞は [`pi.json`](#プロジェクトごとの設定pijson) で変えられる）なら、確認（select）を出さずに実行する。UI が無い実行でも進む（退避しない）。子は従来どおり拒否。**実行直前に、自由区かをもう一度判定し**、なくなっていれば未実行で返す。結果は「承認した内容のとおり」ではなく、「確認なしで実行した (自由区: ブランチ。実行後の HEAD: …)」を返し、`details.freeZone` に判定と省略したかを入れる。**設定が偽の間は判定を「自由区の判定 (観測中。確認は省略していない)」として、真で自由区でないときは「自由区の判定: not free (理由)。確認を省略せず、承認を取って実行した」を結果に添える**（誤判定を見る）。自由区の外・判定できないとき・設定が無い／不正なときは、従来どおり確認する（deny にしない）。試験: `test_pi_free_zone_commit.py`
 - **退避（`git_commit` の無反応・UI 無し・不在。CHG-0046）**: 承認が取れないときは、実行せず、**表示した内容**を `refs/pi/pending/<時刻>` に退避して、`not approved:` で始まる結果（`isError`）で返す。文言は「元の操作は未実行。内容は `<ref>` に退避した。再試行しない。続きの作業を子（worker など）に背景で任せられるなら任せ、親は応答を終えて idle になる（退避は `/pending` で確認・破棄するだけで、承認して実行する経路は無い）。任せられる作業が無ければ、『保留したコミット』として報告して終える」（保存に失敗したときは、成功した ref を返さず、退避できなかったと返す）。
   - **表示の前に tree を確定**する（`snapshotStaged`。一時のインデックスで作り、実のインデックスへ書き戻さない）。表示する HEAD・ブランチ・インデックスの識別子は、この snapshot と一致していなければ、表示せずにやり直しを返す。時間切れのあとは、実のインデックスを読み直さず、確定した tree を保存する（待つ間に別の操作がステージを変えても、退避は表示した内容）。取れない（空・確定中に変化）ときは退避不能とし、確認画面にそう出して、時間切れは拒否になる
   - **時間切れ**は、自前のタイマー（`timeout_seconds`）が発火したときだけ。TUI の組み込みの期限は 3 秒遅らせた保険。利用者の取消（Esc）・呼び出し元の中断・例外・「拒否」は、退避しない
@@ -93,7 +95,7 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
   - 退避は**独立**した commit（親は表示時点の HEAD。ほかの退避を親にしない。コミットが無いリポジトリでは親なし）。出自は末尾の trailer（`Pi-Pending-Request`・`-Branch`・`-Head`）。保存・破棄の内部の git は、**hook を無効**（`core.hooksPath=/dev/null`）にして実行する
   - 確認画面には「N 分応答が無ければ、実行せず内容を退避して作業を続けます。編集・拒否理由の入力中は対象外」と出す。**編集して承認の `editor`・拒否の理由の `input` には期限が無い**（対象外）
   - **`/pending`**（利用者専用。モデルは呼べない）: `list`（新しい順）・`show <ref>`（差分の本文まで）・`drop <ref>`（到達用の ref を外す。オブジェクトは `git gc` まで残る。名前空間の外・symbolic ref は拒否。`--no-deref`）。取り込みは未実装（CHG-0046 の段 4）。新形式の保留（`git_integrate`・`/pending approve` など）は撤去済み（[履歴](pi-pending.md)）。**片付けは、ハーネスが自動で行う**（`reconcilePending`。モデルは消せない）: 同じ tree のコミットが `HEAD` の履歴（新しい側の 500 件）にある（取り込み済み）・同じ tree と起点の退避がより新しくある（重複）・30 日より古い、のどれかを、`git_commit` の成功の直後と `session_start` で消す。内容が変わった途中の状態は、期限まで残る
-- **撤去した操作と gate（CHG-0050）**: 次は 2026-10-31 に撤去した（経緯は [CHG-0047](../../change/0047-gitflow.md)・[CHG-0049](../../change/0049-gitflow-convention-guard.md) と [CHG-0050](../../change/0050-slim-guarded-action.md)、理由は [ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md)）。
+- **撤去した操作と gate（CHG-0050）**: 次は 2026-10-31 に撤去した（経緯は [CHG-0047](../../change/0047-gitflow.md)・[CHG-0049](../../change/0049-gitflow-convention-guard.md) と [CHG-0050](../../change/closed/0050-slim-guarded-action.md)、理由は [ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md)）。
   - `gitflow_feature_start` / `commit` / `finish` / `discard` の 4 操作と、その確認なしの許可リスト、実効設定の安全プロファイル、`git flow` の bash 拒否（`shell_deny`・`replaces`）
   - feature の worktree の中の `git_commit` の確認なし（WIP の省略）。`git_commit` は、どこから呼んでも**常に確認する**
   - develop / main の直接の編集・コミットを拒否する gate（`edit` / `write` / `git_commit`）と `/gitflow-allow`
@@ -110,7 +112,7 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 
 ### プロジェクトごとの設定（`pi.json`）
 
-各リポジトリの `.agents/config/pi.json` で、統合まわりの **3 つの値だけ**を、そのプロジェクト用に変える（[CHG-0057](../../change/0057-per-project-integrate.md)）。
+各リポジトリの `.agents/config/pi.json` で、統合まわりの **3 つの値だけ**を、そのプロジェクト用に変える（[CHG-0057](../../change/closed/0057-per-project-integrate.md)）。
 **保護ブランチは変えられない**（全体設定 `[pi.integrate] protected_refs` のまま）。リポジトリ内のファイルはエージェントが書き換えられるので、保護を弱める手段を置かない。
 利用者向けの書き方は [pi-manual.md の 7.6](../pi-manual.md#76-プロジェクトごとの設定pijson)。
 
@@ -231,7 +233,7 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 #### pi の project trust との関係
 
 - **連動しない**。project trust は `.pi` の設定・拡張の読み込みを決めるだけで、`pi.json` は別の仕組み
-- 連動は後から足せる（未解決。[CHG-0057](../../change/0057-per-project-integrate.md)）
+- 連動は後から足せる（未解決。[CHG-0057](../../change/closed/0057-per-project-integrate.md)）
 
 #### 既知の制限・未確認
 
@@ -254,7 +256,7 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 ### ツールの拡張（`guarded_read` / `guarded_write` / `guarded_bash` の使いやすさ）
 
 誘導の deny（[誘導](pi-decide.md#誘導)）が多発する原因は、代替が同等でないことと、ツール定義の説明が弱いこと
-（[CHG-0038](../../change/0038-guard-reclassification.md) 段 G8。他の製品の調査は
+（[CHG-0038](../../change/closed/0038-guard-reclassification.md) 段 G8。他の製品の調査は
 [記録](../../research/agents/tool-design-survey.md)）。ハーネスは、pi の組み込みの定義を `...def` で展開して
 `guarded_*` として登録し、`tools-ext.ts` で次を足す（pi 本体を import しない純関数。node で単体試験できる）。
 
@@ -280,7 +282,7 @@ pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方
 ## ガード以外の機能
 
 OpenCode のガードにあった機能のうち、pi へ移したもの。仕分けと経緯は
-[CHG-0020](../../change/0020-pi-migration.md#段-5-の仕分け2026-10-09)。
+[CHG-0020](../../change/closed/0020-pi-migration.md#段-5-の仕分け2026-10-09)。
 
 ### 圧縮（旧 checkpoint）
 
@@ -316,6 +318,9 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 
 #### 文脈の使用率による自動の保存と圧縮
 
+旗 `PI_WORK_ARBITER=1` (既定は無効) のときは、この拡張と todo は `agent_before_settle` を登録せず、事実 (`checkpointSnapshot()`) と効果 (`checkpointExec`) を調停へ渡す。
+圧縮完了後の自動再開は旗に関わらず従来の経路。旗と配線は [settle](work/settle.md#既存の-3-者の移し方-配線済み・旗つき-feature-work-settle-wire)。
+
 文脈の使用率が閾値以上になったら、エージェント自身に保存させてから圧縮を起動する（`harness/autocheckpoint.ts`。親のセッションだけ）。
 
 | 項目 | 内容 |
@@ -330,6 +335,11 @@ OpenCode のガードにあった機能のうち、pi へ移したもの。仕�
 | 再開 | 圧縮が**成功**（`onComplete`）したら、200ms 待ってから `pi.sendUserMessage(RESUME_PROMPT, { deliverAs: "followUp" })` で短い再開の指示を 1 回だけ送る（アイドルなら新しいターンが始まり、streaming 中なら followUp で待つ）。200ms は、pi が圧縮の状態を解く前に完了通知が届くため（`index.ts` の `session_compact` と同じ扱い）。待つ間に別の周期が始まった・無効化された場合は送らない。失敗・中断では送らない。1 周期に 1 回で、冷却（10 分）の間は新しい周期が始まらないので、再開で使用率が閾値を超えてもループしない。指示は `NEXT.md` の先頭と todo を読んで続け、判断待ちだけなら「待機」と答えて止まる。`PI_AUTOCHECKPOINT_RESUME=0` で再開だけを無効にする（全体は `PI_AUTOCHECKPOINT=0`） |
 | 限界 | 保存の質は**エージェント次第**で保証しない（指示を守らない・docs の反映が不完全なことがある）。組み込みの自動圧縮（窓 − `reserveTokens` 付近）は**予備として残る**ので、保存より先にそちらが走ることもある。使用率は settle の時点でしか見ないので、1 回の長い実行の途中では働かない。再開の指示は、判断待ち・完了待ちだけのときも 1 ターン走る（「待機」と答えるだけ） |
 | 試験 | `test/agents/test_pi_autocheckpoint.py`（`test/agents/pi/autocheckpoint_driver.mjs` が偽のイベントとコンテキストを handler へ渡す）。実機の確認は未実施 |
+
+### 思考とツール出力の既定の折り畳み
+
+- 思考のブロックは `[pi.settings] hideThinkingBlock = true` で、ツール出力は `quiet-notices.ts` が `session_start` で `ctx.ui.setToolsExpanded(false)` を呼んで、既定で畳む（スマホで読みやすくするため。表示だけ）。
+- 展開は `ctrl+t`（思考）・`ctrl+o`（ツール出力）。戻し方: `hideThinkingBlock = false`、環境変数 `PI_FOLD_TOOLS=0`。UI なし・API なし・例外のときは何もしない。
 
 ### 自動の通知を畳む表示
 
@@ -460,7 +470,7 @@ git for-each-ref --format='%(refname)' refs/pi/pending/ | xargs -n1 git update-r
 
 ### 確認画面の手順の一覧
 
-bash の確認（ask・必須確認）に、1 行のコマンドを**手順に解きほぐした一覧**を添える。**表示だけで、判定（`judge/`）には使わない**（案件 [CHG-0062](../../change/0062-pr-hub-simplify.md)・バックログ #98）。
+bash の確認（ask・必須確認）に、1 行のコマンドを**手順に解きほぐした一覧**を添える。**表示だけで、判定（`judge/`）には使わない**（案件 [CHG-0062](../../change/closed/0062-pr-hub-simplify.md)・バックログ #98）。
 
 ```text
 コマンド (全文):
@@ -544,7 +554,7 @@ cd /abs && git log --oneline | head -3 > /tmp/o
 
 ### 共通の指示
 
-`~/.pi/agent/AGENTS.md` は、Claude Code・Codex・Copilot と同じ共通の指示（`agent-instructions.md`）。
+`~/.pi/agent/AGENTS.md` は、Claude Code・Codex・Copilot と同じ共通の指示（`agent-instructions.md`。平らな 25 行。進め方の詳細はスキル `agent-workflow`）。
 
 ### Orca・Zed
 

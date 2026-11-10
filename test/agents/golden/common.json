@@ -145,7 +145,15 @@
    "twine upload",
    "cargo publish",
    "gem push",
-   "docker push"
+   "docker push",
+   "incus",
+   "kcage-root",
+   "/usr/local/libexec/kcage/kcage-root",
+   "kcage rm",
+   "kcage register",
+   "kcage setup",
+   "kcage init",
+   "kcage uninstall"
   ],
   "deny_guide": {
    "alternative": [
@@ -190,6 +198,29 @@
       "docker network prune"
      ],
      "message": "docker の prune は許可されていません。消す対象を指定して `docker rm <container>` / `docker rmi <image>` を使ってください (確認が出ます)。ボリュームとネットワークの削除は利用者に依頼してください。"
+    },
+    {
+     "commands": [
+      "incus"
+     ],
+     "message": "incus の操作 (読み取りの list も含む) は許可されていません。箱の一覧は `kcage ls`、起動は `kcage up`、停止は `kcage stop`、箱の中の実行は `kcage exec` / `kcage pi` を使ってください。箱の作成・削除・設定の変更は、利用者にホストの端末での実行を依頼してください。"
+    },
+    {
+     "commands": [
+      "kcage-root",
+      "/usr/local/libexec/kcage/kcage-root"
+     ],
+     "message": "root 所有の補助 (kcage-root) は直接呼べません。`kcage` コマンド (ls / up / stop / pi / exec / doctor / selftest) を使ってください。"
+    },
+    {
+     "commands": [
+      "kcage rm",
+      "kcage register",
+      "kcage setup",
+      "kcage init",
+      "kcage uninstall"
+     ],
+     "message": "kcage rm / register / setup / init / uninstall は人だけが行う操作です。実行してほしいコマンドと理由を利用者に示し、ホストの端末で実行してもらってください。"
     },
     {
      "commands": [
@@ -435,7 +466,14 @@
    "~/.pi/agent/settings.json",
    "~/.pi/agent/mcp.json",
    "~/.pi/agent/extensions/**",
-   "~/.config/pi/harness/**"
+   "~/.config/pi/harness/**",
+   "**/.git/pi-work/**",
+   "**/.tmp/work/**",
+   "/etc/kcage/**",
+   "/usr/local/libexec/kcage/**",
+   "/etc/sudoers",
+   "/etc/sudoers.d/**",
+   "/run/kcage-broker/**"
   ]
  },
  "hooks": [
@@ -474,8 +512,25 @@
    ],
    "command": "uv",
    "id": "agentcore-websearch",
+   "pi_exposure": "direct",
    "purpose": "AgentCore Web Search で web 検索する (Gateway の URL がある機だけ)",
    "requires_env": "AGENTCORE_GATEWAY_URL",
+   "transport": "stdio"
+  },
+  {
+   "args": [
+    "run",
+    "--no-project",
+    "--quiet",
+    "/home/applejxd/.config/agents/websearch/mcp_server.py"
+   ],
+   "clis": [
+    "pi"
+   ],
+   "command": "uv",
+   "id": "websearch",
+   "pi_exposure": "direct",
+   "purpose": "家の機の web 検索・ページ取得・論文検索 (web_search / fetch_page / search_papers)",
    "transport": "stdio"
   }
  ],
@@ -796,7 +851,7 @@
    "fleet": {
     "description": "依頼を並列に動かせる作業に分け、作業役 (fleet-worker / bypass-fleet-worker) を同時に起動して進める",
     "subagent": false,
-    "template": "次の依頼を、並列に動かせる小さな作業に分けて進めてください。あなたは取りまとめ役です。\n\n依頼:\n$ARGUMENTS\n\n手順:\n\n1. 必要なら先にコードを読み、依頼を作業に分ける。各作業について、目的・担当ファイル・\n   完了条件・確認方法を決める。担当ファイルは作業どうしで重ねない\n2. 作業の依存関係を決め、同時に動かせる組 (波) に分ける。1 つの波は 4 件まで。\n   分ける価値が無い小さな依頼なら、分けずに自分で進める\n3. 作業の一覧・波・担当ファイルを示してから始める\n4. 波ごとに、各作業を 1 回の応答の中で subagent ツールを並べて作業役に渡す\n   (並べて呼んだ子は同時に走り、全部が終わると結果がそろって返る)。\n   作業役は、subagent ツールに bypass-fleet-worker が載っていればそれ、無ければ\n   fleet-worker を使う (呼べるのはどちらか一方だけ)。\n   どちらも載っていないとき (plan など) は、調査だけの依頼なら explore と review に\n   分担し、実装を含む依頼なら計画を示すところで止めて、作業役を呼べるエージェントへの\n   切り替えを利用者に頼む。拒否された作業を自分の shell で肩代わりしない。\n   今あるファイルの探索は explore、Git の履歴やコマンドの実行が要る調査は作業役、\n   第三者の検証は review に任せてよい。\n   依頼文には、目的・担当ファイル・触ってはいけないファイル・完了条件・確認方法を\n   すべて書く (子エージェントはこの会話を見られない)\n5. 結果を読み、失敗・担当外の変更・報告された問題 (呼び出し元への影響を含む) があれば、\n   直すか作業を切り直してから次の波へ進む\n6. 最後に全体の差分を読み、リポジトリで定められた検証を実行し、作業ごとの結果・\n   検証の結果・残った問題をまとめて報告する。コミットはしない\n"
+    "template": "次の依頼を、並列に動かせる小さな作業に分けて進めてください。あなたは取りまとめ役です。\n\n依頼:\n$ARGUMENTS\n\n手順:\n\n1. 必要なら先にコードを読み、依頼を作業に分ける。各作業について、目的・担当ファイル・\n   完了条件・確認方法を決める。担当ファイルは作業どうしで重ねない\n2. 作業の依存関係を決め、同時に動かせる組 (波) に分ける。1 つの波は 4 件まで。\n   分ける価値が無い小さな依頼なら、分けずに自分で進める\n3. 作業の一覧・波・担当ファイル・見込みの費用（子の数）を示してから始める。依頼に利用者が決めていない設計判断（方式の選択など）が残っているなら、始めずに先に尋ねて止まる\n4. 波ごとに、各作業を 1 回の応答の中で subagent ツールを並べて作業役に渡す\n   (並べて呼んだ子は同時に走り、全部が終わると結果がそろって返る)。\n   作業役は、subagent ツールに bypass-fleet-worker が載っていればそれ、無ければ\n   fleet-worker を使う (呼べるのはどちらか一方だけ)。\n   どちらも載っていないとき (plan など) は、調査だけの依頼なら explore と review に\n   分担し、実装を含む依頼なら計画を示すところで止めて、作業役を呼べるエージェントへの\n   切り替えを利用者に頼む。拒否された作業を自分の shell で肩代わりしない。\n   今あるファイルの探索は explore、Git の履歴やコマンドの実行が要る調査は作業役、\n   第三者の検証は review に任せてよい。\n   依頼文には、目的・担当ファイル・触ってはいけないファイル・完了条件・確認方法を\n   すべて書く (子エージェントはこの会話を見られない)\n5. 結果を読み、失敗・担当外の変更・報告された問題 (呼び出し元への影響を含む) があれば、\n   直すか作業を切り直してから次の波へ進む\n6. 最後に全体の差分を読み、リポジトリで定められた検証を実行し、作業ごとの結果・\n   検証の結果・残った問題をまとめて報告する。コミットはしない\n"
    }
   },
   "formatter": {
@@ -1167,7 +1222,8 @@
     "inherit_bypass": true,
     "profile": "worker",
     "system": "あなたは作業役です。依頼された 1 つの作業を、担当ファイルの範囲で実装し、確認方法を実行して\n結果を返します。担当外のファイルは変えず、git の状態を変える操作 (add / commit / stash /\ncheckout / switch / restore / reset) はしません。既存の振る舞いを変えたら呼び出し元を探して読み、\n影響を報告に書きます。返答は日本語で書きます (コード・コミットメッセージ自体は除く)。\n\n作業の進め方:\n1. 最初に、担当のパスが実在するかを ls / find で確かめる。依頼文の説明と実体が合わないときは、何も変えずにその旨を返す。\n2. 道具は次の使い分けにする。読むのは read (長いファイルは offset と limit)、探すのは grep / find / ls、\n   編集は edit (同じファイルの複数箇所は 1 回の呼び出しの edits[] にまとめる)、新規や全面の書き直しは write。\n   cat / head / sed -n での読み取り、cat > や heredoc での書き込み、python -c / perl -i などの一行スクリプトでの編集は、\n   拒否されるので使わない。\n   拒否されたら、拒否条件を満たす正規の別手段 (読むのは guarded_read など) へ切り替えてよい。\n   言い換え・分割・偽装での回避はしない。手段が無ければ止めて報告する。\n3. edit が一致しなかったときは、その箇所を read し直し、短く一意な oldText で再試行する。2 回続けて失敗したら、\n   そのファイルを write で書き直すか、書き直せない理由を返す。\n4. 試験・lint は実行して、出力を根拠に示す。実行を拒否されたら、そこで止めて「未確認」に書く。\n   言い換えや分割での回避はしない。親が実行すべきコマンドを「次の候補」に正確に書く。\n5. 実行していない試験を通ったと書かない。コードは読んで確かめた範囲だけを「確かめたこと」として書く。\n\n最後の返答は「結論 / 根拠 (パスと行・コマンドの出力) / 未確認 / 次の候補」の順で簡潔に返します。長い出力は貼らず、\n実行できなかったことを未確認に明記します。\n\n使い捨てのファイル (試験・実験のスクリプトや出力) は $TMPDIR に置く。ただし $TMPDIR が作業ツリーの外 (pis の内側など) のときは、\n作業ツリーの `.tmp/` の下に置く (作業ツリーの外へは書かない)。親が使える作業用の絶対パスを依頼に書いたら、それを優先する。\n「担当ファイル以外は読み取りだけ」の明示的な例外は、この使い捨て用ディレクトリに限る。\n残すもの (調査の記録など) は作らない。.tmp/keep は親が指示したときだけ使う。\n",
-    "tier": "worker"
+    "tier": "worker",
+    "timeout_minutes": 30
    }
   },
   "child": {
@@ -1177,7 +1233,7 @@
    "fleet": {
     "argument_hint": "<依頼>",
     "description": "依頼を並列に動かせる作業に分け、作業役 (worker) を同時に起動して進める",
-    "template": "次の依頼を、並列に動かせる小さな作業に分けて進めてください。あなたは取りまとめ役です。\n\n依頼:\n$ARGUMENTS\n\n手順:\n\n1. 必要なら先にコードを読み、依頼を作業に分ける。各作業について、目的・担当ファイル・\n   完了条件・確認方法を決める。担当ファイルは作業どうしで重ねない\n2. 作業の依存関係を決め、同時に動かせる組 (波) に分ける。1 つの波は 4 件まで。\n   分ける価値が無い小さな依頼なら、分けずに自分で進める\n3. 作業の一覧・波・担当ファイルを示してから始める\n4. 波ごとに、各作業を 1 回の応答の中で guarded_task ツールを並べて、agent を worker にして渡す\n   (並べて呼んだ子は同時に走り、全部が終わると結果がそろって返る)。\n   今あるファイルの探索は explore、第三者の検証は review に任せてよい。\n   guarded_task が無い役割 (reader など) のときは、調査だけの依頼なら自分で読み、実装を含む依頼なら\n   計画を示すところで止めて、役割の切り替え (pis --role implementer) を利用者に頼む。\n   子の結果が blocked (承認待ちで未完了) なら、その操作を利用者に示して判断を仰ぐ。\n   拒否された作業を自分の shell で肩代わりしない。\n   依頼文には、目的・担当ファイル・触ってはいけないファイル・完了条件・確認方法を\n   すべて書く (子エージェントはこの会話を見られない)\n5. 結果を読み、失敗・担当外の変更・報告された問題 (呼び出し元への影響を含む) があれば、\n   直すか作業を切り直してから次の波へ進む\n6. 最後に全体の差分を読み、リポジトリで定められた検証を実行し、作業ごとの結果・\n   検証の結果・残った問題をまとめて報告する。コミットはしない\n"
+    "template": "次の依頼を、並列に動かせる小さな作業に分けて進めてください。あなたは取りまとめ役です。\n\n依頼:\n$ARGUMENTS\n\n手順:\n\n1. 必要なら先にコードを読み、依頼を作業に分ける。各作業について、目的・担当ファイル・\n   完了条件・確認方法を決める。担当ファイルは作業どうしで重ねない\n2. 作業の依存関係を決め、同時に動かせる組 (波) に分ける。1 つの波は 4 件まで。\n   分ける価値が無い小さな依頼なら、分けずに自分で進める\n3. 作業の一覧・波・担当ファイル・見込みの費用（子の数）を示してから始める。依頼に利用者が決めていない設計判断（方式の選択など）が残っているなら、始めずに先に尋ねて止まる\n4. 波ごとに、各作業を 1 回の応答の中で guarded_task ツールを並べて、agent を worker にして渡す\n   (並べて呼んだ子は同時に走り、全部が終わると結果がそろって返る)。\n   今あるファイルの探索は explore、第三者の検証は review に任せてよい。\n   guarded_task が無い役割 (reader など) のときは、調査だけの依頼なら自分で読み、実装を含む依頼なら\n   計画を示すところで止めて、役割の切り替え (pis --role implementer) を利用者に頼む。\n   子の結果が blocked (承認待ちで未完了) なら、その操作を利用者に示して判断を仰ぐ。\n   拒否された作業を自分の shell で肩代わりしない。\n   依頼文には、目的・担当ファイル・触ってはいけないファイル・完了条件・確認方法を\n   すべて書く (子エージェントはこの会話を見られない)\n5. 結果を読み、失敗・担当外の変更・報告された問題 (呼び出し元への影響を含む) があれば、\n   直すか作業を切り直してから次の波へ進む\n6. 最後に全体の差分を読み、リポジトリで定められた検証を実行し、作業ごとの結果・\n   検証の結果・残った問題をまとめて報告する。コミットはしない\n"
    },
    "stepback": {
     "argument_hint": "[質問]",
@@ -1271,6 +1327,21 @@
     "pattern": "(^|&&|[;|&(\\n]|\\b(do|then|else))\\s*sleep\\s+(\\d{2,}(\\.\\d+)?s?|\\d+(\\.\\d+)?[mhd]|infinity)(\\s|;|&|\\)|$)",
     "scope": "foreground",
     "unless": "(^|&&|;|\\n)\\s*(git|gh)\\s[^\\n]*\\s-{1,2}(m|am|message|body|title)[\\s=]"
+   },
+   {
+    "id": "kcage-socket",
+    "message": "Incus・Docker のソケット (/var/lib/incus、incus の unix.socket、docker.sock) への接続やマウントは許可されていません (管理者権限と同じになるため)。箱の操作は `kcage ls` / `kcage up` / `kcage exec` などの kcage コマンドを使ってください。",
+    "pattern": "\\b(curl|nc|ncat|netcat|python3?|node|perl|ruby|ssh|docker|podman)\\b[^\\n]*(/var/lib/incus|/run/incus|incus/unix\\.socket|docker\\.sock|podman\\.sock)"
+   },
+   {
+    "id": "kcage-protected-write",
+    "message": "箱の設定・配備先・許可表 (/etc/kcage/、/usr/local/libexec/kcage/、/etc/sudoers と /etc/sudoers.d/、/run/kcage-broker/) への書き込みは許可されていません。変更が必要なら、内容と理由を利用者に示し、ホストの端末で実行してもらってください (ユーザーの設定 ~/.config/kcage/ は書けます)。",
+    "pattern": "(?:>>?\\s*|\\b(?:tee|cp|mv|rm|rmdir|install|ln|dd|truncate|touch|chmod|chown|mkdir|shred|visudo)\\b[^\\n;&|]*?\\s|\\bsed\\s+-\\w*i\\w*\\b[^\\n;&|]*?\\s)[\"']?(?:/etc/kcage(?:/|\\b)|/usr/local/libexec/kcage(?:/|\\b)|/etc/sudoers(?:\\.d)?(?:/|\\b)|/run/kcage-broker(?:/|\\b))"
+   },
+   {
+    "id": "kcage-admin-group",
+    "message": "incus-admin グループへの追加や切り替えは許可されていません (root 相当になるため)。箱の操作は kcage コマンドを使ってください。権限の変更が必要なら、利用者にホストの端末での実行を依頼してください。",
+    "pattern": "\\b(?:usermod|gpasswd|adduser|addgroup|useradd|groupmod)\\b[^\\n;&|]*\\bincus-admin\\b|\\b(?:sg|newgrp)\\s+incus-admin\\b"
    }
   ],
   "integrate": {
@@ -1506,6 +1577,7 @@
      "ls",
      "task",
      "todo",
+     "work",
      "ask",
      "action",
      "pr_summary",
@@ -1521,6 +1593,7 @@
      "ls",
      "task",
      "todo",
+     "work",
      "ask",
      "action"
     ]
@@ -1642,6 +1715,7 @@
     "-builtin:tool-search",
     "-builtin:llama.cpp"
    ],
+   "hideThinkingBlock": true,
    "skills": [
     "~/.claude/skills",
     "-~/.agents/skills/orchestration",
@@ -1705,15 +1779,6 @@
       "names",
       "show",
       "get"
-     ]
-    },
-    {
-     "script": "~/.claude/skills/web-search/scripts/websearch.py",
-     "subcommands": [
-      "search",
-      "fetch",
-      "papers",
-      "status"
      ]
     },
     {

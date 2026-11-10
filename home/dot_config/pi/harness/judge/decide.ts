@@ -7,11 +7,14 @@
 //
 // node の型除去でそのまま動く書き方だけを使う。
 // see docs/spec/guard/pi-decide.md
-import { lstatSync, readlinkSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { strictResolve } from "./pathutil.ts";
+import { ledgerRoots, underLedgerRoot } from "./ledger_root.ts";
 import type { Common } from "./policy.ts";
+import { finish } from "./verdict.ts";
 import {
 	expandUser,
 	loadFileGlobs,
@@ -52,6 +55,7 @@ const FILE_READ_TOOLS = ["read", "grep", "find", "ls"];
 const FILE_WRITE_TOOLS = ["edit", "write"];
 const TASK_TOOL = "task";
 const TODO_TOOL = "todo";
+const WORK_TOOL = "work";
 const ASK_TOOL = "ask";
 const ACTION_TOOL = "action";
 // profile の deny_except に書いてよい語 (bash.ts の例外処理が知っているものだけ)
@@ -75,7 +79,7 @@ export const response = (decision: Decision, reason: string, source: string, ext
 export const errorResponse = (reason: string): Response => response("deny", reason, "error");
 
 /** Python の repr(str) に近い表記 (応答の理由の一致のため)。 */
-const pyRepr = (s: string): string => {
+export const pyRepr = (s: string): string => {
 	const quote = s.includes("'") && !s.includes('"') ? '"' : "'";
 	const body = s.replaceAll("\\", "\\\\").replaceAll("\n", "\\n").replaceAll("\r", "\\r").replaceAll("\t", "\\t");
 	return quote + (quote === "'" ? body.replaceAll("'", "\\'") : body) + quote;
@@ -123,7 +127,7 @@ function profileOf(pi: Record<string, any>, role: string): Record<string, any> {
 }
 
 /** 役割の tools に入っているか。末尾が `*` の項目は前方一致 (`mcp__*` など)。 */
-const toolIn = (tool: string, tools: string[]): boolean =>
+export const toolIn = (tool: string, tools: string[]): boolean =>
 	tools.some((t) => (t.endsWith("*") ? tool.startsWith(t.slice(0, -1)) : tool === t));
 
 // ─── ファイル ──────────────────────────────────────────────
@@ -178,41 +182,6 @@ function piPathVariants(path: string): string[] {
 		out.add(s);
 	}
 	return [...out];
-}
-
-/**
- * 厳格な解決: 先頭から成分を辿り、存在する symlink は (対象が無くても) 文字列として置き換えて続ける。
- * 深さの上限 (40) を超える・lstat が ENOENT 以外で失敗するときは例外 (呼び出し側が deny にする)。
- */
-function strictResolve(path: string): string {
-	let queue = path.split(sep); // normpath しない (`f/..` や `link/..` を字句で畳むと実体と食い違う)
-	let resolved = sep;
-	let hops = 0;
-	while (queue.length > 0) {
-		const comp = queue.shift()!;
-		if (comp === "" || comp === ".") continue;
-		if (comp === "..") {
-			resolved = resolved === sep ? sep : resolved.slice(0, resolved.lastIndexOf(sep)) || sep;
-			continue;
-		}
-		const next = join(resolved, comp);
-		let link: string | null = null;
-		try {
-			const st = lstatSync(next);
-			if (st.isSymbolicLink()) link = readlinkSync(next);
-			else if (!st.isDirectory() && queue.some((c) => c !== "" && c !== ".")) throw new Error("通常ファイルの後に成分が続く");
-		} catch (e: any) {
-			if (e?.code !== "ENOENT") throw e;
-		}
-		if (link === null) {
-			resolved = next;
-			continue;
-		}
-		if (++hops > 40) throw new Error("symlink が深すぎる");
-		if (isAbsolute(link)) resolved = sep;
-		queue = [...link.split(sep), ...queue];
-	}
-	return resolved;
 }
 
 /** write の範囲判定: pi が行いうる解釈のどれか 1 つでも root / tmp の外へ出るなら false。 */
@@ -277,6 +246,16 @@ function decideFile(
 	}
 
 	const absolute = candidates(path, cwd).at(-1)!;
+	if (write) {
+		// `.git` 以外の名前の git-common-dir (separate-git-dir・GIT_DIR) の台帳は名前の glob に当たらないので、fs で解いた置き場と照合する
+		const roots = ledgerRoots(cwd);
+		if (piPathVariants(path).some((v) => candidates(v, cwd).some((c) => underLedgerRoot(c, roots)))) {
+			return {
+				commonDeny: response("deny", `\`${path}\` は作業台帳の置き場 (ハーネスだけが書く)`, "rule"),
+				roleRule: null,
+			};
+		}
+	}
 	if (write && writeScope) {
 		const root = realpathLoose(writeScope.root);
 		if (!writeWithinScope(path, cwd, writeScope.root, writeScope.tmpRoots)) {
@@ -400,6 +379,9 @@ function decideInner(request: unknown, common: Common): Response {
 	} else if (tool === TODO_TOOL) {
 		commonDeny = null;
 		roleRule = response("allow", "タスクリストはメモリの状態だけを変える", "rule");
+	} else if (tool === WORK_TOOL) {
+		commonDeny = null;
+		roleRule = response("allow", "作業台帳の操作は引数が id・題名だけで、台帳への書き込みはハーネスが行う", "rule");
 	} else if (tool === ASK_TOOL) {
 		commonDeny = null;
 		roleRule = response("allow", "利用者への質問は UI だけを使う (ファイルも外部も触らない)", "rule");
@@ -411,26 +393,10 @@ function decideInner(request: unknown, common: Common): Response {
 		commonDeny = null;
 		roleRule = null;
 	}
-	if (commonDeny) return commonDeny;
-
-	// 2. 役割のツール
-	if (!toolIn(tool, profile.tools)) {
-		return response("deny", `役割 ${pyRepr(req.role)} は ${tool} を使えない`, "rule");
-	}
-
-	// 3. 役割の確認と許可、4. 既定
-	const result =
-		roleRule ?? response(profile.default, `どの規則にも当たらない (役割 ${pyRepr(req.role)} の既定)`, "default");
-
-	// 4'. サンドボックスの内側 (証明済み) では、日常の shell の確認だけを外す。
-	//     [bash] ask・意味解析の ask・誘導・deny はそのまま (どの規則にも当たらず、役割の既定の ask になったものだけ)
-	if (req.boundary && tool === "bash" && result.source === "default" && result.decision === "ask") {
-		return response("allow", "サンドボックスの内側の日常の shell (どの規則にも当たらない)", "rule", { sandboxed: true });
-	}
-
-	// 5. bypass は ask だけを allow にする (deny はそのまま)。mustConfirm の ask は bypass でも ask のまま
-	if (req.bypass && result.decision === "ask" && !result.mustConfirm) return { ...result, decision: "allow", bypassed: true };
-	return result;
+	// 2. 役割のツール、3. 役割の確認と許可、4. 既定、4'. サンドボックスの内側の緩和、5. bypass (judge/verdict.ts の finish)
+	//    4' は日常の shell の確認だけを外す。[bash] ask・意味解析の ask・誘導・deny はそのまま (役割の既定の ask になったものだけ)。
+	//    5 は ask だけを allow にする (deny はそのまま)。mustConfirm の ask は bypass でも ask のまま
+	return finish({ tool, role: req.role, profile: profile as { tools: string[]; default: string }, boundary: req.boundary, bypass: req.bypass }, commonDeny, roleRule);
 }
 
 /** 判定する。例外は投げず、異常はすべて `source: error` の deny にする。 */

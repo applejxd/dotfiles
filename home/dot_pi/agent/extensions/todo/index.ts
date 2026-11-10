@@ -211,8 +211,26 @@ export default function (pi: ExtensionAPI) {
 	// 応答を終えようとしたときに、次の 2 つを促す (どちらも利用者の発言ごとに 1 回だけ)。中断・エラーで終わったときや、続けられないときは出さない。続行は最大 1 回 (無条件の続行はループする)
 	// 1. in_progress が残ったまま: 完了の確認か続きの作業
 	// 2. in_progress が無く、待ち (blocked) があり、着手できる未着手 (pending) も残っている: 待ちを理由に止まらない。
-	//    止まってよいのは、利用者の方針決定がないと進められる作業が無いときだけ (承認・実機や操作の確認の待ちは理由にしない)。「【将来」を含む項目は着手できる未着手に数えない
+	//    pending は「契約が確定して着手できる」項目だけ (利用者の判断が未回答のものは blocked)。止まってよいのは、契約の範囲に進められる作業が無く利用者の決定が要るときだけ (承認・実機や操作の確認の待ちは理由にしない)。「【将来」を含む項目は着手できる未着手に数えない
 	const short = (t: { id: number; text: string }) => `#${t.id} ${t.text.length > 60 ? `${t.text.slice(0, 60)}…` : t.text}`;
+	// 調停 (harness/work/settle.ts) の旗 PI_WORK_ARBITER=1 のとき、自分の agent_before_settle は登録せず、事実だけを返す (別ディレクトリなので globalThis 経由)
+	// see docs/spec/work/settle.md
+	const arbiterOn = process.env.PI_WORK_ARBITER === "1";
+	(globalThis as any).__piTodoSnapshot = () => ({
+		disabled: process.env.PI_TODO_NO_REMINDER === "1",
+		open: open().length,
+		doing: todos.filter((t) => t.status === "in_progress").map(short),
+		blocked: todos.filter((t) => t.status === "blocked").map(short),
+		queued: todos.filter((t) => t.status === "pending" && !t.text.includes("【将来")).map(short),
+		nudged,
+		nudgedWaiting,
+		/** リマインドが選ばれたとき、調停が呼んで二重のリマインドを防ぐ */
+		markNudged: (which: "nudged" | "nudgedWaiting") => {
+			if (which === "nudged") nudged = true;
+			else nudgedWaiting = true;
+		},
+	});
+	if (!arbiterOn)
 	pi.on("agent_before_settle", async (event: any) => {
 		if (event?.outcome !== "completed" || process.env.PI_TODO_NO_REMINDER === "1") return;
 		const doing = todos.filter((t) => t.status === "in_progress");
@@ -232,7 +250,8 @@ export default function (pi: ExtensionAPI) {
 			const more = queued.length - top.length;
 			content =
 				`待ち (blocked) の項目があり、着手できる未着手 (pending) も残っています。待ち: ${waiting.slice(0, 3).map(short).join(" / ")}。未着手: ${top.map(short).join(" / ")}${more > 0 ? ` (ほか ${more} 件)` : ""}。` +
-				"止まってよいのは、利用者の方針決定がないと進められる作業が無いときだけです。承認 (マージ) や、利用者の実機・操作の確認を待つ間は止まらず、依存しない未着手を続けてください。" +
+				"止まってよいのは、契約の範囲に進められる作業が無く、利用者の決定が要るときだけです。承認 (マージ) や、利用者の実機・操作の確認を待つ間は止まらず、依存しない未着手を続けてください。" +
+				"未着手 (pending) は、契約が確定して着手できる項目のはずです。利用者の判断が未回答の設計や、確認されていない計画は blocked にして着手しないでください。" +
 				"進められる作業が無ければ、その理由 (要る方針決定) を書いて終えて構いません。";
 		}
 		return {
@@ -250,7 +269,8 @@ export default function (pi: ExtensionAPI) {
 		promptGuidelines: [
 			"For work with 3 or more steps, use todo add to list the steps before starting; set the current item to in_progress (one at a time) and to done when finished.",
 			"Set an item to blocked (not in_progress) while it only waits on something external, such as a background job, a child agent, or the user's reply; write what it waits for (e.g. the job ID) in note.",
-			"While an item is blocked (waiting on an approval or merge, a background job, or the user checking something), keep working on other pending items that do not depend on it. Stop only when no startable work remains without the user's policy decision; an approval or a check by the user is not a reason to stop.",
+			"Use pending only for an item whose plan the user has confirmed and that can start now. An item that still needs the user's decision (open design questions, a plan not yet confirmed) is blocked, not pending: do not start it, and do not count it as startable work.",
+			"While an item is blocked (waiting on an approval or merge, a background job, or the user checking something), keep working on other pending items that do not depend on it. Stop only when no startable work remains without the user's decision; an approval or a check by the user is not a reason to stop.",
 			"Use todo batch (ops) to change several items in one call, and todo replace (items) to rewrite the whole list at once.",
 		],
 		description:

@@ -4,7 +4,7 @@
 
 - **状態**: Abandoned
 - **更新日**: 2026-11-05
-- **基準**: pi 1.4.0、[CHG-0050](../0050-slim-guarded-action.md)（`guarded_action`）、[CHG-0053](../0053-worktree-integration-gate.md)（push の deny 維持）
+- **基準**: pi 1.4.0、[CHG-0050](0050-slim-guarded-action.md)（`guarded_action`）、[CHG-0053](0053-worktree-integration-gate.md)（push の deny 維持）
 
 ## 1. 目的
 

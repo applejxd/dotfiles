@@ -2,7 +2,7 @@
 
 > この文書は当時の記録。現在の仕様は [`spec/opencode-config-generation.md` の子エージェント](../../spec/opencode-config-generation.md#子エージェント)と
 > [`spec/guard/opencode-guard.md` の OpenCode の allow したコマンドの書き込み形](../../spec/guard/opencode-guard.md#opencode-の-allow-したコマンドの書き込み形)。
-> OpenCode は 2026-10-20 に利用者が「もう使っていない」と確認しており、撤去は [CHG-0020](../0020-pi-migration.md) の段 6（保留）。
+> OpenCode は 2026-10-20 に利用者が「もう使っていない」と確認しており、撤去は [CHG-0020](0020-pi-migration.md) の段 6（保留）。
 
 - **状態**: Done
 - **更新日**: 2026-10-25
@@ -397,7 +397,7 @@ flowchart LR
 
 ## 終了結果
 
-**Done。** 実施計画の段 0〜8 はすべて完了した。OpenCode は 2026-10-20 に利用者が「もう使っていない」と確認した（[CHG-0020](../0020-pi-migration.md) の重要な更新）。
+**Done。** 実施計画の段 0〜8 はすべて完了した。OpenCode は 2026-10-20 に利用者が「もう使っていない」と確認した（[CHG-0020](0020-pi-migration.md) の重要な更新）。
 残る未確認は OpenCode の実機での確認だけなので、確認せずに閉じた（2026-10-25、利用者の選択）。
 2026-10-08 時点の「現在地」「未解決点」「次の調査・実験」は、この結果で置き換わる（本文は当時のまま残す）。
 
@@ -431,5 +431,5 @@ flowchart LR
 
 ### 移管した未完事項
 
-- 全体の allow に残る書き込み形の見直し: 移管先は [CHG-0020](../0020-pi-migration.md) の段 6（OpenCode の撤去）。撤去するとき、この案件の成果の設定ごと消える
+- 全体の allow に残る書き込み形の見直し: 移管先は [CHG-0020](0020-pi-migration.md) の段 6（OpenCode の撤去）。撤去するとき、この案件の成果の設定ごと消える
 - OpenCode の実機での確認項目: 起票しない（OpenCode を使っていないため）

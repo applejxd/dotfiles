@@ -286,22 +286,11 @@ def test_skill_scripts_are_allowed_only_in_their_declared_form():
     assert bash(f"bash {lint}")["decision"] == "ask"
 
 
-def test_web_search_script_allows_only_its_read_only_subcommands():
+def test_web_search_script_is_no_longer_allowed():
+    """スキル web-search は廃止した (2026-11-09)。検索は MCP。このパスの実行は許可規則が無く、確認に戻る。"""
     script = "~/.claude/skills/web-search/scripts/websearch.py"
-    for sub in ("search", "fetch", "papers", "status"):
-        assert bash(f'python3 {script} {sub} "windows widgets policy"')["decision"] == "allow"
-    # bw を呼ぶ sync-keys は載せない
-    assert bash(f"python3 {script} sync-keys")["decision"] == "ask"
-    # シェルの機能で別のコマンドを混ぜる・書き出す形は許可しない
-    for unsafe in (
-        f'python3 {script} search "$(id)"',
-        f'python3 {script} search "`id`"',
-        f"python3 {script} search x; rm -rf x",
-        f"python3 {script} search x > out.txt",
-        f"S={script}; python3 $S search x",
-        "python3 ./websearch.py search x",
-    ):
-        assert bash(unsafe)["decision"] == "ask", unsafe
+    for sub in ("search", "fetch", "papers", "status", "sync-keys"):
+        assert bash(f'python3 {script} {sub} "windows widgets policy"')["decision"] == "ask"
     assert bash(f"python3 {script} search x | sh")["decision"] == "deny"
 
 
@@ -450,7 +439,6 @@ _ENV_PREFIX_COMMANDS = [
     "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=id git status",
     "GIT_DIR=/tmp/x git log",
     "GIT_CONFIG_GLOBAL=/tmp/x git log",
-    "LD_PRELOAD=/tmp/x.so git log",
     "PATH=/tmp:$PATH git log",
     "FOO=1 git log",
     "env GIT_PAGER=id git log",
@@ -546,6 +534,9 @@ _DASH_CASES = [
         "deny",
         "check",
     ),
+    # コードの入口になる環境変数は役割を問わず deny (check)
+    ("explorer", "LD_PRELOAD=/tmp/x.so git log", "deny", "check"),
+    ("implementer", "LD_PRELOAD=/tmp/x.so git log", "deny", "check"),
     *[
         (role, cmd, decision, "default")
         for cmd in _ENV_PREFIX_COMMANDS
@@ -610,6 +601,14 @@ def test_task_is_allowed_only_for_roles_that_have_it():
 def test_todo_is_allowed_only_for_roles_that_have_it():
     assert decide(req("todo"))["decision"] == "allow"
     assert decide(req("todo", role="worker"))["decision"] == "deny"
+
+
+def test_work_is_allowed_only_for_parent_roles():
+    # 親 (implementer・orchestrator) だけ。子の役割には無い (台帳に書かせない)
+    assert decide(req("work", op="list"))["decision"] == "allow"
+    assert decide(req("work", role="orchestrator", op="list"))["decision"] == "allow"
+    for role in ("worker", "explorer", "reader", "committer"):
+        assert decide(req("work", role=role, op="list"))["decision"] == "deny", role
 
 
 def test_ask_is_allowed_only_for_roles_that_have_it():
@@ -728,6 +727,9 @@ def test_decide_matches_check_bash_on_the_hook_test_corpus(chunk):
         if got["decision"] == "deny" and got["reason"].startswith(ACTION_DENY_PREFIX):
             # implementer (action ツールあり) の git commit / gh issue comment は guarded_action へ誘導する pi だけの deny
             ok = got["source"] == "rule"
+        elif got.get("guide") and got["decision"] == "deny" and got["source"] == "rule":
+            # 誘導は pi だけの deny。hook が ask を返す入力（例: docker.sock を指す curl）でも、pi は誘導で止める（より厳しい）
+            ok = True
         elif expected in ("deny", "ask"):
             ok = got["decision"] == expected and got["source"] in ("rule", "check")
         elif got.get("guide"):
@@ -761,3 +763,100 @@ def test_decision_does_not_depend_on_earlier_calls():
     bash(quoted)
     after = bash(unquoted)
     assert after == alone
+
+
+_ENTRY_DENY = [
+    "PS4='$(touch /tmp/x)' bash -x -c true",
+    "export PS4='$(id)'",
+    "BASH_ENV=/tmp/x.sh bash -c true",
+    "env BASH_ENV=/tmp/x sh -c true",
+    "LD_PRELOAD=/tmp/x.so ls",
+    "export LD_AUDIT=/tmp/x",
+    "DYLD_INSERT_LIBRARIES=/tmp/x ls",
+    "export BASH_FUNC_foo%%='() { id; }'",
+    "PROMPT_COMMAND='id' bash -i",
+    "declare -x PS4='$(id)'",
+    "PS4+='$(id)' cmd",
+    "printf -v PS4 x",
+    "\"PS4\"='$(id)' cmd",
+    "P''S4='$(id)' cmd",
+    "env -i BASH_ENV=x cmd",
+    "env -S 'BASH_ENV=x cmd'",
+    "sudo env BASH_ENV=x cmd",
+    "xargs -I{} env BASH_ENV=x {}",
+    "bash -c 'BASH_ENV=x true'",
+    "read -r -p prompt PS4",
+    "read -ra PS4",
+    "mapfile PS4",
+    "mapfile -C id arr",
+    "compgen -C id",
+    "complete -C id foo",
+    "find . -exec env BASH_ENV=x cmd {} \\;",
+    "find . -ok env LD_PRELOAD=x cmd {} \\;",
+    "bash <<< 'BASH_ENV=x cmd'",
+    "stdbuf --output L env BASH_ENV=x cmd",
+    "xargs --max-args=1 env BASH_ENV=x cmd",
+    "env 'BASH_FUNC_x-y%%=() { id; }' bash",
+]
+_ENTRY_OK = [
+    "rg 'PS4='",
+    "grep -n 'BASH_ENV=' file",
+    "git commit -m 'fix: unset PS4=x in script'",
+    'echo "BASH_ENV=/tmp/x" > notes.txt',
+    "ENV=production ./deploy",
+    "export PS4='+ ${LINENO}: '",
+    "export PS4",
+    "read line",
+    "mapfile -t lines",
+    "IFS= read -r line",
+    "grep PS4 file.sh",
+    "echo PS4",
+    "ENVIRONMENT=prod ./run",
+    "MY_ENV=x ./run",
+    "BASH_ENVX_NOT=1 ./run",
+    "man bash",
+    "echo hi  # PS4=x",
+    "LD_LIBRARY_PATH=/opt/lib ./prog",
+    "cat <<< 'BASH_ENV=x cmd'",
+    "find . -exec cat {} \\;",
+    "stdbuf --output L cat file",
+    "echo 'BASH_FUNC_x-y%%=1'",
+]
+
+
+@pytest.mark.parametrize("command", _ENTRY_DENY)
+@pytest.mark.parametrize("role", ["implementer", "worker", "explorer"])
+@pytest.mark.parametrize("bypass", [False, True])
+def test_code_entry_env_is_denied(command, role, bypass):
+    response = decide(req("bash", role=role, bypass=bypass, command=command))
+    assert response["decision"] == "deny", command
+    assert "入口の環境変数" in response["reason"], command
+
+
+@pytest.mark.parametrize("command", _ENTRY_OK)
+def test_code_entry_env_mentions_are_not_denied_by_this_rule(command):
+    assert "入口の環境変数" not in bash(command).get("reason", "")
+
+
+_ENTRY_SEPARATORS = [
+    "echo a\u2028BASH_ENV=x cmd",
+    "echo a\u2029BASH_ENV=x cmd",
+    "echo a\u2028PS4='$(id)' cmd",
+    "true '\r#'; BASH_ENV=x",
+    "true '\r#'; PS4='$(id)'",
+    "echo a\rBASH_ENV=x cmd",
+]
+
+
+def test_code_entry_env_ts_and_python_agree_on_line_separators():
+    """U+2028/2029/CR は、判定器の間で語の分割が食い違いやすい (golden は splitlines で割れるのでここで見る)。"""
+    from test_pi_confirm import _bash, _judge, needs_node  # noqa: F401
+
+    cwd = str(ROOT)
+    reqs = [{**_bash(c), "role": "implementer", "cwd": cwd} for c in _ENTRY_SEPARATORS]
+    for command, ts in zip(_ENTRY_SEPARATORS, _judge(reqs), strict=True):
+        py = decide(req("bash", cwd=cwd, command=command))
+        assert ts["decision"] == py["decision"], (command, ts, py)
+        assert ("入口の環境変数" in ts.get("reason", "")) == (
+            "入口の環境変数" in py.get("reason", "")
+        ), command

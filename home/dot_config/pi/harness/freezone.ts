@@ -1,5 +1,5 @@
 // 自由区の判定: feature の linked worktree の中だけ free。迷ったら free:false (呼ぶ側は従来どおり確認する)。
-// see docs/change/0053-worktree-integration-gate.md
+// see docs/change/closed/0053-worktree-integration-gate.md
 import { realpathSync } from "node:fs";
 import { gitSync } from "./gitrun.ts";
 import { isProtectedRef } from "./judge/protectedrefs.ts";

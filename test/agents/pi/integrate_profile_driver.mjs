@@ -7,7 +7,7 @@
 //       → 順に実行 (load は loadProfile。git は cwd で git を実行して設定を変える)。各 load の結果と、
 //         注入した git の呼び出し一覧 (サブコマンドごとの回数) を返す。
 //
-// see docs/change/0057-per-project-integrate.md
+// see docs/change/closed/0057-per-project-integrate.md
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";

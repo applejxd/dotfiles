@@ -24,5 +24,5 @@
 - **2026-10-25**（個人の機、境界あり）: `pis -p` の内側から `websearch.py search` が通った（`provider=brave`、8 件）。内側に鍵は渡っていない。
   独立の `review` の指摘（身元確認を GET に限定、`Proxy-Authorization` の削除、不正なパス・エンコードの実 Envoy の試験）を反映した
 - **2026-10-25**: 共通化の前後で `build_config` の出力が同値であることを、HEAD の旧コード（断片 YAML と旧 `broker.py`）を `git show` で取り出して書き出した構造と、正解データ `golden/broker_config.json` のバイト一致で確かめた
-- 詳しい経緯は [CHG-0037](../../change/0037-pis-usability-and-telemetry.md)、方式の調査は
+- 詳しい経緯は [CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md)、方式の調査は
   [調査 D2〜D6](agent-auth-delegation.md)

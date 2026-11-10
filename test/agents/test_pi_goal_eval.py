@@ -3,7 +3,7 @@
 ``test/agents/pi/goal_eval_driver.mjs`` に JSON を渡して呼ぶ (node の型除去を使うので、22.18 未満の node では飛ばす)。
 純関数の引数は driver が deep freeze して渡すので、入力を変更する実装は失敗する。LLM の呼び出しは偽の complete に差し替える。
 
-see docs/change/0062-pr-hub-simplify.md (goal-eval の履歴は docs/change-history/0062.md)
+see docs/change/closed/0062-pr-hub-simplify.md (goal-eval の履歴は docs/change-history/0062.md)
 """
 
 from __future__ import annotations

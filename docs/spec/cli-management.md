@@ -139,7 +139,7 @@ seccomp フィルタは手で `npm install -g` する必要はありません。
 
 ### git flow（git-flow-next）
 
-`github:gittower/git-flow-next` は、利用者が feature の起票・クローズを行う `git flow` の実体です（[CHG-0047](../change/0047-gitflow.md)。AI の `gitflow_*` 操作は [CHG-0050](../change/0050-slim-guarded-action.md) で撤去）。Linux / WSL だけに入れます。
+`github:gittower/git-flow-next` は、利用者が feature の起票・クローズを行う `git flow` の実体です（[CHG-0047](../change/0047-gitflow.md)。AI の `gitflow_*` 操作は [CHG-0050](../change/closed/0050-slim-guarded-action.md) で撤去）。Linux / WSL だけに入れます。
 
 - **版とチェックサムを固定しています**（Fence と同じ）。公式の Releases の `checksums.txt` の値を `platforms.<os>-<arch>.checksum` に写します（`linux-x64` と `linux-arm64`）。上げるときは、`git-flow` が `.git/config` に書く設定の意味が変わりうるので、`scripts/gitflow-setup.sh` と動作を見直す
 - 実体は `git-flow` 1 つ。PATH にあれば `git flow` として動く。利用者が自分のシェルで実行する（bash の `git flow` の拒否は撤去した）
@@ -342,7 +342,7 @@ Herdr のユーザーデータ・設定は削除しません。
 固定版（v1.40.1）の公式リリースのバイナリを、`checksum.sha256` で照合します（chezmoi が検証）。
 
 - **対象**: Linux / WSL で、`llm-provider` が `github-copilot` の機、Raspberry Pi 以外、amd64 と arm64 だけ
-  （Envoy は macOS・Windows のバイナリを配布していない。制約のある環境の機（Bedrock を使う機）は、Bedrock の対応（[CHG-0037](../change/0037-pis-usability-and-telemetry.md)）まで対象外）
+  （Envoy は macOS・Windows のバイナリを配布していない。制約のある環境の機（Bedrock を使う機）は、Bedrock の対応（[CHG-0037](../change/closed/0037-pis-usability-and-telemetry.md)）まで対象外）
 - **更新手順**: 公式リリースの `checksums.txt.asc` から、`envoy-<版>-linux-x86_64` と `envoy-<版>-linux-aarch_64` の
   sha256 を取り、`.chezmoiexternal.toml.tmpl` の版・URL・sha256 を 3 つ同時に書き換える（署名の検証は任意）
 - **sha256 の限界**: 同じリリースの checksums との一致で、改ざん検知の根拠は弱い（署名の検証は未実施）

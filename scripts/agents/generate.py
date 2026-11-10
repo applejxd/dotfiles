@@ -560,7 +560,9 @@ MCP_TRANSPORT_KEYS = {
     "http": {"url"},
     "stdio": {"command", "args"},
 }
-MCP_COMMON_KEYS = {"id", "purpose", "transport", "clis", "exposure", "requires_env"}
+MCP_COMMON_KEYS = {"id", "purpose", "transport", "clis", "exposure", "requires_env", "pi_exposure"}
+# pi_exposure: stock の pi の mcp.json の server の exposure に、無いときだけ補う値 (merge_pi_mcp)。
+# 他の生成先は読まない。pi 組み込みの MCP の既定は codemode で、モデルに直接見えない
 # requires_env: この環境変数が空のとき、pi のフルガードはこのサーバを登録しない (認証や URL が無い機で、動かないサーバを
 # 起動し続けない)。他の CLI への生成には影響しない
 MCP_ENV_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
@@ -617,6 +619,12 @@ def mcp_servers(common: dict[str, Any], cli: str | None = None) -> list[tuple[st
                 f"[[mcp]] {name} の exposure が不正: {exposure!r} "
                 f"(対応: {', '.join(MCP_EXPOSURES)})"
             )
+        pi_exposure = server.get("pi_exposure")
+        if pi_exposure is not None and pi_exposure not in MCP_EXPOSURES:
+            raise ValueError(
+                f"[[mcp]] {name} の pi_exposure が不正: {pi_exposure!r} "
+                f"(対応: {', '.join(MCP_EXPOSURES)})"
+            )
         required = server.get("requires_env")
         if required is not None and (
             not isinstance(required, str) or MCP_ENV_NAME.fullmatch(required) is None
@@ -653,6 +661,8 @@ def mcp_servers(common: dict[str, Any], cli: str | None = None) -> list[tuple[st
             entry["command"] = command
             entry["args"] = list(args)
 
+        if pi_exposure is not None:
+            entry["pi_exposure"] = pi_exposure
         servers.append((name, entry))
     return servers
 
@@ -685,6 +695,42 @@ def merge_copilot_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[
         for key in stale:
             entry.pop(key, None)
         entry.setdefault("tools", ["*"])
+        servers[name] = entry
+    out["mcpServers"] = servers
+    return out
+
+
+# ---------------------------------------------------------------------------
+# stock の pi の MCP 設定 (~/.pi/agent/mcp.json。pi 組み込みの MCP も pi-mcp-adapter も読む)
+# ---------------------------------------------------------------------------
+
+
+def merge_pi_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """``~/.pi/agent/mcp.json`` の ``mcpServers`` を更新する。
+
+    ``pi mcp add`` や ``/mcp`` も書き込むので、common.toml が宣言した名前だけを更新し、
+    ほかのサーバは残す。宣言したサーバでも ``command`` / ``args`` だけを持ち、
+    ``env`` / ``enabled`` / ``exposure`` / ``timeout`` など利用者が足したキーは保つ
+    (common.toml が持たない情報)。``[[mcp]]`` の ``exposure`` / ``requires_env`` は
+    pi 本体の MCP が解釈しないので出さない。``pi_exposure`` があれば server の ``exposure`` に無いときだけ補う。
+    http は ``url``、stdio は ``command`` / ``args``。
+    """
+    out = dict(existing) if isinstance(existing, dict) else {}
+    servers = dict(out.get("mcpServers") or {})
+    for name, server in mcp_servers(common, "pi"):
+        entry = dict(servers.get(name) or {})
+        if server["transport"] == "http":
+            entry["url"] = server["url"]
+            stale = ("command", "args")
+        else:
+            entry["command"] = server["command"]
+            entry["args"] = server["args"]
+            stale = ("url", "headers")
+        for key in stale:
+            entry.pop(key, None)
+        if "pi_exposure" in server:
+            # 利用者が /mcp で変えた値を保つ (無いときだけ補う)
+            entry.setdefault("exposure", server["pi_exposure"])
         servers[name] = entry
     out["mcpServers"] = servers
     return out
@@ -2063,7 +2109,7 @@ def pi_integrate(common: dict[str, Any]) -> dict[str, Any]:
 
     ``protected_refs`` は下限 (``PI_INTEGRATE_FLOOR``) を全て含み、各要素は ``refs/`` で始めず、
     ``*`` は末尾の ``/*`` だけ。``target`` は ``protected_refs`` の完全一致の要素。
-    see docs/change/0053-worktree-integration-gate.md
+    see docs/change/closed/0053-worktree-integration-gate.md
     """
     section = (common.get("pi") or {}).get("integrate")
     if section is None:
@@ -2394,6 +2440,7 @@ PI_SETTINGS_KEYS = frozenset(
         "enabledModels",
         "extensions",
         "defaultTools",
+        "hideThinkingBlock",
     }
 )
 # extensions の中で自動検出の拡張を外す記法。自作の拡張はこの直後に "+" で足す
@@ -2416,6 +2463,8 @@ def merge_pi_settings(existing: dict[str, Any], common: dict[str, Any]) -> dict[
         value = declared.get(key, [])
         if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
             raise SystemExit(f"[pi.settings] {key} は文字列の配列でなければならない")
+    if "hideThinkingBlock" in declared and not isinstance(declared["hideThinkingBlock"], bool):
+        raise SystemExit("[pi.settings] hideThinkingBlock は真偽値でなければならない")
     declared = copy.deepcopy(declared)
     exts = declared.get("extensions")
     if exts and PI_EXCLUDE_AUTO in exts:
@@ -3573,6 +3622,7 @@ TARGETS = {
     "opencode-guide": build_opencode_guide,
     "opencode-service": merge_opencode_service,
     "pi-harness": build_pi_harness,
+    "pi-mcp": merge_pi_mcp,
     "pi-settings": merge_pi_settings,
     "pi-keybindings": pi_keybindings,
     "pi-subagents": build_pi_subagents,
@@ -3587,6 +3637,10 @@ FULL_GENERATION_TARGETS = {
     "pi-keybindings",
     "pi-subagents",
 }
+
+
+# 既存ファイルが壊れた JSON のとき、エラーにせず入力をそのまま返す (apply を止めず、利用者の編集中のファイルを壊さない)。
+PASSTHROUGH_BROKEN_TARGETS = {"pi-mcp"}
 
 
 def load_existing(path: str | None) -> dict[str, Any]:
@@ -3887,7 +3941,23 @@ def main(argv: list[str] | None = None) -> int:
     common = apply_local_overlay(common, load_local_overlay())
     # 旧名・綴り間違いは防御を黙って消すので、生成前に落とす
     validate_sandbox_keys(common)
-    existing = {} if args.target in FULL_GENERATION_TARGETS else load_existing(args.existing)
+    if args.target in PASSTHROUGH_BROKEN_TARGETS:
+        # 利用者も書くファイル。壊れていたら触らずそのまま返す (利用者が直す)
+        raw = (
+            sys.stdin.read()
+            if args.existing in (None, "-")
+            else Path(args.existing).read_text(encoding="utf-8")
+        )
+        try:
+            parsed = json.loads(raw) if raw.strip() else {}
+        except json.JSONDecodeError:
+            parsed = None
+        if not isinstance(parsed, dict):
+            sys.stdout.write(raw)
+            return 0
+        existing = parsed
+    else:
+        existing = {} if args.target in FULL_GENERATION_TARGETS else load_existing(args.existing)
     merger = TARGETS[args.target]
     merged = merger(existing, common)
 

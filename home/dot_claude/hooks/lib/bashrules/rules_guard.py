@@ -10,7 +10,7 @@ import os
 import re
 import shlex
 
-from . import tables
+from . import shellparse, tables
 from ._shared import (
     _basename,
     _cmd_name,
@@ -23,6 +23,282 @@ from ._shared import (
     _write_targets,
 )
 from .rules_exec import _is_inline_code_segment
+
+# シェルが値をコードとして実行する入口の環境変数 (名前は完全一致。BASH_FUNC_ だけ前方一致)。
+# 検出する形・入れないもの・限界は docs/spec/guard/pi-guard.md#コードの入口になる環境変数
+# (pi 側 judge/rules_guard.ts の codeEntryEnv と同じ規則。片方だけ直さない)
+# 通常の引数は走査しない: 単純コマンドの語の列の、代入になりうる位置だけを見る
+_ENTRY_NAMES = frozenset(
+    {"PS4", "PROMPT_COMMAND", "BASH_ENV", "LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"}
+)
+_ENTRY_ASSIGN_WORD_RE = re.compile(
+    r"([A-Za-z_][A-Za-z0-9_]*|BASH_FUNC_[^=]*)(?:\[[^\]]*\])?\+?=(.*)", re.S
+)
+_PS4_EXPANSION_RE = re.compile(
+    r"\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*(?:\[(?:[0-9]+|@)\])?\})"
+)
+_ENTRY_KEYWORDS = frozenset({"if", "then", "else", "elif", "do", "while", "until", "!", "{", "}"})
+_ENTRY_WRAPPERS = frozenset(
+    {
+        "env",
+        "sudo",
+        "doas",
+        "time",
+        "command",
+        "nice",
+        "nohup",
+        "timeout",
+        "stdbuf",
+        "xargs",
+        "exec",
+        "builtin",
+    }
+)
+_ENTRY_WRAPPER_VALUE_OPTS: dict[str, frozenset[str]] = {
+    "env": frozenset({"-u", "--unset", "-C", "--chdir", "--argv0"}),
+    "sudo": frozenset(
+        {"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T", "-U", "-r", "-t"}
+        | {"--user", "--group", "--host", "--prompt", "--chdir", "--close-from", "--role"}
+        | {"--type", "--other-user", "--command-timeout"}
+    ),
+    "doas": frozenset({"-u", "-C"}),
+    "time": frozenset({"-f", "--format", "-o", "--output"}),
+    "nice": frozenset({"-n", "--adjustment"}),
+    "timeout": frozenset({"-s", "--signal", "-k", "--kill-after"}),
+    "stdbuf": frozenset({"-i", "-o", "-e", "--input", "--output", "--error"}),
+    "xargs": frozenset(
+        {"-I", "-n", "-P", "-s", "-L", "-E", "-d", "-a"}
+        | {"--max-args", "--max-procs", "--max-lines", "--max-chars", "--delimiter", "--arg-file"}
+        | {"--process-slot-var"}
+    ),
+    "exec": frozenset({"-a"}),
+}
+_ENTRY_DECLARE = frozenset({"export", "declare", "typeset", "local", "readonly"})
+_ENTRY_SHELLS = frozenset({"bash", "sh", "zsh", "dash", "ksh"})
+
+
+def _entry_name(name: str) -> bool:
+    return name in _ENTRY_NAMES or name.startswith("BASH_FUNC_")
+
+
+def _ps4_safe(value: str) -> bool:
+    """PS4 の値が、リテラルと単純な展開 (`$NAME`・`${NAME}`・`${NAME[数字]}`・`${NAME[@]}`) だけか。"""
+    return re.search(r"[$`\\]", _PS4_EXPANSION_RE.sub("", value)) is None
+
+
+def _entry_assign(word: str) -> str | None:
+    """`NAME=値`・`NAME+=値` の語が名簿の変数への代入なら名前を返す (値が安全な PS4 は除く)。"""
+    m = _ENTRY_ASSIGN_WORD_RE.fullmatch(word)
+    if m is None or not _entry_name(m.group(1)):
+        return None
+    return None if m.group(1) == "PS4" and _ps4_safe(m.group(2)) else m.group(1)
+
+
+def _entry_target(word: str | None) -> str | None:
+    """`read`・`printf -v` の設定先の変数名 (添字は外す)が名簿なら名前を返す。値は取れないので常に拒否側。"""
+    if word is None:
+        return None
+    name = re.sub(r"\[.*", "", word, flags=re.S)
+    return name if _entry_name(name) else None
+
+
+def _short_opts(
+    args: list[str], value_chars: str
+) -> tuple[list[tuple[str, str | None]], list[str]]:
+    """短いオプションを読む。`value_chars` の文字は値を取る (同じ語の残り、無ければ次の語)。`--` と長いオプションは読み飛ばす。"""
+    opts: list[tuple[str, str | None]] = []
+    i = 0
+    while i < len(args):
+        t = args[i]
+        if t == "--":
+            i += 1
+            break
+        if t.startswith("--"):
+            i += 1
+            continue
+        if not t.startswith("-") or len(t) < 2:
+            break
+        for k in range(1, len(t)):
+            if t[k] in value_chars:
+                rest = t[k + 1 :]
+                if rest:
+                    opts.append((t[k], rest))
+                else:
+                    opts.append((t[k], args[i + 1] if i + 1 < len(args) else None))
+                    i += 1
+                break
+            opts.append((t[k], None))
+        i += 1
+    return opts, args[i:]
+
+
+def _env_split_string(args: list[str], j: int) -> tuple[str | None, int]:
+    """`env -S` の文字列 (語の残り・`=` の後・次の語) と、消費した語数。"""
+    t = args[j]
+    if t in ("-S", "--split-string"):
+        return (args[j + 1] if j + 1 < len(args) else None), 2
+    if t.startswith("--split-string="):
+        return t[len("--split-string=") :], 1
+    if t.startswith("-S") and not t.startswith("--"):
+        return t[2:], 1
+    return None, 0
+
+
+def _shlex_or_split(text: str) -> list[str]:
+    try:
+        return shlex.split(text)
+    except ValueError:
+        return text.split()
+
+
+def _entry_in_words(words: list[str], depth: int) -> str | None:
+    """1 つの単純コマンドの語の列から、名簿の変数の設定・コールバックの入口を見つける。"""
+    i = 0
+    while i < len(words) and words[i] in _ENTRY_KEYWORDS:
+        i += 1
+    while i < len(words) and _ENTRY_ASSIGN_WORD_RE.fullmatch(words[i]):
+        hit = _entry_assign(words[i])
+        if hit is not None:
+            return hit
+        i += 1
+    if i >= len(words):
+        return None
+    head = _basename(words[i])
+    args = words[i + 1 :]
+    if head in _ENTRY_WRAPPERS:
+        value_opts = _ENTRY_WRAPPER_VALUE_OPTS.get(head, frozenset())
+        j = 0
+        while j < len(args):
+            t = args[j]
+            if t == "--":
+                j += 1
+                break
+            if head == "env" and t.startswith(("-S", "--split-string")):
+                text, used = _env_split_string(args, j)
+                if text is None:
+                    return None
+                return _entry_in_words(["env", *_shlex_or_split(text), *args[j + used :]], depth)
+            if t.startswith("-") and len(t) > 1:
+                j += 2 if t in value_opts else 1
+                continue
+            break
+        if head == "timeout" and j < len(args):
+            j += 1  # DURATION
+        return _entry_in_words(args[j:], depth)
+    if head == "find":
+        # -exec 系の直後から `;` / `+` の手前までを、コマンドの語の列として見る (`{}` はそのまま)
+        k = 0
+        while k < len(args):
+            if args[k] in ("-exec", "-execdir", "-ok", "-okdir"):
+                e = k + 1
+                while e < len(args) and args[e] not in (";", "+"):
+                    e += 1
+                hit = _entry_in_words(args[k + 1 : e], depth)
+                if hit is not None:
+                    return hit
+                k = e
+            k += 1
+        return None
+    if head in _ENTRY_DECLARE:
+        for t in args:
+            hit = _entry_assign(t)
+            if hit is not None:
+                return hit
+        return None
+    if head == "printf":
+        for ch, value in _short_opts(args, "v")[0]:
+            if ch == "v":
+                return _entry_target(value)
+        return None
+    if head == "read":
+        opts, operands = _short_opts(args, "adinNptu")
+        for ch, value in opts:
+            if ch == "a":
+                hit = _entry_target(value)
+                if hit is not None:
+                    return hit
+        for t in operands:
+            hit = _entry_target(t)
+            if hit is not None:
+                return hit
+        return None
+    if head in ("mapfile", "readarray"):
+        opts, operands = _short_opts(args, "dnOsuCc")
+        if any(ch == "C" for ch, _ in opts):
+            return "mapfile -C"
+        for t in operands:
+            hit = _entry_target(t)
+            if hit is not None:
+                return hit
+        return None
+    if head in ("compgen", "complete"):
+        return (
+            "compgen -C" if any(ch == "C" for ch, _ in _short_opts(args, "AFGWPSXoC")[0]) else None
+        )
+    if head in _ENTRY_SHELLS and depth < 3:
+        for k, t in enumerate(args):
+            if not t.startswith("-") or t.startswith("--") or len(t) < 2:
+                break
+            if "c" in t[1:]:
+                if k + 1 >= len(args):
+                    return None
+                for inner in shellparse.parse(args[k + 1]):
+                    hit = _entry_in_command(inner, depth + 1)
+                    if hit is not None:
+                        return hit
+                return None
+    return None
+
+
+def _is_shell_command(words: list[str]) -> bool:
+    """単純コマンドの先頭 (キーワード・前置代入を除く) がシェルか。"""
+    i = 0
+    while i < len(words) and (
+        words[i] in _ENTRY_KEYWORDS or _ENTRY_ASSIGN_WORD_RE.fullmatch(words[i])
+    ):
+        i += 1
+    return i < len(words) and _basename(words[i]) in _ENTRY_SHELLS
+
+
+def _entry_in_command(command: shellparse.Command, depth: int) -> str | None:
+    """単純コマンド 1 つ。シェルが here-string (`<<<`) を受けるときは、その文字列も `-c` と同じく調べる (深さ 3 まで)。"""
+    words = list(command.argv)
+    hit = _entry_in_words(words, depth)
+    if hit is not None or depth >= 3 or not _is_shell_command(words):
+        return hit
+    for r in command.redirects:
+        if r.op != "<<<" or r.target is None:
+            continue
+        for inner in shellparse.parse(r.target.value):
+            h = _entry_in_command(inner, depth + 1)
+            if h is not None:
+                return h
+    return None
+
+
+def _data_here_strings(cmd: str) -> set[str]:
+    """正規化は here-string の本文を別のセグメントにする。シェル以外が受ける本文はデータなので、そのセグメントは見ない。"""
+    skip: set[str] = set()
+    for c in shellparse.parse(cmd):
+        if _is_shell_command(list(c.argv)):
+            continue
+        for r in c.redirects:
+            if r.op == "<<<" and r.target is not None:
+                skip.add(r.target.value.strip())
+    return skip
+
+
+def code_entry_env(cmd: str) -> str | None:
+    """コードの入口になる環境変数の設定・コールバックの入口を見つける。見つからなければ None。"""
+    skip = _data_here_strings(cmd)
+    for segment in _segments(cmd):
+        if segment != cmd and segment.strip() in skip:
+            continue
+        for command in shellparse.parse(segment):
+            hit = _entry_in_command(command, 0)
+            if hit is not None:
+                return hit
+    return None
 
 
 def check_guard_tampering(cmd: str) -> str | None:
@@ -95,6 +371,14 @@ def check_guard_tampering(cmd: str) -> str | None:
         return (
             f"`{name}` を差し替えて hook の設定読み込み先を変えようとしています。\n"
             "hook や permission の無効化に繋がるため許可されていません。"
+        )
+
+    entry = code_entry_env(cmd)
+    if entry is not None:
+        return (
+            f"シェルが値をコードとして実行する入口の環境変数 (`PS4` など。今回は `{entry}`) の設定は許可されていません。\n"
+            "対象は PROMPT_COMMAND・BASH_ENV・LD_PRELOAD・LD_AUDIT・DYLD_INSERT_LIBRARIES・BASH_FUNC_* と、"
+            "値にコマンド置換などを含む PS4、`compgen -C` / `complete -C` / `mapfile -C` です。"
         )
 
     mutating = {

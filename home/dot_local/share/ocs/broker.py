@@ -12,7 +12,7 @@
 - PAT の出どころ (ファイルかコマンド) の読み取りは純関数 (``read_token_file`` / ``run_token_command``)
 - トークンの値は、標準出力・標準エラー・例外メッセージ・ログに出さない
 
-see docs/change/0037-pis-usability-and-telemetry.md
+see docs/change/closed/0037-pis-usability-and-telemetry.md
 """
 
 from __future__ import annotations

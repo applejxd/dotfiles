@@ -1,0 +1,58 @@
+# 並列実行基盤（スケジューラ）
+
+作業台帳を唯一の状態にして、「次に何を起動するか」を決める純関数群（`home/dot_config/pi/harness/work/`）。外部依存・fs・pi の API・乱数・時計は持たない（時刻・乱数は引数で注入）。台帳の核（reduce・project）は import せず、アダプタが台帳から `SchedState` を作る（配線は別の feature）。背景と決定の経緯: [ADR-0026](../../adr/0026-work-ledger-integrated-architecture.md)。
+
+| ファイル | 役割 |
+| --- | --- |
+| `sched.ts` | `next(state, res, now): Action[]`。背圧・壁なし（pipeline）・優先順位・予約・429・見込みの取り消し・stall |
+| `strategy.ts` | 並列化の方式の選択表（上から評価）、誤選択の検出、統計の畳み込み |
+| `aimd.ts` | 429 で生存数を半減、連続成功 K 回で +1。指数バックオフ |
+| `reserve.ts` | 起動前の予約（見積りは履歴の p75 か既定表）、実行中の 1.5 倍 steer・2 倍 abort |
+| `overlap.ts` | `globsMayOverlap`（保守的・偽陰性 0）、自動の直列化、hot file の排他、広すぎる writes の拒否 |
+
+## 優先順位と起動
+
+空き枠 = min(設定の slots, AIMD の上限) − 実行中の run。空き枠の数だけ取り出す（待機を溜めない）。完了のたびに再計算するので、次段はすぐ起動する（壁を作らない）。順序は ①臨界路の長さ（降順）②bundle を満たす task ③費用（昇順）④id。書き込みの重なる task は、実行中 → 今すぐ着手できるもの → 臨界路の順で自動の依存を足して直列にする。
+
+glob の意味: writes の重なりは台帳の門と同じ `globs.ts` の既定（gitignore 流: スラッシュ無しの記法は全階層、前置も重なる）で判定する。`*.py` と `scripts/verify.py` は重なる（直列）。
+台帳が拒否するものを start しない（偣陰性 0 を優先。偏陰性は直列になるだけ）。
+
+起動候補にするのは、承認の時点の task（`Node.approved`）だけ。`adapt.ts` の `schedStateOf` は、承認の後に追加された task（`approved` が無い ready／waiting）を `proposed` として渡し、`readyOf` は除く。「承認済みの計画」ではなく「承認の時点の task」だけが走る。
+
+親を起こす理由（`wake_parent`）は排他で、優先順位は次のとおり。(1) 全 task が終端: 失敗が 1 つも無ければ `all_done`、`failed` を含めば `failed`。(2) 予算で止まっている: `budget`。(3) 実行中も着手可能も無く、待ち・実行・検査の task も無い: 未承認の task（台帳が `proposed` に落としたもの。承認後に足した task を含む）が残っていれば `awaiting_approval`（利用者が `/goal approve` で承認する）、無ければ `stuck`（失敗した上流の下流など）。`awaiting_approval` は未承認が残る限り `failed`・`stuck` より優先する（終端でない task が残るので、(1) は成り立たない）。driver は理由を文字列のまま親へ渡すだけで、arbiter の `proposeChildren` は理由を読まない。
+
+## 並列化の方式
+
+| 行 | 条件（上から最初に当たった行） | 方式 |
+| --- | --- | --- |
+| R1 | 検査 | 直列（排他） |
+| R2 | 読み取り（foreach × 段なら pipeline） | fan-out |
+| R3 | 上流が未着手 | 待つ |
+| R4 | writes の重なり・hot・境界 | 直列（境界は独立 review） |
+| R5 | 上流が実行中・契約 done・予算に余裕 | 見込み（投機予算 25% 以下） |
+| R6 | 不確かで機械判定でき、1 候補が予算の 15% 以下 | 競争（N=2〜3） |
+| R7 | 同じ group・writes が素・S | 共有 worktree（≤3） |
+| R8・R9 | 予算の逼迫（L）・既定方式の失敗率が高い | 直列 |
+| R10 | 既定 | feature ごとの worktree |
+
+無効にした方式（`disabled`）は R5〜R7 を飛ばす。選択の根拠は `why` と `rule` に残る。hot は writes が特定のファイルを名指すときだけ（`src/**` は hot とみなさず、重なりで直列にする）。
+
+## 予約
+
+「使用済み + 予約 + 見積り > 予算」なら起動しない。実行中は使用量（子 + 評価役）が見積りの 1.5 倍で wrap-up の steer、2 倍で abort。無出力 5 分で steer、10 分で abort。
+
+## 429 と AIMD
+
+429 で上限を `max(1, floor(limit/2))`、連続成功 K（既定 5）回で +1（初期 6・上限 10 は仮）。バックオフは 60 秒 ×2、±20% のジッター（乱数はイベントに残す）、上限 15 分、5 回で pause。状態はイベントの畳み込み。429 で落ちた run は task の失敗に数えず再キューする（アダプタの責務）。
+
+## 誤選択と学習
+
+scope 違反・numstat の急減・bundle の衝突・破棄率 40% 超を検出する。統計はイベントの畳み込みで導き、人手で編集しない。無効化は直近 10 件のうち 5 件以上で判定し、24 時間後か `reset` で戻る。学んだ重なりの組は最大 50 組。
+
+## 限界
+
+`awaiting_approval`（未承認の task がある・承認済み task が未承認 task に依存して起動できない）の `wake_parent` は、接着層が利用者へ通知する（[起動の通知](driver-run.md#起動の通知)）。スケジューラ自身は通知せず、理由を返すだけ。
+
+`writes` の正しさは LLM 依存（実行時に検出して学習）。バックオフ・見積りの既定値・生存数の上限は仮で未測定。見込みの破棄率は件数が足りないと判定しない。試験: `test/agents/test_work_sched.py`（方式の選択表の総当たり・glob の偽陰性・性質試験）。
+
+[仕様の索引へ戻る](../index.md)

@@ -1,0 +1,23 @@
+# pi の stock プロファイルで入れる package。単一の編集点。
+# 1 行に 1 つ。npm:<名前>@<版> の形 (版を指定した npm は固定され、再取得されない)。
+# 出典: 公式の package カタログ https://pi.dev/packages (npm の月間ダウンロード数が多く用途が合うもの)。
+# 版の調査: `npm view <名前> version` (2026-11-08)。更新するときは版を書き換える。
+{{/*
+pi-mcp-adapter は検索の送り先が限られる環境 (is-work) だけ入れる。他の機は pi 組み込みの MCP (~/.pi/agent/mcp.json) で足りる。
+pi-web-access は入れない (家の検索は自作の MCP websearch に揃えた)。
+*/ -}}
+{{ if eq (includeTemplate "is-work" .) "true" -}}
+npm:pi-mcp-adapter@7.0.1
+{{ end -}}
+npm:pi-subagents@0.87.0
+npm:@juicesharp/rpiv-todo@2.15.0
+npm:@juicesharp/rpiv-ask-user-question@2.15.0
+npm:@gotgenes/pi-permission-system@42.0.0
+npm:cc-safety-net@2.7.6
+npm:pi-background@0.4.2
+npm:@narumitw/pi-plan-mode@0.60.0
+npm:@narumitw/pi-goal@0.55.0
+npm:@narumitw/pi-btw@0.63.5
+npm:pi-show-token-rate@0.3.0
+npm:@ayulab/pi-rewind@0.4.6
+npm:@thgilciffart/pi-compaction@0.3.1

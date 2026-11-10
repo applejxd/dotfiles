@@ -1,4 +1,4 @@
-// 正本 (agent-instructions.md・AGENTS.md) に child-context.ts の resolveContext / lint を当て、結果を JSON で標準出力へ出す。
+// 固定サンプル (旧 agent-instructions.md・AGENTS.md の写し) に child-context.ts の resolveContext / lint を当て、結果を JSON で標準出力へ出す。
 // 照合は test_child_context_sources.py。
 //
 //   node test/agents/pi/child_context_sources_driver.mjs
@@ -11,7 +11,11 @@ const ROOT = resolve(HERE, "..", "..", "..");
 const mod = await import(pathToFileURL(join(ROOT, "home", "dot_config", "pi", "harness", "child-context.ts")).href);
 const { resolveContext, lint } = mod;
 
-const FILES = { global: "home/.chezmoitemplates/agent-instructions.md", repo: "AGENTS.md" };
+// 凍結 (ADR-0030): 実物の指示は印なしの平らな文書になったので、印つきの固定サンプルに当てる
+const FILES = {
+	global: "test/agents/fixtures/child_context/agent-instructions.md",
+	repo: "test/agents/fixtures/child_context/repo-instructions.md",
+};
 const ROLES = ["explore", "review", "plan", "worker"];
 
 const out = {};

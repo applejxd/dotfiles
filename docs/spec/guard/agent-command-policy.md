@@ -9,7 +9,7 @@ sandbox によるパス単位の遮断は [sandbox (Claude Code / Copilot CLI)](
 > **現状**: Claude Code / Copilot CLI の判定 hook（`check_bash.py` など）は登録を外した（`common.toml.tmpl` の `[retired_hooks]`、
 > [ADR-0017](../../adr/0017-pi-only-and-ts-judge.md)）。この文書の「hook」の規則（`bashrules`）は Python 版で、
 > 同じ規則を TS の判定器（`pi/harness/judge/`）と `tables.toml` が引き継いでいる（[判定 API](pi-decide.md)）。
-> Python 版は TS 版の正解データの出力元として残り、撤去は [CHG-0035](../../change/0035-retire-python-judge-oracle.md)。
+> Python 版は TS 版の正解データの出力元として残り、撤去は [CHG-0035](../../change/closed/0035-retire-python-judge-oracle.md)。
 > Claude / Copilot の permission（allow / ask / deny の生成）の記述は、各 CLI の仕様の説明として残してある。
 
 ## 照合規則
@@ -158,7 +158,7 @@ world-readable な `passwd` / `group` は書き込み先のときだけ deny と
   ディレクトリ経由で保護対象を読む形は見逃すが、事故防止の水準([ADR-0012](../../adr/0012-ocs-boundary-for-accidents.md))で
   は、そのディレクトリを作る必要があり、実質の穴にならないとして許容した
 - 実装は Python 版 `sensitive.py` の `_URL_RE` と TS 版 `sensitive.ts` の `URL_RE`(同じ正規表現)。
-  経緯と review は [CHG-0032](../../change/0032-guard-url-false-positive.md)
+  経緯と review は [CHG-0032](../../change/closed/0032-guard-url-false-positive.md)
 
 ## エージェント CLI のランタイム設定も秘密扱いにする
 
@@ -377,6 +377,27 @@ deny 側は `check_rm_root_guard` が担う。作業ディレクトリ全体と 
 判定は `rm` 側にだけ置き `_is_catastrophic_rm_target` には入れない。
 
 > OpenCode 専用の節（pip 誘導と rm の誘導・allow したコマンドの書き込み形・deny の説明）は [OpenCode のガードの仕様](opencode-guard.md) へ移した。
+
+## 箱（Incus）の管理操作の拒否
+
+箱（Incus のコンテナ）の制御面は、root 所有の補助 `kcage-root`（`sudo` で呼ぶ）に一本化する。ホストの pi は Incus を直接操作せず、利用者も `incus-admin` に入れない
+（入れると root 相当になる。proxy・unix-char デバイスを作れる権限は管理者権限と同じで、実測では proxy でホストの Incus 管理ソケットを箱へ転送できた）。
+そのため、AI からの管理操作と、その周辺（ソケット・配備先・許可表）への書き込みを拒否する（[ADR-0028](../../adr/0028-per-repo-agent-container.md) の決定 9）。
+
+| 対象 | 置き場所 | 備考 |
+| --- | --- | --- |
+| `incus` コマンド全般（読み取りの `incus list` も）。`sudo`・`env`・`xargs`・`sh -c`・`bash -lc`・`command`・絶対パス経由も | `[bash] deny` の `incus` | 例外なし。案内は `kcage ls` |
+| `kcage-root` と `/usr/local/libexec/kcage/kcage-root` の直接呼び出し | `[bash] deny` | `kcage` コマンドを使う |
+| 人だけが行う `kcage rm` / `kcage register` / `kcage setup` | `[bash] deny` | 許可: `ls` / `up` / `stop` / `pi` / `exec` / `doctor` / `selftest` |
+| Incus・Docker のソケット（`/var/lib/incus`・`unix.socket`・`docker.sock`）への接続 | `[[pi.guide]]` の `kcage-socket` | `curl` / `nc` / `python` / `node` / `docker -H` などの行に、これらのパスがある形。`docker run -v …docker.sock` は既存の `check_docker_host_escape` が止める |
+| `/etc/kcage/`・`/usr/local/libexec/kcage/`・`/etc/sudoers`・`/etc/sudoers.d/`・`/run/kcage-broker/` への書き込み | edit / write ツール: `[file] write_deny_globs`、bash: `[[pi.guide]]` の `kcage-protected-write` | `~/.config/kcage/`（利用者の設定）は拒否しない |
+| `incus-admin` グループへの追加（`usermod -aG`・`gpasswd -a`・`adduser`）と `sg` / `newgrp` | `[[pi.guide]]` の `kcage-admin-group` | `sudo` 自体は既存の `sudo` の deny が止める |
+
+- **うっかり防止**であり、敵対的な迂回への完全な防御ではない。コマンド全体への正規表現と先頭語の照合なので、コマンドの動的な組み立て、別言語（python・perl）による書き込み、
+  シェルの変数展開で作ったパスは検出できない。本当の境界は、`incus-admin` に入れないこと（OS の権限）と `kcage-root` の許可表である。
+- pi の判定は `[bash] deny` を `[[pi.guide]]` より先に評価するので、`incus` などの拒否理由は定型文になる。案内文（`kcage ls` など）は OpenCode の `[bash.deny_guide]` が持つ。
+  `[[pi.guide]]` の `kcage-*` は `[[opencode.shell.guide]]` から参照しない（pi 専用。OpenCode には生成された `bash.deny` が効く）。
+- 試験: `test/agents/test_deny_kcage.py`（肯定例・包み方の迂回・誤検知の否定例。判定器を実際に呼ぶ）。
 
 ## 使い捨てディレクトリ (`./.tmp`) の削除
 

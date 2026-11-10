@@ -67,12 +67,15 @@ const segments = (glob: string): string[] => {
 	return norm;
 };
 
+/**
+ * 2 つの glob が同じファイルに一致しうるか (保守的)。gitignore 流 (スラッシュの無い記法はどの階層にも一致し、前置も重なる)。
+ */
 export const globsMayOverlap = (a: string, b: string): boolean => {
 	const A = segments(a);
 	const B = segments(b);
 	const memo = new Map<number, boolean>();
 	const f = (i: number, j: number): boolean => {
-		// どちらかを使い切った: 前置 (ディレクトリかもしれない) なので重なるとみなす
+		// どちらかを使い切った: 前置 (ディレクトリかもしれない) なので重なる
 		if (i === A.length || j === B.length) return true;
 		const key = i * (B.length + 1) + j;
 		const hit = memo.get(key);

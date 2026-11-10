@@ -20,8 +20,8 @@ const [ev, tr, rd, inv, pj, gl] = await Promise.all(["events.ts", "transitions.t
 const USER_ONLY = new Set(["plan.approved", "budget.adjusted", "goal.resumed"]);
 const Z = { usd: 0, tokens: 0, ms: 0 };
 const mkEvent = (e, seq) => {
-	const source = e.source ?? (USER_ONLY.has(e.type) || (e.type === "wait.resolved" && e.data?.by === "user") ? "user" : "system");
-	return { ts: seq * 1000, seq: e.seq ?? seq, type: e.type, ...(e.node !== undefined ? { node: e.node } : {}), data: { ...(e.data ?? {}), source }, ...(e.aux ? { aux: true } : {}) };
+	const source = e.noSource ? undefined : (e.source ?? (USER_ONLY.has(e.type) || (e.type === "wait.resolved" && e.data?.by === "user") ? "user" : "system"));
+	return { ts: seq * 1000, seq: e.seq ?? seq, type: e.type, ...(e.node !== undefined ? { node: e.node } : {}), data: { ...(e.data ?? {}) }, ...(source !== undefined ? { source } : {}), ...(e.holder !== undefined ? { holder: e.holder } : {}), ...(e.aux ? { aux: true } : {}) };
 };
 
 const plain = (s) => ({ ...rd.serialize(s), nodes: Object.fromEntries(s.nodes) });
@@ -83,7 +83,7 @@ const cellEvent = (kind, on, variant) => {
 		case "goal.paused": return { type: on, node, data: { reason: "x" } };
 		case "goal.resumed": return { type: on, node, data: {}, source: "user" };
 		case "goal.done": return { type: on, node, data: {} };
-		case "verdict": return { type: on, node, data: { verdict: variant, reason: "r" } };
+		case "verdict": return { type: on, node, data: { verdict: variant, reason: "r" }, ...(kind === "goal" && variant === "cancel" ? { source: "user" } : {}) };
 		case "note.appended": return { type: on, node, data: { by: "llm", text: "n" } };
 		case "budget.adjusted": return { type: on, node, data: { budget: big }, source: "user" };
 		case "lease.acquired": return { type: on, node, data: { holder: "A", pid: 1 } };
@@ -119,6 +119,12 @@ const evalCell = (cell) => {
 		T.evidence = ["check:1"];
 		R.state = "done";
 		s.nodes.get("T2").state = "done";
+		// 再承認 (active / paused の plan.approved) は承認の対象 (未承認の非終端 task) が要る
+		if (on === "plan.approved" && (from === "active" || from === "paused")) {
+			const T2 = s.nodes.get("T2");
+			T2.state = "ready";
+			delete T2.approved;
+		}
 		if (on === "lease.released" || on === "lease.expired") G.owner = { holder: "A", pid: 1, startedAt: 0, heartbeat: 0 };
 		if (on === "wait.resolved") G.waits = variant === "remain" ? [wait("w1"), wait("w2")] : [wait("w1")];
 	} else if (kind === "task") {
@@ -129,6 +135,11 @@ const evalCell = (cell) => {
 		if (on === "wait.resolved") T.waits = variant === "remain" ? [wait("w1"), wait("w2")] : [wait("w1")];
 	} else {
 		R.state = from;
+		// run への plan.approved は、再承認の対象が無い状態にして「拒否」を保つ (対象があると goal 宛てのイベントが通ってしまう)
+		if (on === "plan.approved") {
+			T.state = "done";
+			s.nodes.get("T2").state = "done";
+		}
 	}
 	const full = mkEvent(cellEvent(kind, on, variant), s.seq + 1);
 	let actual;
@@ -176,7 +187,7 @@ const gen = (state, R, c) => {
 			return g.length ? { type: "plan.proposed", node: pick(g).id, data: { hash: pick(["h1", "h2"]) } } : null;
 		}
 		case "A": {
-			const g = goals.filter((n) => n.state === "planned");
+			const g = goals.filter((n) => n.state === "planned" || n.state === "active" || n.state === "paused"); // active / paused は再承認
 			if (!g.length) return null;
 			const n = pick(g);
 			return { type: "plan.approved", node: n.id, data: { hash: R() < 0.9 ? n.attrs.planHash : "zz" }, source: src() };
@@ -261,7 +272,7 @@ const gen = (state, R, c) => {
 			if (!nodes.length) return null;
 			const n = pick(nodes);
 			const holder = R() < 0.2 ? { holder: pick(["A", "B"]) } : {};
-			return { type: "note.appended", node: n.id, data: { by: pick(["user", "llm", "run:r1"]), text: R() < 0.03 ? "x".repeat(301) : "メモ" + c.t, ...holder } };
+			return { type: "note.appended", node: n.id, data: { by: pick(["user", "llm", "run:r1"]), text: R() < 0.03 ? "x".repeat(301) : "メモ" + c.t }, ...holder };
 		}
 		case "b": {
 			const t = [...goals, ...tasks.filter((n) => n.kind === "task")];

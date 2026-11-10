@@ -1,6 +1,6 @@
 // `/worktrees` の本体と、起動時の取り残しの照合。依存は worktree.ts だけ (node の型除去でそのまま読める)。
 // 起動時に自動で変えるのは古いロックの解除だけ (worktree・ref・記録は消さない)。秘密の値・ファイルの内容は出さず、パスと job id と状態だけを出す。
-// 仕様は docs/change/0029-worktree-isolation.md の「W1 の実装計画」(S3 の段 5・S4)。
+// 仕様は docs/change/closed/0029-worktree-isolation.md の「W1 の実装計画」(S3 の段 5・S4)。
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import type { Stats } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";

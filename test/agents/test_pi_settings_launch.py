@@ -128,12 +128,25 @@ def test_settings_drop_declared_keys_that_were_removed():
     assert "defaultTools" not in out
 
 
+def test_settings_hide_thinking_block_is_owned_and_keeps_user_keys():
+    common = _render("linux")
+    assert common["pi"]["settings"]["hideThinkingBlock"] is True
+    out = gen.merge_pi_settings({"theme": "dark", "hideThinkingBlock": False}, common)
+    assert (
+        out["hideThinkingBlock"] is True and out["theme"] == "dark" and out["defaultThinkingLevel"]
+    )
+    del common["pi"]["settings"]["hideThinkingBlock"]
+    assert "hideThinkingBlock" not in gen.merge_pi_settings({"hideThinkingBlock": False}, common)
+
+
 @pytest.mark.parametrize(
     ("key", "value"),
     [
         ("defaultTools", "read"),
         ("defaultTools", [1]),
         ("extensions", "x"),
+        ("hideThinkingBlock", "true"),
+        ("hideThinkingBlock", 1),
     ],
 )
 def test_settings_reject_bad_types(key, value):

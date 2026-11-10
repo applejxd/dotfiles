@@ -1,12 +1,27 @@
 // 統合器（merge.ts）が使う git の実行器。書き込みを含む。
-// 設計: docs/change/0062-pr-hub-simplify.md の §3.2・§3.4.1。hook・外部の driver・filter を動かさない（S1）。
+// 設計: docs/change/closed/0062-pr-hub-simplify.md の §3.2・§3.4.1。hook・外部の driver・filter を動かさない（S1）。
 // 独立させるため、node: 標準ライブラリと ./ だけを import する。
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-export type GitRun = { code: number; out: string };
+/** err は captureErr を指定したときだけ入る（標準エラーの先頭。診断の表示用で、判定には使わない）。 */
+export type GitRun = { code: number; out: string; err?: string };
+
+const ERR_CAPTURE_MAX = 4096;
+const GIT_MSG_MAX = 300;
+
+/** git の標準エラーを、利用者に見せる 1 行（最大 300 字）にする。URL の資格情報は伏字、制御文字は除去、改行は空白にする。 */
+export function sanitizeGitMessage(s: string): string {
+	const oneLine = s
+		.replace(/[\r\n]+/g, " ")
+		.replace(/[\u0000-\u001F\u007F]/g, "")
+		.replace(/([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^\s/@]*@/g, "$1***@")
+		.replace(/\s+/g, " ")
+		.trim();
+	return oneLine.slice(0, GIT_MSG_MAX);
+}
 
 type RunOpts = {
 	gitDir?: string; // --git-dir（共通ディレクトリ）。指定が無ければ cwd のリポジトリ
@@ -16,6 +31,7 @@ type RunOpts = {
 	env?: Record<string, string>; // 追加の環境変数（コミットの作者など）
 	timeoutMs?: number;
 	maxBytes?: number;
+	captureErr?: boolean; // 標準エラーの先頭を err に載せる（既定は捨てる）
 };
 
 // 設定・属性・hook が指す外部のコードを止める固定の先頭引数
@@ -111,7 +127,7 @@ export function runGit(args: string[], opts: RunOpts = {}): Promise<GitRun> {
 				shell: false,
 				cwd: opts.cwd ?? sandboxDir(),
 				env: gitEnv(opts.write === true, opts.env),
-				stdio: [opts.input === undefined ? "ignore" : "pipe", "pipe", "ignore"],
+				stdio: [opts.input === undefined ? "ignore" : "pipe", "pipe", opts.captureErr ? "pipe" : "ignore"],
 			});
 		} catch {
 			done({ code: 127, out: "" });
@@ -124,6 +140,10 @@ export function runGit(args: string[], opts: RunOpts = {}): Promise<GitRun> {
 			child.stdin.end(opts.input);
 		}
 		const chunks: Buffer[] = [];
+		let errBuf = "";
+		child.stderr?.on("data", (buf: Buffer) => {
+			if (errBuf.length < ERR_CAPTURE_MAX) errBuf += buf.toString("utf8").slice(0, ERR_CAPTURE_MAX);
+		});
 		let size = 0;
 		let settled = false;
 		let forced: number | null = null; // 時間切れ・出力超過で止めたときの結果。子の終了を確かめてから返す
@@ -153,7 +173,7 @@ export function runGit(args: string[], opts: RunOpts = {}): Promise<GitRun> {
 			chunks.push(buf);
 		});
 		child.on("error", () => finish({ code: 127, out: "" }));
-		child.on("close", (code) => finish(forced !== null ? { code: forced, out: "" } : { code: code ?? 1, out: Buffer.concat(chunks).toString("utf8") }));
+		child.on("close", (code) => finish(forced !== null ? { code: forced, out: "" } : { code: code ?? 1, out: Buffer.concat(chunks).toString("utf8"), ...(opts.captureErr ? { err: errBuf } : {}) }));
 	});
 }
 
@@ -190,6 +210,25 @@ export async function resolveCommonDir(repo: string): Promise<string | null> {
 	if (!line) return null;
 	try {
 		return realpathSync(resolve(cwd, line));
+	} catch {
+		return null;
+	}
+}
+
+/** git-dir と共通ディレクトリ（どちらも realpath）。リポジトリでなければ null。ロックの診断に使う。 */
+export async function resolveGitDirs(repo: string): Promise<{ gitDir: string; commonDir: string } | null> {
+	let cwd: string;
+	try {
+		cwd = realpathSync(resolve(repo));
+		if (!statSync(cwd).isDirectory()) return null;
+	} catch {
+		return null;
+	}
+	const r = await runGit(["rev-parse", "--git-dir", "--git-common-dir"], { cwd });
+	const lines = r.out.split("\n");
+	if (r.code !== 0 || !lines[0] || !lines[1]) return null;
+	try {
+		return { gitDir: realpathSync(resolve(cwd, lines[0])), commonDir: realpathSync(resolve(cwd, lines[1])) };
 	} catch {
 		return null;
 	}

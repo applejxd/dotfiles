@@ -163,6 +163,8 @@ GOAL_ALL = ["draft", "planned", "active", "paused", "done", "cancelled"]
 GOAL_LIVE = ["draft", "planned", "active", "paused"]
 rule("goal", ["draft", "planned"], "plan.proposed", "*", "planned")
 rule("goal", "planned", "plan.approved", "*", "active")
+# 再承認 (状態は変えない。利用者専用。未承認の task が無いときは reduce が別途拒否する)
+rule("goal", ["active", "paused"], "plan.approved", "*", "=")
 rule("goal", "active", "goal.paused", "*", "paused")
 rule("goal", "paused", "goal.resumed", "*", "active")
 rule("goal", "active", "goal.done", "*", "done")
@@ -293,7 +295,10 @@ def test_transition_cells(kind, state):
             etype = c["error"].split(":")[0]
             assert etype == (
                 "ReduceError"
-                if on in KIND_ONLY[kind] or (kind == "run" and on == "wait.resolved")
+                if on in KIND_ONLY[kind]
+                or (
+                    kind == "run" and on in ("wait.resolved", "plan.approved")
+                )  # plan.approved は goal 宛て・承認の対象なしで拒否
                 else "TransitionError"
             ), c
     assert n > 20
@@ -1049,8 +1054,10 @@ def test_i8_lease_shape():
 
 def test_i8_holder_mismatch_rejected_by_reducer():
     pre = [*goal(), E("lease.acquired", "G", holder="A", pid=1), task("a")]
-    assert "I8" in rejected([*pre, E("note.appended", "a", by="llm", text="x", holder="B")])
-    ok([*pre, E("note.appended", "a", by="llm", text="x", holder="A")])
+    assert "I8" in rejected([*pre, {**E("note.appended", "a", by="llm", text="x"), "holder": "B"}])
+    ok([*pre, {**E("note.appended", "a", by="llm", text="x"), "holder": "A"}])
+    # data の中の holder は I8 の対象でない (専用欄だけを見る)
+    ok([*pre, E("note.appended", "a", by="llm", text="x", holder="B")])
     assert "I8" in rejected([*pre, E("lease.acquired", "G", holder="B", pid=2)])
     assert "I8" in rejected([*pre, E("lease.released", "G", holder="B")])
 
@@ -1097,7 +1104,8 @@ def test_node_added_duplicate_id_rejected():
 
 
 def test_plan_approved_twice_rejected():
-    assert "未定義" in rejected([*goal(), E("plan.approved", "G", source="user", hash="h")])
+    # 承認の対象 (未承認の task) が無い再承認は拒否
+    assert "承認の対象" in rejected([*goal(), E("plan.approved", "G", source="user", hash="h")])
 
 
 def test_run_reserved_twice_for_one_task_rejected():
@@ -1129,7 +1137,7 @@ def test_invalid_payloads_rejected():
 
 
 def test_node_added_to_finished_goal_rejected():
-    pre = [*goal(), E("verdict", "G", verdict="cancel", reason="r")]
+    pre = [*goal(), E("verdict", "G", source="user", verdict="cancel", reason="r")]
     assert "終わった" in rejected([*pre, task("a")])
 
 
@@ -1296,7 +1304,9 @@ def test_goal_pause_resume_and_cancel():
     s = ok([*goal(), E("goal.paused", "G", reason="r"), E("goal.resumed", "G", source="user")])
     assert N(s, "G")["state"] == "active" and N(s, "G")["attrs"]["resumes"] == 1
     assert (
-        N(ok([*goal(), E("verdict", "G", verdict="cancel", reason="r")]), "G")["state"]
+        N(ok([*goal(), E("verdict", "G", source="user", verdict="cancel", reason="r")]), "G")[
+            "state"
+        ]
         == "cancelled"
     )
 
@@ -1357,11 +1367,70 @@ def test_make_event_enforces_source():
     r = call("makeEvent", "plan.approved", "G", {"hash": "h"}, "model")
     assert "利用者専用" in r["error"]
     r = call("makeEvent", "plan.approved", "G", {"hash": "h"}, "user")
-    assert r["ok"]["data"] == {"hash": "h", "source": "user"}
+    assert r["ok"]["data"] == {"hash": "h"} and r["ok"]["source"] == "user"
     r = call(
         "makeEvent", "note.appended", "G", {"by": "llm", "text": "x"}, "model", {"holder": "A"}
     )
-    assert r["ok"]["data"]["holder"] == "A" and r["ok"]["data"]["source"] == "model"
+    assert r["ok"]["holder"] == "A" and r["ok"]["source"] == "model"
+    assert "holder" not in r["ok"]["data"] and "source" not in r["ok"]["data"]
+
+
+def test_make_event_drops_source_and_holder_in_data():
+    # data の中の偽装は捨てられ、model 出所の plan.approved は拒否される
+    r = call("makeEvent", "plan.approved", "G", {"hash": "h", "source": "user"}, "model")
+    assert "利用者専用" in r["error"]
+    r = call(
+        "makeEvent",
+        "note.appended",
+        "G",
+        {"by": "llm", "text": "x", "holder": "EVIL"},
+        "model",
+        {"holder": "A"},
+    )
+    assert r["ok"]["holder"] == "A" and "holder" not in r["ok"]["data"]
+    r = call(
+        "makeEvent", "note.appended", "G", {"by": "llm", "text": "x", "holder": "EVIL"}, "model"
+    )
+    assert "holder" not in r["ok"] and "holder" not in r["ok"]["data"]
+    # lease.* の data.holder はペイロードなので残る
+    r = call("makeEvent", "lease.acquired", "G", {"holder": "A", "pid": 1}, "system")
+    assert r["ok"]["data"]["holder"] == "A"
+
+
+def test_data_source_cannot_forge_user_only_event():
+    pre = [*goal(approve=False), task("a")]
+    forged = {
+        "type": "plan.approved",
+        "node": "G",
+        "data": {"hash": "h", "source": "user"},
+        "source": "model",
+    }
+    assert "利用者専用" in rejected([*pre, forged])
+
+
+def test_event_without_source_is_treated_as_system():
+    # source 欄が無いイベントは system 扱い: 利用者専用は拒否、それ以外は通る
+    pre = [*goal(approve=False), task("a")]
+    ev = {
+        "type": "plan.approved",
+        "node": "G",
+        "data": {"hash": "h", "source": "user"},
+        "noSource": True,
+    }
+    assert "利用者専用" in rejected([*pre, ev])
+    ok([*pre, {**E("note.appended", "a", by="llm", text="x"), "noSource": True}])
+
+
+def test_edge_rejected_keeps_source():
+    base = ok([*goal(), task("a"), task("b", after=["a"])])
+    ev = {"type": "edge.added", "node": "a", "data": {"from": "a", "to": "b"}, "source": "model"}
+    r = call("resolveEdge", ev, state=ser(base))
+    assert r["ok"]["type"] == "edge.rejected" and r["ok"]["source"] == "model"
+    assert "source" not in r["ok"]["data"]
+    # data の中の source は引き継がれない
+    ev = {"type": "edge.added", "node": "a", "data": {"from": "a", "to": "b", "source": "user"}}
+    r = call("resolveEdge", ev, state=ser(base))
+    assert r["ok"]["type"] == "edge.rejected" and "source" not in r["ok"]["data"]
 
 
 @pytest.mark.parametrize(
@@ -1404,3 +1473,196 @@ def test_rejected_event_leaves_state_unchanged():
     assert "error" in out["steps"][-1]
     assert out["state"]["seq"] == len(base)  # 拒否された seq は進まない
     assert out["violations"] == []
+
+
+# ── goal の cancel は利用者専用 (I10 の拡張)・pauseReason・Money.rounds ──
+@pytest.mark.parametrize("src", ["model", "system", None])
+def test_goal_cancel_verdict_rejected_from_non_user(src):
+    assert "I10" in rejected([*goal(), E("verdict", "G", source=src, verdict="cancel", reason="r")])
+
+
+def test_goal_cancel_verdict_accepted_from_user():
+    s = ok([*goal(), E("verdict", "G", source="user", verdict="cancel", reason="clear")])
+    assert N(s, "G")["state"] == "cancelled"
+
+
+@pytest.mark.parametrize("src", ["model", "system", "user"])
+def test_task_cancel_verdict_passes_for_any_source(src):
+    s = ok([*goal(), task("a"), E("verdict", "a", source=src, verdict="cancel", reason="r")])
+    assert N(s, "a")["state"] == "cancelled"
+
+
+def test_goal_non_cancel_verdict_from_model_still_passes():
+    s = ok([*goal(), E("verdict", "G", source="model", verdict="continue", reason="r")])
+    assert N(s, "G")["state"] == "active"
+
+
+def test_rejected_goal_cancel_leaves_goal_active():
+    out = play(
+        [*goal(), E("verdict", "G", source="model", verdict="cancel", reason="r")], tolerant=True
+    )
+    assert "error" in out["steps"][-1]
+    assert N(out["state"], "G")["state"] == "active"
+
+
+def test_goal_paused_reason_is_saved():
+    s = ok([*goal(), E("goal.paused", "G", reason="rounds")])
+    assert N(s, "G")["pauseReason"] == "rounds"
+
+
+def test_goal_paused_reason_is_overwritten_by_next_pause():
+    s = ok(
+        [
+            *goal(),
+            E("goal.paused", "G", reason="rounds"),
+            E("goal.resumed", "G"),
+            E("goal.paused", "G", reason="stalled"),
+        ]
+    )
+    assert N(s, "G")["pauseReason"] == "stalled"
+
+
+def test_goal_resumed_clears_pause_reason():
+    s = ok([*goal(), E("goal.paused", "G", reason="tokens"), E("goal.resumed", "G")])
+    assert "pauseReason" not in N(s, "G")
+
+
+def test_goal_created_budget_keeps_rounds():
+    s = ok(goal(budget={"usd": 5, "tokens": 5000, "ms": 60000, "rounds": 20}))
+    assert N(s, "G")["budget"]["rounds"] == 20
+
+
+def test_budget_adjusted_keeps_rounds():
+    s = ok(
+        [
+            *goal(),
+            E("budget.adjusted", "G", budget={"usd": 5, "tokens": 5000, "ms": 60000, "rounds": 7}),
+        ]
+    )
+    assert N(s, "G")["budget"]["rounds"] == 7
+
+
+def test_rounds_survives_run_accounting_without_violations():
+    b = {"usd": 5, "tokens": 5000, "ms": 60000, "rounds": 3}
+    s = ok([*goal(budget=b), task("a"), *complete("a", "r1")])
+    assert N(s, "G")["budget"] == b
+
+
+def test_negative_rounds_is_rejected():
+    out = play(
+        [E("goal.created", "G", title="G", budget={"usd": 1, "tokens": 1, "ms": 1, "rounds": -1})]
+    )
+    assert "error" in out["steps"][-1]
+
+
+# ── g) active / paused の再承認 (plan.approved)。利用者専用・状態は変えない ──
+def reapprove(source="user", h="h"):
+    return E("plan.approved", "G", source=source, hash=h)
+
+
+def test_reapprove_active_keeps_state_and_stamps_late_task():
+    s = ok([*goal(), task("a"), reapprove()])
+    assert N(s, "G")["state"] == "active"
+    assert N(s, "a").get("approved") is True
+
+
+def test_reapprove_paused_keeps_state_and_stamps_late_task():
+    s = ok([*goal(), E("goal.paused", "G", reason="r"), task("a"), reapprove()])
+    assert N(s, "G")["state"] == "paused"
+    assert N(s, "a").get("approved") is True
+
+
+def test_late_task_is_unapproved_before_reapprove():
+    s = ok([*goal(), task("a")])
+    assert N(s, "a").get("approved") is None
+
+
+def test_reapprove_without_targets_rejected():
+    assert "承認の対象" in rejected([*goal(), reapprove()])
+
+
+def test_reapprove_paused_without_targets_rejected():
+    assert "承認の対象" in rejected([*goal(), E("goal.paused", "G", reason="r"), reapprove()])
+
+
+def test_reapprove_with_only_terminal_tasks_rejected():
+    evs = [*goal(), task("a"), E("verdict", "a", verdict="cancel", reason="r")]
+    assert "承認の対象" in rejected([*evs, reapprove()])
+
+
+def test_reapprove_twice_rejected():
+    assert "承認の対象" in rejected([*goal(), task("a"), reapprove(), reapprove()])
+
+
+@pytest.mark.parametrize("src", ["model", "system", "x"])
+def test_reapprove_from_non_user_rejected(src):
+    assert "利用者専用" in rejected([*goal(), task("a"), reapprove(src)])
+
+
+@pytest.mark.parametrize("src", ["model", "system"])
+def test_reapprove_paused_from_non_user_rejected(src):
+    evs = [*goal(), E("goal.paused", "G", reason="r"), task("a")]
+    assert "利用者専用" in rejected([*evs, reapprove(src)])
+
+
+def test_reapprove_wrong_hash_rejected():
+    assert "hash" in rejected([*goal(), task("a"), reapprove(h="zz")])
+
+
+@pytest.mark.parametrize("final", ["done", "cancelled"])
+def test_reapprove_on_finished_goal_rejected(final):
+    if final == "done":
+        evs = [
+            *goal(),
+            E("verdict", "G", source="user", verdict="done", reason="r"),
+            E("goal.done", "G"),
+        ]
+    else:
+        evs = [*goal(), E("verdict", "G", source="user", verdict="cancel", reason="r")]
+    assert "未定義" in rejected([*evs, reapprove()])
+
+
+def test_reapprove_does_not_stamp_terminal_task():
+    s = ok(
+        [
+            *goal(),
+            task("a"),
+            E("verdict", "a", verdict="cancel", reason="r"),
+            task("b"),
+            reapprove(),
+        ]
+    )
+    assert N(s, "a").get("approved") is None
+    assert N(s, "b").get("approved") is True
+
+
+def test_reapprove_stamps_all_open_tasks_and_child():
+    s = ok([*goal(), task("a"), task("b"), task("c", parent="a"), reapprove()])
+    assert [N(s, t).get("approved") for t in "abc"] == [True, True, True]
+
+
+def test_reapprove_keeps_goal_approved_by_user():
+    s = ok([*goal(), task("a"), reapprove()])
+    assert N(s, "G")["attrs"]["approvedBy"] == "user"
+
+
+def test_reapprove_second_late_task_needs_another_approval():
+    s = ok([*goal(), task("a"), reapprove(), task("b")])
+    assert N(s, "a").get("approved") is True
+    assert N(s, "b").get("approved") is None
+    s = ok([*goal(), task("a"), reapprove(), task("b"), reapprove()])
+    assert N(s, "b").get("approved") is True
+
+
+def test_reapprove_does_not_change_running_task():
+    evs = [*goal(), task("a"), reserve("r1", "a"), start("r1"), task("b"), reapprove()]
+    s = ok(evs)
+    assert N(s, "a")["state"] == "running"
+    assert N(s, "b")["state"] == "ready"
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_fuzz_reapprove_is_exercised(seed):
+    # 乱数列が active での plan.approved を実際に通している (空振りでなく、不変条件も保たれる)
+    f = fuzz(seed)
+    assert f["byType"].get("plan.approved", 0) > 0

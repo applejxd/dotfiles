@@ -65,7 +65,7 @@ def confine(path: Path) -> Path:
 
 # ─── 外へ送る文字列の秘匿チェック ─────────────────────────────────────────
 
-# 兄弟のスキル web-search が読めないときの代替。web-search の SECRET_PATTERNS / LONG_TOKEN と同じ内容
+# 検索の核 (~/.config/agents/websearch/core.py) が読めないときの代替。核の SECRET_PATTERNS / LONG_TOKEN と同じ内容
 _FALLBACK = [
     ("秘密鍵", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("AWS のアクセスキー", re.compile(r"\b(AKIA|ASIA)[0-9A-Z]{16}\b")),
@@ -102,7 +102,7 @@ _URL_IN_TEXT = re.compile(r"https?://\S+", re.IGNORECASE)
 
 
 def _is_slug(segment: str) -> bool:
-    """web-search の `is_slug` と同じ。URL の中のパスの 1 つの区切りだけに使う。"""
+    """検索の核 (core.py) の `is_slug` と同じ。URL の中のパスの 1 つの区切りだけに使う。"""
     parts = [p for p in re.split(r"[-_]", segment) if p]
     if not parts:
         return False
@@ -125,8 +125,8 @@ def _is_slug(segment: str) -> bool:
 
 
 def _websearch_check():
-    """兄弟のスキル web-search の `check_query` を借りる (パターンを二重に持たない)。無ければ None。"""
-    path = Path(__file__).resolve().parents[2] / "web-search" / "scripts" / "websearch.py"
+    """検索の核 (~/.config/agents/websearch/core.py) の `check_query` を借りる (パターンを二重に持たない)。無ければ None。"""
+    path = Path.home() / ".config" / "agents" / "websearch" / "core.py"
     if not path.is_file():
         return None
     try:

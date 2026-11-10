@@ -4,7 +4,7 @@
 使い捨ての git リポジトリで確かめる。Landlock・git・pi・python3 のどれかが無い環境では skip する。
 偽のモデルを使う統合経路で、Landlock の適用・回収・親への書込拒否・拒否の理由・書込可の一覧とリポジトリの重なりの扱いを確かめる。
 ``children.ts`` の停止確認 (``stopped=false``・孫の残存・二重シグナル) は直接検査しない。
-see docs/change/0029-worktree-isolation.md#w1-の実装計画
+see docs/change/closed/0029-worktree-isolation.md#w1-の実装計画
 """
 
 # ruff: noqa: F811  (env はインポートしたフィクスチャ。引数名で使うので再定義に見える)

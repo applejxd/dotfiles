@@ -1,15 +1,16 @@
 # pi の拡張は自作を基本とし、外部の拡張は条件を満たす例外だけを導入する
 
-- **ステータス**: Accepted
+- **ステータス**: Superseded by ADR-0031
 - **日付**: 2026-10-11
 - **決定者**: applejxd
 
+> **2026-11-09 の注記**: この「自作を基本」は [ADR-0031](0031-evaluate-existing-extensions-first.md) で置き換えた（既存の拡張・設定の評価を先にし、自作は最後の手段）。本文は経緯として残す。
 > **用語の注記（2026-10-15）**: 決定は変えない。本文の「ハーネス」は、現在の「フルガード」（`pis` で効くガード）を指す。対応は [pi のガード](../spec/guard/pi-guard.md#用語)。
 
 ## コンテキスト
 
 pi のハーネス（`pis`）は `-ne` で起動し、拡張を自動では読まない
-（[pi のガード](../spec/guard/pi-guard.md#起動)）。この構成は、[CHG-0020](../change/0020-pi-migration.md) の
+（[pi のガード](../spec/guard/pi-guard.md#起動)）。この構成は、[CHG-0020](../change/closed/0020-pi-migration.md) の
 設計の過程で AI が提案し、**利用者が十分に理解しないまま承認したもの**で、「拡張は足さない」という方針として
 扱われてきた。利用者が決めた方針ではない。
 
@@ -90,4 +91,4 @@ pi のハーネス（`pis`）は `-ne` で起動し、拡張を自動では読�
 
 - [pi のガード](../spec/guard/pi-guard.md)
 - [実測: ハーネス付きの pi への拡張の追加](../research/agents/pi-extension-under-harness.md)
-- [CHG-0020](../change/0020-pi-migration.md)
+- [CHG-0020](../change/closed/0020-pi-migration.md)

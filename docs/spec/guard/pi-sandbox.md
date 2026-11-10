@@ -2,6 +2,9 @@
 
 `pis` が pi を Fence の中で起動するときの仕様: agent 置き場・セッション・認証・後始末、プロキシ必須の環境での通信、拒否リスト型の通信、緩和のゲート。境界の組み立ての規則は [Fence 境界の組み立て](../sandbox/fence-boundary.md)、サンドボックスの総覧は [サンドボックス](../sandbox/index.md)、起動・設定は [pi のガード](pi-guard.md)。
 
+> **使う場所**: dotfiles のリポジトリの開発では、このサンドボックスを使わない（`pis --no-sandbox`。[ADR-0025](../../adr/0025-dotfiles-dev-without-os-sandbox.md)）。
+> 隠した秘密の追跡ファイルが作業ツリーで変更に見え、統合が失敗するため。外部のコード・依存・Web アプリ・GPU を実行するほかのリポジトリで使う。
+
 ## サンドボックス
 
 `pis`（標準）は、`pi.py` の `run_sandboxed` が pi を Fence で囲って起動する（`ocs` のコマンドは経由しない。CHG-0023 の段 3c）。
@@ -22,6 +25,22 @@
 | 起動ディレクトリの秘密 | 起動のたびに、起動ディレクトリの中で `[file] read_deny_globs`（判定器と同じ `command_policy`。`deny_exceptions` も効く）に当たる**実在のファイル・ディレクトリ**を列挙し、Fence の `denyRead` へ足す（`boundary.hide_workspace_secrets`。`.env`・`.env.*`（`.env.example` を除く）・`*.pem`・`secrets/` など）。`.ssh/**` や `secrets/**` のようにディレクトリごと当たる規則は、中を降りずにディレクトリを隠す。`.git`・`node_modules`・`.venv` などは降りない。symlink は辿らない。一覧が読めない・空・30 万件超・当たりが 2000 件超のときは**起動を止める**。内側からは、読めず、上書きもできない。**起動後に作られたファイルは隠せない**（列挙は起動時の 1 回）。`pis` だけ（`ocs` は未対応） | 判定器の層だけだと、内側から `cat` 以外の経路（スクリプトや言語のランタイム）で `.env` を読み、拒否リスト型では任意のホストへ送れてしまう |
 
 > OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。表の「設定の出所」の `[opencode.sandbox]` と「作業先ごとの追加」の `.opencode/sandbox.toml` が対象。pi の仕様は [緩和のゲート](#緩和のゲート)。
+
+### GPU（既定で見える）
+
+```sh
+PIS_NO_GPU=1 pis      # 既定の GPU のデバイスを内側へ見せない
+```
+
+`pis` は、ホストに在る GPU のデバイス（`/dev/dxg`・`/dev/nvidia*`）を既定で内側へ見せる。無ければ何も変わらない。詳細は [デバイス](../sandbox/fence-boundary.md#デバイス)。
+
+### 公開ポート（起動例）
+
+```sh
+PIS_EXPOSE_PORTS=3000:8000 pis      # 内側の Web アプリをホストの http://127.0.0.1:3000/ で開く
+```
+
+`.opencode/sandbox.toml` の `expose_ports` は許可の根拠にしない（警告して無視）。既定は無効で、理由・検証・限界は [公開ポート](../sandbox/fence-boundary.md#公開ポートweb-アプリをホストのブラウザで開く)。
 
 ### プロキシ必須の環境での通信
 
@@ -51,7 +70,7 @@ Fence は許可リスト（`allowedDomains`）に当たる通信を直接つな�
 
 `[pis.network] mode = "denylist"` のとき、`deny` に入れた宛先**以外の公開宛先**へ、内側から HTTPS でつなげる（許可リスト型は、許可したドメインにしか届かない）。
 既定は、個人の機（`llm-provider` が `github-copilot`）が `denylist`、それ以外が `allowlist`（テンプレートの `[pis.network]`）。`pis --allowlist` で一時的に戻せる。
-経緯と実測は [CHG-0037](../../change/0037-pis-usability-and-telemetry.md)（候補 E1'）。
+経緯と実測は [CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md)（候補 E1'）。
 
 | 項目 | 内容 | 理由 |
 | --- | --- | --- |
@@ -99,6 +118,6 @@ Fence は許可リスト（`allowedDomains`）に当たる通信を直接つな�
 - フッターのステータス行に「🔒 sandbox」（証明済み）または「⚠ no sandbox」（警告色）を出す。**目印であり、安全の根拠ではない**
 - 試験: `test_pi_judge_ts.py`（緩和の範囲）、`test_pi_harness.py`（カナリアが読める・書ける・既にある・自己申告だけ・証明済み）、`test_pi_boundary.py`（事前検査の記憶）
 
-`~/.config/agents`（判定器が `common.toml` を読む）は読めるが書けない。内側から判定の規則を書き換えられない。**その中の検索 API の鍵 `websearch-keys.json` は、`[pi.sandbox] deny_read` で隠す**（内側からは `/dev/null` に見え、読むと許可がない。**`test -r` は真になる**ので、可否の確認は実際に読むこと）。検索は今、内側から使えない（プロバイダーが許可リストに無い）。内側で使うには、ブローカー（[CHG-0033](../../change/0033-sandbox-build-value-assessment.md) の棚卸し）が要る
+`~/.config/agents`（判定器が `common.toml` を読む）は読めるが書けない。内側から判定の規則を書き換えられない。**その中の検索 API の鍵 `websearch-keys.json` は、`[pi.sandbox] deny_read` で隠す**（内側からは `/dev/null` に見え、読むと許可がない。**`test -r` は真になる**ので、可否の確認は実際に読むこと）。検索は今、内側から使えない（プロバイダーが許可リストに無い）。内側で使うには、ブローカー（[CHG-0033](../../change/closed/0033-sandbox-build-value-assessment.md) の棚卸し）が要る
 OpenCode 用の読み取り先（`~/.opencode` など 3 件）も共有キーに入っているので、pi からも読める
 （秘密を含まない道具の置き場）。

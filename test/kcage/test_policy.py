@@ -1,0 +1,256 @@
+"""scripts/kcage/policy.py の試験。厳格な解釈・許可表の安全確認・追記。"""
+
+from __future__ import annotations
+
+import pytest
+from kcage import model, policy
+from kcage_fakes import POLICY_TEXT, FakeFs
+
+P = policy.PolicyError
+
+
+def _repo(extra: str = "") -> str:
+    return f'[repo.demo]\npath = "/home/a/demo"\n{extra}'
+
+
+def test_parse_demo() -> None:
+    pol = policy.parse(POLICY_TEXT)
+    r = pol.repos["demo"]
+    assert r.gpu and r.uid == 1000 and r.network == "proxy-only"
+    assert r.ports == (model.PortRange(8080, 8080), model.PortRange(9000, 9099))
+    assert pol.deny_paths == ("/mnt/d/private",)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "[repo.demo]\npath='/a'\nunknown=1\n",  # 未知のキー
+        "unknown = 1\n",  # 最上位の未知のキー
+        "[defaults]\nfoo=1\n",
+        "[repo.Bad_ID]\npath='/a'\n",  # id の形
+        "[repo." + "a" * 32 + "]\npath='/a'\n",  # 長すぎる id
+        "[repo.demo]\npath='relative'\n",
+        "[repo.demo]\npath='/a/../b'\n",
+        "[repo.demo]\npath='/a'\ndata_roots=['rel']\n",
+        "[repo.demo]\npath='/a'\nports=['80']\n",
+        "[repo.demo]\npath='/a'\nports=[[1,2,3]]\n",
+        "[repo.demo]\npath='/a'\nports=[[9,1]]\n",
+        "[repo.demo]\npath='/a'\nports=[70000]\n",
+        "[repo.demo]\npath='/a'\nports=[true]\n",
+        "[repo.demo]\npath='/a'\nbrokers=['ssh']\n",
+        "[repo.demo]\npath='/a'\nnetwork='open'\n",
+        "[repo.demo]\npath='/a'\nidmap='both'\n",
+        "[repo.demo]\npath='/a'\nuid=0\n",
+        "[repo.demo]\npath='/a'\nuid=65536\n",
+        "[repo.demo]\npath='/a'\nuid='1000'\n",
+        "[repo.demo]\npath='/a'\ngid=0\n",
+        "[repo.demo]\npath='/a'\ngid=65536\n",
+        "[repo.demo]\npath='/a'\ngid='1001'\n",
+        "[repo.demo]\npath='/a'\ngid=true\n",
+        "[repo.demo]\npath='/a'\ngid=0123\n",  # 先頭ゼロは TOML として不正
+        "[repo.demo]\npath='/a'\ngpu='yes'\n",
+        "[repo.demo]\npath='/a'\nsubnet='10.0.0.1/8'\n",  # strict でない CIDR
+        "[repo.demo]\npath='/a'\nnetwork='proxy-only'\n",  # 上流なし
+        "[repo.demo]\npath='/a'\nproxy_upstream='bad'\n",
+        "[repo.demo]\npath='/a'\nproxy_upstream='h:99999'\n",
+        "[repo.demo.secrets.gh]\nsource='file'\n",  # path なし
+        "[repo.demo.secrets.gh]\nsource='command'\nargv='sh -c x'\n",  # 配列でない
+        "[repo.demo.secrets.gh]\nsource='env'\n",
+        "[repo.demo.secrets.gh]\nsource='file'\npath='/a'\nvalue='x'\n",  # 値は書けない
+        "not toml [",
+    ],
+)
+def test_parse_rejects(text: str) -> None:
+    if text.startswith("[repo.demo.secrets"):
+        text = "[repo.demo]\npath='/a'\n" + text
+    with pytest.raises(P):
+        policy.parse(text)
+
+
+def test_upstream_forms() -> None:
+    for up in ("192.0.2.1:8080", "[2001:db8::1]:3128", "proxy.example.test:3128"):
+        pol = policy.parse(_repo(f'network="proxy-only"\nproxy_upstream="{up}"\n'))
+        assert pol.repos["demo"].proxy_upstream == up
+
+
+def test_secrets_parse() -> None:
+    pol = policy.parse(
+        _repo()
+        + "[repo.demo.secrets.gh]\nsource='file'\npath='/etc/kcage/s/gh'\n"
+        + "[repo.demo.secrets.aws]\nsource='command'\nargv=['/usr/bin/x','y']\n"
+        + "[repo.demo.secrets.hf]\nsource='prompt'\n"
+    )
+    s = pol.repos["demo"].secrets
+    assert s["gh"].source == "file" and s["aws"].argv == ("/usr/bin/x", "y")
+    assert s["hf"].source == "prompt"
+
+
+def test_defaults_network_inherited() -> None:
+    pol = policy.parse('[defaults]\nnetwork="offline"\n' + _repo())
+    assert pol.repos["demo"].network == "offline"
+
+
+def _fs_for_policy() -> FakeFs:
+    fs = FakeFs()
+    fs.add_dir("/etc", uid=0, mode=0o755)
+    fs.add_dir("/etc/kcage", uid=0, mode=0o755)
+    fs.add_file("/etc/kcage/policy.toml", "", uid=0, mode=0o644)
+    return fs
+
+
+def test_check_file_safe_ok() -> None:
+    policy.check_file_safe("/etc/kcage/policy.toml", fs=_fs_for_policy())
+
+
+@pytest.mark.parametrize(
+    ("path", "kw"),
+    [
+        ("/etc/kcage/policy.toml", {"uid": 1000}),  # 所有者が root でない
+        ("/etc/kcage/policy.toml", {"mode": 0o666}),  # 他人から書ける
+        ("/etc/kcage/policy.toml", {"mode": 0o664}),  # グループから書ける
+        ("/etc/kcage", {"uid": 1000}),  # 親が root 所有でない
+        ("/etc/kcage", {"mode": 0o777}),  # 親が書ける
+        ("/etc", {"mode": 0o775}),  # 祖先が書ける
+    ],
+)
+def test_check_file_safe_rejects(path: str, kw: dict) -> None:
+    fs = _fs_for_policy()
+    fs.nodes[path].update(kw)
+    with pytest.raises(P):
+        policy.check_file_safe("/etc/kcage/policy.toml", fs=fs)
+
+
+def test_check_file_safe_missing() -> None:
+    with pytest.raises(P):
+        policy.check_file_safe("/etc/kcage/none.toml", fs=_fs_for_policy())
+
+
+def test_gidの既定はuid() -> None:
+    r = policy.parse("[repo.demo]\npath='/a'\nuid=1001\n").repos["demo"]
+    assert r.uid == 1001 and r.gid == 1001
+    r = policy.parse("[repo.demo]\npath='/a'\nuid=1000\ngid=1001\n").repos["demo"]
+    assert r.gid == 1001
+
+
+def test_load_uses_fs() -> None:
+    fs = _fs_for_policy()
+    fs.add_file("/etc/kcage/policy.toml", POLICY_TEXT)
+    assert "demo" in policy.load("/etc/kcage/policy.toml", fs=fs).repos
+
+
+def test_render_and_add_repo_roundtrip() -> None:
+    block = policy.render_repo_block(
+        "new1",
+        path="/home/a/new",
+        data_roots=("/mnt/d/x",),
+        ports=(model.PortRange(80, 80), model.PortRange(9000, 9010)),
+        brokers=("gh",),
+        gpu=True,
+        network="proxy-only",
+        proxy_upstream="192.0.2.5:3128",
+        idmap="root",
+        uid=1001,
+        gid=1002,
+        subnet="10.88.0.0/24",
+    )
+    text = policy.add_repo(POLICY_TEXT, block)
+    r = policy.parse(text).repos["new1"]
+    assert r.idmap == "root" and r.uid == 1001 and r.gid == 1002 and r.ports[1].hi == 9010
+    assert "demo" in policy.parse(text).repos  # 既存は残る
+
+
+def test_add_repo_to_empty_and_duplicate() -> None:
+    block = policy.render_repo_block("a1", path="/home/a/x")
+    text = policy.add_repo("", block)
+    assert "a1" in policy.parse(text).repos
+    with pytest.raises(P, match="重複"):
+        policy.add_repo(text, block)
+
+
+def test_add_repo_rejects_bad_block() -> None:
+    with pytest.raises(P):
+        policy.add_repo("", '[repo.a1]\npath = "rel"\n')
+    with pytest.raises(P):
+        policy.add_repo("", '[defaults]\nnetwork = "offline"\n')
+    with pytest.raises(P):  # 2 つ同時には足せない
+        policy.add_repo("", '[repo.a1]\npath = "/a"\n[repo.b1]\npath = "/b"\n')
+
+
+def test_render_does_not_mutate_inputs_and_is_pure() -> None:
+    a = policy.render_repo_block("a1", path="/x")
+    b = policy.render_repo_block("a1", path="/x")
+    assert a == b
+
+
+# ---- build_proxy
+
+
+def test_build_proxyはdefaultsから読めてhostpolicyに入る() -> None:
+    pol = policy.parse('[defaults]\nbuild_proxy = "192.0.2.10:3128"\n')
+    assert pol.build_proxy == "192.0.2.10:3128"
+    assert policy.parse('[defaults]\nbuild_proxy = "proxy.example.test:8080"\n').build_proxy == (
+        "proxy.example.test:8080"
+    )
+    assert policy.parse("").build_proxy is None
+
+
+@pytest.mark.parametrize(
+    "bad", ['"192.0.2.10"', '"a b:80"', '"192.0.2.10:99999"', "3128", '"http://x:1"']
+)
+def test_build_proxyの不正は拒否する(bad: str) -> None:
+    with pytest.raises(P):
+        policy.parse(f"[defaults]\nbuild_proxy = {bad}\n")
+
+
+# ---- 資源の上限と idmap_isolated
+
+
+def test_上限と_idmap_isolated_の既定は未設定() -> None:
+    r = policy.parse(_repo()).repos["demo"]
+    assert (r.cpu, r.memory_mib, r.processes, r.idmap_isolated) == (None, None, None, False)
+
+
+def test_上限を読む() -> None:
+    r = policy.parse(
+        _repo('cpu = 4\nmemory = "8GiB"\nprocesses = 4096\nidmap_isolated = true\n')
+    ).repos["demo"]
+    assert (r.cpu, r.memory_mib, r.processes, r.idmap_isolated) == (4, 8192, 4096, True)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        "cpu = 0\n",
+        "cpu = 1025\n",
+        "cpu = true\n",
+        'cpu = "4"\n',
+        'memory = "64MiB"\n',
+        'memory = "1025GiB"\n',
+        'memory = "8GB"\n',
+        "memory = 8\n",
+        'memory = "8GiB\\n"\n',
+        'memory = " 8GiB"\n',
+        'memory = "8GiB,x=1"\n',
+        'memory = "08GiB"\n',
+        "processes = 63\n",
+        "processes = 4194305\n",
+        'idmap_isolated = "true"\n',
+    ],
+)
+def test_上限の不正な値は拒否する(extra: str) -> None:
+    with pytest.raises(P):
+        policy.parse(_repo(extra))
+
+
+def test_render_repo_block_は上限を描画して_parse_で通る() -> None:
+    block = policy.render_repo_block(
+        "demo",
+        path="/home/a/demo",
+        cpu=2,
+        memory="512MiB",
+        processes=100,
+        idmap_isolated=True,
+    )
+    r = policy.parse(block).repos["demo"]
+    assert (r.cpu, r.memory_mib, r.processes, r.idmap_isolated) == (2, 512, 100, True)
+    assert "cpu" not in policy.render_repo_block("demo", path="/home/a/demo")

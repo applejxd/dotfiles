@@ -1,0 +1,114 @@
+#76 起動 21:03:21 / 完了 21:08:25
+
+child explore: completed [304s, 52 calls, 6475.4k tokens, $1.417]
+- model: github-copilot/claude-sonnet-5.5, effort: (pi default), role default
+- 文脈: inherit
+warnings (tool errors during the run; the answer below already accounts for them):
+- tool error: guarded_bash: どの規則にも当たらない (役割 'explorer' の既定)
+format check (the answer lacks the standard sections; verify its claims yourself):
+- missing: 根拠
+- calls: read×46 grep×26 find×5 bash×3 ls×2
+
+answer:
+## 結論
+
+- **最小の挿入点**: `harness/index.ts:692-705` の `definitions` と `appendDef` に、各 `create*ToolDefinition` へ `operations` を渡す分岐を足す。判定器 (`judge/*`) と `tool_call`→`execute` の順序は変えない。操作の実装は新規 `remote-ops.ts` に置く（トランスポート・パス写像・env の篩い）。
+- **規模**: 新規 300〜450 行、既存の編集は計 100 行前後。どちらも見積りで、実測ではない。
+- **壊れるもの**:
+  - ホスト側に残る「ローカル fs / git 前提」の読み書き（下の 1・2）。
+  - `bg_run`、`post_edit` の整形、`isolation`/`cwd` つきの子、`guarded_pr_summary`。
+  - grep は `GrepOperations` が `isDirectory`/`readFile` だけで、検索本体の `rg` はローカル実行（`grep.d.ts:28-33`）。gondolin 例のように全面実装が要る。
+- **鍵**: ホスト側の cwd を、遠隔の絶対パスと同じ文字列の空ディレクトリ（鏡写し）にする。判定器は文字列比較が中心なので、ほぼ無改造で成り立つ。
+
+## 1. ツール定義と判定の順序
+
+- 順序は `tool_call`（`index.ts:612-655`）で `decide`（617）。deny は block。ask は確認して `decided` に記録する。入力の書き換えはしない。
+- 次に `execute`（716〜）が再判定する（727）。キャッシュ使用時も `tightenIntegration` はやり直す。承認済みの `--body-file` は 731 で再読して差し替えを検出する。その後 `def.execute`。
+- bash だけ、後で `deniedPathIn` と `redactResult` を通す（750〜760 付近）。
+- 事後は `tool_result`（675-690）で edit/write のヒントと整形を行う。
+- 判定器が読むローカル fs:
+  - `judge/decide.ts`: `realpathLoose`（142）、`strictResolve`（`writeWithinScope`）、`ledgerRoots(cwd)`（251）、`insideCwd`（272）、external_read（299・311）。
+  - `judge/ledger_root.ts:52-75`: `existsSync`/`statSync`/`readFileSync` で `.git` を辿る。
+  - `judge/pathutil.ts:17-66`: `realpathSync`/`lstatSync`/`readlinkSync`。
+  - `judge/rules_guard.ts:99-105`、`226-228`: 同じ関数を使う。`:584` は `process.cwd()` で PYTHONPATH を検査する。
+  - `judge/shared.ts:251`、`rm.ts:200/229/255`: `.tmp` 配下の削除判定。
+  - `judge/` は `child_process` を使わない。
+- git を起動するのは `integration-gate.ts:68-102`（head 系の統合コマンドのみ）経由の `freezone.ts` `classifyFreeZone` と、`gitrun.ts:11-31` の `gitSync`。
+- 食い違いの現れ方（ホストにリポジトリが無い場合）:
+  - ホストの cwd が遠隔の cwd と別の文字列だと、全パスが「作業ツリーの外」になり ask になる。
+  - 遠隔の symlink は解決されない。
+  - `read_deny_globs` はホストの `homedir` 基準で、遠隔の `~/.ssh` は glob に当たらず ask 止まり。
+  - 自由区は常に `free:false` になる（fail-closed）。
+- `readBodyFile`（`index.ts:283-298`）はローカルの `statSync`/`readFileSync` を使う。遠隔で書いた本文は読めず、`mustConfirm` が block になる。
+- `gatherIntegrationFacts`（213-245）は `gitSync` と `previewBlocked` を呼ぶ。ホストにリポジトリが無いと確認画面は「確認できない」になる。
+
+## 2. ホスト側に残るもの
+
+| 対象 | ローカル前提 | 遠隔化 |
+|---|---|---|
+| `guarded_action` | `actions.ts:143-168` `resolveRepoDir`、`:189`/`:460` の `execFile`、`:498` `snapshotStaged`、`pending-store.ts:44-60`（spawnSync git）、`:638` | git_commit は壊れる。リポジトリが遠隔なら git ごと遠隔で実行する。`gh issue *` は `-R` 付きなのでホストのままでよい |
+| `guarded_task` | 下の 5 | 壊れる |
+| `guarded_pr_summary` | `pr-review.ts:33` `gitIn(ctx.cwd)`。`gitFor` は注入可（`PrDeps.gitFor`、133行） | ローカルのリポジトリが前提。遠隔の git 実行か、ホストのまま（遠隔に refs を書く）かを選ぶ |
+| 台帳（`work/*`、journal） | `journal.ts:63-66` が `<cwd>/.tmp/work/journal` を既定で書く。work ツールは `PI_WORK_TOOL=1` のときだけ | ホストのままでよい。`PI_JOURNAL=0` 推奨 |
+| `bg_run`/`bg_log`/`bg_kill` | `home/dot_pi/agent/extensions/activity/index.ts:243` がローカルで `spawn(shell:true, cwd)` し、ログもローカル | 遠隔ツールを迂回する。無効化するか遠隔化する |
+| `post_edit` 整形 | `index.ts:~2000-2060` `runPostEditHook` がローカルでスクリプトを spawn する | 遠隔ファイルは見えず空振りする。逆にローカルに同パスがあれば、ローカルのコピーを整形する |
+| `wt_owner`（`scripts/wt_owner.py`）、web 検索スキル | bash 経由で実行される | 遠隔で実行される。スクリプトが遠隔に無い |
+| todo / ask / MCP | fs を触らない（todo の grep は 0 件） | ホストのままでよい |
+
+- `user_bash` ハンドラは無い（`!` コマンドはホストで走る）。
+- スキルや external_read（`~/.claude/skills`）は、ホストの絶対パスを read する。read は「遠隔 / ホスト」でパス単位の振り分けが要る。
+
+## 3. cwd と worktree
+
+- `session_start`（`index.ts:424-448`）の `sessionTmp.start`、`reconcilePending`、`reconcileOnStart`、`unguardedSources` は、いずれも try で囲まれているか、リポジトリが無ければ何もしない。ホストにリポジトリが無くても**起動はできる**（コードを読んだ範囲。実行して確かめてはいない）。
+- ただし `process.cwd()` が 692、`rules_guard.ts:584`、`index.ts:428/443/562/1400` で使われる。
+- `decide.ts` の `validate` は cwd が絶対パスであることを要求する。
+
+## 4. 環境変数と認証
+
+- bash の env は `index.ts:694-696` の `spawnHook` で `{AGENT_ENV, ...spawn.env}` になる。ホストの全 env と `PI_SESSION_*`（`docs/extensions.md:2421`）が入る。
+- `guarded_action` は `process.env`（`index.ts:808`）、子は `...process.env`（`:1339`）。
+- `pis` の broker モード（`pi.py:561-612`）は、ダミーの `COPILOT_GITHUB_TOKEN`/`GH_TOKEN`、ループバック宛の `WEBSEARCH_BROKER_URL`、`PI_HARNESS_*` を渡す。
+- 遠隔へ渡さないものの規則は、`pi.py:55-66` の `DROP_ENV`、`:70` 付近の `SECRET_ENV` 正規表現、`cli.py:35-54` に既にある。これを流用する。
+- 篩う場所は、`remote-ops.ts` の `exec` が受ける `options.env`。許可リスト方式（`PATH`、`LANG`、`AGENT_ENV`）が安全。
+- 公式例では、ssh 例は env を無視し、gondolin 例は全部渡す（`containerization.md` でも警告されている）。
+
+## 5. 子エージェント
+
+- 子は `pi --mode rpc … -e builtin:mcp -e HERE`（`index.ts:1332`）で起動し、env は親から継承する。遠隔の指定を**環境変数**にすれば自動で継承される。`registerFlag` だと継承されない。
+- `children.ts:259` は `spawn(cwd)` なので、ホスト側に実在する cwd が要る。鏡写しディレクトリが必要になる。
+- `resolveChildCwd`（`index.ts:1237-1264`）は、ローカルの `realpathSync` と `git worktree list` が前提。
+- `isolation:"worktree"`（`:1160-1230`）は、ローカルの `findRepoRoot`、Landlock（`landlock_exec.py`）、`worktree.ts` に依存する。遠隔リポジトリでは `refuse` になる。遠隔の `git worktree add` で再設計が要る。
+- `WRITE_ROOT` と `tmpRoots`（`index.ts:199`）はホストの `TMPDIR`・`/tmp` を指す。
+
+## 6. 変更の見積り
+
+- 触るファイル:
+  - `index.ts`: ops の差し込みと `readBodyFile`・`formatFile` の fs 差し替え。
+  - `tools-ext.ts`: `appendOperations`、`runRead` の tail、`countLines`、`decorateReadError`、`decorateEditResult` がローカル fs 直。
+  - `gitrun.ts`: `gitSync` を差し替え可能にする。
+  - `actions.ts`/`pending-store.ts`: git の実行場所。
+  - `activity/index.ts`: bg_run。
+- 変えてはいけないもの:
+  - 判定の入力の形（`decide.ts` の `Request`）。`test/agents/pi/judge_golden.mjs` と `golden/decide_golden.jsonl` が固定している。
+  - `guarded_` 接頭辞。
+  - ソース文字列を固定する試験: `test_pi_session_tmp.py:113`、`test_pi_quiet_notices.py:293`、`test_work_settle_wire.py:545`、`test_pi_harness_removal.py:84`、`test_pi_integrate_index.py:65`。
+- 追加する試験:
+  - 偽トランスポートでの ops の単体試験（signal・timeout・終了コード・env の篩い・パス写像）。
+  - `test_pi_harness.py` 型の faux モデルによる配線試験。deny が先に効くこと、遠隔 ops を通ることを確かめる。
+  - 鏡写し cwd での判定の同値性。
+  - 子への継承。golden が不変であること。
+
+## 懸念・未確認
+
+- 未確認: `operations` と `spawnHook` を併用したときの適用順。pi 本体のソースは未読で、`.d.ts` と docs だけを見た。
+- `decide` は同期関数。ssh 越しの git を 3 秒 timeout で数回呼ぶと遅くなる（ControlMaster が要る）。
+- 遠隔の symlink とホスト home 基準の deny glob は、判定器では検出できない。遠隔側の境界に頼ることになる。
+- 既存の先行事例: `[pi.remote_exec] targets`（`common.toml.tmpl:957`）。ADR-0028 は pi 全体を箱の中で動かす方針で、ツールだけを遠隔にするとホスト側の拡張は隔離されない（`containerization.md`）。
+- 試験・ビルドは実行していない（読み取りのみ）。
+
+## 次の候補
+
+1. 鏡写し cwd 方式で、read/write/edit/bash だけの PoC を作る（約 150 行）。
+2. `gitSync` と `Git` の注入点を先に抽象化する。
+3. `bg_run` の扱い（無効化か遠隔化か）を決める。

@@ -28,9 +28,28 @@ args = [
 | OpenCode V2 | `~/.config/opencode/opencode.json` の `mcp.servers` | `generate.py --target opencode-config` |
 | Codex CLI | `~/.codex/config.toml` の `mcp_servers` | `modify_config.toml` が `fromToml` で描画 |
 | Claude Code | `~/.claude.json` | `400_unix/410` (Unix) と `300_windows/346` (Windows) が `claude mcp add-json` で登録 |
-| pi（Unix・Windows） | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](guard/pi-guard.md#mcp)。`mcp.json` へ書く経路は無い。[経緯](../research/agents/agent-config-generation-notes.md)） |
+| pi・stock（Unix・Windows） | `~/.pi/agent/mcp.json` の `mcpServers`（pi 組み込みの MCP も `pi-mcp-adapter` もこれを読む） | `generate.py --target pi-mcp`。配備は `home/dot_pi/agent/modify_mcp.json.py.tmpl`（stock だけ。custom は `.chezmoiignore.tmpl` で配らない）。宣言したサーバの `command` / `args`（http は `url`）だけを更新し、`pi mcp add` や `/mcp` で足したサーバと、宣言済みサーバの利用者のキー（`env`・`enabled`・`exposure` など）は保つ。`[[mcp]]` の `exposure`・`requires_env`・`pi_exposure` は出さない（`pi_exposure` は server の `exposure` へ、無いときだけ補う）。壊れた JSON は触らない |
+| pi・custom（Unix・Windows） | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](guard/pi-guard.md#mcp)。`mcp.json` へ書く経路は無い。[経緯](../research/agents/agent-config-generation-notes.md)） |
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
+
+### websearch（家の機の検索）
+
+```toml
+[[mcp]]
+id = "websearch"
+clis = ["pi"]
+transport = "stdio"
+command = "uv"
+args = ["run", "--no-project", "--quiet", '{{ .chezmoi.homeDir }}/.config/agents/websearch/mcp_server.py']
+```
+
+- 自作の stdio サーバ（ツール `web_search`・`fetch_page`・`search_papers`。仕様は [Web 検索](web-search.md#mcp-サーバ)）。この MCP に一本化し、スキル `web-search` は廃止した（2026-11-09）。
+- `pi_exposure = "direct"`: pi の `mcp.json` の `exposure` に補う（下の「`pi_exposure`」）。モデルに直接見えるツール名は `mcp__websearch__web_search`・`mcp__websearch__fetch_page`・`mcp__websearch__search_papers`。
+- **`is-work` が `true` の機では宣言しない**（`[[mcp]]` のブロックごと条件で囲む）。検索の送り先が限られる環境では登録しない、という一般論による。その機の検索は `agentcore-websearch` だけ。
+- `clis = ["pi"]` のため、custom の harness（`rules.json`）にも `websearch` が登録される。custom は凍結だが、検索が使えるのは害がないので意図した変更として受け入れる。
+- 家の機の `mcp.json` には `agentcore-websearch` も出る（`clis` に `pi` が常にある）。認証が無ければツールの無い空のサーバになる。受け入れる。
+- permission（stock）: `pi-permission-policy.json` の `mcp` は、`websearch`・`agentcore-websearch` を allow（検索は読み取りのため）、他の MCP は ask のまま。
 
 **`[[mcp]]` の任意のキー `exposure`（pi だけに効く）**: モデルへのツールの見せ方で、`direct` / `codemode` / `deferred` / `hidden`（不正な値は生成が止まる）。
 **省略すると pi には `direct` を出す。** pi 本体の既定は `codemode` だが、`pis` は `-ne` で組み込みの `codemode` / `tool_search` を外すので、
@@ -102,6 +121,14 @@ TOML の重複宣言になり、Codex が設定ファイル全体を読めなく
 `generate.py` が `apply` を止める。トークンは `common.toml` に書かず、
 環境変数参照として各 CLI 側で設定する。
 
+### `pi_exposure`（pi への見せ方）
+
+`[[mcp]]` の任意キー。stock の pi の `~/.pi/agent/mcp.json` の server の `exposure` に、**無いときだけ**補う（`merge_pi_mcp`。`/mcp` で利用者が変えた値は保つ）。値は `direct`・`codemode`・`deferred`・`hidden`。他の生成先は読まず、出力に出ない（試験: `test/agents/test_mcp_servers.py`）。
+
+- 理由: pi 組み込みの MCP の既定の `exposure` は `codemode` で、ツールはモデルに宣言されず `codemode` のスクリプトから呼ぶ。この形では、plan mode（`@narumitw/pi-plan-mode`）の許可リストは**完全一致の名前だけ**で、`codemode` を許すと任意の MCP を呼べて境界が広がる。`direct` なら、組み込みのツールと同様にモデルへ宣言され、名前 `mcp__<server>__<tool>`（英数字と `_` 以外は `_` に置換）で許可リストに具体名を足せる。
+- `websearch`・`agentcore-websearch` を `direct` にする。許可リスト側は [pi のプロファイル](agent-config-generation.md#追加の-4-つの-packagebackgroundplan-modegoalrewind)。permission-system の `mcp` 規則（`"websearch": "allow"` など）は `direct` のツール名にも効く（package の docs で確認。実機は未確認）。
+- `agentcore-websearch` のツールの生の名前は `web-search-tool__WebSearch`（実機で確認済み）。pi に登録される完全な名前は、命名規則から導いた `mcp__agentcore_websearch__web_search_tool__WebSearch`。実機の `/mcp` の Tools 表示では**未確認**。検索の送り先が限られる環境では `pi-mcp-adapter` も入るので、adapter が別の名前で同じツールを出す可能性も未確認。
+
 ### AgentCore Web Search
 
 Bedrock の PC で web 検索を提供する MCP サーバ。Claude Code の内蔵 `WebSearch` は
@@ -131,7 +158,7 @@ Claude Code / OpenCode
 起動の失敗が毎回の通知になるのを避け、「家で設定されても、認証しなければ何も起きない」を実現する。空になるのは、`AGENTCORE_GATEWAY_URL` が無い・`https://` でないとき、
 pi のサンドボックスの内側（`PI_HARNESS_BOUNDARY=1`。内側では AWS の認証情報を使えない）のとき。
 Unix の pi のフルガードは、`[[mcp]]` の `requires_env`（`AGENTCORE_GATEWAY_URL`）が空の機では、そもそも登録しない（プロセスも起動しない）。
-**`pis` の内側で AgentCore を使うには、ブローカーでの中継が要る**（Bedrock のブローカー（段 U7b）の後。[CHG-0037](../change/0037-pis-usability-and-telemetry.md)）。
+**`pis` の内側で AgentCore を使うには、ブローカーでの中継が要る**（Bedrock のブローカー（段 U7b）の後。[CHG-0037](../change/closed/0037-pis-usability-and-telemetry.md)）。
 それまで、会社 PC の `pis` の内側では使えない（境界なしの `pi` か、Windows の素の `pi` では使える）。**未確認**: 起動失敗時の pi の挙動、Windows の `uvx`、内側の環境変数に `PI_HARNESS_BOUNDARY` が伝わるか。
 
 **ラッパーを挟む理由**: proxy は Gateway の URL を位置引数でしか受け取らない。

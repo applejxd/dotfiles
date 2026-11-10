@@ -3,7 +3,7 @@
 // 退避は独立 (親は表示時点の HEAD。ほかの退避を親にしない)。HEAD・ブランチ・インデックス・作業ツリーに触れない。
 // ★承認なしに動くので、git の hook は無効にする (reference-transaction などが任意のコードを動かす経路になる)。
 //   tree の確定は一時のインデックスで行い、実のインデックスへ書き戻さない。
-// see docs/change/0046-guarded-action-timeout.md
+// see docs/change/closed/0046-guarded-action-timeout.md
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";

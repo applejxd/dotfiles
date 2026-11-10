@@ -1,7 +1,7 @@
 # 運用モード（pi 単独と PR ビューア併用）
 
 pi の使い方は 2 通りある。**pi 単独**（pi と TUI だけで完結）と、**PR ビューア併用**（人の操作盤を足す）。
-どちらでも同じ層 0・1 が動き、ビューアは任意で足すだけ。背景は [CHG-0062](../change/0062-pr-hub-simplify.md) の D5（アプリへ切り出し、pi を通常のコーディングエージェントへ戻す）。
+どちらでも同じ層 0・1 が動き、ビューアは任意で足すだけ。背景は [CHG-0062](../change/closed/0062-pr-hub-simplify.md) の D5（アプリへ切り出し、pi を通常のコーディングエージェントへ戻す）。
 
 入口は [pi / pis マニュアル](pi-manual.md)。機能の一覧は [オーケストレーション](orchestration.md)、ガードの総覧は [guard/index.md](guard/index.md)、ビューアの設計は [pr-viewer.md](pr-viewer.md)。
 
@@ -55,7 +55,7 @@ git flow feature finish <名前> --no-ff --no-squash -M "$(cat <メッセージ�
 
 メッセージはサマリーの `mergeMessage` を `.tmp/keep/pr-merge/<名前>-message.txt` に書く。**2026-11-05 の bundle-4 で、確認画面を通して成功した**（merge commit を作り、メッセージは `-M` の内容。ボタンと同じ形。統合の枝 `feature/<名前>` は消え、その worktree は切り離されてディレクトリだけ残る）。`--squash` を付けない理由: この repo の `.gitflow` は feature の既定を squash にしているが、bundle を squash すると取り込み元の枝が `develop` の祖先にならず、掃除（`wt_clean.py`）と「統合済み」の判定が壊れる。
 2026-11-05 の bundle-3 は、finish の確認画面が squash 前提だったため、代わりに `git merge --no-ff -F <メッセージファイル> feature/<名前>` で統合した（成功）。
-統合後は `python3 scripts/wt_clean.py <名前>...`（取り込み元の枝もまとめて。統合した枝自身は、finish で枝が消えてディレクトリだけ残るので、`git worktree remove` が許可されている環境で消す）と、`apps/pr-viewer/**` を更新したときは `python3 scripts/pr_app.py restart`。外出先から承認する手段は、pi 単独には無い（保留・非同期承認は撤去済み。[履歴](guard/pi-pending.md)）。
+統合後は `python3 scripts/wt_clean.py <名前>...`（取り込み元の枝もまとめて。統合した枝自身は、finish で枝が消えて detached のディレクトリだけ残るが、これも `wt_clean.py <名前>` で消せる（HEAD が統合済みで変更なしのときだけ））と、`apps/pr-viewer/**` を更新したときは `python3 scripts/pr_app.py restart`。外出先から承認する手段は、pi 単独には無い（保留・非同期承認は撤去済み。[履歴](guard/pi-pending.md)）。
 
 TUI を使わず端末で統合するときは `apps/pr-viewer/merge-cli.ts`。ビューアのサーバなしで同じ統合器が動く。結果は JSON 1 行。終了コードは成功 0・拒否 2・想定外の例外 1。
 

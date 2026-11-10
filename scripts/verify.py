@@ -87,6 +87,78 @@ class Rule:
     windows: bool = False
 
 
+@dataclass(frozen=True)
+class ClosedModule:
+    """依存が閉じたモジュール。変更がこの範囲だけなら、全件の T2 (残りの全件) を省く。
+
+    paths は変更パスの glob、tests は試験の stem の glob (その規則の試験)。
+    shared_reads は、モジュールの試験が読んでよい範囲外の読み取り専用のパス (glob)。
+    see docs/spec/development.md#閉じたモジュールの規則
+    """
+
+    name: str
+    rule_name: str
+    paths: tuple[str, ...]
+    tests: tuple[str, ...]
+    shared_reads: tuple[str, ...] = ()
+    # モジュール外の試験で、範囲のパスを文字列として名指すだけのもの (読まない。偽陽性だけを足す)。
+    # 実際に開いていないことは verify_audit.py (監査) で確かめる
+    ignored_readers: tuple[str, ...] = ()
+    # リポジトリ全体を走査してモジュールのファイルも読む試験 (stem の glob)。監査 (verify_audit.py) で実際に開いたもの。
+    # モジュールの変更では必ず T1 で回す (範囲外を読む試験としては扱わない)
+    scanners: tuple[str, ...] = ()
+    # モジュールの文書。変更の範囲には入るが、試験の選択 (Rule) には使わない (文書の変更で全試験を回さない)。lint は T0 が全件で回す
+    docs: tuple[str, ...] = ()
+
+    @property
+    def scope_paths(self) -> tuple[str, ...]:
+        """変更がこの範囲だけなら T2 を省く、パスの glob (コード + 文書)。"""
+        return (*self.paths, *self.docs)
+
+
+CLOSED_MODULES = (
+    ClosedModule(
+        "kcage",
+        "Incus の箱 (kcage)",
+        ("scripts/kcage/**", "test/kcage/**", "home/dot_local/bin/executable_kcage"),
+        (
+            "test_model",
+            "test_policy",
+            "test_config",
+            "test_commondir",
+            "test_plan",
+            "test_root_helper",
+            "test_resolver",
+            "test_net",
+            "test_fake_proxy",
+            "test_broker_common",
+            "test_broker_aws",
+            "test_broker_gh_copilot",
+            "test_cli",
+            "test_setup",
+            "test_template",
+            "test_uninstall",
+            "test_dist",
+            "test_integration",
+        ),
+        # 保護対象のパス home/dot_local/bin を文字列で名指すだけ (中身は読まない)
+        ignored_readers=("test/agents/test_opencode_launcher.py",),
+        scanners=(
+            "test_bootstrap_scripts",
+            "test_windows_assets",
+            "test_pi_boundary",
+            "test_imozuru",
+        ),
+        docs=(
+            "docs/spec/sandbox/incus-box.md",
+            "docs/research/agents/incus-dev-environment.md",
+            "docs/adr/0028-per-repo-agent-container.md",
+            "docs/change/0064-dev-environment-isolation.md",
+        ),
+    ),
+)
+
+
 _HOOK_TESTS = (
     "test_check_bash_*",
     "test_command_policy",
@@ -103,6 +175,7 @@ _HOOK_TESTS = (
 )
 _ORCH = "home/dot_claude/skills/feature-orchestration/scripts"
 _PI_TESTS = (
+    "test_pi_public_bypasses",
     "test_pi_harness",
     "test_pi_harness_extensions",
     "test_pi_compact_defer",
@@ -111,6 +184,7 @@ _PI_TESTS = (
     "test_pi_action_view",
     "test_pi_confirm_present",
     "test_pi_actions",
+    "test_pi_plan_ready",
     "test_pi_boundary",
     "test_pi_workspace_hide",
     "test_broker",
@@ -154,6 +228,7 @@ _PI_TESTS = (
     "test_pi_orchestrate",
     "test_pi_allow_output_quoting",
     "test_pi_deny_default_ask",
+    "test_deny_kcage",
     "test_pi_model_catalog",
     "test_pi_scratch_protected",
     "test_pi_session_tmp",
@@ -178,15 +253,18 @@ _PI_TESTS = (
     "test_pi_settings_launch",
     "test_pi_unguarded",
     "test_pi_control_files_bash",
+    "test_pi_ledger_root",
     "test_pi_platform",
     "test_pi_judge_windows_paths",
     "test_pi_pending_command",
     "test_btw_view",
     "test_pi_todo_view",
-    "test_work_core",
-    "test_work_store",
-    "test_work_digest",
-    "test_work_journal",
+    "test_work_*",
+    "test_pi_plan_*",
+    "test_pi_stage_table",
+    "test_pi_shadow",
+    "test_pi_subagents_config",
+    "test_pi_compaction_config",
 )
 _OC_TESTS = (
     "test_generate_opencode*",
@@ -265,6 +343,11 @@ RULES: tuple[Rule, ...] = (
         ("test_herdr_integration",),
     ),
     Rule(
+        "websearch の核と MCP サーバ",
+        ("home/dot_config/agents/websearch/**",),
+        ("test_websearch", "test_websearch_mcp"),
+    ),
+    Rule(
         "websearch の鍵スクリプト",
         ("home/.chezmoiscripts/*_websearch_keys.*",),
         ("test_websearch",),
@@ -338,6 +421,37 @@ RULES: tuple[Rule, ...] = (
         ("test_generate_*", "test_pi_shared", "test_mcp_servers", "test_claude_mcp_registration"),
     ),
     Rule(
+        "pi プロファイル (custom / stock)",
+        (
+            "home/.chezmoitemplates/pi-profile",
+            "home/.chezmoitemplates/pi-stock-packages",
+            "home/.chezmoitemplates/pi-own-extensions",
+            "home/.chezmoitemplates/pi-permission-policy.json",
+            "home/.chezmoitemplates/modify_pi_permission_config.py.tmpl",
+            "home/dot_pi/agent/extensions/pi-permission-system/*",
+            "home/.chezmoitemplates/modify_pi_stock_settings.py.tmpl",
+            "home/.chezmoitemplates/agent-instructions-stock.md",
+            "home/.chezmoiremove",
+            "home/dot_pi/agent/AGENTS.md.tmpl",
+            "home/dot_pi/agent/modify_settings.json.py.tmpl",
+            "home/dot_pi/agent/modify_pi-plan-mode.json.py.tmpl",
+            "home/dot_pi/agent/modify_compaction.json.py.tmpl",
+            "home/dot_pi/agent/extensions/subagent/*",
+            "home/dot_pi/agent/themes/**",
+            "home/dot_cc-safety-net/**",
+            "test/agents/pi/permission_check.mjs",
+            "test/agents/pi/permission_cases.json",
+        ),
+        (
+            "test_pi_profile",
+            "test_pi_compaction_config",
+            "test_pi_subagents_config",
+            "test_pi_permission_decisions",
+            "test_pi_theme",
+        ),
+        ("templates",),
+    ),
+    Rule(
         "chezmoi データ・mise 設定",
         (
             "home/.chezmoiignore.tmpl",
@@ -346,6 +460,7 @@ RULES: tuple[Rule, ...] = (
         ),
         (
             "test_chezmoi_templates",
+            "test_pi_profile",
             "test_raspi_detection",
             "test_python_requirement",
             "test_herdr_integration",
@@ -366,7 +481,6 @@ RULES: tuple[Rule, ...] = (
         ("templates",),
         windows=True,
     ),
-    Rule("web-search", ("home/dot_claude/skills/web-search/**",), ("test_websearch",)),
     Rule(
         "imozuru",
         ("home/dot_claude/skills/imozuru/**", "scripts/vendor/imozuru_patch.py"),
@@ -420,7 +534,11 @@ RULES: tuple[Rule, ...] = (
         ("test_lint_templates",),
         ("templates",),
     ),
-    Rule("検証の入口", ("scripts/verify.py",), ("test_verify", "test_verify_stamp")),
+    Rule(
+        "検証の入口",
+        ("scripts/verify.py", "scripts/verify_audit.py"),
+        ("test_verify", "test_verify_stamp", "test_verify_audit"),
+    ),
     Rule("検証の印", ("scripts/verify_stamp.py",), ("test_verify_stamp",)),
     Rule("push 前の秘密検出", ("scripts/gitleaks_prepush.py",), ("test_gitleaks_prepush",)),
     Rule(
@@ -439,6 +557,7 @@ RULES: tuple[Rule, ...] = (
         ("test_wt_owner", "test_wt_clean"),
     ),
     Rule("PR ビューアの起動・常駐", ("scripts/pr_app.py",), ("test_pr_app",)),
+    *(Rule(m.rule_name, m.paths, (*m.tests, *m.scanners)) for m in CLOSED_MODULES),
     Rule(
         "統合用の枝 (bundle)",
         ("scripts/bundle.py", f"{_ORCH}/bundle.py"),
@@ -705,6 +824,8 @@ def full_stages(
     t1_files: Sequence[str] = (),
     shell_files: Sequence[str] = (),
     test_files: Sequence[str] | None = None,
+    *,
+    skip_t2: bool = False,
 ) -> list[list[list[str]]]:
     """全件を段に分ける: T0 (数秒〜数十秒の安い検査) → T1 (変更に当たる試験) → T2 (残りの全件)。
 
@@ -725,7 +846,7 @@ def full_stages(
     t1 = selected_commands([f for f in t1_files if f not in T0_PYTEST_FILES])
     if t1:
         stages.append(t1)
-    if test_files is None or set(test_files) - set(done):
+    if not skip_t2 and (test_files is None or set(test_files) - set(done)):
         stages.append([pytest_command(["test/"], ignore=done)])
     return stages
 
@@ -823,6 +944,55 @@ def plan(
     if cheap and tests:
         result.gates = [len(cheap) - 1]
     return result
+
+
+def module_test_files(module: ClosedModule, test_files: Sequence[str]) -> set[str]:
+    """閉じたモジュールの試験ファイル (規則が選ぶもの + モジュールの範囲にあるもの)。"""
+    inside = {f for f in test_files if any(_match(p, f) for p in module.paths)}
+    return set(resolve_tests((*module.tests, *module.scanners), test_files)) | inside
+
+
+def closed_scope(
+    paths: Sequence[str],
+    test_files: Sequence[str],
+    *,
+    exists: Callable[[str], bool] | None = None,
+    refs: dict[str, frozenset[str]] | None = None,
+) -> list[ClosedModule] | None:
+    """変更パスがすべて閉じたモジュールの範囲に収まるとき、そのモジュールを返す。そうでなければ None (全件)。
+
+    削除・範囲外・他の規則や全件領域に当たるパス・モジュール外の試験が読むパスがあれば None。
+    """
+    paths = list(dict.fromkeys(p for p in map(normalize_path, paths) if p))
+    if not paths:
+        return None
+    exists = exists or (lambda p: (ROOT / p).exists())
+    refs = test_references(test_files) if refs is None else refs
+    hit: dict[str, ClosedModule] = {}
+    for path in paths:
+        if not exists(path):
+            return None
+        owners = [m for m in CLOSED_MODULES if any(_match(p, path) for p in m.scope_paths)]
+        if not owners:
+            return None
+        # 文書の規則 (docs) は lint を足すだけ。モジュールの文書は範囲に宣言済みで、読む試験が無いことは別の試験が見る
+        allowed_rules = {m.rule_name for m in owners} | {"docs"}
+        if any(r.full or r.name not in allowed_rules for r in matching_rules(path)):
+            return None
+        allowed_tests: set[str] = set()
+        for m in owners:
+            hit[m.name] = m
+            allowed_tests |= module_test_files(m, test_files)
+            allowed_tests.update(m.ignored_readers)
+        allowed_tests.update(T0_PYTEST_FILES, [REGISTRATION_TEST])  # 常に回る
+        readers = {
+            t
+            for t in test_files
+            if any(path == r or path.startswith(r + "/") for r in refs.get(t, ()))
+        }
+        if readers - allowed_tests:
+            return None
+    return list(hit.values())
 
 
 def discover_test_files(root: Path = ROOT) -> list[str]:
@@ -1071,7 +1241,7 @@ def _stamp_snapshot():
         return None
 
 
-def _write_stamp(started=None) -> None:
+def _write_stamp(started=None, scope: str | None = None) -> None:
     """全件検証の成功を印に残す。失敗しても検証の結果は変えない。
 
     開始時の snapshot を記録し、終わりに同じ状態でなければ印を書かない
@@ -1088,7 +1258,10 @@ def _write_stamp(started=None) -> None:
                 file=sys.stderr,
             )
             return
-        stamp.write_stamp(ROOT, started)
+        if scope is None:
+            stamp.write_stamp(ROOT, started)
+        else:
+            stamp.write_stamp(ROOT, started, scope=scope)
     except Exception as exc:
         print(f"警告: 検証の印を書けませんでした: {exc}", file=sys.stderr)
 
@@ -1098,6 +1271,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--changed", action="store_true", help="変更したパスから選ぶ (既定)")
     mode.add_argument("--all", action="store_true", help="全件を実行する")
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="--all と併用: 閉じたモジュールの省略を行わず、必ず全件を実行する",
+    )
     parser.add_argument("--dry-run", action="store_true", help="実行せずコマンドを列挙する")
     parser.add_argument(
         "--list", action="store_true", help="変更パスごとの当たった規則を出す (実行しない)"
@@ -1110,12 +1288,45 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="pytest の並列数 (既定: コア数の半分。VERIFY_JOBS でも指定できる)",
     )
     args = parser.parse_args(argv)
+    if args.full and not args.all:
+        parser.error("--full は --all と併用する")
     if args.jobs > 0:
         os.environ["VERIFY_JOBS"] = str(args.jobs)
 
     test_files = discover_test_files()
     shell_files = tracked_shell_files(_git)
-    if args.all:
+    stamp_scope: str | None = None
+    closed: list[ClosedModule] | None = None
+    if args.all and not args.full:
+        # 基準を決められない・git でないときは全件 (取りこぼしより過剰な実行を選ぶ)
+        with contextlib.suppress(Exception):
+            base_info = resolve_base(_git_try)
+            if base_info is not None:
+                changed = collect_changed(_git, base_info[1])
+                closed = closed_scope(changed, test_files)
+                if closed is not None and plan(changed, test_files).full:
+                    closed = None
+    if args.all and closed:
+        names = "・".join(m.name for m in closed)
+        print(
+            f"閉じたモジュール ({names}) だけの変更のため T2 (残りの全件) を省略します "
+            "(全件が要るときは mise run verify:full)",
+            flush=True,
+        )
+        selection = plan(changed, test_files, shell_files=shell_files)
+        commands, gates = flatten_stages(
+            full_stages(selection.selected, shell_files, test_files, skip_t2=True)
+        )
+        result = Plan(
+            commands=commands,
+            gates=gates,
+            full=True,
+            windows=True,
+            hits=selection.hits,
+            selected=selection.selected,
+        )
+        stamp_scope = "closed:" + ",".join(m.name for m in closed)
+    elif args.all:
         # 全件でも、変更に当たる試験を T1 として先に回す (変更が無ければ T1 は空)
         selection = plan(collect_changed(_git), test_files, shell_files=shell_files)
         commands, gates = flatten_stages(full_stages(selection.selected, shell_files, test_files))
@@ -1192,7 +1403,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if failed or blocked:
         return 1
     if result.full:
-        _write_stamp(started)
+        if stamp_scope is None:
+            _write_stamp(started)
+        else:
+            _write_stamp(started, stamp_scope)
     print("すべて成功")
     return 0
 

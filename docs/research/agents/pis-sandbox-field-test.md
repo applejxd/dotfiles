@@ -1,6 +1,6 @@
 # pis（標準のサンドボックス）を実機で動かしたときの挙動
 
-<!-- 現在の総合判断は docs/change/0023-guard-terminology.md が正本。
+<!-- 現在の総合判断は docs/change/closed/0023-guard-terminology.md が正本。
      ここは「いつ何を観測したか」を積む場所 -->
 
 ## 記録 S1 — 2026-10-15
@@ -104,7 +104,7 @@ fd  pi
 
 ### 参照
 
-- 案件: [CHG-0023](../../change/0023-guard-terminology.md)
+- 案件: [CHG-0023](../../change/closed/0023-guard-terminology.md)
 - 仕様: [pi のガード](../../spec/guard/pi-sandbox.md#緩和のゲート)
 - pi 1.1.0 の `dist/utils/tools-manager.js`・`dist/config.js`（`~/.pi/agent/install/releases/1.1.0/node_modules/@earendil-works/pi-coding-agent/`）
 
@@ -188,7 +188,7 @@ Orca の文書に `Settings → Terminal → Allow TUI Clipboard Writes (OSC 52)
 
 - **言えること**: 取得の失敗は、ツールの作り（事前の DNS 検査）と内側の環境（DNS なし・プロキシあり）の食い違い。プロキシは設計どおり動いている
   （許可は通し、許可外は 403）。許可の強制の位置は、ツール内の IP 検査から、プロキシの許可リストへ移る
-- **今の内側の通信は許可リスト型の挙動**（許可外の 1 ドメインで 403）。[CHG-0037](../../change/0037-pis-usability-and-telemetry.md) の「通信の方針」（拒否リスト型へ引き直す）は、
+- **今の内側の通信は許可リスト型の挙動**（許可外の 1 ドメインで 403）。[CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md) の「通信の方針」（拒否リスト型へ引き直す）は、
   この観測の時点では実現していない（推測: 許可の一覧は `[web] allow_domains`・`[sandbox] shell_network_allow`。内側へ実際に渡った一覧は未確認）
 - **言えないこと**: 内側の DNS が引けないのが Fence の設計か（文書で確認していない）。`socks5h` の経路（`all_proxy`）は使っていない。
   クリップボードの失敗が、ソケットと `powershell.exe` の相互運用のどちらで起きているか（推測）。`PI_CLIPBOARD_OSC52=1` を渡した `pis` の内側で、`/copy` が実際に通ること（未確認）
@@ -201,7 +201,7 @@ Orca の文書に `Settings → Terminal → Allow TUI Clipboard Writes (OSC 52)
 
 ### 参照
 
-- 案件: [CHG-0037](../../change/0037-pis-usability-and-telemetry.md)（段 U2）
+- 案件: [CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md)（段 U2）
 - 仕様: [web-search（pis の内側のプロキシ越しの取得）](../../spec/web-search.md#pis-の内側のプロキシ越しの取得)、[imozuru](../../spec/imozuru.md)、[トラブルシューティング（クリップボード）](../../spec/troubleshooting-agents.md#pis-の内側でクリップボードへコピーできない)
 - ADR: [ADR-0019](../../adr/0019-pis-fetch-via-proxy-with-explicit-flag.md)
 - pi 1.3.0 の `dist/utils/clipboard.js`、pi の Issue（上の表）

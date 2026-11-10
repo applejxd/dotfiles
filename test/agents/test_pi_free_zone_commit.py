@@ -3,7 +3,7 @@
 設定 (`[pi.integrate] skip_confirm_in_free_zone`) が偽の間は何も省略せず、判定を結果に添える (観測)。
 真のときだけ、feature の linked worktree の git_commit が確認なしで実行される。
 実行直前に判定し直し、結果は「承認した内容のとおり」と書かない。
-see docs/change/0053-worktree-integration-gate.md
+see docs/change/closed/0053-worktree-integration-gate.md
 """
 
 from __future__ import annotations

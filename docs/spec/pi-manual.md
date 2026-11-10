@@ -7,7 +7,7 @@
 > **状態（2026-11-05 時点）**
 >
 > - 記載した既定値は、リポジトリに同梱された設定の値
-> - 保留の承認（`/pending approve`・`git_integrate`）は撤去済み。統合は必須確認（TUI）か PR ビューアの「統合する」ボタン（[CHG-0062](../change/0062-pr-hub-simplify.md)、履歴は [guard/pi-pending.md](guard/pi-pending.md)）
+> - 保留の承認（`/pending approve`・`git_integrate`）は撤去済み。統合は必須確認（TUI）か PR ビューアの「統合する」ボタン（[CHG-0062](../change/closed/0062-pr-hub-simplify.md)、履歴は [guard/pi-pending.md](guard/pi-pending.md)）
 > - PR ビューアの書き込み系の旗（`--allow-merge`）は既定で無効。markdown 描画・worktree の所有（`wt_owner.py`）・統合用の枝（`bundle.py`）・掃除（`wt_clean.py`）の道具が入った（ジョブと起票の機能は撤去済み）。使い分けは [運用モード](operation-modes.md)
 > - 反映は `chezmoi apply` と pi の再起動の後
 
@@ -331,7 +331,7 @@ pis [--bypass | --no-bypass] [--no-sandbox] [--no-broker] [--new] [--role <役�
 | `[pi.external_read]` | 作業ツリー外で無確認に読める場所 | 3 件（各 CLI のスキル置き場） |
 | `[pi.skill_scripts]` | 無確認で実行できるスキルのスクリプト | `[[allow]]` 11 件 |
 | `[[pi.guide]]` | 当たると案内つきで deny（bypass でも外れない） | 6 件 |
-| `[pi.settings]` | pi の `settings.json` の持ち物 | `defaultThinkingLevel = "xhigh"`、`skills`、`extensions`、`defaultTools = []` |
+| `[pi.settings]` | pi の `settings.json` の持ち物 | `defaultThinkingLevel = "xhigh"`、`hideThinkingBlock = true`、`skills`、`extensions`、`defaultTools = []` |
 | `[pi.model.tier.*]` / `[pi.model.catalog.*]` | 子のモデルの階層の上書き / 選べるモデルの範囲 | プロバイダごと |
 | `[pi.sandbox]` | `pis` の追加の読み取り・保護 | `read` `control_dirs` `deny_read` `protected` |
 | `[pis.broker]` | ブローカー（`copilot` `github` `search`） | `off` / `auto` |
@@ -399,6 +399,7 @@ read = ["/data1"]
 | `PI_DELEGATE_NUDGE=0` | `/delegate-stats` の記録を止める |
 | `PI_TODO_NO_REMINDER=1` | todo の続行の促しを止める |
 | `PI_AUTOCHECKPOINT=0` / `PI_AUTOCHECKPOINT_PERCENT` / `PI_AUTOCHECKPOINT_RESUME=0` | 文脈の使用率による自動の保存と圧縮を止める / 閾値（既定 80）/ 圧縮後の自動の再開だけを止める（[仕様](guard/pi-extensions.md#文脈の使用率による自動の保存と圧縮)） |
+| `PI_FOLD_TOOLS=0` | ツール出力を既定で畳むのを止める（戻し方: [仕様](guard/pi-extensions.md#思考とツール出力の既定の折り畳み)） |
 | `PIS_EXTRA_READ` / `PIS_EXTRA_DEVICES` | 7.3 |
 | `AGENTS_LOCAL_CONFIG` | `local.toml` の場所の差し替え |
 | `DOTFILES_RESYNC_WEBSEARCH_KEYS=1` | apply 時に検索の鍵を取り直す |
@@ -475,7 +476,7 @@ read = ["/data1"]
 - feature の linked worktree（`feature/*`）の `git_commit` だけは確認なしで実行される。それ以外のコミットは確認する。
 - `git flow feature finish` や `git merge` などの保護ブランチへの統合は、bypass でも必須確認。承認画面に、行き先・衝突の事前検査・squash メッセージ・コマンド全文が出る。時間切れなら、再試行せず指示を待つ。
 - main への統合と push は、利用者が自分で行う。
-- feature の統合は、AI が `guarded_pr_summary` で PR に要約を出し、利用者が PR ビューアの「統合する」ボタンを押す（merge commit。[CHG-0062](../change/0062-pr-hub-simplify.md)）。
+- feature の統合は、AI が `guarded_pr_summary` で PR に要約を出し、利用者が PR ビューアの「統合する」ボタンを押す（merge commit。[CHG-0062](../change/closed/0062-pr-hub-simplify.md)）。
 
 ### 8.2 時間切れと保留
 
@@ -535,14 +536,14 @@ read = ["/data1"]
 | 判定・役割 | [guard/pi-decide.md](guard/pi-decide.md) |
 | 子・orchestrate・並列実装・複数会話 | [guard/pi-subagents.md](guard/pi-subagents.md) |
 | `guarded_action`・`/plan`・`/pending`・拡張 | [guard/pi-extensions.md](guard/pi-extensions.md) |
-| 保留の履歴（撤去済み） | [guard/pi-pending.md](guard/pi-pending.md)、[CHG-0062](../change/0062-pr-hub-simplify.md) |
-| プロジェクトごとの統合設定（`pi.json`） | 7.6、[guard/pi-extensions.md](guard/pi-extensions.md#プロジェクトごとの設定pijson)、[CHG-0057（プロジェクトごとの統合設定）](../change/0057-per-project-integrate.md) |
+| 保留の履歴（撤去済み） | [guard/pi-pending.md](guard/pi-pending.md)、[CHG-0062](../change/closed/0062-pr-hub-simplify.md) |
+| プロジェクトごとの統合設定（`pi.json`） | 7.6、[guard/pi-extensions.md](guard/pi-extensions.md#プロジェクトごとの設定pijson)、[CHG-0057（プロジェクトごとの統合設定）](../change/closed/0057-per-project-integrate.md) |
 | サンドボックス | [guard/pi-sandbox.md](guard/pi-sandbox.md)、[sandbox/index.md](sandbox/index.md)、[sandbox/fence-boundary.md](sandbox/fence-boundary.md)、[sandbox/broker.md](sandbox/broker.md) |
 | 設定の生成 | [agent-config-generation.md](agent-config-generation.md) |
 | モデルの割り当て | [agent-model-assignment.md](agent-model-assignment.md)、[CHG-0043（モデルカタログ）](../change/0043-model-catalog.md) |
 | Web 検索の許可規則 | [web-search.md](web-search.md) |
-| worktree と統合の確認 | [CHG-0053（worktree と統合の関門）](../change/0053-worktree-integration-gate.md) |
-| `guarded_action` の簡素化 | [CHG-0050（guarded_action の簡素化）](../change/0050-slim-guarded-action.md) |
+| worktree と統合の確認 | [CHG-0053（worktree と統合の関門）](../change/closed/0053-worktree-integration-gate.md) |
+| `guarded_action` の簡素化 | [CHG-0050（guarded_action の簡素化）](../change/closed/0050-slim-guarded-action.md) |
 | オーケストレーション一覧 | [orchestration.md](orchestration.md) |
 | 検査・ブランチ・`pk` | [development.md](development.md) |
 | トラブルシュート | [troubleshooting-agents.md](troubleshooting-agents.md) |

@@ -27,6 +27,21 @@ const out = cases.map((c) => {
 			const comp = mod.lineComponent(a.lines);
 			return { rows: comp.render(a.width) };
 		}
+		case "foldTools": {
+			// 偽の pi に session_start などを流し、setToolsExpanded の呼び出しを数える
+			const handlers = {};
+			const pi = { on: (n, h) => (handlers[n] ??= []).push(h) };
+			mod.registerQuietNotices(pi, a.env ?? {});
+			const calls = [];
+			const ui = a.noApi ? {} : { setToolsExpanded: (v) => (a.throws ? (() => { throw new Error("x"); })() : calls.push(v)) };
+			let error = null;
+			try {
+				for (const ev of a.events) for (const h of handlers[ev] ?? []) h({ type: ev }, { hasUI: a.hasUI, ui });
+			} catch (e) {
+				error = String(e);
+			}
+			return { calls, error, registered: Object.keys(handlers) };
+		}
 		default:
 			throw new Error(`unknown fn: ${c.fn}`);
 	}

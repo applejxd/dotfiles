@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+"""kcage: リポジトリごとの Incus の箱を操作する薄い入口。本体は scripts/kcage/cli.py。
+
+環境変数 BOX_SCRIPTS があればそれを scripts/ の場所に使う。無ければ ~/.local/share/chezmoi/scripts。
+see docs/spec/sandbox/incus-box.md
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+scripts = Path(os.environ.get("BOX_SCRIPTS") or Path.home() / ".local/share/chezmoi/scripts")
+sys.path.insert(0, str(scripts))
+
+from kcage.adapters.dotfiles import dist  # noqa: E402
+from kcage.cli import main  # noqa: E402
+
+
+def build_dist(dest: Path) -> object:
+    """pi の配布物をホームから作る（dotfiles 固有。cli 本体は adapters を import しない）。"""
+    return dist.build_box_dist(Path.home(), dest)
+
+
+if __name__ == "__main__":
+    sys.exit(main(dist_builder=build_dist))

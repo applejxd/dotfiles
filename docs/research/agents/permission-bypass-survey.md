@@ -1,7 +1,7 @@
 # 全承認（bypass・yolo）モードでも確認を残す仕組みと、公開・送信系のガードの分類
 
 - **観測日**: 2026-10-25。`explore` の子 3 件（公式 docs・ソース・issue・第三者の記事。取得日が分からないものは日付を書かない）。実行は無し
-- **目的**: 自作ハーネスの `confirm`（bypass でも確認を出す ask。[pi-decide.md](../../spec/guard/pi-decide.md#confirm)）と、公開・配布の deny／投稿の確認の分類表の参考（[CHG-0038](../../change/0038-guard-reclassification.md) 段 G1〜G5）
+- **目的**: 自作ハーネスの `confirm`（bypass でも確認を出す ask。[pi-decide.md](../../spec/guard/pi-decide.md#confirm)）と、公開・配布の deny／投稿の確認の分類表の参考（[CHG-0038](../../change/closed/0038-guard-reclassification.md) 段 G1〜G5）
 
 ## 結論
 

@@ -57,7 +57,7 @@
 - **内側から外へ出られる宛先**は、Fence の許可リスト（`[web] allow_domains`・`[sandbox] shell_network_allow`）と、ブローカーのローカルのポート・ソケットだけ。
 - 検索のプロバイダー（Brave・Exa・Tavily・OpenAlex・DuckDuckGo）は許可リストに入れず、**検索ブローカー経由**で届く（実測: 内側から検索が通る）。
 - ページ本文の取得（`fetch`）は、許可リストの範囲（`[web] allow_domains`）。任意の URL には届かない。
-- 方針の候補（未決。[CHG-0037](../../change/0037-pis-usability-and-telemetry.md)）: 許可リスト型から、拒否リスト型（危険な宛先だけ止める）へ。
+- 方針の候補（未決。[CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md)）: 許可リスト型から、拒否リスト型（危険な宛先だけ止める）へ。
 - **認証つき HTTP プロキシ・TLS 検査を経由する環境での動作は未対応**。設計案と調査は[ブローカー](broker.md#未対応未検証)。
 
 ## 設定と試験の対応
@@ -68,6 +68,8 @@
 | 内側へ渡さない環境変数 | `ocs/cli.py` の `DROP_ENV`、`ocs/pi.py` | `test/agents/test_opencode_launcher.py` |
 | `[pis.broker]` | `common.toml.tmpl` → `rules.json` の `broker.*` | `test_pi_broker_generate.py`、`test_broker.py`、`test_broker_search.py` |
 | 起動と境界の検査（カナリア） | `ocs/pi.py`・`ocs/boundary.py` | `test_pi_boundary.py` |
+| GPU のデバイス（`pis` だけ。ホストに在るものを既定で見せる。`PIS_NO_GPU=1` で無効。`ocs` は従来どおり） | `ocs/boundary.py`・`ocs/pi.py` → Fence の `devices.allow` | `test_pi_boundary.py`（[仕様](fence-boundary.md#デバイス)） |
+| 公開ポート（`PIS_EXPOSE_PORTS` だけ。`expose_ports` は警告して無視。既定は無効） | `ocs/boundary.py`・`ocs/pi.py` → Fence の `-p` | `test_pi_boundary.py`（[仕様](fence-boundary.md#公開ポートweb-アプリをホストのブラウザで開く)） |
 
 ## 文書の地図
 
@@ -78,10 +80,11 @@
 - [Claude Code / Copilot CLI の sandbox](agent-sandbox.md): それらの CLI 自身が持つ sandbox（`pis` の Fence とは別物）の層・ネットワーク・seccomp。
 - [隔離 GPU サンドボックス（WSL2）](wsl-sandbox.md): GPU 付きの検証用に専用の WSL2 ディストロを作る手順。`pis` の sandbox とは別目的。
 - [ガード（総覧）](../guard/index.md): 判定と確認。
+- [箱（Incus。試作名 `kcage`）](incus-box.md): リポジトリごとの Incus の箱の仕様（仕組み・コマンド・許可表・信頼境界・限界）。方針は [ADR-0028](../../adr/0028-per-repo-agent-container.md)。
 
 ## 未解決
 
 - 作業ツリー内の `.env` と、残りの `*_API_KEY` 環境変数が内側から見える。
 - ホームの他の場所の可視性は、個別に実測していない。
 - 通信の方針（拒否リスト型）、認証つき HTTP プロキシ、Bedrock の署名・AgentCore の MCP 中継は未対応。
-- 進捗と経緯は [CHG-0033](../../change/0033-sandbox-build-value-assessment.md)（責務の棚卸し）・[CHG-0037](../../change/0037-pis-usability-and-telemetry.md)。
+- 進捗と経緯は [CHG-0033](../../change/closed/0033-sandbox-build-value-assessment.md)（責務の棚卸し）・[CHG-0037](../../change/closed/0037-pis-usability-and-telemetry.md)。

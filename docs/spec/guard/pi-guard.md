@@ -2,14 +2,14 @@
 
 pi（earendil-works/pi）の拡張として、ツールの実行を判定器（TypeScript の `judge/`。[`decide`](pi-decide.md)）に通す仕組み。
 OpenCode のガード（permission の生成・guide plugin）の後継で、移行の計画と経緯は
-[CHG-0020](../../change/0020-pi-migration.md)、設計の根拠になった試作の観測は
+[CHG-0020](../../change/closed/0020-pi-migration.md)、設計の根拠になった試作の観測は
 [pi のハーネスの試作（旧称。現在のフルガード）](../../research/agents/pi-harness-spike.md)（E1〜E4）。
 
 > **位置づけ**: **Unix（Ubuntu・WSL・macOS）では、素の `pi` もフルガード付きで起動する**（`~/.pi/agent/settings.json` が読み込む。
 > [pi の設定](#pi-の設定)）。Orca・Zed が呼ぶ `pi` も同じ。`pis` は「`pi` を Fence のサンドボックスの中で起動する」ものに絞る（標準）。
 > `pis --no-sandbox` は、素の `pi` との差（下の表）を解消するまでの移行用に残す。
 > **Windows ネイティブの `pi` も、設定でフルガード（判定・ガードツール・伏字化）付きで起動する**。ただし**境界（Fence）は無く、実機は未検証**（[Windows](#windows)）。`pis` と ocs は Windows に配らない。
-> 経緯は [CHG-0040](../../change/0040-pi-guard-by-settings.md)。
+> 経緯は [CHG-0040](../../change/closed/0040-pi-guard-by-settings.md)。
 
 ## 話題別の文書
 
@@ -25,7 +25,7 @@ OpenCode のガード（permission の生成・guide plugin）の後継で、移
 
 このリポジトリでは、pi 本体を含む仕組み全体を「ハーネス」と呼ぶ（一般の用法と同じ）。
 pi に足す判定の層、および起動の形を、次のように呼び分ける
-（旧称は過去の案件・調査記録・ADR に残り、それらは書き換えない。[CHG-0023](../../change/0023-guard-terminology.md)）。
+（旧称は過去の案件・調査記録・ADR に残り、それらは書き換えない。[CHG-0023](../../change/closed/0023-guard-terminology.md)）。
 
 | 用語 | 指すもの | 旧称 |
 | --- | --- | --- |
@@ -53,8 +53,8 @@ pis --new           # 新しいセッションで始める (既定は、この�
 - **サンドボックスが標準**。サンドボックスを張れない OS（macOS）では、`pis` は起動せず `--no-sandbox` を案内する（Windows ネイティブには `pis` を配らない）（黙って弱い守りに落とさない）。
   `--boundary` は互換の別名（標準と同じ意味）
 - サンドボックスの検査に落ちたとき・起動場所が危険なときも起動しない。制御ファイル・フルガードの編集、復旧、Orca・Zed は `--no-sandbox` で行う
-- **検討中の方針**: ask 層と bypass モードをなくし、境界で守る方向（[ADR-0022](../../adr/0022-containment-first-minimal-approvals.md)、Proposed）。結論が出るまで、`--bypass` / `--no-bypass` は現行の仕様のまま。実際の運用は、素の `pi` でも常に bypass（境界なし）。**素の `pi` の扱いは決定済み（2026-11-02。利用者）: 今のまま**。素の `pi` には境界が無く、拒否（`git push` など。常時禁止）と必須確認（bypass でも省略できない確認。保護ブランチへの統合など）だけが効く。`pis` への一本化も、必須確認の自動の拡大もしない（ガードは境界ではなく、うっかり防止。[CHG-0054](../../change/0054-containment-and-async-approval.md) 未解決点 1）
-- 設計の根拠は [CHG-0023](../../change/0023-guard-terminology.md#設計原則決定2026-10-14利用者)
+- **検討中の方針**: ask 層と bypass モードをなくし、境界で守る方向（[ADR-0022](../../adr/0022-containment-first-minimal-approvals.md)、Proposed）。結論が出るまで、`--bypass` / `--no-bypass` は現行の仕様のまま。実際の運用は、素の `pi` でも常に bypass（境界なし）。**素の `pi` の扱いは決定済み（2026-11-02。利用者）: 今のまま**。素の `pi` には境界が無く、拒否（`git push` など。常時禁止）と必須確認（bypass でも省略できない確認。保護ブランチへの統合など）だけが効く。`pis` への一本化も、必須確認の自動の拡大もしない（ガードは境界ではなく、うっかり防止。[CHG-0054](../../change/closed/0054-containment-and-async-approval.md) 未解決点 1）
+- 設計の根拠は [CHG-0023](../../change/closed/0023-guard-terminology.md#設計原則決定2026-10-14利用者)
 
 **素の `pi`（Unix）**は、`settings.json` の設定だけで、下の `pis` と同じツール構成になる（`extensions` にフルガードと自作の拡張を足し、自動検出の拡張を外し、`defaultTools = []`）。
 役割・bypass・orchestrate は環境変数 `PI_HARNESS_ROLE` / `PI_HARNESS_BYPASS` / `PI_HARNESS_ORCHESTRATE` で変えられる（既定: 実装役、bypass なし、orchestrate なし）。
@@ -113,7 +113,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 - 効くのは判定器の ask だけで、deny・誘導・秘密の保護は変わらない（[評価順](pi-decide.md)）。切り替え時は、`tool_call` で下した判定の使い回し（`decided`）を捨てる
 - 子エージェントへは、**起動した時点の値**を `inherit_bypass` の子にだけ渡す。動いている子には後からの切り替えが届かない
 - サンドボックスの切り替えはできない（Fence は外側から囲うので、内側から外せない。再起動する）
-- 関連: gitflow-lite の develop / main での直接作業を止める制限（`/gitflow-allow` による逃がし口を含む）は、2026-10-31 に撤去した。今は指示だけで運用する（[CHG-0050](../../change/0050-slim-guarded-action.md)、[ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md)）
+- 関連: gitflow-lite の develop / main での直接作業を止める制限（`/gitflow-allow` による逃がし口を含む）は、2026-10-31 に撤去した。今は指示だけで運用する（[CHG-0050](../../change/closed/0050-slim-guarded-action.md)、[ADR-0021](../../adr/0021-conventions-as-instructions-slim-guarded-action.md)）
 - 試験: `test_pi_harness.py` の `test_bypass_command_*`（RPC で `/bypass` を送る。TUI の表示そのものは未確認）
 
 ### confirm の確認
@@ -136,7 +136,7 @@ pi --no-approve -nbt -ne -e builtin:mcp -e ~/.config/pi/harness …
 
 ## Windows
 
-Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）だけで**フルガード（判定・ガードツール・伏字化）を載せる（[CHG-0040](../../change/0040-pi-guard-by-settings.md)）。
+Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）だけで**フルガード（判定・ガードツール・伏字化）を載せる（[CHG-0040](../../change/closed/0040-pi-guard-by-settings.md)）。
 **境界（Fence）は Windows に無い**ので、サンドボックスの保護は付かない。`pis` と ocs は Windows に配らない。**Windows 実機は未検証**（WSL からは `chezmoi` の描画・静的な試験・Node でのドライバ試験だけ）。
 
 | 配るもの | 方法 |
@@ -156,7 +156,7 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 - **MCP は Unix と同じく `rules.json` から**（フルガードが `registerMcpServer` で登録する）。`~/.pi/agent/mcp.json` へ書く経路（`generate.py --target pi-mcp`）は廃止した（[MCP](#mcp)）
 - **自作の拡張の `activity`**: `bg_run` は `spawn(shell:true)`（Windows では cmd）で、`taskkill` で止める。実機は未確認
 - **フルガードを欠いた起動では実行しない**: フルガードは起動時に印 `globalThis.__PI_FULL_GUARD__` を立てる。`bg_run`（`activity`）と `task`（`subagents`）は、印が無いと実行しない（[判定の外で動くもの](#判定の外で動くもの)）
-- **残る限界**: 境界が無い（Fence・Landlock の代わりは無い）、Git Bash というシェルを経由する、`guarded_task` が無い（次の段）、実機未検証。守りが強く要る作業は WSL の `pis` で行う。PowerShell が必須のプロジェクトで、境界なしの運用をどこまで許すかは未決（[CHG-0034](../../change/0034-windows-native-pi-boundary.md)、[CHG-0054](../../change/0054-containment-and-async-approval.md)）
+- **残る限界**: 境界が無い（Fence・Landlock の代わりは無い）、Git Bash というシェルを経由する、`guarded_task` が無い（次の段）、実機未検証。守りが強く要る作業は WSL の `pis` で行う。PowerShell が必須のプロジェクトで、境界なしの運用をどこまで許すかは未決（[CHG-0034](../../change/closed/0034-windows-native-pi-boundary.md)、[CHG-0054](../../change/closed/0054-containment-and-async-approval.md)）
 - 調査記録: [pi-isolation-options](../../research/agents/pi-isolation-options.md)（過去の判断。Windows に載せる前の記録）
 
 **Windows 実機で確認する項目**は、[実機で確認する項目](#実機で確認する項目)の Windows の節にまとめた。
@@ -170,10 +170,10 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 | キー | 出所 |
 | --- | --- |
 | `defaultProvider` / `defaultModel` | `[opencode.model]` の `default` 階層（[モデルの割り当て](../agent-model-assignment.md#モデルの割り当て)） |
-| `defaultThinkingLevel` / `skills` / `enabledModels` | `[pi.settings]`（書いたものだけ） |
+| `defaultThinkingLevel` / `skills` / `enabledModels` / `hideThinkingBlock` | `[pi.settings]`（書いたものだけ。`hideThinkingBlock` は真偽値のみ） |
 | `extensions` / `defaultTools` | `[pi.settings]`。**非 Windows**: フルガード・自作の拡張（`[pi] own_extensions`。除外の直後に `+extensions/<名前>/index.ts` で足す）・`!extensions/**`（自動検出の拡張を外す）・Orca の状態表示（`+extensions/orca-agent-status.ts`）・組み込みの `codemode` / `tool-search` / `llama.cpp` の除外、`defaultTools = []`。**Windows**: 非 Windows と同じ（Orca の状態表示を含む）に、subagents（`+extensions/subagents/index.ts`）を足す。`commit-confirm` はどちらにも含めない |
 
-今は `defaultThinkingLevel = "xhigh"`（2026-10-31 に `medium` から上げた。根拠は [記録 M5](../../research/agents/subagent-model-assignment.md)）、`skills = ["~/.claude/skills"]`。子は、階層に `#variant` が無い役割（`explore`・`review`）だけがこの既定を継ぐ。`~/.agents/skills` は pi が元から読む。
+今は `defaultThinkingLevel = "xhigh"`（2026-10-31 に `medium` から上げた。根拠は [記録 M5](../../research/agents/subagent-model-assignment.md)）、`hideThinkingBlock = true`（思考のブロックを既定で畳む。スマホで読みやすくするため）、`skills = ["~/.claude/skills"]`。子は、階層に `#variant` が無い役割（`explore`・`review`）だけがこの既定を継ぐ。`~/.agents/skills` は pi が元から読む。
 
 `defaultProjectTrust` は設定しない（既定の `ask`）。作業先の信頼の拒否は、`pis` の `--no-approve` が担う。
 この設定だけで、フラグ無しの `pi` のツールが `guarded_*` と自作の拡張だけになり、agent 置き場の `extensions/` に置いた未審査の拡張は読まれない。設定と同じ拡張を `-e` でも読むと、ツール名の衝突で起動に失敗する（試験は `test_pi_settings_launch.py`）。
@@ -190,8 +190,19 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 作業先のスキル（`.agents/skills`・`.pi/skills`）は指示を読むだけなので、警告しない。
 **書き込みの拒否**: `~/.pi/agent/settings.json`・`mcp.json`・`extensions/**`・`~/.config/pi/harness/**` は、判定器が書き込みを拒否する（`[file] write_deny_globs`）。素の `pi` は Fence で凍結できないため。変更は chezmoi の source 側（このリポジトリ）で行い、`chezmoi apply` で入れる（`settings.json` の生成器が持つキーは `[pi.settings]` が正本で、直接書いても戻る。拡張は chezmoi から配る）。`mcp.json` も拒否する（モデルが書いたサーバは、次の起動でガードの外で動くため）。
 **bash 経由でも拒否する**: 上の制御ファイルへの書き込みは、ファイルツールの `write_deny_globs` に加えて、bash のリダイレクト・`mv` / `cp` / `rm` / `tee`・インラインコードでの書き込みも拒否する（`judge/rules_guard.ts` の `GUARD_TARGETS`。試験は `test_pi_control_files_bash.py`）。ただし**ガードは OS の隔離ではない**（シェルの経由などの抜け道は、サンドボックスで塞ぐ）。
+**作業台帳の置き場**: `**/.git/pi-work/**` と `**/.tmp/work/**` も、同じ 2 経路（`write_deny_globs` と `GUARD_TARGETS`）で書き込みを拒否する。読み取りは許す。ハーネスは判定器を通らず fs で書くので影響しない（[置き場](../work/store.md#置き場)）。サンドボックスの `denyWrite` には足さない（ハーネスが内側で書くため）。
 `defaultTools = []` は境界ではなく、`pi --tools …` で戻せる（利用者が意図して選ぶ経路）。
 **フルガードの読み込みに失敗した起動で、判定なしの実行が残らないようにする**: フルガードは起動時に印 `globalThis.__PI_FULL_GUARD__` を立てる。実行を伴う自作の拡張の `bg_run`（`activity`）と `task`（`subagents`）は、印が無いと実行しない。ガードのパスが無いとき、`defaultTools = []` は組み込みツールだけを無効にするので、自作の拡張の `bg_run`（shell）が残るためである（独立レビューで見つかった）。`rules.json` が壊れている・無いときは pi が起動に失敗する（終了コード 1。`pi -ne` で拡張無しに起動できる）。
+
+### コードの入口になる環境変数
+
+シェルが変数の値をコードとして実行する入口は、構文木に現れないまま実行に使える（公開の突破の型。[調査](../../research/agents/command-judge-survey.md)）。判定器（TS の `codeEntryEnv`・Python の `code_entry_env`。同じ規則を二重に持つ）は、次の名前を**設定する形**を、役割・bypass・cwd によらず deny にする。追加の厳格化だけで、既存の判定は変えない。判定は**文字列の検索ではなく、単純コマンドの語の列**（`commands` / `argv` と同じ分割）の、代入になりうる位置だけを見る。
+
+- **名簿**（完全一致）: `PROMPT_COMMAND`・`BASH_ENV`・`LD_PRELOAD`・`LD_AUDIT`・`DYLD_INSERT_LIBRARIES`、`BASH_FUNC_` で始まる名前。`ENV` は入れない（bash の posix 対話起動と dash の対話起動だけが読む。`ENV=production ./deploy` のような一般の使い方を誤って拒否する害が大きい）。
+- **`PS4`**: 値が、リテラルと単純な展開（`$NAME`・`${NAME}`・`${NAME[数字]}`・`${NAME[@]}`）だけのときは許可する（`export PS4='+ ${LINENO}: '`）。`$(`・バッククォート・`${…@P}`・`${…:-…}`・`$((`・バックスラッシュを含む値と、値が取れない形（`printf -v PS4`・`read PS4`・`mapfile PS4`）は拒否する。
+- **検出する位置**: ①先頭の前置代入（`X=v cmd`・`X+=v`）②ラッパーの引数（`env`〔`-i`・`-u`・`-C`・`-S '文字列'`〕・`sudo`・`doas`・`time`・`command`・`nice`・`nohup`・`timeout`・`stdbuf`・`xargs`・`exec`・`builtin` の、本体の手前の代入）③`export`・`declare`・`typeset`・`local`・`readonly` の `X=v`（オプションは読み飛ばす。値の無い `export PS4`・`export -n PS4` は対象外）④`printf -v X`⑤`read`・`mapfile`・`readarray` の設定先の変数名（値を取るオプションを読み飛ばした後の全オペランド）⑥`compgen -C`・`complete -C`・`mapfile -C`・`readarray -C`（コールバックのコマンドを実行する）⑦`bash|sh|zsh|dash|ksh -c '文字列'` と、これらのシェルが受ける here-string（`bash <<< 'BASH_ENV=x cmd'`。`cat <<<` や `grep x <<<` などシェル以外が受けるものは見ない）の文字列（深さ 3 まで）⑧`find` の `-exec`・`-execdir`・`-ok`・`-okdir` の直後から `;` / `+` の手前まで（コマンドの語として同じ規則で見る）。ラッパーの値を取る長いオプション（`stdbuf --output L`・`xargs --max-args 1`・`sudo --user root` など。`--opt=value` は 1 語）も読み飛ばす。`BASH_FUNC_` の名前は `-` など通常の変数名ではない文字も含めて見る。`if`・`then`・`do`・`{` などの直後も見る。
+- **誤拒否しないもの**: 通常の引数に現れる言及（`rg 'PS4='`・`grep -n 'BASH_ENV=' file`・`git commit -m 'fix: unset PS4=x'`・`echo "BASH_ENV=/tmp/x" > notes.txt`・`sed -i 's/PS4=.*//' f`）、`PATH`・`NODE_OPTIONS`・`LD_LIBRARY_PATH`・`IFS`・`ENVIRONMENT`・`MY_ENV`、`read line`・`mapfile -t lines`・`IFS= read -r line`・`compgen -c`。コメントの中の言及も見ない（語の分割がコメントを落とす）。
+- **限界**: 名前を実行時に組み立てる形（`${x}S4=…`）と `eval` の中身は静的に見えない。`trap`・`alias` は既存の規則（`normalize` の `TRAP_BINS` など）の範囲のままで、この規則では足していない。通常の文書・コミット本文のヒアドキュメントは判定前に除外され、シェルへ渡す本文は検査する。**既知の誤拒否 (D)**: `--` の後ろの検索文字列と、`;` を含むコミットメッセージで、名簿の名前を `NAME=` の形で書くと発火しうる（`rg -- 'BASH_ENV=x'`・`git commit -m 'docs: example; BASH_ENV=x'`。汎用の正規化が引用を失った文字列を再解析するため）。回避: `--` を使わない・メッセージは `-F` のファイルへ。専用の走査器への移行は別の課題（試験は `xfail(strict=True)` で固定）。`env -iS` のようにオプションを束ねた形の `-S` は読まない。
 
 ## 置き場
 
@@ -289,7 +300,7 @@ Windows ネイティブの pi にも、**設定（`~/.pi/agent/settings.json`）
 
 ## 実機で確認する項目
 >
-> 確認項目の一覧は [CHG-0040](../../change/0040-pi-guard-by-settings.md#実機で確認する項目旧-pi-guardmd-から移設) へ移した（チェックの進捗は案件で管理する）。**Windows 実機の確認項目は、現行の確認先として CHG-0040 を見る**。
+> 確認項目の一覧は [CHG-0040](../../change/closed/0040-pi-guard-by-settings.md#実機で確認する項目旧-pi-guardmd-から移設) へ移した（チェックの進捗は案件で管理する）。**Windows 実機の確認項目は、現行の確認先として CHG-0040 を見る**。
 
 ## 未対応
 

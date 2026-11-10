@@ -1,0 +1,33 @@
+# isx（incus-spawn）の評価 — 2026-11-08（静的調査。実機は未実施）
+
+出典: https://github.com/Sanne/incus-spawn（Apache-2.0。blobless clone を `.tmp/research/isx/src` に取得。2,614 commits・開発開始 2026-03-31・最新 2026-11-07・85 タグ・v0.5.0-dev.3）。調査の全文: `.tmp/subagents/61-…`（権限・認証・git）・`63-…`（機能・保守・統合）。外部の内容なので鵜呑みにしない。
+
+## 結論
+**isx の上に載せる・置き換えるのは不適。参考にするだけ。** ただし **git の方式（箱ごとの独立 clone＋ホストからの fetch）は、kcage の共有 `.git` より安全で、clone モード（#220）の具体的な実装の参考になる。**
+
+## 要件との対応
+| 要件 | isx |
+| --- | --- |
+| 制御面の分離（利用者を incus-admin に入れない） | **満たさない**。利用者を `incus-admin` に入れ、Incus の unix ソケットを直接叩く。特権の補助なし（sudoers は btrfs の読み取りだけ） |
+| GPU・WSL2 | **満たさない**。Windows 非対応と明記。`/dev/dxg`・libcuda の仕組みなし（GPU は Wayland 用の `gpu` デバイスだけ） |
+| 入れ子の Docker・compose | 一部。podman＋podman-compose（docker.sock 互換）。dockerd・GPU 付き compose は未試験 |
+| pi | 一部。npm で導入・settings.json の生成・`shell-command` で任意の起動文字列（`-e`・`-ne` は自前で書ける）。ホストの `~/.pi` は複製しない |
+| 通信 3 モード | 概ね。nat（既定は全開）・`--proxy-only`（NIC なしではなく、bridge の NIC に Incus の ACL）・`--airgap`（NIC をマスク）。proxy-only は新しい Incus（Zabbly）が必要（Ubuntu 24.04 標準の 6.0.0 は拒否） |
+| 認証の broker | 設計思想は同等（実トークンを箱に入れず、placeholder/proof だけ）。方式は TLS 傍受（MITM）＋DNS 上書き＋CA。実トークンはホストの `~/.config/incus-spawn/config.yaml` に平文 |
+| worktree の rw マウント・git flow | **設計として拒否**（箱の外のディレクトリを rw で共有しない） |
+| 基底 OS | Fedora（dnf）固定。Ubuntu 箱は想定外 |
+| 規模・保守 | 本体 Java 約 11 万行（kcage Python 6.4k の約 17 倍）。作者実質 1 人（上位 1 人が 85%）・AI 駆動で変更が速い（2026-10 に 1,299 commits）・Quarkus は Beta・破壊的変更は手作業の移行手順。CI は 15 本（実 Incus の統合試験あり）。SECURITY.md なし |
+| 箱の堅さ | **弱い**。`raw.lxc lxc.cap.drop =`（capability を落とさない。「箱が境界だから」）・nesting・tun 0666・`security.idmap.isolated` なし |
+
+## git の方式（kcage の clone モードの参考。最重要）
+- **入れ方**: 箱の中で clone する。ホストの checkout は mount しない。`host-source` は、枝/タグの先端から届く objects だけを新しい独立 repo へ詰める（hooks・config・作業ファイルは入れない）。ホストのスナップショットを貸すときは、最小の bare repo を **ro** で mount し、箱側で `clone --no-hardlinks`・alternates を拒否・SHA-256 を検証する（docs/dev/GIT-PREPARATION.md）。
+- **取り戻し方**: `isx://<箱>/<path>` の remote helper。ホストの git が、箱の中の `git-upload-pack`／`git-receive-pack` **だけ**（allowlist。uid 1000 で実行）へ pack プロトコルで直接接続する。ホストには hooks・config が転送されない。ホストで見る手順は `git diff main..fix-auth/main`・`cherry-pick`。
+- **未確認**: ホストの fetch に `fetch.fsckObjects` を強制しているか（強制しているのは準備時の clone だけ）。
+- **費用**: 作業ツリーを live に見られない。feature の worktree・`git flow` を使う運用とは前提が違う。
+
+## 借りる価値のある点
+1. clone＋fetch（上記）。ホスト側の fetch には `transfer.fsckObjects=true` を付ける。
+2. 起動のたびに、制限を再適用・検証し、許可していない NIC・pci/usb・proxy デバイスが加わっていれば拒否する。機能が足りなければ fail closed（箱の中の規則へ降格しない）。
+3. proxy-only を Incus の NIC ACL（ホスト側）で作る方式（kcage は NIC なし＋proxy デバイス。強さは kcage のほうが上だが、ACL 方式は設定が単純）。
+4. doctor の 4 値（OK/WARN/FAIL/NOTE。NOTE は終了コードに影響しない）と `--bundle`（出力の構造的な伏せ字）、他ユーザーの holder の検出、秘密を置くファイルの権限。
+5. `mcp.yaml`（agent は書けない許可表）・`host-routes`（`*.isx.internal`。箱からホストの制御役を呼ぶ）の発想。

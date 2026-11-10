@@ -128,6 +128,7 @@ const ALL_TASK = TASK_STATES;
 // goal: draft → planned → active ⇄ paused → done | cancelled
 add("goal", ["draft", "planned"], "plan.proposed", "*", "planned", "plan");
 add("goal", "planned", "plan.approved", "*", "active", "approve"); // 利用者専用。proposed の task を ready にする
+add("goal", ["active", "paused"], "plan.approved", "*", "=", "approve"); // 再承認 (利用者専用・状態は変えない。未承認の task が無ければ reduce が拒否)
 add("goal", "active", "goal.paused", "*", "paused");
 add("goal", "paused", "goal.resumed", "*", "active"); // 利用者専用
 add("goal", "active", "goal.done", "*", "done", "finish"); // verdict done と全 task の決着が要る (I6)

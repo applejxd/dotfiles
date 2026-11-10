@@ -258,7 +258,7 @@
 ### 問い
 
 複数の feature を、複数の `worker`（1 worktree = 1 feature = 1 worker）へ並列に任せる親は、feature の単位と依存関係を、明示的に持つべきか。よくあるオーケストレーターは、どう持っているか。
-O1（pi の拡張と他社の親子設計）の続き。親側の運用の表（[CHG-0045](../../change/0045-orchestrator-parent.md)、[CHG-0054](../../change/0054-containment-and-async-approval.md)）の根拠にする。
+O1（pi の拡張と他社の親子設計）の続き。親側の運用の表（[CHG-0045](../../change/closed/0045-orchestrator-parent.md)、[CHG-0054](../../change/closed/0054-containment-and-async-approval.md)）の根拠にする。
 
 ### 対象・方法・限界
 

@@ -1,5 +1,5 @@
 // guarded_action: 承認つきで、表 (rules.json の judge.common.pi.actions) に宣言した操作 (git commit・gh issue comment) を実行する。
-// 承認はこのツールが 1 回だけ取り、承認した argv をシェル無しでそのまま実行する。see docs/change/0038-guard-reclassification.md
+// 承認はこのツールが 1 回だけ取り、承認した argv をシェル無しでそのまま実行する。see docs/change/closed/0038-guard-reclassification.md
 //
 // node の型除去でそのまま動く書き方だけを使う (enum・namespace は使わない)。
 

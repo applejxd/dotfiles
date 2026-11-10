@@ -23,8 +23,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Type } from "typebox";
 import { BG_RUN, createCallDecider, type Decision } from "./judge/call.ts";
 import { integrationConfig, tightenIntegration } from "./integration-gate.ts";
+import { createShadow } from "./judge/shadow.ts";
 import { readBoundaryEnv, runCanary } from "./canary.ts";
 import { Jobs, MAX_BATCH, NOT_APPROVED, WRAP_UP_MESSAGE, parseTaskInput, type Job, type RoundResult, type RoundStats } from "./children.ts";
+import { registerDriverRun, registryRuntime } from "./work/driver-run.ts";
 import { createRedactor } from "./redact.ts";
 import { MAX_BODY_FILE_BYTES, MUST_CONFIRM_INTEGRATION_PREFIX, NO_UI_REASON, buildMustConfirmView, classifyConfirm, confirmTimeoutSeconds, explainSection, outcomeReason, parseFinishTarget, parseMergeTree, parseNumstat, type BodyFileResult, type ConfirmRaw, type IntegrationFacts, type MergeCheck } from "./confirm-view.ts";
 import { gitSync } from "./gitrun.ts";
@@ -45,8 +47,12 @@ import { reconcilePending } from "./pending-store.ts";
 import { registerPendingCommand } from "./pending-command.ts";
 import { buildBoard, renderBoard } from "./board.ts";
 import { collectBoardInput } from "./board-collect.ts";
-import { registerAutoCheckpoint } from "./autocheckpoint.ts";
+import { arbiterEnabled, checkpointExec, checkpointSnapshot, registerAutoCheckpoint } from "./autocheckpoint.ts";
+import { registerSettle } from "./work/settle.ts";
+import { makeSettleDeps } from "./work/settle-snapshot.ts";
 import { registerJournal } from "./work/journal.ts";
+import { registerWork } from "./work/register.ts";
+import { registerGoal } from "./work/goal-run.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // 組み込みと同じ名前にしないこと。/reload でフルガードが抜けたとき、組み込みが同じ名前で戻って
@@ -195,6 +201,13 @@ const callDecider = createCallDecider({
 
 const integration = integrationConfig(rules.judge?.common);
 
+// 新しい解析 (plan.ts) の観測だけ。応答は変えない。PI_SHADOW=0 で無効、子では記録しない。see docs/spec/guard/pi-decide.md#shadow観測
+const shadow = createShadow({
+	role: () => (orchestrate ? ORCH.role : ROLE),
+	mode: () => `${bypass ? "bypass" : "ask"}${BOUNDARY ? "+boundary" : ""}`,
+	sshTargets: () => ((rules.judge?.common?.pi?.remote_exec?.targets as unknown[] | undefined) ?? []).map(String),
+});
+
 // `git flow feature finish <名前>` の確認に添える、統合の内容 (git の読み取りと merge-tree。ref・インデックス・作業ツリーは変えない)。統合先は [pi.integrate] target (既定 develop)
 const REF_NAME = /^[A-Za-z0-9][A-Za-z0-9._\/-]*$/;
 const integrationTarget = ((t: unknown) => (typeof t === "string" && REF_NAME.test(t) ? t : "develop"))(rules.judge?.common?.pi?.integrate?.target);
@@ -240,7 +253,7 @@ const decided = new Map<string, { input: string; decision: Decision; approved: b
 // 確認は 1 件ずつ出す。TUI の confirm は 1 枠を共有し、後の確認が先の確認を置き換える
 // (codemode の中で並べた呼び出しで先の確認が永久に止まった。spike の E3)
 let confirmQueue: Promise<unknown> = Promise.resolve();
-// 利用者が不在と分かった状態 (確認が時間切れ)。入力の世代 gen は、利用者の入力のたびに進む。see docs/change/0046-guarded-action-timeout.md
+// 利用者が不在と分かった状態 (確認が時間切れ)。入力の世代 gen は、利用者の入力のたびに進む。see docs/change/closed/0046-guarded-action-timeout.md
 const absence = { absent: false, gen: 0 };
 // TUI 以外 (RPC など) は、クライアントが確認に応えないと永久に待つので期限を付ける (期限が来たら拒否)
 const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
@@ -602,6 +615,11 @@ export default async function (pi: ExtensionAPI) {
 		const ep = epoch;
 		const stale = () => ({ block: true, reason: `${NOT_APPROVED} 確認を待つ間に権限の状態 (bypass / orchestrate) が変わった。もう一度やり直す` });
 		const d = decide(tool, event.input, ctx.cwd);
+		try {
+			shadow.observe(tool, (event.input as any)?.command, d, ctx.cwd, ctx.sessionManager.getSessionId());
+		} catch {
+			// 観測は判定に影響させない
+		}
 		const input = JSON.stringify(event.input);
 		if (d.decision === "deny") return { block: true, reason: denyReason(tool, event.input, d) + (orchestrate ? ORCH_HINT : "") };
 		if (d.decision === "ask") {
@@ -825,10 +843,30 @@ export default async function (pi: ExtensionAPI) {
 	registerPr(pi, { Type, prefix: PREFIX, child: CHILD, hasTool: (name) => roleTools.includes(name) });
 	// 文脈の使用率による自動の保存と圧縮 (親のみ。PI_AUTOCHECKPOINT=0 で無効)
 	registerAutoCheckpoint(pi, { child: CHILD, compactInstructions: COMPACT_INSTRUCTIONS });
+	// 継続の調停 (旗 PI_WORK_ARBITER=1 のときだけ。既定は無効で、上の自動保存と todo が従来どおり自分で登録する)。
+	// 旗が有効なら 2 者は agent_before_settle を登録しないので、登録順は問題にならない (journal より前に置き、settle の entries を journal に見せる)。
+	// 圧縮完了後の自動再開 (trigger: resume) は従来の経路のまま。see docs/spec/work/settle.md
+	if (arbiterEnabled()) {
+		registerSettle(
+			pi,
+			makeSettleDeps({
+				checkpointSnapshot,
+				checkpointExec,
+				todoSnapshot: () => (globalThis as any).__piTodoSnapshot?.(),
+				wake: (prompt) => {
+					Promise.resolve(pi.sendUserMessage(prompt, { deliverAs: "followUp" })).catch(() => {});
+				},
+			}),
+			{ enabled: true, child: CHILD },
+		);
+	}
 	// 自動で出る通知 (子・ジョブの完了・todo の続き・保存と再開) の表示を畳む (表示だけ。PI_QUIET_NOTICES=0 で無効)
 	if (!CHILD) registerQuietNotices(pi);
 	// 作業の観測ログ (追記のみ。挙動は変えない。PI_JOURNAL=0 で無効)。todo・autocheckpoint の後に登録して settle の entries を見る
 	registerJournal(pi, { child: CHILD });
+	// 作業台帳のツール work・/work・パネル (既定は無効。PI_WORK_TOOL=1 のときだけ。PI_WORK=0 で一括無効)
+	registerWork(pi, { child: CHILD });
+	registerGoal(pi, { child: CHILD, redact: redactText }); // 旗 PI_WORK_GOAL=1 のときだけ。see docs/spec/work/goal-run.md
 
 	const agents: Record<string, any> = rules.agents ?? {};
 	if (!CHILD && supportsChildTasks() && roleTools.includes("task") && Object.keys(agents).length > 0) registerTask(pi, agents);
@@ -952,7 +990,7 @@ const runningChildren = ((globalThis as any).__piChildren ??= new Map<string, Ru
 const MAX_JOBS = 6;
 const MAX_REPLY_CHARS = 20000;
 // 読み取り専用の子の役割 (プロファイル)。利用者のコマンド (`btw`) が起動できるのはこれだけで、計画モード (`/plan`) の間に
-// 起動・続きの依頼ができる子もこれだけ (see docs/change/0044-plan-agent.md)
+// 起動・続きの依頼ができる子もこれだけ (see docs/change/closed/0044-plan-agent.md)
 const READ_ONLY_CHILD_PROFILES = new Set(["reader", "explorer"]);
 const jobs = new Jobs(MAX_JOBS);
 // 異常終了でも孤児の子を残さない (stdin が閉じても止まるが、作業中の子はすぐ止める)
@@ -1000,7 +1038,7 @@ const fmtStats = (s: RoundStats) =>
 	`${fmtSecs(s.durationMs)}, ${s.calls} calls, ${fmtTokens(s.tokens)} tokens${s.cost > 0 ? `, $${s.cost.toFixed(3)}` : ""}`;
 
 // ─── 隔離 (worktree) ────────────────────────────────────────────────
-// 契約・順序・残る限界は docs/change/0029-worktree-isolation.md の「W1 の実装計画」
+// 契約・順序・残る限界は docs/change/closed/0029-worktree-isolation.md の「W1 の実装計画」
 
 // Landlock が使えるかは、プロセスの寿命の間 1 回だけ確かめる (null: 使える。文字列: 使えない理由)
 let landlockProblem: string | null | undefined;
@@ -1351,6 +1389,24 @@ function registerTask(pi: ExtensionAPI, agents: Record<string, any>) {
 		if (baseline) mainBaselines.set(job, baseline);
 		return { job, model };
 	};
+	registerDriverRun(pi, {
+		child: CHILD,
+		runtime: registryRuntime,
+		spawnChild,
+		jobs,
+		ownerRole: ROLE,
+		// guarded_task の execute と同じ起動前の判定: deny は起動しない・ask は保留 (自動承認しない)・/plan 中は書き込みの役割を起動しない
+		canSpawn: (spec, c) => {
+			const d = decide("task", { agent: spec.role, task: spec.prompt }, c?.cwd ?? process.cwd());
+			if (d.decision === "deny") return { ok: false, reason: `判定で deny: ${d.reason}` };
+			if (d.decision !== "allow") return { ok: false, hold: true, reason: `確認が要るため保留: ${d.reason}` };
+			if ((globalThis as any).__piPlanMode === true) {
+				const refused = planModeRefusal(spec.role);
+				if (refused) return { ok: false, reason: refused };
+			}
+			return { ok: true, reason: "" };
+		},
+	}); // PI_WORK_SCHEDULER=1 のときだけ動く (work/driver-run.ts)
 
 	// 隔離の job の結果の行。opt-in の間は、隔離しない worker にも「none」を出して誤認を防ぐ
 	const isolationLines = (job: Job): string[] => {

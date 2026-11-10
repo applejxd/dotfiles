@@ -19,7 +19,7 @@
 | 保証の範囲（境界ではなく「うっかり防止」）、4 つの結果 | [ガード（総覧）](guard/index.md) |
 | bypass、bypass でも確認する操作（`mustConfirm`）、元に戻せない git 操作 | [判定 API](guard/pi-decide.md#confirm)、[pi のガード](guard/pi-guard.md) |
 | `guarded_action`（`git commit`・`gh` の書き込みを、固定の引数と確認つきで） | [pi の拡張と補助機能](guard/pi-extensions.md#guarded_action承認つきの外部操作) |
-| 承認の時間切れの退避（`/pending`） | [CHG-0046](../change/0046-guarded-action-timeout.md) |
+| 承認の時間切れの退避（`/pending`） | [CHG-0046](../change/closed/0046-guarded-action-timeout.md) |
 | 保留の承認（`/pending approve`・`git_integrate`）の履歴。撤去済みで、統合は PR ビューア | [保留（撤去済み・履歴）](guard/pi-pending.md)、[PR ビューア](pr-viewer.md) |
 | コマンド・ファイルの判定の規則 | [コマンド・ファイルの判定](guard/agent-command-policy.md) |
 | 誘導・出力の伏字化 | [判定 API](guard/pi-decide.md#誘導)、[pi のガード](guard/pi-guard.md) |
@@ -34,7 +34,7 @@
 | ネットワークの層・ローカルの許可 | [ネットワーク層](sandbox/cli-sandbox-network.md)、[ローカルの許可](sandbox/cli-sandbox-local-allow.md) |
 | Claude Code / Copilot / OpenCode の sandbox | [sandbox](sandbox/agent-sandbox.md)、[Copilot](sandbox/copilot-sandbox.md)、[OpenCode](sandbox/opencode-sandbox.md) |
 | 隔離 GPU サンドボックス（WSL2） | [隔離 GPU サンドボックス](sandbox/wsl-sandbox.md) |
-| 子の隔離（`isolation: "worktree"`。Landlock） | オーケストレーションの機能でもある。素の `pi` では保留。[CHG-0029](../change/0029-worktree-isolation.md) |
+| 子の隔離（`isolation: "worktree"`。Landlock） | オーケストレーションの機能でもある。素の `pi` では保留。[CHG-0029](../change/closed/0029-worktree-isolation.md) |
 
 ## オーケストレーション
 
