@@ -60,7 +60,7 @@ def _home(value: str) -> str:
     return value.replace("$HOME", str(Path.home()))
 
 
-def run_engine(tmp_path: Path, *, bash=(), surface=(), project=None, name="in") -> dict:
+def run_engine(tmp_path: Path, *, bash=(), surface=(), access=(), project=None, name="in") -> dict:
     payload = {
         "pkg": str(PERMISSION_PKG),
         "jiti": str(JITI),
@@ -68,6 +68,7 @@ def run_engine(tmp_path: Path, *, bash=(), surface=(), project=None, name="in") 
         "policy": json.loads(POLICY.read_text(encoding="utf-8")),
         "bash": list(bash),
         "surface": [[s[0], _home(s[1])] for s in surface],
+        "access": [_home(c) for c in access],
     }
     if project is not None:
         payload["project"] = project
@@ -83,7 +84,12 @@ def run_engine(tmp_path: Path, *, bash=(), surface=(), project=None, name="in") 
 @pytest.fixture(scope="module")
 def engine_result(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("perm")
-    return run_engine(tmp, bash=[c["cmd"] for c in CASES["bash"]], surface=CASES["surface"])
+    return run_engine(
+        tmp,
+        bash=[c["cmd"] for c in CASES["bash"]],
+        surface=CASES["surface"],
+        access=[c[0] for c in CASES["access"]],
+    )
 
 
 @needs_engine
@@ -111,6 +117,27 @@ def test_surface_decisions_match_the_table(engine_result):
         if got["action"] != case[2]:
             bad.append(f"{case[0]} {case[1]!r}: 期待 {case[2]} / 実際 {got['action']} ({got['pattern']})")
     assert not bad, "\n".join(bad)
+
+
+@needs_engine
+def test_bash_path_effects_match_the_table(engine_result):
+    """bash のトークンの向き (read / write / unproven)。commandEffects の宣言と、それを外す旗が、意図どおりに効くこと。
+
+    向きは surface の判定と合わせて読む: unproven は読み取りと書き込みの両方を調べ、厳しい方になる。
+    """
+    bad = []
+    for case, got in zip(CASES["access"], engine_result["access"], strict=True):
+        cmd, expected = case
+        actual = [[_short(a["path"]), a["effect"]] for a in got]
+        if actual != [[e[0], e[1]] for e in expected]:
+            bad.append(f"{cmd!r}: 期待 {expected} / 実際 {actual}")
+    assert not bad, "\n".join(bad)
+
+
+def _short(path: str) -> str:
+    """ホームを ``$HOME`` に戻して、表と同じ書き方にする。"""
+    home = str(Path.home())
+    return path.replace(home, "$HOME", 1) if path.startswith(home) else path
 
 
 @needs_engine

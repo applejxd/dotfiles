@@ -1,5 +1,5 @@
 {
- "_説明": "bash: cmd=コマンド, perm=pi-permission-system の判定 (YOLO 切り), csn=cc-safety-net の判定, note=理由。surface: [面, 値, 期待]。値の $HOME は実行時に展開する。project*: 作業ツリーの .pi/extensions/pi-permission-system/config.json を足したときの surface",
+ "_説明": "bash: cmd=コマンド, perm=pi-permission-system の判定 (YOLO 切り), csn=cc-safety-net の判定, note=理由。surface: [面, 値, 期待]。access: [コマンド, [[作業ツリー外のパス, 向き]...]] (commandEffects を含む bash のトークンの向き)。値の $HOME は実行時に展開する。project*: 作業ツリーの .pi/extensions/pi-permission-system/config.json を足したときの surface",
  "bash": [
   {"cmd": "git status && git diff --stat", "perm": "allow", "csn": "allowed"},
   {"cmd": "ls -la | head -5", "perm": "allow", "csn": "allowed"},
@@ -230,6 +230,17 @@
   ["external_directory_write", "$HOME/.pi/agent/extensions/subagent/config.json", "ask"],
   ["external_directory_read", "$HOME/.pi/agent/AGENTS.md", "allow"],
   ["external_directory_read", "$HOME/.pi/agent/settings.json", "allow"],
+  ["external_directory_read", "/tmp", "allow"],
+  ["external_directory_write", "/tmp", "ask"],
+  ["external_directory_read", "/tmpfoo", "ask"],
+  ["external_directory_read", "$HOME/.agents/skills", "allow"],
+  ["external_directory_read", "$HOME/.agents/skills/away-shift/references/resume.md", "allow"],
+  ["external_directory_read", "$HOME/.agents/skills/away-shift/scripts/away_guard.py", "allow"],
+  ["external_directory_write", "$HOME/.agents/skills/away-shift/SKILL.md", "ask"],
+  ["external_directory_read", "$HOME/.agents/skillsx/y", "ask"],
+  ["external_directory_read", "$HOME/.agents/.skill-lock.json", "ask"],
+  ["external_directory_read", "$HOME/.claude/skills/herdr/SKILL.md", "ask"],
+  ["path_read", "$HOME/.agents/skills/x/.env", "deny"],
   ["external_directory_read", "$HOME/.pi/agent/models.json", "ask"],
   ["external_directory_read", "$HOME/.pi/agent/mcp.json", "ask"],
   ["external_directory_read", "$HOME/src/other-project/README.md", "ask"],
@@ -256,6 +267,17 @@
   ["path_read", "$HOME/.config/gh/hosts.yml", "deny"],
   ["path_read", "$HOME/.config/agents/websearch-keys.json", "deny"],
   ["path_read", "$HOME/.config/gh-other/x", "allow"]
+ ],
+ "access": [
+  ["python3 $HOME/.agents/skills/away-shift/scripts/away_guard.py check r1", [["$HOME/.agents/skills/away-shift/scripts/away_guard.py", "read"]]],
+  ["python3 $HOME/.agents/skills/away-shift/scripts/away_guard.py log r1 --note-file note.md", [["$HOME/.agents/skills/away-shift/scripts/away_guard.py", "read"]]],
+  ["python3 $HOME/data/x.py", [["$HOME/data/x.py", "read"]]],
+  ["python3 -m pytest $HOME/.agents/skills/x/tests", [["$HOME/.agents/skills/x/tests", "unproven"]]],
+  ["python3 -c 'pass' $HOME/data/x", [["$HOME/data/x", "unproven"]]],
+  ["python3 $HOME/.agents/skills/x/y.py > $HOME/out.txt", [["$HOME/.agents/skills/x/y.py", "read"], ["$HOME/out.txt", "write"]]],
+  ["node $HOME/.agents/skills/x/y.js", [["$HOME/.agents/skills/x/y.js", "unproven"]]],
+  ["python $HOME/.agents/skills/x/y.py", [["$HOME/.agents/skills/x/y.py", "unproven"]]],
+  ["./python3 $HOME/.agents/skills/x/y.py", [["$HOME/.agents/skills/x/y.py", "unproven"]]]
  ],
  "project": {
   "config": {"permission": {"external_directory_read": {"/data/datasets/*": "allow"}}},

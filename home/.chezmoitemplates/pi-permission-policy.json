@@ -6,7 +6,8 @@
     "git": {
       "unlessOption": ["--output"],
       "subcommands": { "log": "read", "status": "read", "diff": "read", "show": "read" }
-    }
+    },
+    "python3": { "unlessOption": ["-c", "-m"], "effects": ["read"] }
   },
   "permission": {
     "*": "ask",
@@ -204,6 +205,9 @@
       "~/.pi/agent/themes/*": "allow",
       "~/.pi/agent/AGENTS.md": "allow",
       "~/.pi/agent/settings.json": "allow",
+      "~/.agents/skills": "allow",
+      "~/.agents/skills/*": "allow",
+      "/tmp": "allow",
       "/mnt/c/Users/applejxd/AppData/Local/Temp/orca-paste-*": "allow"
     }
   }

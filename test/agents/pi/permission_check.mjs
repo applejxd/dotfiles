@@ -5,9 +5,10 @@
 //   aliasRoot  @earendil-works/* を含む node_modules (pi 本体の install)
 //   policy     config.json の中身 (permission / commandEffects / shellTools)。yoloMode は常に false で評価する
 //   project    作業ツリーの .pi/extensions/pi-permission-system/config.json の中身 (任意)
-// 標準出力へ JSON: { bash: [{state, pattern}...], surface: [{action, pattern}...] }
+// 標準出力へ JSON: { bash: [{state, pattern}...], surface: [{action, pattern}...], access: [[{path, effect, source}...]...] }
 // bash は、実際のゲートと同じく複合コマンドを分解し、ラッパーの床 (opaque / indirection / unparsed) も含めて判定する。
-// path / external_directory のゲート (bash のトークンの投影) は含めない。surface の照合は規則の評価だけ。
+// access: [cmd...] は、bash のトークンの投影 (作業ツリーの外のパスと、commandEffects を含む向き) を返す。
+// surface の照合は規則の評価だけ (向きに応じた ask の判定は、access の向きと surface の判定を合わせて読む)。
 // see docs/spec/agent-config-generation.md#permission-system-の設定stock
 import { createRequire } from "node:module";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -30,6 +31,7 @@ const { warmBashParser } = await load("src/access-intent/bash/parser.ts");
 const { resolveBashAdvisoryCheck } = await load("src/service/bash-advisory-check.ts");
 const { evaluate } = await load("src/policy/rule.ts");
 const { posixPathFlavor } = await load("src/path/path-flavor.ts");
+const { foldDeclaredCommandEffects } = await load("src/config/command-effects-config.ts");
 
 const agentDir = mkdtempSync(join(tmpdir(), "perm-agent-"));
 mkdirSync(join(agentDir, "extensions/pi-permission-system"), { recursive: true });
@@ -54,10 +56,15 @@ if (!BashProgram.parseSync("true", normalizer)) {
 }
 
 const rules = manager.getComposedConfigRules();
-const out = { bash: [], surface: [] };
+const out = { bash: [], surface: [], access: [] };
+const declared = foldDeclaredCommandEffects({}, input.policy.commandEffects, "global");
 for (const cmd of input.bash ?? []) {
   const r = resolveBashAdvisoryCheck(cmd, undefined, resolver, normalizer);
   out.bash.push({ state: r.state, pattern: r.matchedPattern ?? null });
+}
+for (const cmd of input.access ?? []) {
+  const program = BashProgram.parseSync(cmd, normalizer, { commandEffects: declared });
+  out.access.push(program.externalAccesses().map((a) => ({ path: a.path.value(), effect: a.effect.effect, source: a.effect.source })));
 }
 for (const [surface, value] of input.surface ?? []) {
   const r = evaluate(surface, value, rules, posixPathFlavor);
