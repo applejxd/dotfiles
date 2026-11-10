@@ -25,7 +25,8 @@
 		"successBg": "#262c2b",
 		"errorBg": "#35262e",
 		"customBg": "#2b2a3a",
-		"searchBg": "#493b37"
+		"searchBg": "#493b37",
+		"slate": "#7788a7"
 	},
 	"colors": {
 		"accent": "orange",
@@ -77,12 +78,12 @@
 		"syntaxOperator": "muted",
 		"syntaxPunctuation": "muted",
 		"thinkingOff": "gray",
-		"thinkingMinimal": "blue",
-		"thinkingLow": "cyan",
-		"thinkingMedium": "purple",
-		"thinkingHigh": "orange",
-		"thinkingXhigh": "red",
-		"thinkingMax": "redLight",
+		"thinkingMinimal": "slate",
+		"thinkingLow": "blue",
+		"thinkingMedium": "cyan",
+		"thinkingHigh": "purple",
+		"thinkingXhigh": "purpleLight",
+		"thinkingMax": "orangeLight",
 		"bashMode": "greenLight"
 	},
 	"export": {
