@@ -106,6 +106,8 @@ autocast のディスパッチで先に落ちることが多い。
 
 ## 4. 由来を検証する（数値以外）
 
+対象プロジェクトの環境（torch・拡張モジュール）で動かすので `uv run python` で起動する。pi（stock）では、`uv run` は作業ツリー外のスクリプトを読み取りと証明できないため、確認が出ることがある（見込み。実測していない）。そのときは承認してよい。
+
 ```bash
 uv run python ~/.agents/skills/cuda-version-migration/scripts/check_cuda_build.py pointnet2_ops._ext \
   --built-torch 2.10.0 --built-cuda 12.8 --target-sm "8.6;9.0+PTX"

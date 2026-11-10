@@ -33,12 +33,13 @@ allowed-tools: Read, Edit, Grep, Glob, Bash(uv run ruff *), Bash(uvx ruff *), Ba
 
 | 言語 | 判定ファイル | 参照ガイド |
 | ------ | ------------- | ----------- |
-| Python | `pyproject.toml`, `setup.py`, `setup.cfg` | `${CLAUDE_SKILL_DIR}/references/python.md` |
-| JS/TS | `package.json`, `tsconfig.json` | `${CLAUDE_SKILL_DIR}/references/js-ts.md` |
-| Go | `go.mod` | `${CLAUDE_SKILL_DIR}/references/go-rust.md` |
-| Rust | `Cargo.toml` | `${CLAUDE_SKILL_DIR}/references/go-rust.md` |
-| C++ | `CMakeLists.txt`, `compile_commands.json` | `${CLAUDE_SKILL_DIR}/references/cpp.md` |
+| Python | `pyproject.toml`, `setup.py`, `setup.cfg` | `~/.agents/skills/fix/references/python.md` |
+| JS/TS | `package.json`, `tsconfig.json` | `~/.agents/skills/fix/references/js-ts.md` |
+| Go | `go.mod` | `~/.agents/skills/fix/references/go-rust.md` |
+| Rust | `Cargo.toml` | `~/.agents/skills/fix/references/go-rust.md` |
+| C++ | `CMakeLists.txt`, `compile_commands.json` | `~/.agents/skills/fix/references/cpp.md` |
 
+参照ガイドのパスは `~/.agents/skills/fix/references/` 配下（pi・Copilot CLI では `${CLAUDE_SKILL_DIR}` が展開されないため、絶対パスで書く）。
 複数の言語が該当する場合はすべてのガイドを読み込み、順に実行する。
 ガイドのコマンドは例であり、手順 0 の範囲に合わせて対象パスを絞る。
 プロジェクトに設定の無い linter / formatter を新たに導入・適用しない（報告に留める）。
