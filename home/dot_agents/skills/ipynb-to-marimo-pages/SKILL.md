@@ -246,6 +246,8 @@ grep -c 'MarimoExceptionRaisedError\|Traceback (most recent call last)' site/*.h
 Markdown を JSON として埋め込み、KaTeX の描画はブラウザ上で行われる。
 ヘッドレスブラウザで `.katex-display` の数をソースと突き合わせる。
 
+`audit-math-rendering.py` は playwright が要るので `uv run --with playwright python` で起動する。pi（stock）では、`uv run` は作業ツリー外のスクリプトを読み取りと証明できないため、確認が出ることがある（見込み。実測していない）。そのときは承認してよい。
+
 ```shell
 uv run --with playwright python \
   ~/.agents/skills/ipynb-to-marimo-pages/scripts/audit-math-rendering.py \

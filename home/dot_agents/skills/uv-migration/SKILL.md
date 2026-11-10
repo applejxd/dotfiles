@@ -101,8 +101,10 @@ NVIDIA が公式に定めているのは `PATH`（必須）と `LD_LIBRARY_PATH`
 `--profile` で指定する（`general` = 一般の Python、`torch-cpu`、`torch-cuda`）。
 独自の拡張があれば `--expect-module` で期待するモジュール名を渡す。
 
+このスクリプトは標準ライブラリだけで動く（`tomllib` を使うので Python 3.11 以上）。対象プロジェクトの環境での確認（torch の import など）は、スクリプトが中で `uv run --no-sync` を呼ぶ。そのため外側は `python3` で起動する（pi（stock）では `python3 ~/.agents/skills/…` は確認なしで通る）。
+
 ```bash
-uv run python ~/.agents/skills/uv-migration/scripts/verify_migration.py <PROJECT_DIR> \
+python3 ~/.agents/skills/uv-migration/scripts/verify_migration.py <PROJECT_DIR> \
   --profile torch-cuda --expect-module pointnet2_ops._ext \
   --retire 'requirements*.txt' --retire 'install*.sh' \
   --keep 'requirements-docs.txt:Read the Docs が参照する'

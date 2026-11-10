@@ -113,6 +113,8 @@ uv への移行が必要なときだけ `uv-migration` スキルを併用する�
 
 **(a) 由来の検証** — `scripts/check_cuda_build.py` が機械的に見る。
 
+このスクリプトは対象プロジェクトの環境（torch・拡張モジュール）で動かす必要があるため、`uv run python` で起動する。pi（stock）では、`uv run` は作業ツリー外のスクリプトを読み取りと証明できないため、確認が出ることがある（見込み。実測していない）。そのときは承認してよい。
+
 ```bash
 uv run python ~/.agents/skills/cuda-version-migration/scripts/check_cuda_build.py pointnet2_ops._ext \
   --built-torch 2.10.0 --built-cuda 12.8 --target-sm "8.6;9.0+PTX"
