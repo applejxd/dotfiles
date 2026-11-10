@@ -26,7 +26,7 @@
 | --- | --- |
 | 外部への投稿・変更 | `gh` の `pr`・`issue`・`workflow`・`variable`・`gist` の変更系、`gh repo fork\|rename\|archive\|create\|edit\|delete`、`gh api` の書き込み（`-X`・`-f`・`--method` など）、`chezmoi apply\|update` |
 | 公開・配布 | `gh release create\|edit\|delete\|upload`、`npm\|yarn\|pnpm\|uv\|cargo publish`、`twine upload`、`gem push`、`docker push` |
-| 履歴・設定の改変 | `git rebase`・`git config`（`--get`・`--list` は可）・`git filter-branch`・`git update-ref -d`・`git reflog expire`・`git worktree remove`・`git remote add\|set-url` |
+| 履歴・設定の改変 | `git rebase`・`git config`（`--get`・`--list` は可）・`git filter-branch`・`git update-ref -d`・`git reflog expire`・`git worktree remove`（`.tmp/worktrees/` の下で `--force`・`-f`・`..` が無いときだけ確認なし。`feature/allow-worktree-remove` の統合後）・`git remote add\|set-url` |
 | 外部送信・永続化 | `scp`・`sftp`・`ssh`・`rsync`・`socat`・`ncat`・`nc`・`telnet`、`aws s3 cp\|sync`、`gsutil cp`、`crontab`・`at`・`batch`、`systemctl` の変更系、`systemd-run` |
 
 読み取り系の `gh`（`gh pr view`・`gh issue list`・`gh api` の GET など）は確認が出ない。

@@ -169,7 +169,7 @@ python3 ~/.agents/skills/away-shift/scripts/away_guard.py check <run_id>
 - <障害。確認が出て拒否された操作（誰も答えなかった）はここ>
 
 ## 次にやるべきこと（利用者の判断）
-- 枝を統合するか、捨てるか（`git worktree remove` と `git branch -D` は利用者の操作）。承認が要る操作
+- 枝を統合するか、捨てるか（`git branch -D` は利用者の操作。worktree は `.tmp/worktrees/` の下なら `git worktree remove` で消せる）。承認が要る操作
 
 ## 監査
 - 本体 HEAD: <開始時> → <停止時>（同じ / 違う）、本体 `git status`: <件数>
