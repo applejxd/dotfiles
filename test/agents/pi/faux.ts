@@ -128,7 +128,11 @@ export default async function (pi: ExtensionAPI) {
 		}
 		// 子: システムプロンプトのスキル一覧の名前だけを返す (フルガードが一覧を足すかを見る)
 		if (process.env.FAUX_CHILD_SKILLS === "1" && process.env.PI_HARNESS_CHILD === "1" && last?.role === "user") {
-			const names = [...getCurrentSystemPrompt(messages).matchAll(/<name>([^<]+)<\/name>/g)].map((m) => m[1]);
+			// 実機の ~/.agents/skills の数で子の答えが切れないよう、FAUX_CHILD_SKILLS_ONLY を含む名前だけにできる
+			const only = process.env.FAUX_CHILD_SKILLS_ONLY ?? "";
+			const names = [...getCurrentSystemPrompt(messages).matchAll(/<name>([^<]+)<\/name>/g)]
+				.map((m) => m[1])
+				.filter((n) => n.includes(only));
 			return fauxAssistantMessage(fauxText(`SKILLS=${JSON.stringify(names)}`));
 		}
 		// 子: 受けた依頼 (スラッシュコマンドの展開後) をそのまま返す (親の --skill の引き継ぎを見る)

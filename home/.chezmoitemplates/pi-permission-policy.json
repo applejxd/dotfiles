@@ -204,6 +204,8 @@
       "~/.pi/agent/themes/*": "allow",
       "~/.pi/agent/AGENTS.md": "allow",
       "~/.pi/agent/settings.json": "allow",
+      "~/.agents/skills": "allow",
+      "~/.agents/skills/*": "allow",
       "/mnt/c/Users/applejxd/AppData/Local/Temp/orca-paste-*": "allow"
     }
   }

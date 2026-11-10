@@ -423,7 +423,11 @@ def test_the_harness_adds_the_skill_list_to_the_system_prompt(env):
 def test_the_child_also_gets_the_skill_list(env):
     project = _skill_dir(env["tmp"], "childlist", "CHILD-LIST-DESC")
     calls = [{"name": "guarded_task", "args": {"agent": "worker", "task": "list skills"}}]
-    common = dict(FAUX_CHILD_SKILLS="1", PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"))
+    common = dict(
+        FAUX_CHILD_SKILLS="1",
+        FAUX_CHILD_SKILLS_ONLY="childlist",
+        PI_HARNESS_TEST_CHILD_EXT=str(FIXTURES / "faux.ts"),
+    )
     proc = run_pi(env, calls, extra=("--skill", str(project)), **common)
     assert proc.returncode == 0, proc.stderr
     assert "SKILLS=[" in proc.stdout and '"childlist"' in proc.stdout, proc.stdout
