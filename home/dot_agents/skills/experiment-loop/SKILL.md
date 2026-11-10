@@ -41,10 +41,15 @@ description: "ベンチマークのスコアを上げる実験を、複数 seed 
 
 ## 停滞したとき
 
-スコアが伸びない・判断に自信がないときは、`review` 役（別モデルの独立した相談役）に [監査の依頼](references/audit-checklist.md) を渡し、判断の根拠・未検証の仮説・自分で入れた計測の残り・分割の予算・ばらつきの見積もりを見直させる。
+スコアが伸びない・判断に自信がないときは、レビュー役の子エージェント（pi では `reviewer`。独立した相談役）に [監査の依頼](references/audit-checklist.md) を渡し、判断の根拠・未検証の仮説・自分で入れた計測の残り・分割の予算・ばらつきの見積もりを見直させる。
 
 ## pi での使い方
 
 - 長い実行（`exp run` が数分以上）は、`bg_run` で背景に回し、終わりを待たずに別の作業（プロファイルの解析など）を進める。
-- 監査役は `guarded_task` の `review` に、チェックリストの雛形を埋めて渡す（会話の転写ではなく、判断の一覧と数字を渡す）。
-- スクリプトの実行に許可が要るときは、利用者が `[pi.skill_scripts.allow]` へ足す（このスキルは足さない）。
+- 監査役は `subagent({ agent: "reviewer", async: true, cwd, task })` で起動し、`task` にチェックリストの雛形を埋めて渡す（会話の転写ではなく、判断の一覧と数字を渡す）。完了は通知で届き、親が自動で再開するので、待たない。
+  - `reviewer`（`pi-subagents` 同梱）を選ぶ理由: 見てほしいのは、実験の判断（採否・予算・未検証の仮説）と手元の数字・差分で、`reviewer.md` の「計画・提案された解決・コードの差分」の見直しに当たる。もう一方の `evidence-auditor` は、調査の主張が出典に裏づけられるかを Web の出典で確かめる役（道具は `web_search`・`fetch_content`・`source_check`）で、数字の統計や自前の計測コードの残りは見ない。
+  - `reviewer` は読み取り専用で shell を使えない。`exp log`・`exp best`・`exp compare` の出力、`.exp/decisions.md`、計測コードの `git diff` は、親が実行して依頼文に貼る。
+  - 実機では未確認（`pi-subagents` の docs とエージェント定義を読んで書いた）。
+- スクリプト（`python3 ~/.agents/skills/experiment-loop/scripts/exp.py …`）は、stock の pi では確認なしで実行できる見込み（`python3` は読み取りと宣言済み。実機では未確認）。`uv run …`・`node …` は、作業ツリーの外のパスだと確認になりうる。
+
+> 凍結した custom（`pis`）では、監査役は `guarded_task` の `review`、スクリプトの許可は利用者が `[pi.skill_scripts.allow]` へ足していた（このスキルは足さない）。
