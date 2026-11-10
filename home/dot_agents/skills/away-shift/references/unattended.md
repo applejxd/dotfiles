@@ -38,7 +38,7 @@ Copilot CLI の `permissions-config.json` はプロジェクト単位で
 
 次のどれかに当たるなら、承認の有無に関わらず**やらない**。
 
-1. **不可逆か** — 取り消せない。コミット、削除、履歴の書き換え
+1. **不可逆か** — 取り消せない。本体の履歴へのコミット、削除、履歴の書き換え（専用 worktree の枝へのコミットは、枝ごと捨てられるので可）
 2. **外部に見えるか** — リモートや外部サービスに出る
 3. **環境を変えるか** — インストール、設定変更、常駐プロセス
 
@@ -49,25 +49,25 @@ Copilot CLI の `permissions-config.json` はプロジェクト単位で
 
 | 操作 | 該当する基準 | 代わりに |
 | --- | --- | --- |
-| `git commit` / `git push` | 不可逆・外部 | 差分を `work/` に置いて提示 |
+| `git push` | 外部（拒否される） | しない。統合は利用者が行う |
+| 本体の作業ツリーでの `git commit` / `git add` / ファイル編集 | 不可逆（復帰時に差分が読めない） | 専用 worktree の枝で行う（子は worktree の中で自由にコミットしてよい） |
 | `git clean` / `git reset --hard` / `git branch -D` | 不可逆 | 触らない |
 | `git stash drop` / `git checkout --` / `git restore` | 不可逆 | 触らない |
 | `git config`（`--get` を含む） | 環境 | 触らない。設定値はファイルを読む |
-| `work/` の外への `rm` / `find -delete` | 不可逆 | 消さない。`work/` 配下で作業する |
+| worktree の外への `rm` / `find -delete` | 不可逆 | 消さない。worktree の中で作業する |
 | `sudo` 全般 | 環境 | レポートに必要性を書く |
 | `docker run` の `--privileged` / `-v /:...` / `--pid=host` | 環境（ホストを直接触れる） | 使わない |
 | `docker exec` でのシェル起動 | 環境 | 使わない |
-| `apt` / `brew` / `pipx install` / `uv tool install` | 環境 | `uv run --no-project` で一時的に済ませる |
-| `uv pip install` / `uv add` / `uv remove` | 環境（依存が残る） | `uv run --with <pkg>` で一時的に済ませる |
-| `mise install` / `mise use -g` / `mise settings set` | 環境 | 使わない |
+| `apt` / `brew` / `pipx install` / `uv tool install` / `pip install` / `npm install -g` | 環境（`brew`・`pip`・`pipx`・`uv tool`・`npm -g` などは拒否される。統合後） | worktree の中の `uv run --with` / `uv add` |
+| `uv add` / `uv remove` / `uv sync` | 環境（依存が残る） | worktree の中なら自由（ローカル。枝の変更として残る）。本体では使わない |
+| `mise install` / `mise use -g` / `mise settings set` | 環境（`mise use -g` は拒否される。統合後） | 使わない。worktree の中の `mise exec` は可 |
 | `uv self update` / `mise self-update` / `mise implode` | 環境（deny 済み） | 使わない |
 | `cmake --install` | 環境（システムへ書く） | ビルドまでに留める |
 | `docker rm` / `docker rmi` / `docker * prune` | 不可逆 | 触らない |
-| `gh pr create` / `gh issue create` / `gh issue comment` | 外部 | 本文案を `work/` に置く |
+| `gh pr create` / `gh issue create` / `gh issue comment` | 外部 | 本文案を worktree の `.tmp/away/` か `report.md` に置く |
 | `gh pr checkout` / `gh issue close` | 不可逆・外部 | 触らない |
 | `nc` による疎通確認 | 外部 | 必要性をレポートに書く |
-| リポジトリ本体のファイル編集 | 不可逆（復帰時に差分が読めない） | `work/` にコピーして試す |
-| 長時間のバックグラウンド常駐 | 環境 | サイクル内で完結させる |
+| 長時間のバックグラウンド常駐 | 環境（`subagent stop` では止まらない） | `timeout` で上限を付ける。サイクル内で完結させる |
 
 この表は代表例で、網羅ではない。`~/.config/agents/common.toml` の
 `[bash] ask` / `[bash] deny` に載っているものは当然やらないが、
@@ -78,57 +78,39 @@ Copilot CLI の `permissions-config.json` はプロジェクト単位で
 ## やってよいこと
 
 - 読み取り（`git diff`、`git log`、ファイル閲覧、`grep`）
-- `./.tmp/away-shift/<run-id>/work/` 配下での作成・編集・削除
-  （作業ツリーの中なので確認は出ない）
-- 既存のテスト / lint / ビルドの実行（依存を追加せず、成果物を
-  リポジトリ外へインストールしないもの）
-- `uv run --no-project` / `uv run --with <pkg>` / `uvx` による一時的なツール実行
-  （`uv add` / `uv pip install` と違い、プロジェクトの依存を書き換えない）
+- **子は、専用 worktree の中で**: ファイルの作成・編集・削除、`git add`・`git commit`（枝へ）、
+  `uv add`・`uv sync`・`uv run --with`・ローカルの `npm install` などローカルな依存の変更
+- 親は、`.tmp/away-shift/<run-id>/` の中と、worktree 内の引き継ぎファイル（`.tmp/away/`）への書き込み
+- 既存のテスト / lint / ビルドの実行（成果物を worktree の外へインストールしないもの）
 - ネットワーク読み取り（ドキュメント参照、`gh` の読み取り系）
 
-## リポジトリ本体に触れたくなったら
+## 本体に触れたくなったら
 
-「試しに直してみないと検証できない」場面は多い。その場合も本体は変えない。
+「試しに直してみないと検証できない」場面は多い。**本体の作業ツリーは変えず、専用 worktree の枝で直す**（`SKILL.md`）。
 
-1. 対象ファイルを `work/` へコピーする
-2. コピー側を編集して検証する
-3. `diff -u <元> <コピー>` でパッチを作り、`work/patches/` に置く
-4. レポートで「このパッチを当てれば良い」と提示する
+1. 子が worktree の中でコードを直し、検証し、コミットする
+2. 親が、worktree の中で同じ検証を自分で再実行する
+3. 停止時に `audit` が、本体の `HEAD`・`git status` が開始時のままかと、枝のコミット・差分を出す
+4. レポートで「この枝を統合するか捨てるか」を利用者に尋ねる
 
-復帰したユーザが `git diff` を打って**何も出ない**状態を保つ。
-これは「勝手に変えられていない」という保証になる。
+復帰した利用者が本体で `git diff` を打って**何も出ない**状態を保つ。これは「勝手に変えられていない」という保証になる。
 
 ## 秘密情報
 
 `.env`、トークン、鍵の中身をログ・レポート・コマンド出力に残さない。
 検証に必要でも、存在の有無だけを記録する（値は書かない）。
 
-## なぜサブエージェントに作業させないのか
+## 子に作業させる理由と、気をつけること
 
-「作業はサブエージェントにやらせ、メインエージェントが監視する。詰まったら
-kill して新しいサブエージェントを立てる」という案は自然に見えるが、成立しない。
+away-shift は、実験を**子（サブエージェント）に任せ、親が監督する**。理由は次のとおり。
 
-**サブエージェントを終了させる手段が無い**（確認できた環境では）。利用できるのは起動 (`task`) と
-状態取得 (`read_agent` / `list_agents`)、メッセージ送信 (`write_agent`) だけで、
-kill / cancel に相当するツールは存在しない。ツール名は CLI ごとに違い、
-全環境に当てはまるとは確認していない（`resume.md` を参照）。シェルには `stop_bash` があるが、
-これはプロセスを止めるもので、**承認プロンプト待ちには効かない**
-（プロンプトはコマンドが起動する前に出るため、止めるプロセスがまだ無い）。
+- **文脈が汚れない。** サイクルごとに新しい子なので、長い実験の出力で親の文脈が膨らまない。引き継ぎはファイル（`.tmp/away/notes.md`）。
+- **範囲を物理的に絞れる。** 子の `cwd` を専用 worktree にすると、その外への書き込みは確認（無人では拒否）になる。
+- **止める手段がある。** `subagent` の `stop` と `timeoutMs`・`checkpointBeforeDeadlineMs`（`resume.md`）。
 
-したがって、詰まったサブエージェントは放置するしかない。監視できても
-回復できないなら、監視の価値は小さい。
+気をつけること（実測）。
 
-**そもそも止まらないようにするのが唯一の対処**なので、この skill は
-事前判定 (`preflight.py`) で「承認を求められるコマンドを発行しない」ことに
-賭けている。
-
-なお、コンテクストを分けたいだけならサブエージェントは有効である。
-ただし away-shift 本体は自分を起こし続ける必要があり（`references/resume.md`）、
-サブエージェントは 1 ターンで終了するため、本体を fork してはいけない
-（`SKILL.md` 冒頭の注記を参照）。重い調査を 1 サイクル内で切り出す用途なら
-サブエージェントを使ってよい。その場合も**制約はプロンプトに書き写す**こと。
-サブエージェントはこの skill の本文を読んでいない。
-
-**pi（stock）の注記**: 子エージェントは `subagent`（`pi-subagents`）で起動し、背景で動く。起動と停止は `subagent` の `status`・`stop` などで扱える
-（「終了させる手段が無い」は当てはまらない）。ただし本体を fork しない方針（`SKILL.md` 冒頭）は変わらない。1 サイクル内の重い調査を子へ切り出す用途は可。
-子の確認は親の画面へ転送される（離席中は誰も答えず、5 分で拒否される）。子に**制約を書き写す**こと。
+- **`stop` は子を止めるが、子のサブプロセスは止めない。** 子のコマンドには `timeout` を付けさせ、停止時は `audit --kill` で掃除する。
+- **子の自己申告は当てにならない。** 「確認は出なかった」と誤報した例がある。親が worktree で再検証し、確認の有無は審査ログで確かめる。
+- **子はこの skill の本文を読んでいない。** 制約は `brief-common.md`（`references/child-brief.md` のひな形から作る）で渡す。
+- 子の確認は親の画面へ転送される。離席中は誰も答えず、5 分で拒否される（承認にならない）。

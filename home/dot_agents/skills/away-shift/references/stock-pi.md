@@ -3,6 +3,9 @@
 無人では、確認に誰も答えない。**確認は 5 分で拒否され（`promptTimeoutMs`）、1 回で 5 分を失う。** 拒否は承認にならない。
 ここにある操作は、計画に入れない。出て拒否されたら、同じ形で繰り返さず、レポートの「分からなかったこと」に書く。
 
+**子は専用 worktree が作業ツリー**（`cwd` に指定する）。以下の「作業ツリー」は、親では本体、子では worktree を指す。
+子の確認は親の画面へ転送されるが、離席中は誰も答えず、同じく 5 分で拒否される。
+
 出典は、方針 `home/.chezmoitemplates/pi-permission-policy.json`（2026-11-10 時点）。仕組みは、このリポジトリの
 `docs/spec/agent-config-generation.md` の「permission-system の設定（stock）」。方針は変わるので、**迷ったら配備済みの設定を読む**
 （`~/.pi/agent/extensions/pi-permission-system/config.json` の `permission.bash`。読み取りは許可リストにあり、確認が出ない）。
@@ -37,13 +40,16 @@
 
 ## 作業ツリーの外のパス
 
-作業ツリー（リポジトリ）の外の読み書きは、確認になる。確認が出ないのは次のとおり。
+作業ツリーの外の読み書きは、確認になる。確認が出ないのは次のとおり。
 
-- 作業ツリーの中（`.tmp/away-shift/` を含む）
+- 作業ツリーの中。子では worktree の中（`.venv`・`.tmp/away/` を含む）。親では `.tmp/away-shift/`、**子の worktree**（`.tmp/worktrees/` は本体の中）
 - 読み取りだけ: `/tmp`、`~/.agents/skills/` の下（この skill の `references/` と `scripts/` を含む）、`~/.pi/agent/` の一部（`npm/`・`install/`・`extensions/`・`prompts/` など）
 - `python3 <作業ツリー外のスクリプト>` は、スクリプトのパスを読み取りとして扱う（許可リストの下なら確認なし）。
   **`uv run …` や `node …` は向きを証明できず、外のパスで確認になる**
-- 実験の出力・キャッシュ・一時ファイルは、`work/` か `/tmp` に置く（`/tmp/*` は読み書きとも可）
+- 実験の出力・キャッシュ・一時ファイルは、worktree の中か `/tmp` に置く（`/tmp/*` は読み書きとも可）
+
+**確認になる例**（実測）: 子から本体の `.tmp/` への `write`（子の cwd は worktree なので外側）、bash から `/proc/<pid>/…` のようなパスを読む操作。
+プロセスの確認は、`away_guard.py audit` が（スクリプトの中で）行う。
 
 ## cc-safety-net（実行を止める）
 
@@ -51,12 +57,14 @@
 `git stash drop`・`git branch -D`・`git clean -f`、`find -delete`、作業ツリーの外・ホーム・`.git` を対象にする `rm -rf`。
 どれも、この skill の「制約」でも禁じている。
 
-## 確認が出ない（通る）が、やってはいけないもの
+## 確認が出ない（通る）もの
 
-方針は「離席中」を区別できないので、次は通る（上の確認は 2026-11-10 の `cc-safety-net explain`。方針の側は、規則に無い bash は allow）。
-**`SKILL.md` の「制約」で禁じており、停止時の監査（`git status`・`HEAD`）で確かめる**。
+方針は「離席中」を区別できないので、次は通る（規則に無い bash は allow。`cc-safety-net explain` で確認）。
 
-- `git commit`・`git stash`（`drop` 以外）
-- `uv add`・`pip install`・`mise use -g`（`uv tool install`・`npm install -g` も、規則に無いので通る見込み。未確認）
-- **作業ツリーの中の `rm -rf`**（`work/` の外でも通る。外・ホーム・`.git` だけが拒否される）
-- 作業ツリー内の本体ファイルの編集（`write`・`edit` は作業ツリーのどこでも通る）
+**子（worktree の中）には自由にさせてよい**: `git add`・`git commit`・`git stash`（`drop` 以外）、`uv add`・`uv sync`・`uv run --with`、ローカルの `npm install`、
+worktree 内の `rm -rf`（外・ホーム・`.git` を対象にする形だけ拒否される）。実測: worktree 内の `write`・`git commit`・`uv run --with`・`mise exec` は確認なしで通った。
+
+**親が本体でやってはいけない**（停止時の `audit` で確かめる）: 本体での `git commit`・`git add`・ファイルの書き換え・`rm -rf`。親が書くのは `.tmp/away-shift/` と worktree 内の引き継ぎファイルだけ。
+
+**グローバルな環境変更は拒否される**（`feature/deny-global-installs` の統合後。統合前は通る）: `pip install`・`pipx`・`uv tool install`・`npm install -g`・`mise use -g`・`brew install`・
+`cargo`・`go`・`gem` の `install`。拒否の理由に、代わりの手段（uv・mise）が出る。限界: `npm install foo -g` のようにフラグが後ろにある形は拾えない。子の指示（`brief-common.md`）でも禁じている。
