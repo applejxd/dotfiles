@@ -16,7 +16,8 @@
            停止済み (stopped が埋まっている) の run は確定状態で、状態を変えずに exit 3
     log    サイクルの記録を追記する (--text / --note-file / 標準入力)。停止済みの run でも使える
     status 現在の run の要約を出す。停止済みの run でも使える
-    sleep  <秒> (整数 1〜7200) だけ待つ。何も読み書きしない。pi の bg_run で再開を予約する用
+    sleep  <秒> (整数 1〜7200) だけ待つ。何も読み書きしない。pi の bg_run で再開を予約する用。
+           --note <文> を付けると、待ち終えた最後に 1 行で出す (bg_run の完了通知に run_id と再開手順を載せる)
     snapshot  コードを変えて試す用に、リポジトリの作業コピーを work/src へ作る。
            隔離の保証ではない (SKILL.md の「コードを変えて検証する」)
 
@@ -54,6 +55,7 @@ EXIT_USAGE = 2
 
 # check の NEXT_WAKE_SECONDS は既定で 3600 まで (--max-wake-minutes 120 までは収まる)
 SLEEP_MAX_SECONDS = 7200
+NOTE_MAX_CHARS = 300  # sleep --note の出力の上限 (bg_run の通知に載せる 1 行)
 WAKE_MAX_MINUTES = SLEEP_MAX_SECONDS // 60
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -402,6 +404,10 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def cmd_sleep(args: argparse.Namespace) -> int:
     time.sleep(args.seconds)
+    if args.note:
+        # bg_run の完了通知は、起動したコマンドと出力の最後の数行を運ぶ。再開時にコンテクストが残らないので、
+        # run_id と「手順 3 から再開する」旨をここに載せる (1 行・上限つき。制御文字は空白にする)
+        print(" ".join(args.note.split())[:NOTE_MAX_CHARS])
     return EXIT_CONTINUE
 
 
@@ -625,6 +631,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_sleep = sub.add_parser("sleep", help="上限つきで待つ (1〜7200 秒)")
     p_sleep.add_argument("seconds", type=_sleep_seconds)
+    p_sleep.add_argument("--note", default="", help="待ち終えたあとに出す 1 行 (run_id と再開手順)")
     p_sleep.set_defaults(func=cmd_sleep)
 
     p_snap = sub.add_parser("snapshot", help="作業用のコピーを work/src に作る (隔離ではない)")

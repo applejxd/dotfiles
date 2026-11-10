@@ -1,4 +1,4 @@
-# 再開・停止・復帰の手段
+# 再開・停止・復帰の手段（pi の stock）
 
 away-shift は離席時間いっぱい動くため、開始前に次の 3 つができると確認する。
 1 つでも確認できなければ、**開始せずに理由をユーザへ報告する**。
@@ -9,51 +9,45 @@ away-shift は離席時間いっぱい動くため、開始前に次の 3 つが
 | 停止 | 停止条件に当たったとき、予約を取り消せる |
 | 復帰 | ユーザのメッセージが届いた時点で、サイクルを打ち切れる |
 
-## CLI ごとの手段
-
-| CLI | 再開・停止の手段 | 状態 |
-| --- | --- | --- |
-| Copilot CLI | `manage_schedule`（`wakeup` / `create` / `stop`） | 未確認（このリポジトリで実測していない） |
-| OpenCode v2 | 不明 | 未確認 |
-| Claude Code | 不明 | 未確認 |
-| pi (pis) | `bg_run` で `sleep` を起動し、完了で自動再開 / `bg_kill` | 実測あり (`docs/research/agents/pi-bg-experiments.md` の s1・s2。TUI での見え方と数十分の sleep の上限は未確認) |
-
-どの CLI で使えるかは実測が無いので断定しない。ツール一覧に予約・取り消しに
-相当するものが見つからなければ「手段なし」として開始しない。
-実測したら、この表を更新する。
-
-## `manage_schedule` を使える場合
-
-`check` が出した `NEXT_WAKE_SECONDS` を `delaySeconds` に渡す。
+## 手段 A: `bg_run` で `sleep` を起動する（既定）
 
 ```text
-manage_schedule(action="wakeup", id=<自己ペースループの id>,
-                delaySeconds=<NEXT_WAKE_SECONDS>,
-                reason="away-shift <run-id> cycle <N+1>")
+bg_run: python3 ~/.agents/skills/away-shift/scripts/away_guard.py sleep <NEXT_WAKE_SECONDS> --note "away-shift <run-id> cycle <N+1>: SKILL.md の手順 3 から再開"
 ```
 
-自己ペースループとして起動されていない場合は、最初のサイクルで
-`manage_schedule(action="create", interval="<NEXT_WAKE_SECONDS>s", prompt=...)`
-を作る。prompt には **run_id と「SKILL の手順 3 から再開する」旨**を書く。
+- **予約**: サイクルの最後に上を起動し、応答を終える。ジョブが終わると、アイドルのまま自動で再開する（完了の通知が届く）。
+  通知は起動したコマンドと出力の最後の数行を運ぶので、`--note` の行から run_id と再開手順が分かる。
+  同じ内容を `todo` の項目にも残す（note にジョブ ID と run_id）。
+- **停止**: `bg_kill <ジョブ ID>`。停止条件に当たったら予約は出さない。出ているものは止める。
+- **復帰**: 利用者のメッセージが来たら、まず `bg_kill` する（止めないと、戻ったあとで通知が届き、余分に起こされる）。
+- `sleep` は 1〜7200 秒。`check` の `NEXT_WAKE_SECONDS` は、これに収まる。
+- 生の `sleep <秒>` も確認は出ない（規則に無い bash は allow）。ただし `--note` を付けられないので、`away_guard.py sleep` を使う。
+- 実測（2026-11-10）: 3 秒・5 秒・120 秒の `sleep` で、確認なしで起動し、完了でアイドルの親が再開した。120 秒の完了通知には `--note` の行が載った。時間単位の待機は未確認。
 
-停止・復帰では `manage_schedule(action="stop", id=...)` を呼ぶ。
+## 手段 B: `/goal` の `goal_wait`（未確認）
 
-## `bg_run` を使える場合 (pi)
+入れ済みの `pi-goal`（`/goal`）には、予約・再開の標準の仕組みがある。`goal_wait({ goal_id, reason, resume_after_ms })` は、
+外部の待機を用意したあと、指定の時間で 1 回だけ自分を起こす。予算（`--tokens`）・無進捗の検出・一時停止も標準で備わる。
 
-仕様と実測は `docs/spec/guard/pi-guard.md` と `docs/research/agents/pi-bg-experiments.md`。
+- **開始は利用者**。`/goal` はスラッシュコマンドで、エージェントからは起動できない。
+- **復帰の打ち切りに難がある見込み**。目標を終える `goal_complete`（全要件の検証済み）・`goal_blocked`（同じ障害が 3 ターン続いた）は、
+  「利用者が戻ったので止める」には使えない。止めるのは利用者の `/goal pause`・`/goal clear`。利用者のメッセージは待機を起こし、
+  目標が active のままだと、続きを自動で始める。
+- 自動の応答の上限（既定 25）に達すると一時停止する。夜間の運転では、設定（`~/.pi/agent/pi-goal.json`）の見直しが要る。
 
-- **予約**: サイクルの最後に `bg_run` で
-  `python3 ~/.agents/skills/away-shift/scripts/away_guard.py sleep <NEXT_WAKE_SECONDS>`
-  を起動し (生の `sleep` は確認になる。1〜7200 秒)、応答を終える。完了でアイドルのまま自動再開する。予約の本文は run_id と
-  「SKILL の手順 3 から再開する」旨。同じ内容を `todo` の項目 (blocked、
-  note に bg ジョブ ID と run_id) にも残す
-- **停止・復帰**: `bg_kill <ジョブ ID>` で予約を取り消す (再開を起こさない)。
-  利用者のメッセージが来たら、まず `bg_kill` する
-- **読まない**: `bg_log` で完了を読むと、通知と合わせて余分に 1 ターン走る (F2)。
-  sleep のジョブは `bg_log` で読まない
-- 1 サイクル = 1 ターン + 1 ジョブ
+## 実機の確認（2026-11-10）
+
+結果は、確かめた分だけ書く。
+
+| 確認 | 結果 |
+| --- | --- |
+| `bg_run` で `away_guard.py sleep` を起動し、確認が出ない | 確認なし（3 秒の `sleep`。方針の判定表でも `read` と分類） |
+| 完了でアイドルの親が再開する（3〜5 秒） | 再開した |
+| 分単位の待機（120 秒）で、再開が `--note` の行つきで届く | 届いた（`2m0s`。通知の最後の行が `--note` の文）。続けて `check`・`STOP` で終了コード 3・監査（`HEAD` 同じ・`git status` 空）も通った |
+| `goal_wait` で時間指定の再開 | （未確認） |
 
 ## サブエージェント
 
-サブエージェントを起動する道具の名前も CLI ごとに違う。この skill の本文は
-特定のツール名を前提にしない。使えるものを確認し、無ければ使わない。
+重い調査を 1 サイクル内で切り出す用途なら、サブエージェント（`subagent`）を使ってよい。
+背景の子の確認（ask）は親の画面へ転送される（実測: 約 11 秒で承認され、続行した）。離席中は誰も答えないので、親の確認と同じく 5 分で拒否される。
+**制約は依頼文に書き写す**。子はこの skill の本文を読んでいない。本体は fork しない（`SKILL.md` 冒頭）。

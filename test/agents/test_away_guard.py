@@ -565,6 +565,21 @@ def test_sleep_waits_and_touches_nothing(workspace):
     assert not (workspace / ".tmp").exists()
 
 
+def test_sleep_prints_the_note_as_one_bounded_line(workspace, capsys):
+    """bg_run の完了通知に run_id と再開手順を載せる。改行は空白にし、長さに上限を付ける。"""
+    assert guard.main(["sleep", "1", "--note", "away-shift r1 cycle 3:\n手順 3 から再開"]) == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    assert out == "away-shift r1 cycle 3: 手順 3 から再開\n"
+    assert not (workspace / ".tmp").exists()
+    assert guard.main(["sleep", "1", "--note", "x" * 1000]) == guard.EXIT_CONTINUE
+    assert capsys.readouterr().out == "x" * guard.NOTE_MAX_CHARS + "\n"
+
+
+def test_sleep_without_a_note_prints_nothing(workspace, capsys):
+    assert guard.main(["sleep", "1"]) == guard.EXIT_CONTINUE
+    assert capsys.readouterr().out == ""
+
+
 def test_sleep_limit_covers_the_default_wake_interval():
     assert guard.SLEEP_MAX_SECONDS >= 60 * 60
 

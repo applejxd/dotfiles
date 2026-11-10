@@ -11,36 +11,22 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash(uv run --no-project python ~/
 
 > **この skill は fork しない（`context: fork` を付けない）**
 >
-> 離席時間をまたいで動き続けることが要件なので、独立したサブエージェントでは
-> 成立しない。
->
-> - サブエージェントは 1 回走って要約を返して終わるため、自分を再開させる
->   自己ペースループを維持できない
-> - ユーザの復帰はメインの会話にメッセージとして届く。サブエージェントからは
->   観測できず、「復帰時に止まる」が効かない
-> - レポートは要約に畳まれず、そのままユーザに見える必要がある
+> 離席時間をまたいで動き続けることが要件なので、独立したサブエージェントでは成立しない。
+> サブエージェントは 1 回走って要約を返して終わるため、自分を再開させるループを維持できず、
+> 利用者の復帰（メインの会話へのメッセージ）も観測できない。レポートは要約に畳まれず、そのまま利用者に見える必要がある。
 
-前提は **autopilot / 自動承認モードで動いていること**。
-それでも「承認が要る操作」には手を出さない。理由は
-`references/unattended.md` にまとめてある（要点: 無人では `ask` に誰も答えないので
-自動拒否・スキップ・応答待ちのいずれかになり、どれもサイクルが無駄になる。
-加えて、事前承認や `ask` 未登録のせいで**止まらない**破壊的操作も実在する）。
+## 前提（pi の stock）
 
-## pi (pis) で使うとき
-
-- スクリプトは `python3 ~/.agents/skills/away-shift/scripts/<script>.py …` で呼ぶ
-  （pi の許可規則の runner は `python3`。`uv run --no-project python` は Claude Code / Copilot 向け）
-- ツール名は Bash→`guarded_bash`、Read→`guarded_read`、Write→`guarded_write`、
-  Edit→`guarded_edit`、Task→`guarded_task` と読み替える（frontmatter は Claude 向けのまま）
-- 無人で確認の画面に当たらないよう、`preflight.py` に `--judge pi` を付ける
-  （必要なら `--role`・`--bypass`）。規則に無いコマンドも ASK になり、実行しない。
-  この判定は Python 版の判定器による**近似**で、実際の pis（TS 版。境界が証明されたセッションでは default の ask を allow に緩和する）より厳しめ（ASK が多め）に出る。安全側の見積り
-- **記録の渡し方**: `log --text "$(cat <<'EOF' …)"` は pi の判定器が allow にしない
-  （`$` と heredoc）。記録の本文を `write` ツールで `.tmp/away-shift/<run-id>/work/note.md`
-  に書き、`away_guard.py log <run-id> --note-file note.md` で渡す（実装済み）
-- 再開の予約は `bg_run` で `python3 ~/.agents/skills/away-shift/scripts/away_guard.py sleep <NEXT_WAKE_SECONDS>`
-  を起動する（生の `sleep` は確認になる。1〜7200 秒）
-- 再開・停止・復帰は `references/resume.md` の「`bg_run` を使える場合 (pi)」
+- **確認（ask）に誰も答えない。** 確認の画面は 5 分で拒否される（`promptTimeoutMs`）。拒否は承認にならず、
+  「誰も答えなかった」とだけ伝わる。1 回の ask で 5 分失うので、**ask が出る操作を計画に入れない**
+  （一覧と迷ったときの確かめ方: `references/stock-pi.md`）。出て拒否されたら、同じ操作を繰り返さず、
+  記録して、代替か次の仮説へ進む。
+- **方針は「離席中」を区別できない。** `git commit`・`uv add`・`mise use -g` などは確認なしで通る。
+  止めるのはこの skill の指示だけなので、「制約」を守り、停止時に監査で確かめる（手順 4）。
+- **コマンドの形**: スクリプトは `python3 ~/.agents/skills/away-shift/scripts/<名>.py …` で呼ぶ。
+  `python3` は読み取りと宣言済みで、確認が出ない。`uv run …` は宣言が無く、作業ツリー外のパスで確認になる。
+- **使う道具**: `bash`・`read`・`write`・`edit`、状態の記録に `todo`、再開・停止に `bg_run`・`bg_status`・`bg_kill`。
+- 再開・停止・復帰の手段は `references/resume.md`。仕組みと根拠は、このリポジトリの `docs/spec/away-shift.md`。
 
 ## 使わない場面
 
@@ -70,22 +56,19 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash(uv run --no-project python ~/
 ### 2. run を作る
 
 ```bash
-uv run --no-project python ~/.agents/skills/away-shift/scripts/away_guard.py \
-  init --goal "<目標>" --deadline "<復帰予定時刻>"
+python3 ~/.agents/skills/away-shift/scripts/away_guard.py init --goal "<目標>" --deadline "<復帰予定時刻>"
 ```
 
-> pi では上の「pi (pis) で使うとき」の呼び方（`python3 …`、`--note-file`）を使う。
-
-`--deadline` は `HH:MM`（次にその時刻になる瞬間）、`YYYY-MM-DD HH:MM`、
-`8h`、`90m` のいずれか。出力された `run_id` を以降ずっと使う。
-
-離席の形に合わせて使い分ける。
+`--deadline` は `HH:MM`（次にその時刻になる瞬間）、`YYYY-MM-DD HH:MM`、`8h`、`90m` のいずれか。
+出力された `run_id` を以降ずっと使う。
 
 | 離席の形 | 指定例 |
 | --- | --- |
 | 夜に離席して翌朝戻る | `--deadline "07:30"` |
 | 日中に出かけて夕方戻る | `--deadline "17:00"` |
 | 戻る時刻が読めない | `--deadline "6h"`（長さで指定） |
+
+開始時の HEAD を、最初のサイクルの記録に残す（`git rev-parse HEAD`。停止時の監査で使う）。
 
 ディレクトリの役割は分ける。
 
@@ -96,61 +79,31 @@ uv run --no-project python ~/.agents/skills/away-shift/scripts/away_guard.py \
 | `.tmp/away-shift/<run-id>/state.json` | 停止判定の状態 | **消さない** |
 | `.tmp/away-shift/<run-id>/report.md` | 復帰時のレポート | **消さない** |
 
-`./.tmp/` 配下の削除には承認が要らない。だからこそ、
-**証跡を消さない**ことを自分で守る必要がある。
+`./.tmp/` 配下の削除には確認が出ない。だからこそ、**証跡を消さない**ことを自分で守る。
 
 ### 3. サイクルを回す
 
-**各サイクルの最初に必ず `check` を実行する。** 期限や STOP ファイルの確認を
-サイクルの終わりに回すと、長いサイクルを 1 つ跨いだだけで期限を超える。
-`check` が守るのは「新しい実験を始めないこと」までで、実行中の実験は止まらない。
+**各サイクルの最初に必ず `check` を実行する。** 期限や STOP ファイルの確認をサイクルの終わりに回すと、
+長いサイクルを 1 つ跨いだだけで期限を超える。`check` が守るのは「新しい実験を始めないこと」までで、
+実行中の実験は止まらない。
 
 ```bash
-uv run --no-project python ~/.agents/skills/away-shift/scripts/away_guard.py \
-  check <run-id>
+python3 ~/.agents/skills/away-shift/scripts/away_guard.py check <run-id>
 ```
 
-> pi では上の「pi (pis) で使うとき」の呼び方（`python3 …`、`--note-file`）を使う。
-
-- 終了コード 0 → 継続。出力に残り時間、現在のサイクル番号、
-  次のサイクルまで空ける秒数（`NEXT_WAKE_SECONDS`）が出る
+- 終了コード 0 → 継続。出力に残り時間、現在のサイクル番号、次のサイクルまで空ける秒数（`NEXT_WAKE_SECONDS`）が出る
 - 終了コード 3 → **その場で止めて手順 4 へ**。理由が出力される
 
 継続する場合、1 サイクルで次を行う。
 
 1. **仮説を 1 つ立てる**。「何を確かめるか」「どうなれば成立か」を書く
-2. **最小の実験**をする。作業は `work/` 配下。既存ファイルは読むだけ
-3. **結果を記録する**
+2. **最小の実験**をする。作業は `work/` 配下。既存ファイルは読むだけ。各実験のコマンドには、
+   `check` が出した残り時間を超えない `timeout` を付ける（`timeout 20m <command>`。付けられない操作は始めない）
+3. **結果を記録する**。本文は `write` ツールで `.tmp/away-shift/<run-id>/work/note.md` に書き、
+   `python3 ~/.agents/skills/away-shift/scripts/away_guard.py log <run-id> --note-file note.md` で渡す
+   （コマンド置換と heredoc を使わない形。`--note-file` は `work/` 直下のファイルだけ受け付ける）
 
-#### 実行前に必ず事前判定する
-
-無人実行で最悪なのは、**承認プロンプトが出たまま誰も答えず離席時間を丸ごと
-失う**こと。プロンプトはコマンドを実行する**前**に出るので、タイムアウトでは
-救えない。実行してから困るのではなく、実行する前に同じ判定器へ問い合わせる。
-
-判断に迷うコマンドは、まず次を通す。
-
-```bash
-uv run --no-project python ~/.agents/skills/away-shift/scripts/preflight.py \
-  "<実行しようとしているコマンド>"
-```
-
-- `ALLOW`（終了コード 0）→ 実行してよい。ただし意味は **この hook の判定上は
-  許可** に限る。CLI の permission / sandbox 全体で承認が不要なことまでは
-  保証しない
-- `ASK` / `DENY`（終了コード 3）→ **実行しない**。`work/` で代替する方法を
-  探すか、レポートに書いて次の仮説へ移る
-- **判定不能（終了コード 2）→ 実行しない**。hook が見つからない・終了コードが
-  0 以外・タイムアウト・出力が解釈できない、のいずれか。ASK 扱いで代替を探す
-- 上記以外の終了コード、または出力が `ALLOW` でない場合も実行しない
-
-判定には PreToolUse hook 本体を使うので、予測と実際がずれない。
-`uv sync` のような日常的なコマンドまで毎回通す必要はないが、
-**環境やリポジトリの状態を変えるものは必ず通す**。
-
-```bash
-uv run --no-project python ~/.agents/skills/away-shift/scripts/away_guard.py \
-  log <run-id> --text "$(cat <<'EOF'
+```text
 ### 仮説
 ...
 ### やったこと
@@ -159,22 +112,27 @@ uv run --no-project python ~/.agents/skills/away-shift/scripts/away_guard.py \
 ...
 ### 次にやること
 ...
-EOF
-)"
 ```
 
-> pi では上の「pi (pis) で使うとき」の呼び方（`python3 …`、`--note-file`）を使う。
+#### ask を避ける
+
+実行する前に、そのコマンドが確認になりうるかを、`references/stock-pi.md` の一覧で確かめる。
+一覧の分類は次のとおり。
+
+- 強制の確認: 外部への投稿・変更、公開、履歴・設定の改変、外部送信・永続化
+- 拒否: `sudo`・`git push`・スクリプトをシェルへ渡す形・秘密を取るコマンド
+- 床の確認: `bash -c`・`eval`・`sudo`/`env`/`xargs` などの前置き、解析できない形
+- 作業ツリーの外のパス（`/tmp` と `~/.agents/skills` の読み取りなど、許可リストにあるものを除く）
+
+確認になる操作は**実行しない**。`work/` で代替する方法を探すか、レポートに書いて次の仮説へ移る。
 
 #### コードを変えて検証する
 
 リポジトリのコードを変えて試したいときは、最初に 1 回作業用のコピーを作る（リポジトリの根で実行する）。
 
 ```bash
-uv run --no-project python ~/.agents/skills/away-shift/scripts/away_guard.py \
-  snapshot <run-id>
+python3 ~/.agents/skills/away-shift/scripts/away_guard.py snapshot <run-id>
 ```
-
-> pi では「pi (pis) で使うとき」の呼び方（`python3 …`）を使う。
 
 - コピーするのは、追跡ファイルと、ignored でない未追跡ファイル。未コミットの変更も含む。
   秘密の疑い（`read_deny_globs`）・シンボリックリンク・サブモジュール・大きすぎるファイルはコピーしない。
@@ -187,31 +145,33 @@ uv run --no-project python ~/.agents/skills/away-shift/scripts/away_guard.py \
 
 ### 3-1. 離席時間いっぱい使う（重要）
 
-1 サイクルは実時間で数分しかかからない。何もしないと、離席直後に
-全サイクルを使い切って手が空き、「戻るまでかけて検証する」前提が崩れる。
+1 サイクルは実時間で数分しかかからない。何もしないと、離席直後に全サイクルを使い切って手が空く。
+**サイクルの終わりに、自分を再開させる予約を出して、応答を終える。** 手順 2 の前に、再開・停止・復帰の
+3 つができると確かめる。1 つでも確認できなければ、**開始せずに理由をユーザへ報告する**
+（内容と実測は `references/resume.md`）。
 
-**サイクルの終わりに、自分を再開させる手段で次のサイクルを予約する。**
-`check` が出した `NEXT_WAKE_SECONDS` を待ち時間として渡す。手段は CLI ごとに
-違い、使えるかどうかも環境による。**手順 2 の前に、再開・停止・復帰の 3 つが
-できるか確かめる**（内容と CLI ごとの扱いは `references/resume.md`）。
-1 つでも確認できなければ、**開始せずに理由をユーザへ報告する**。
+```text
+bg_run: python3 ~/.agents/skills/away-shift/scripts/away_guard.py sleep <NEXT_WAKE_SECONDS> --note "away-shift <run-id> cycle <N+1>: SKILL.md の手順 3 から再開"
+```
 
-予約には run_id と「SKILL の手順 3 から再開する」旨を必ず含める。
-再開時にコンテクストが残らないので、run_id を書き忘れると再開できない。
-
-停止したら（`check` が終了コード 3）、必ず再開の予約を止める。
-止め忘れると、レポートを出した後も起こされ続ける。
-
-1 サイクルの実作業は 15〜30 分を目安にする。長くなりそうなら分割する。
-`check` はサイクルの先頭でしか走らず、**実行中の実験は止めない**。
-そのため各実験のコマンドには、`check` が出した残り時間を超えない
-タイムアウトを付ける（`timeout 20m <command>` や、ツールの timeout 引数）。
-タイムアウトを付けられない操作は始めない。
+- 完了の通知に、起動したコマンドと `--note` の行が載る。再開時にコンテクストが残らないので、run_id と再開手順を必ず `--note` に入れる
+- ジョブ ID と run_id を `todo` に残す
+- 1 サイクルの実作業は 15〜30 分を目安にする。長くなりそうなら分割する
+- 停止したら（`check` が終了コード 3）、予約は出さない。出ている予約は `bg_kill` で止める
 
 ### 4. 停止したら
 
-`check` が停止を返したら、**新しい実験を始めない**。
-残り時間をレポート作成に使う。再開スケジュールも止める（`references/resume.md`）。
+`check` が停止を返したら、**新しい実験を始めない**。残り時間をレポート作成に使う。
+
+**監査**: 次を実行し、結果をレポートに書く。「勝手に変えられていない」ことを、利用者が確かめられるようにする。
+
+```bash
+git rev-parse HEAD
+git status --short
+```
+
+- `HEAD` が開始時と同じこと（コミットされていない）
+- 追跡ファイルに変更が無いこと（`.tmp/` は ignored で出ない）。出たら**違反として、そのままレポートの先頭に書く**
 
 `report.md` を書いて会話にも同じ内容を出す。
 
@@ -228,10 +188,14 @@ uv run --no-project python ~/.agents/skills/away-shift/scripts/away_guard.py \
 - <根拠になるコマンド出力・ファイルとともに>
 
 ## 分からなかったこと・詰まった点
-- <何が障害だったか。承認が必要で進めなかったものはここに書く>
+- <何が障害だったか。確認が出て拒否されたもの（誰も答えなかった）は、ここに書く>
 
 ## 次にやるべきこと（ユーザの判断が要るもの）
 - <承認が要る操作。コミット、インストール、外部への書き込みなど>
+
+## 監査
+- HEAD: <開始時> → <停止時>（同じ / 違う）
+- `git status --short`: <出力。空なら「変更なし」>
 
 ## 成果物
 - <path>: <内容>
@@ -243,8 +207,7 @@ uv run --no-project python ~/.agents/skills/away-shift/scripts/away_guard.py \
 
 ### 5. ユーザが戻ってきたら
 
-ユーザからメッセージが来た時点で **その場でサイクルを打ち切る**。
-再開スケジュールを止めてから（`references/resume.md`）、
+ユーザからメッセージが来た時点で **その場でサイクルを打ち切る**。まず予約を `bg_kill` で止めてから、
 中断したサイクルの状態を 1 行で伝え、レポートを提示する。
 
 ## 停止条件
@@ -259,31 +222,24 @@ uv run --no-project python ~/.agents/skills/away-shift/scripts/away_guard.py \
 | 行き詰まり | 3 サイクル連続で新しい情報が出ない |
 | 承認が必要 | 目標に到達するには、不可逆・外部・環境変更のいずれかが要ると分かった |
 
-ユーザは `touch STOP` だけで止められる。run_id を覚えていなくてよいよう、
-リポジトリ直下の `STOP` も見る。
+ユーザは `touch STOP` だけで止められる。run_id を覚えていなくてよいよう、リポジトリ直下の `STOP` も見る。
 
 ## 制約
 
 - **承認の有無に関わらず、次の性質を持つ操作をしない**。
   「不可逆」「外部に見える」「環境を変える」のどれかに当たるもの
-  （コミット、push、`work/` 外の削除、sudo、`docker run --privileged`、
-  グローバルインストール、依存の追加、外部サービスへの書き込み）。
-  承認が要るかどうかで判断しない。**止められていない = やってよい、ではない**。
-  必要になったらレポートに書いて止める
-- **リポジトリ本体のファイルを書き換えない**。コードを変えて試すなら、`away_guard.py snapshot` で
-  `work/src/` に作る**作業用のコピー**を使う（下の「コードを変えて検証する」）。変更案は
-  パッチやコピーとして `work/` 配下に置き、レポートで提示する。`git worktree` は使わない
+  （コミット、push、`work/` 外の削除、sudo、`docker run --privileged`、グローバルインストール、依存の追加、
+  外部サービスへの書き込み）。stock の方針では、止められない操作がある（前提）。
+  **止められていない = やってよい、ではない**。必要になったらレポートに書いて止める
+- **リポジトリ本体のファイルを書き換えない**。コードを変えて試すなら、`snapshot` で作る作業用のコピーを使う。
+  変更案はパッチやコピーとして `work/` 配下に置き、レポートで提示する。`git worktree` は使わない
   （`.git` や参照を書き換える。理由は `references/experiment-design.md`）
 - **証跡を消さない**。消してよいのは `work/` 配下だけ
 - **秘密情報をログに出さない**。トークン・鍵・パスワードは記録しない
-- **`check` をサイクルの先頭で必ず実行する**。省略しない。`check` は新しい実験を
-  始めてよいかの判定であり、実行中の実験は止めない
-- **環境やリポジトリを変えるコマンドは `preflight.py` を通してから実行する**。
-  `ASK` / `DENY` / 判定不能（終了コード 2・3）は実行しない
-- **再開・停止の手段が無ければ開始しない**。停止条件に当たったら
-  再開スケジュールを必ず止める（手段は `references/resume.md`）
+- **`check` をサイクルの先頭で必ず実行する**。省略しない
+- **確認になる操作を実行しない**（上の「ask を避ける」）。拒否された操作は、同じ形で繰り返さない
+- **再開・停止の手段が無ければ開始しない**。停止条件に当たったら予約を必ず止める
 - **行き詰まりを隠さない**。「できなかった」も成果として書く
 
-詳細は `references/unattended.md`（無人実行で避けること）、`references/resume.md`
-（再開・停止・復帰の手段）、
-`references/experiment-design.md`（1 サイクルの組み立て方）を参照する。
+詳細は `references/stock-pi.md`（確認になる操作の一覧）、`references/unattended.md`（無人実行で避けること）、
+`references/resume.md`（再開・停止・復帰の手段）、`references/experiment-design.md`（1 サイクルの組み立て方）を参照する。
