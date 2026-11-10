@@ -12,6 +12,7 @@ import datetime as dt
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -565,6 +566,21 @@ def test_sleep_waits_and_touches_nothing(workspace):
     assert not (workspace / ".tmp").exists()
 
 
+def test_sleep_prints_the_note_as_one_bounded_line(workspace, capsys):
+    """bg_run の完了通知に run_id と再開手順を載せる。改行は空白にし、長さに上限を付ける。"""
+    assert guard.main(["sleep", "1", "--note", "away-shift r1 cycle 3:\n手順 3 から再開"]) == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    assert out == "away-shift r1 cycle 3: 手順 3 から再開\n"
+    assert not (workspace / ".tmp").exists()
+    assert guard.main(["sleep", "1", "--note", "x" * 1000]) == guard.EXIT_CONTINUE
+    assert capsys.readouterr().out == "x" * guard.NOTE_MAX_CHARS + "\n"
+
+
+def test_sleep_without_a_note_prints_nothing(workspace, capsys):
+    assert guard.main(["sleep", "1"]) == guard.EXIT_CONTINUE
+    assert capsys.readouterr().out == ""
+
+
 def test_sleep_limit_covers_the_default_wake_interval():
     assert guard.SLEEP_MAX_SECONDS >= 60 * 60
 
@@ -693,3 +709,315 @@ def test_snapshot_needs_the_repository_root(repo):
 
 def test_snapshot_of_an_unknown_run_is_a_usage_error(repo):
     assert guard.main(["snapshot", "nope"]) == guard.EXIT_USAGE
+
+
+# ---------------------------------------------------------------------------
+# prepare / check / audit: 専用 worktree を使う run
+# ---------------------------------------------------------------------------
+
+linux_only = pytest.mark.skipif(not os.path.isdir("/proc/self"), reason="/proc がある環境だけ")
+
+
+@pytest.fixture()
+def gitrepo(workspace):
+    """コミットが 1 つある git リポジトリ。.tmp/ は無視する (本体の status を汚さない)。"""
+    _git(workspace, "init", "-q")
+    (workspace / ".gitignore").write_text(".tmp/\n")
+    (workspace / "a.py").write_text("print('a')\n")
+    _git(workspace, "add", "-A")
+    _git(workspace, "commit", "-q", "-m", "init")
+    return workspace
+
+
+def prepare_run(deadline: str = "8h", max_cycles: int = 20) -> str:
+    before = set(os.listdir(".tmp/away-shift")) if os.path.isdir(".tmp/away-shift") else set()
+    code = guard.main(["prepare", "--goal", "目標 G", "--deadline", deadline, "--max-cycles", str(max_cycles)])
+    assert code == guard.EXIT_CONTINUE
+    (run_id,) = set(os.listdir(".tmp/away-shift")) - before
+    return run_id
+
+
+def load_state_of(repo: Path, run_id: str) -> dict:
+    return json.loads((repo / ".tmp" / "away-shift" / run_id / "state.json").read_text(encoding="utf-8"))
+
+
+def test_prepare_creates_worktree_branch_state_and_brief(gitrepo, capsys):
+    run_id = prepare_run()
+    out = capsys.readouterr().out
+    state = load_state_of(gitrepo, run_id)
+    worktree = gitrepo / ".tmp" / "worktrees" / f"away-{run_id}"
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=gitrepo, capture_output=True, encoding="utf-8", check=True
+    ).stdout.strip()
+
+    assert state["worktree"] == str(worktree)
+    assert state["branch"] == f"feature/away-{run_id}"
+    assert state["base"] == head
+    assert state["repo"] == str(gitrepo.resolve())
+    assert worktree.is_dir()
+    branches = subprocess.run(
+        ["git", "branch", "--list", state["branch"]], cwd=gitrepo, capture_output=True, encoding="utf-8", check=True
+    ).stdout
+    assert state["branch"] in branches
+
+    brief = (worktree / ".tmp" / "away" / "brief-common.md").read_text(encoding="utf-8")
+    assert "目標 G" in brief
+    assert str(worktree) in brief
+    assert run_id in brief
+    assert not brief.lstrip().startswith("<!--")
+    assert "-->" not in brief
+    assert re.search(r"\{[a-z_]+\}", brief) is None
+
+    for label in ("run_id:", "worktree:", "branch:", "base:", "期限:", "引き継ぎ:"):
+        assert any(line.startswith(label) for line in out.splitlines()), label
+    assert f"base: {head[:8]}\n" in out
+    assert "警告" not in out
+
+
+def test_prepare_warns_about_uncommitted_changes_in_the_main_tree(gitrepo, capsys):
+    (gitrepo / "a.py").write_text("print('changed')\n")
+    prepare_run()
+    assert "worktree には含まれない" in capsys.readouterr().out
+
+
+def test_prepare_outside_a_git_root_is_a_usage_error(workspace, capsys):
+    code = guard.main(["prepare", "--goal", "G", "--deadline", "8h"])
+    assert code == guard.EXIT_USAGE
+    assert not (workspace / ".tmp").exists()
+
+
+def test_prepare_from_a_subdirectory_is_a_usage_error(gitrepo, monkeypatch):
+    (gitrepo / "sub").mkdir()
+    monkeypatch.chdir(gitrepo / "sub")
+    assert guard.main(["prepare", "--goal", "G", "--deadline", "8h"]) == guard.EXIT_USAGE
+
+
+def test_prepare_with_a_missing_brief_template_keeps_the_worktree(gitrepo, monkeypatch, capsys):
+    monkeypatch.setattr(guard, "child_brief_path", lambda: gitrepo / "no-such-brief.md")
+    code = guard.main(["prepare", "--goal", "G", "--deadline", "8h"])
+    assert code == guard.EXIT_USAGE
+    assert "消していません" in capsys.readouterr().err
+    assert len(list((gitrepo / ".tmp" / "worktrees").iterdir())) == 1
+
+
+def test_prepare_rejects_a_past_deadline_before_creating_anything(gitrepo):
+    assert guard.main(["prepare", "--goal", "G", "--deadline", "2020-01-01 00:00"]) == guard.EXIT_USAGE
+    assert not (gitrepo / ".tmp").exists()
+
+
+def test_check_prints_worktree_timeouts_for_a_worktree_run(gitrepo, capsys):
+    run_id = prepare_run()
+    capsys.readouterr()
+    assert guard.main(["check", run_id]) == guard.EXIT_CONTINUE
+    lines = capsys.readouterr().out.splitlines()
+    values = dict(line.split(": ", 1) for line in lines if line.startswith(("WORKTREE", "CHILD_")))
+    assert values["WORKTREE"] == str(gitrepo / ".tmp" / "worktrees" / f"away-{run_id}")
+    assert values["CHILD_TIMEOUT_MS"] == "1800000"
+    assert values["CHILD_CHECKPOINT_MS"] == "180000"
+    # 既存の出力の後ろに足される
+    assert lines.index(next(x for x in lines if x.startswith("NEXT_WAKE_SECONDS"))) < lines.index(
+        next(x for x in lines if x.startswith("WORKTREE"))
+    )
+
+
+def test_check_child_timeout_is_limited_by_the_remaining_time(gitrepo, capsys):
+    run_id = prepare_run(deadline="25m")
+    capsys.readouterr()
+    assert guard.main(["check", run_id]) == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    # 残り 24 分 - 予備 15 分 = 9 分
+    assert "CHILD_TIMEOUT_MS: 540000" in out
+    assert "CHILD_CHECKPOINT_MS: 180000" in out
+
+
+def test_check_checkpoint_is_a_third_of_a_short_timeout(gitrepo, capsys):
+    run_id = prepare_run(deadline="22m")
+    capsys.readouterr()
+    assert guard.main(["check", run_id]) == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    # 残り 21 分 - 予備 15 分 = 6 分 = 360000 ms、その 3 分の 1 は 120000
+    assert "CHILD_TIMEOUT_MS: 360000" in out
+    assert "CHILD_CHECKPOINT_MS: 120000" in out
+
+
+def test_check_output_of_an_init_run_has_no_worktree_lines(workspace, capsys):
+    init_run("r1")
+    capsys.readouterr()
+    assert guard.main(["check", "r1"]) == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    assert "WORKTREE" not in out
+    assert "CHILD_" not in out
+    assert "NEXT_WAKE_SECONDS" in out
+
+
+def test_check_stops_when_the_child_time_is_under_three_minutes(gitrepo, capsys):
+    run_id = prepare_run(deadline="17m")  # 残り 16 分 - 予備 15 分 = 1 分
+    capsys.readouterr()
+    assert guard.main(["check", run_id]) == guard.EXIT_STOP
+    assert "子に割り当てられる時間" in capsys.readouterr().out
+    assert load_state_of(gitrepo, run_id)["cycle"] == 0
+
+
+def test_child_time_stop_does_not_apply_to_an_init_run(workspace):
+    init_run("r1", deadline="17m")
+    assert guard.main(["check", "r1"]) == guard.EXIT_CONTINUE
+
+
+def test_existing_stop_reasons_win_over_the_child_time_stop(gitrepo, capsys):
+    run_id = prepare_run(deadline="10m")  # 予備時間未満でもある
+    capsys.readouterr()
+    assert guard.main(["check", run_id]) == guard.EXIT_STOP
+    assert "予備" in capsys.readouterr().out
+    assert load_state_of(gitrepo, run_id)["stopped"] == "reserve"
+
+
+def test_max_cycles_stop_wins_over_the_child_time_stop(gitrepo, capsys):
+    run_id = prepare_run(deadline="17m", max_cycles=0)  # 子の時間も足りないが、最大サイクル数が先
+    capsys.readouterr()
+    assert guard.main(["check", run_id]) == guard.EXIT_STOP
+    assert load_state_of(gitrepo, run_id)["stopped"] == "max-cycles"
+
+
+def audit_exit(run_id: str, *extra: str) -> int:
+    return guard.main(["audit", run_id, *extra])
+
+
+def test_audit_passes_on_an_untouched_main_tree(gitrepo, capsys):
+    run_id = prepare_run()
+    capsys.readouterr()
+    assert audit_exit(run_id) == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    assert "同じ" in out
+    assert "本体 git status: 0 件" in out
+    assert "コミット: 0 件" in out
+    assert "差分: なし" in out
+
+
+def test_audit_reports_commits_made_in_the_worktree(gitrepo, capsys):
+    run_id = prepare_run()
+    worktree = gitrepo / ".tmp" / "worktrees" / f"away-{run_id}"
+    (worktree / "b.py").write_text("print('b')\n")
+    _git(worktree, "add", "b.py")
+    _git(worktree, "commit", "-q", "-m", "worktree commit")
+    (worktree / "a.py").write_text("print('dirty')\n")
+    capsys.readouterr()
+
+    assert audit_exit(run_id) == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    assert "コミット: 1 件" in out
+    assert "worktree commit" in out
+    assert "1 file changed" in out
+    assert "worktree の未コミット: 1 件" in out
+
+
+def test_audit_fails_when_a_tracked_file_in_the_main_tree_changed(gitrepo, capsys):
+    run_id = prepare_run()
+    (gitrepo / "a.py").write_text("print('changed')\n")
+    capsys.readouterr()
+    assert audit_exit(run_id) == guard.EXIT_AUDIT_VIOLATION
+    assert "本体 git status: 1 件" in capsys.readouterr().out
+
+
+def test_audit_fails_when_the_main_head_moved(gitrepo, capsys):
+    run_id = prepare_run()
+    _git(gitrepo, "commit", "-q", "--allow-empty", "-m", "moved")
+    capsys.readouterr()
+    assert audit_exit(run_id) == guard.EXIT_AUDIT_VIOLATION
+    assert "違う" in capsys.readouterr().out
+
+
+def test_audit_write_creates_audit_md_in_the_run_directory(gitrepo):
+    run_id = prepare_run()
+    assert audit_exit(run_id, "--write") == guard.EXIT_CONTINUE
+    audit_md = gitrepo / ".tmp" / "away-shift" / run_id / "audit.md"
+    assert "本体 HEAD:" in audit_md.read_text(encoding="utf-8")
+
+
+def test_audit_does_not_write_without_the_write_flag(gitrepo):
+    run_id = prepare_run()
+    assert audit_exit(run_id) == guard.EXIT_CONTINUE
+    assert not (gitrepo / ".tmp" / "away-shift" / run_id / "audit.md").exists()
+
+
+def test_audit_on_an_init_run_is_a_usage_error(workspace):
+    init_run("r1")
+    assert audit_exit("r1") == guard.EXIT_USAGE
+
+
+def test_audit_on_an_unknown_run_is_a_usage_error(workspace):
+    assert audit_exit("missing") == guard.EXIT_USAGE
+
+
+@pytest.fixture()
+def sleepers(gitrepo):
+    """(worktree の run_id, 別ディレクトリの sleep を起動する関数)。終了時に残った sleep を片づける。"""
+    procs: list[subprocess.Popen] = []
+
+    def start(cwd: Path) -> subprocess.Popen:
+        proc = subprocess.Popen(["sleep", "60"], cwd=cwd, start_new_session=True)
+        procs.append(proc)
+        return proc
+
+    yield start
+    for proc in procs:
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait()
+
+
+@linux_only
+def test_audit_lists_processes_in_the_worktree_without_killing(gitrepo, sleepers, capsys):
+    run_id = prepare_run()
+    inside = sleepers(gitrepo / ".tmp" / "worktrees" / f"away-{run_id}")
+    capsys.readouterr()
+    assert audit_exit(run_id) == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    assert f"{inside.pid} sleep 60" in out
+    assert inside.poll() is None
+
+
+@linux_only
+def test_audit_kill_stops_only_processes_whose_cwd_is_in_the_worktree(gitrepo, sleepers, capsys):
+    run_id = prepare_run()
+    worktree = gitrepo / ".tmp" / "worktrees" / f"away-{run_id}"
+    (worktree / "deep").mkdir()
+    other_dir = gitrepo / "other"
+    other_dir.mkdir()
+    inside = sleepers(worktree / "deep")
+    outside = sleepers(other_dir)
+    capsys.readouterr()
+
+    assert audit_exit(run_id, "--kill") == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    assert inside.wait(timeout=5) is not None
+    assert str(inside.pid) in out.split("止めた pid:")[1]
+    assert outside.poll() is None
+
+
+@linux_only
+def test_audit_kill_spares_processes_with_a_controlling_tty(gitrepo, sleepers, capsys, monkeypatch):
+    """worktree で利用者が動かしているシェル・コマンド (端末つき) は、一覧には出すが止めない。"""
+    run_id = prepare_run()
+    inside = sleepers(gitrepo / ".tmp" / "worktrees" / f"away-{run_id}")
+    monkeypatch.setattr(guard, "_has_controlling_tty", lambda pid: pid == inside.pid)
+    capsys.readouterr()
+
+    assert audit_exit(run_id, "--kill") == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    assert f"{inside.pid} sleep 60 [止めない: 端末つき]" in out
+    assert "止めた pid:" not in out
+    assert inside.poll() is None
+
+
+@linux_only
+def test_audit_kill_spares_processes_started_before_the_run(gitrepo, sleepers, capsys, monkeypatch):
+    """run より前に起動したプロセスは、利用者の既存のプロセスなので止めない。"""
+    run_id = prepare_run()
+    inside = sleepers(gitrepo / ".tmp" / "worktrees" / f"away-{run_id}")
+    monkeypatch.setattr(guard, "_process_started_at", lambda pid: 0.0)
+    capsys.readouterr()
+
+    assert audit_exit(run_id, "--kill") == guard.EXIT_CONTINUE
+    out = capsys.readouterr().out
+    assert f"{inside.pid} sleep 60 [止めない: run より前に起動]" in out
+    assert inside.poll() is None
