@@ -685,7 +685,7 @@ def test_permission_policy_matches_the_contract():
         "~/.config/agents/websearch-keys.json",
         "*.pem",
     ):
-        assert path[denied] == "deny", denied
+        assert action(path[denied]) == "deny", denied
     # 入れる拡張の自分のツールは、毎回の確認を出さない (子の起動・ToDo・利用者への質問)
     for tool in (
         "todo",
