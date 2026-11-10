@@ -70,7 +70,8 @@ AGENT_TOOL_OVERRIDES = {
 # pi-subagents が、親のセッションのモデルのプロバイダ (/model で替えても追従する) ごとに層を重ねる (docs/models.md)。
 # 以前の Copilot / Bedrock のカタログ (common.toml.tmpl の [pi.model.tier.*]・docs/spec/agent-model-assignment.md) に合わせる:
 # worker = Sonnet 5.5 の medium、reviewer・evidence-auditor = 別系統の second_opinion (GPT 6.1 sol。worker と系統を分ける)、
-# oracle = Sonnet 5.5 の xhigh (Opus は高価で、カタログでは plan 役の既定。指示なしに自律で起動する子には使わない)。
+# oracle = reviewer と同じ GPT 6.1 sol の high (2026-11-10。親・worker の Claude と別系統の二番目の意見にするため。根拠は docs/research/agents/oracle-model-2026-11.md)。
+# Opus は高価で、カタログでは plan 役の既定。指示なしに自律で起動する子には使わない。
 # scout = low、researcher = medium は、カタログに階層が無い新しい判断。Haiku は使わない。
 # 利用者がすでに同じ役の model を書いていれば保つ (無いときだけ補う)。
 PROVIDER_AGENT_MODELS = {
@@ -80,7 +81,7 @@ PROVIDER_AGENT_MODELS = {
         "worker": "github-copilot/claude-sonnet-5.5:medium",
         "reviewer": "github-copilot/gpt-6.1-sol:high",
         "evidence-auditor": "github-copilot/gpt-6.1-sol:high",
-        "oracle": "github-copilot/claude-sonnet-5.5:xhigh",
+        "oracle": "github-copilot/gpt-6.1-sol:high",
     },
     "amazon-bedrock": {
         "scout": "amazon-bedrock/us.anthropic.claude-sonnet-5-5:low",
@@ -88,8 +89,15 @@ PROVIDER_AGENT_MODELS = {
         "worker": "amazon-bedrock/us.anthropic.claude-sonnet-5-5:medium",
         "reviewer": "amazon-bedrock/us.openai.gpt-6.1-sol:high",
         "evidence-auditor": "amazon-bedrock/us.openai.gpt-6.1-sol:high",
-        "oracle": "amazon-bedrock/us.anthropic.claude-sonnet-5-5:xhigh",
+        "oracle": "amazon-bedrock/us.openai.gpt-6.1-sol:high",
     },
+}
+
+
+# 前の既定値 (プロバイダ, 役) -> モデル。この値のままなら、利用者が選んだ値ではないので新しい既定へ移す
+LEGACY_AGENT_MODELS = {
+    ("github-copilot", "oracle"): "github-copilot/claude-sonnet-5.5:xhigh",
+    ("amazon-bedrock", "oracle"): "amazon-bedrock/us.anthropic.claude-sonnet-5-5:xhigh",
 }
 
 
@@ -155,6 +163,8 @@ def main() -> int:
             entry = layer.get(name)
             if not isinstance(entry, dict):
                 entry = {}
+            if entry.get("model") == LEGACY_AGENT_MODELS.get((provider, name)):
+                entry["model"] = model
             entry.setdefault("model", model)
             layer[name] = entry
         by_provider[provider] = layer
