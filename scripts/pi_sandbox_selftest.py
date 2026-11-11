@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""pi-sandbox-runner の実機確認 (GPU・秘密の隠蔽・docker の遮断・git の保護)。
+"""pi-sandbox-runner の実機確認 (見える範囲・書き込み・秘密の隠蔽・環境変数・docker・git・GPU・通信の遮断)。
 
-@yuru7/pi-sandbox 0.5.0 の bwrapProfileArgs (workspace-write) と同じ引数で runner を呼び、
-内側から確かめる。確認できない項目 (GPU が無い機など) は SKIP。FAIL があれば終了コード 1。
-拡張を更新したら、これを回したうえで、実拡張でも確かめる (see docs/spec/sandbox/pi-sandbox-runner.md#版の固定と更新)。
+実際の runner を、シェルモード (``-c <コマンド>``。pi の shellPath 経由と同じ呼び方) で動かし、内側から確かめる。
+確認できない項目 (GPU が無い機など) は SKIP。FAIL があれば終了コード 1。
+pi の本体を通した確認 (bash・bg_run・利用者の bash・子エージェントが囲いを通るか) は、docs の「導入と確認」の手順で行う。
 
 usage: python3 scripts/pi_sandbox_selftest.py [--runner PATH] [--config PATH]
-秘密の中身は読まない。存在と、内側から空に見えるかだけを調べる。
+秘密の中身は読まない。存在と、内側から見えないかだけを調べる。
+see docs/spec/sandbox/pi-sandbox-runner.md#導入と確認
 """
 
 from __future__ import annotations
@@ -81,17 +82,20 @@ def git(*args: str, cwd: Path) -> None:
     )
 
 
-def sandbox(runner: Path, config: Path, workspace: Path, git_roots: list[Path], script: str):
-    """拡張 (workspace-write) と同じ引数で runner を呼び、sh -c <script> を内側で実行する。"""
-    profile = [
-        *("--ro-bind", "/", "/", "--dev", "/dev", "--unshare-pid", "--proc", "/proc"),
-        *("--die-with-parent", "--bind", "/tmp", "/tmp", "--bind", str(workspace), str(workspace)),
-    ]
-    for root in git_roots:
-        profile += ["--bind", str(root), str(root)]
-    env = {**os.environ, "PI_SANDBOX_RUNNER_CONFIG": str(config)}
+def sandbox(
+    runner: Path,
+    config: Path,
+    workspace: Path,
+    script: str,
+    *,
+    offline: bool = False,
+    env_extra=None,
+):
+    """runner をシェルモードで呼び、``bash -c <script>`` を内側で実行する (pi の shellPath 経由と同じ形)。"""
+    env = {**os.environ, "PI_SANDBOX_RUNNER_CONFIG": str(config), **(env_extra or {})}
+    flags = ["--offline"] if offline else []
     return subprocess.run(
-        [sys.executable, str(runner), *profile, "--", "sh", "-c", script],
+        [sys.executable, str(runner), *flags, "-c", script],
         cwd=workspace,
         env=env,
         capture_output=True,
@@ -114,6 +118,10 @@ def main() -> int:
         "--config", type=Path, default=deployed_conf if deployed_conf.exists() else REPO_CONFIG
     )
     args = parser.parse_args()
+    args.runner, args.config = (
+        args.runner.resolve(),
+        args.config.resolve(),
+    )  # 作業ディレクトリを変えて呼ぶので、絶対パスにする
     if shutil.which("bwrap") is None or shutil.which("git") is None:
         print("SKIP  bwrap と git が要る")
         return 0
@@ -127,32 +135,55 @@ def main() -> int:
         git("init", "-q", cwd=main_repo)
         git("commit", "--allow-empty", "-qm", "init", cwd=main_repo)
         git("worktree", "add", "-q", str(wt), "-b", "selftest", cwd=main_repo)
-        git_roots = [
-            main_repo / ".git" / "worktrees" / "wt",
-            main_repo / ".git",
-        ]  # 拡張が足す gitdir と commondir
 
-        def run(script: str):
-            return sandbox(args.runner, args.config, wt, git_roots, script)
+        def run(script: str, **kw):
+            return sandbox(args.runner, args.config, wt, script, **kw)
 
-        probe = (
-            home / f".pi-sandbox-selftest-{os.getpid()}-{os.urandom(4).hex()}"
-        )  # 既存のファイルと衝突しない名前
-        res = run(
-            f'touch "{probe}" 2>/dev/null && echo leak || echo blocked; touch ./w && echo ok || echo FAIL'
-        )
+        # 書き込み: ホームの中は空の tmpfs なので、書けても外へ届かない。作業ツリーは書ける
+        probe = home / f".pi-sandbox-selftest-{os.getpid()}-{os.urandom(4).hex()}"
+        res = run(f'touch "{probe}" 2>/dev/null; touch ./w && echo work=ok || echo work=FAIL')
+        reached = probe.exists()
         probe.unlink(missing_ok=True)
-        out = res.stdout.split()
+        ok = res.stdout.split() == ["work=ok"] and not reached and (wt / "w").exists()
         report.line(
-            "PASS" if out == ["blocked", "ok"] else "FAIL",
-            "書き込み: HOME は不可・作業ツリーは可",
+            "PASS" if ok else "FAIL",
+            "書き込み: 作業ツリーは可・ホームへの書き込みは外へ届かない",
             res.stderr.strip(),
         )
 
-        hidden = [
-            p for p in cfg.get("hide", {}).get("dirs", []) + cfg.get("hide", {}).get("files", [])
+        # 見える範囲: ホームの履歴・Windows のドライブ・共有の /tmp とソケットが見えない
+        shared = Path(tempfile.mkdtemp(prefix="pib-selftest-", dir="/tmp"))
+        (shared / "marker").write_text("x", encoding="utf-8")
+        try:
+            probes = {
+                "ホームの履歴": [home / ".bash_history", home / ".zsh_history"],
+                "Windows のドライブ": [Path("/mnt/c"), Path("/mnt/d")],
+                "共有の /tmp": [shared / "marker"],
+                "tmux・X11 のソケット": [*Path("/tmp").glob("tmux-*"), Path("/tmp/.X11-unix")],
+            }
+            for name, paths in probes.items():
+                present = [p for p in paths if p.exists()]
+                if not present:
+                    report.line("SKIP", f"見えない: {name}", "この機に無い")
+                    continue
+                shown = [
+                    p
+                    for p in present
+                    if run(f'test -e "{p}" && echo VISIBLE || echo hidden').stdout.strip()
+                    != "hidden"
+                ]
+                report.line(
+                    "FAIL" if shown else "PASS", f"見えない: {name}", ", ".join(map(str, shown))
+                )
+        finally:
+            shutil.rmtree(shared, ignore_errors=True)
+
+        # 秘密の隠蔽: 設定の hide のうち、この機にあるもの (見せた場所の中にあっても隠れる)
+        hide = cfg.get("hide", {})
+        present = [
+            Path(str(p).replace("~", str(home), 1))
+            for p in [*hide.get("dirs", []), *hide.get("files", [])]
         ]
-        present = [Path(str(p).replace("~", str(home), 1)) for p in hidden]
         present = [p for p in present if p.exists() and (not p.is_dir() or any(p.iterdir()))]
         if not present:
             report.line("SKIP", "秘密の隠蔽", "隠す対象が、この機に (中身つきで) 無い")
@@ -169,6 +200,44 @@ def main() -> int:
             report.line(
                 "FAIL" if bad else "PASS", f"秘密の隠蔽 ({len(present)} 件)", ", ".join(bad)
             )
+
+        # git の認証 (store ヘルパー) が、内側から見つからない
+        found = subprocess.run(
+            ["git", "credential", "fill"],
+            input="protocol=https\nhost=github.com\n\n",
+            capture_output=True,
+            text=True,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            timeout=30,
+            check=False,
+        )
+        if found.returncode != 0:
+            report.line("SKIP", "git の認証が見つからない", "ホストにも github.com の認証が無い")
+        else:
+            res = run(
+                'printf "protocol=https\\nhost=github.com\\n\\n" | GIT_TERMINAL_PROMPT=0 git credential fill >/dev/null 2>&1; echo rc=$?'
+            )
+            report.line(
+                "PASS" if res.stdout.strip() not in ("rc=0", "") else "FAIL",
+                "git の認証が内側から見つからない",
+                res.stdout.strip(),
+            )
+
+        # 環境変数: 設定の unset に入れた名前は渡らず、他は渡る
+        names = cfg.get("env", {}).get("unset", [])
+        if names:
+            name = names[0]
+            res = run(
+                f"printenv {name} >/dev/null && echo {name}=set || echo {name}=unset; printenv SELFTEST_KEEP",
+                env_extra={name: "x", "SELFTEST_KEEP": "kept"},
+            )
+            report.line(
+                "PASS" if res.stdout.split() == [f"{name}=unset", "kept"] else "FAIL",
+                "環境変数: 一覧の名前は消え、他は渡る",
+                res.stdout.strip().replace("\n", " "),
+            )
+        else:
+            report.line("SKIP", "環境変数の遮断", "設定の env.unset が空")
 
         docker_wanted = cfg.get("docker", {}).get("block", True) and shutil.which("docker")
         host_docker = (
@@ -194,8 +263,15 @@ def main() -> int:
         )
         report.line(
             "PASS" if res.stdout.split() == ["hooks=ro", "commit=ok"] else "FAIL",
-            "git: worktree で commit できて、hooks は読み取り専用",
-            res.stdout.strip().replace("\n", " "),
+            "git: worktree で commit できて、共有の hooks は読み取り専用",
+            (res.stdout + res.stderr).strip().replace("\n", " "),
+        )
+
+        res = run("awk -F: 'NR>2 {gsub(/ /, \"\", $1); print $1}' /proc/net/dev", offline=True)
+        report.line(
+            "PASS" if res.stdout.split() == ["lo"] else "FAIL",
+            "--offline: ネットワークのインターフェースが lo だけ",
+            res.stdout.strip(),
         )
 
     gpu_wanted = bool(cfg.get("gpu", {}).get("devices"))
@@ -205,7 +281,7 @@ def main() -> int:
     else:
         with tempfile.TemporaryDirectory(prefix="pi-sandbox-selftest-") as tmp:
             (Path(tmp) / "kernel.py").write_text(CUDA_KERNEL, encoding="utf-8")
-            res = sandbox(args.runner, args.config, Path(tmp), [], "python3 kernel.py")
+            res = sandbox(args.runner, args.config, Path(tmp), "python3 kernel.py")
         report.line(
             "PASS" if res.stdout.strip() == "cuda=ok" else "FAIL",
             "GPU: 内側で CUDA カーネルが動く",

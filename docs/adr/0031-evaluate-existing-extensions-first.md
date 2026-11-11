@@ -78,7 +78,7 @@
 | 自作 | 理由 | 維持費の見込み | 撤去の条件 |
 | --- | --- | --- | --- |
 | 家の機の検索 MCP（`home/dot_config/agents/websearch/`） | 各サービスの無料枠のフォールバックと、クエリの秘匿チェック・SSRF 防止を満たす既製の MCP が、調べた範囲（npm の検索。網羅ではない）で見つからなかった。利用者が自作を選択した（2026-11-08） | 既存のスキルの CLI の核をそのまま使う。新規は MCP の薄い層（約 300 行）と試験 | 同じ要件を満たす既製の MCP・拡張が現れたら置き換える |
-| pi の sandbox 拡張に GPU などを足す runner（`home/dot_local/bin/executable_pi-sandbox-runner`、[ADR-0035](0035-pi-sandbox-gpu-runner.md)） | 調べた拡張 10 個のどれも、設定だけでは GPU を通せなかった。利用者が採用を指示した（2026-11-12） | runner 約 280 行（コメントと docstring を含む）・設定・試験・自己確認。追従が要る上流は `@yuru7/pi-sandbox` の引数の並び 1 点（版を固定して確認する） | 上流の拡張がデバイスの受け渡しと秘密の隠蔽を設定で持ったとき、またはツール委譲型へ移ったとき |
+| pi のコマンド実行を包む囲い（`pib`・`pib-shell`・`home/dot_local/bin/executable_pi-sandbox-runner`、[ADR-0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md)。[ADR-0035](0035-pi-sandbox-gpu-runner.md) の拡張を使う方式を置き換えた） | 拡張は bash だけを包み、`bg_run`・`!` が抜ける。既存の囲い（Fence）は、コマンドごとに包む使い方が公式の想定外で、WSL で遅く、保守が緩い。利用者が責務の分担と方式（素の bwrap）を承認した（2026-11-12） | 引数を組み立てる runner（約 520 行。コメントと docstring を含む）・`pib`（約 100 行）・`pib-shell`（約 15 行）・設定・試験・自己確認。追従が要る上流は、pi の `shellPath` の仕様 1 点 | pi 本体が同等の sandbox を標準で持ったとき。`shellPath` の仕様変更が 2 回続けて保守の負担になったとき |
 
 ## 結果
 

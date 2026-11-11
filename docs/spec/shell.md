@@ -81,6 +81,23 @@ Nix 化・`rm` の alias 差し替え・環境変数の列挙による人間判�
 | `~/.config/shell/userenv.sh`・`.bash`・`.zsh` | 環境変数・プロキシ。例: `export PIS_EXTRA_READ="$HOME/dataset:/data2"` | シェルの起動ごと（`userenv.sh` は `shellenv.sh` が読む） | chezmoi の管理外。同じ場所の `.example` から作る。`PIS_EXTRA_READ` は読み取り専用で、詳細は [環境変数での追加](sandbox/fence-boundary.md#環境変数での追加) |
 | `~/.config/mise/conf.d/*.toml` | `mise` の設定のマシン固有分 | `mise` が設定を読むとき | chezmoi の管理外。`[env]` は mise を有効化したシェルでしか効かない（**推測**。公式 docs では未確認） |
 | `<起動ディレクトリ>/.opencode/sandbox.toml` | リポジトリごとの `read`・`write`・`network_allow` | `pis` の起動時 | パスがマシン依存なら、1 行目の環境変数のほうがよい（環境変数で足せるのは読み取りだけ） |
+| `~/.config/chezmoi/chezmoi.toml` の `[data]` | chezmoi のテンプレートに渡すマシン固有の値（例: `llm_provider`・`no_proxy`） | `chezmoi apply` のとき | chezmoi の管理外。値の使い道はテンプレートが決める（[プロバイダの判定](agent-model-assignment.md#プロバイダの判定)） |
+| `~/.config/git/config.local` | git の設定のマシン固有分 | git が設定を読むとき | chezmoi の管理外。`home/dot_config/git/config.tmpl` が、共有設定の後ろに `[include]` で読む（**共有設定を上書きもできる**） |
+| `~/.config/agents/local.toml` | Claude Code / Copilot CLI の sandbox の許可の追記 | `chezmoi apply` のとき（生成時に読む） | chezmoi の管理外。`[sandbox]` は追記のみで、共有を緩められない（[このマシンだけで許可を足す](sandbox/cli-sandbox-local-allow.md)） |
+| `~/.config/pi-sandbox/runner.local.toml` | pi の囲い（`pib`）で、隠す場所の追記 | `pib` の囲いでコマンドを実行するたび | chezmoi の管理外。追記のみで、`[gpu]`・`[docker]`・`[git]` は書けない。同じ場所の `runner.local.toml.example` から作る（[設定](sandbox/pi-sandbox-runner.md#設定runnertoml)）。Linux / WSL のみ |
+| pi の確認（YOLO など） | `/permission-system` で切り替える | すぐ | 機械ごとの設定で、`chezmoi apply` では戻らない（[YOLO mode](agent-config-generation.md#permission-system-の設定stock)） |
+
+**共通の約束**（共有の設定とマシン固有の設定を分ける）:
+
+- 共有の設定（リポジトリ。chezmoi が管理し、`apply` で上書きされる）とは別に、マシン固有のファイルは **chezmoi の管理外**に置く。`chezmoi apply` で消えず、`chezmoi diff` にも出ない。
+- 生成物（`~/.claude/settings.json` など）は直接編集しない。`apply` で作り直される。
+
+**sandbox の許可を足すファイル**（`agents/local.toml` の `[sandbox]`・`runner.local.toml`）は、さらに次を守る。
+
+- **追記のみ**。共有のエントリを消したり、緩めたりしない（`[sandbox]` は緩めるキーを無視し、`runner.local.toml` は緩める指定があると起動しない）。
+- 利用者の階層（`~/.config/…`）に置く。エージェントが書き換えられる作業ツリーの中には置かない。
+
+git の `config.local` のように、共有設定を上書きできるものもある。
 
 出典: `home/dot_config/shell/shellenv.sh.tmpl`（「User settings」の節が `userenv.sh` を読む）、
 `home/dot_config/mise/config.toml.tmpl` の冒頭のコメント（`conf.d` の案内）。

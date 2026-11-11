@@ -243,10 +243,15 @@ def test_remove_has_no_stock_target_that_source_still_deploys_in_custom(tmp_path
 # --- settings.json ----------------------------------------------------
 
 
-def stock_settings_script(tmp_path: Path) -> Path:
+def stock_settings_script(tmp_path: Path, os_name: str = "linux") -> Path:
     script = tmp_path / "modify_settings.py"
     script.write_text(
-        render_file("dot_pi/agent/modify_settings.json.py.tmpl", tmp_path, profile_env="stock"),
+        render_file(
+            "dot_pi/agent/modify_settings.json.py.tmpl",
+            tmp_path,
+            profile_env="stock",
+            os_name=os_name,
+        ),
         encoding="utf-8",
     )
     return script
@@ -325,7 +330,26 @@ def test_stock_settings_from_empty_input(tmp_path):
     out = json.loads(run_script(stock_settings_script(tmp_path), ""))
     out.pop("subagents")  # agentOverrides は test_pi_subagents_config.py で検査
     out.pop("compaction")  # modelOverrides は test_pi_compaction_config.py で検査
-    assert out == {"defaultTools": ["+grep", "+find", "+ls"], "packages": stock_packages(tmp_path)}
+    assert out == {
+        "defaultTools": ["+grep", "+find", "+ls"],
+        "packages": stock_packages(tmp_path),
+        "shellPath": str(tmp_path / ".local" / "bin" / "pib-shell"),  # Linux だけ (下の試験)
+    }
+
+
+def test_stock_settings_points_the_shell_at_pib_shell_only_on_linux(tmp_path):
+    """pi のシェルは、コマンド実行の囲い (pib-shell) を指す。bwrap は Linux 専用なので、他の OS には入れない。"""
+    linux = json.loads(run_script(stock_settings_script(tmp_path, "linux"), "{}"))
+    assert linux["shellPath"] == str(tmp_path / ".local" / "bin" / "pib-shell")
+    for os_name in ("darwin", "windows"):
+        assert "shellPath" not in json.loads(run_script(stock_settings_script(tmp_path, os_name), "{}"))
+
+
+def test_stock_settings_keeps_a_shell_the_user_chose(tmp_path):
+    """利用者が別のシェルを書いていれば触らない (pib が、囲いを指していないと知らせる)。"""
+    script = stock_settings_script(tmp_path)
+    out = json.loads(run_script(script, json.dumps({"shellPath": "/usr/bin/zsh"})))
+    assert out["shellPath"] == "/usr/bin/zsh"
 
 
 def test_stock_settings_keeps_user_incremental_default_tools(tmp_path):

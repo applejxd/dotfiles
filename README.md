@@ -175,6 +175,26 @@ root が要るスクリプトは飛ばし、sudo が使えるようになった�
 A. `chezmoi apply --refresh-externals` を実行する
 （[external が取得されない](docs/spec/troubleshooting-bootstrap.md#apply-しても-zinit-などの-external-が取得されない)）。
 
+### Q. PC ごとに違う設定（データセットの置き場・プロキシ・sandbox の許可など）を、chezmoi の管理と分けて置きたい
+
+A. 共有の設定はこのリポジトリ（chezmoi が管理）に置き、PC ごとの設定は **chezmoi の管理外のファイル**に書く。
+後者は `chezmoi apply` で消えず、`chezmoi diff` にも出ない。生成された設定（`~/.claude/settings.json` など）は直接編集しない。
+sandbox の許可を足すもの（`agents/local.toml` の `[sandbox]`・`runner.local.toml`）は、共有の設定に**足すだけ**で、
+緩める指定は効かない（無視されるか、起動しない）。git の `config.local` のように、共有の設定を上書きできるものもある。
+
+| 変えたいもの | このマシンだけの置き場 | 反映 |
+| --- | --- | --- |
+| 環境変数・プロキシ・データセットの置き場（`PIS_EXTRA_READ` など） | `~/.config/shell/userenv.sh`（同じ場所の `.example` から作る） | 次のシェルの起動 |
+| chezmoi のテンプレートに渡す値（LLM プロバイダなど） | `~/.config/chezmoi/chezmoi.toml` の `[data]` | `chezmoi apply` |
+| git の設定 | `~/.config/git/config.local` | すぐ |
+| mise の設定 | `~/.config/mise/conf.d/*.toml` | 次の mise の実行 |
+| Claude Code / Copilot CLI の sandbox の許可 | `~/.config/agents/local.toml` | `chezmoi apply` |
+| pi の囲い（`pib`）で、隠す場所・見せる場所（データセットなど）の追加（Linux / WSL） | `~/.config/pi-sandbox/runner.local.toml`（同じ場所の `.example` から作る）。効いているかは `pib --status` で確かめる（存在しない場所に `✗`） | 次のコマンドの実行 |
+| pi の確認（YOLO など） | `/permission-system` | すぐ（`apply` で戻らない） |
+
+置き場ごとの書き方と注意は
+[マシン固有の設定の置き場](docs/spec/shell.md#マシン固有の設定の置き場)。
+
 ### Q. AI CLI の設定（OpenCode のモデル・プロバイダを含む）を手で変えたい
 
 A. 生成された設定ファイルは直接編集せず、次のどちらかで変える。
@@ -207,7 +227,7 @@ A. 誰も答えない確認は 5 分で拒否され、エージェントは先�
 
 ### Q. pi（stock）が作業ツリー外のデータセットを読むたびに確認される
 
-A. プロジェクトごとに、読み取りだけを事前許可できる（`/tmp` はグローバルで許可済み）。手順は
+A. プロジェクトごとに、読み取りだけを事前許可できる（`/tmp` はグローバルで許可済み）。`pib` で起動したときは、プロジェクトの `.pi/` の設定を読まない（`--no-approve`）ので、見せたい場所を `~/.config/pi-sandbox/runner.local.toml` の `[visible]` に足す。手順は
 [プロジェクト単位でデータセットを読み取り専用にする](docs/spec/agent-config-generation.md#プロジェクト単位でデータセットを読み取り専用にする)。
 
 ### Q. 外出先から WSL に SSH したい

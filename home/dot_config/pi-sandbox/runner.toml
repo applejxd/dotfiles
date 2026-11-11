@@ -1,4 +1,5 @@
 # pi-sandbox-runner の設定。仕組み・判断基準・限界は docs/spec/sandbox/pi-sandbox-runner.md
+# このマシンだけの追記は、同じ場所の runner.local.toml (chezmoi の管理外。見本は runner.local.toml.example) に書く。
 version = 1
 
 [gpu]
@@ -6,8 +7,40 @@ version = 1
 # 渡さないときは [] にする。明示するときは /dev/ 以下の絶対パス。
 devices = ["auto"]
 
+[visible]
+# 許可リスト型: ホーム・/mnt・/tmp・/run/user は空で覆われ、ここに書いた所だけが内側に見える。無い場所は何もしない。
+# 作業ディレクトリ (pi を起動した場所) は、書かなくても書き込み可で見える。ホームそのものとその親は書けない。
+# read = 読み取り専用 (道具の置き場・設定)。~/.config/git は丸ごと見せず、設定のファイルだけを見せる
+# (store ヘルパーの認証 ~/.config/git/credentials を読ませない)。
+read = [
+  "~/.local/share/mise",
+  "~/.local/share/uv",
+  "~/.local/bin",
+  "~/.config/mise",
+  "~/.config/uv",
+  "~/.gitconfig",
+  "~/.config/git/config",
+  "~/.config/git/config.local",
+  "~/.config/git/ignore",
+  "~/.config/git/attributes",
+  "~/.cargo",
+  "~/.rustup",
+]
+# write = 書き込み可 (標準のキャッシュ。ホストが後で使う成果物 (wheel・hook の環境・モデル) を差し替えられる代償がある)。
+write = [
+  "~/.cache/uv",
+  "~/.cache/pre-commit",
+  "~/.cache/pip",
+  "~/.npm",
+  "~/.cache/huggingface/hub",
+  "~/.cache/huggingface/datasets",
+  "~/.cache/torch",
+]
+# ~/.cache/huggingface 全体は書き込み可にしない (認証の token・stored_tokens が同じ場所にある)。モデルとデータセットの下だけ。
+
 [hide]
-# 内側から見えなくする場所。ディレクトリは空の tmpfs、ファイルは /dev/null で覆う。無ければ何もしない。
+# visible の中や、見せた場所の下にある秘密を、さらに見えなくする (hide が visible に勝つ)。
+# ディレクトリは空の tmpfs、ファイルは /dev/null で覆う。無ければ何もしない。
 dirs = [
   "~/.ssh",
   "~/.aws",
@@ -22,12 +55,33 @@ dirs = [
 files = [
   "~/.netrc",
   "~/.git-credentials",
+  "~/.config/git/credentials",
   "~/.pypirc",
   "~/.vault-token",
+  "~/.cache/huggingface/token",
+  "~/.cache/huggingface/stored_tokens",
   "~/.pi/agent/auth.json",
   "~/.pi/agent/oauth.json",
   "~/.pi/agent/models.json",
   "~/.pi/agent/models-store.json",
+]
+
+[env]
+# 内側へ渡さない環境変数 (拒否リスト。一覧に無い名前は渡る。許可リストにはしていない)。
+unset = [
+  "GH_TOKEN",
+  "GITHUB_TOKEN",
+  "GH_ENTERPRISE_TOKEN",
+  "GITHUB_ENTERPRISE_TOKEN",
+  "GITLAB_TOKEN",
+  "NPM_TOKEN",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "SSH_AUTH_SOCK",
+  "DBUS_SESSION_BUS_ADDRESS",
 ]
 
 [docker]

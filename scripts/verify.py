@@ -548,8 +548,8 @@ RULES: tuple[Rule, ...] = (
         (
             "home/dot_local/bin/executable_pi-sandbox-runner",
             "home/dot_local/bin/executable_pib",
+            "home/dot_local/bin/executable_pib-shell",
             "home/dot_config/pi-sandbox/**",
-            "home/dot_pi/agent/create_pi-sandbox.json.tmpl",
             "scripts/pi_sandbox_selftest.py",
         ),
         ("test_pi_sandbox_runner",),
