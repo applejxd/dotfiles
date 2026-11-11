@@ -189,7 +189,7 @@ sandbox の許可を足すもの（`agents/local.toml` の `[sandbox]`・`runner
 | git の設定 | `~/.config/git/config.local` | すぐ |
 | mise の設定 | `~/.config/mise/conf.d/*.toml` | 次の mise の実行 |
 | Claude Code / Copilot CLI の sandbox の許可 | `~/.config/agents/local.toml` | `chezmoi apply` |
-| pi の囲い（`pib`）で、隠す場所・見せる場所（データセットなど）の追加（Linux / WSL） | `~/.config/pi-sandbox/runner.local.toml`（同じ場所の `.example` から作る） | 次のコマンドの実行 |
+| pi の囲い（`pib`）で、隠す場所・見せる場所（データセットなど）の追加（Linux / WSL） | `~/.config/pi-sandbox/runner.local.toml`（同じ場所の `.example` から作る）。効いているかは `pib --status` で確かめる（存在しない場所に `✗`） | 次のコマンドの実行 |
 | pi の確認（YOLO など） | `/permission-system` | すぐ（`apply` で戻らない） |
 
 置き場ごとの書き方と注意は

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """pi を、コマンド実行の囲い (bwrap) つきで起動する ``pib [--offline] [pi の引数...]``。
 
+``pib --help`` はこのコマンドの使い方 (日本語)。pi のヘルプを上書きする (pi のヘルプは ``pi --help``)。
+``pib --status`` は、囲いが使える状態か、いま効いている設定 (見える場所・隠す場所。存在しない場所の印つき) を見せる。
+
 pi のシェル (``shellPath`` = ``pib-shell``) は、環境変数 ``PIB_SANDBOX`` が立っているときだけ ``pi-sandbox-runner`` を通す。
 ``pib`` は、その環境変数を立てて ``pi`` を exec する。``--offline`` は、通信を丸ごと遮断する (強い設定)。
 囲いが効かない状態 (runner・設定・bwrap が無い、``shellPath`` が ``pib-shell`` を指していない) では起動しない。
@@ -21,6 +24,7 @@ import json
 import os
 import posixpath
 import shutil
+import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -29,6 +33,36 @@ PREFIX = "pib:"
 SANDBOX_ENV = "PIB_SANDBOX"
 SHELL_NAME = "pib-shell"
 RUNNER_NAME = "pi-sandbox-runner"
+
+
+HELP = """\
+pib — pi を、コマンド実行の囲い (bwrap) つきで起動する
+
+使い方:
+  pib [--offline] [pi の引数...]   囲いつきで pi を起動する
+  pib [--offline] --status         囲いの状態と、いま効いている設定を表示する
+  pib --help | -h                  このヘルプ
+
+オプション (先頭にだけ置く):
+  --offline   通信を丸ごと遮断する (強い設定)
+
+pi の引数はそのまま渡る。--no-approve が常に付き (プロジェクトの .pi/ の設定を読まない)、
+--approve / -a は使えない。pi 自身のヘルプは `pi --help`。
+
+囲いに通るのは、pi が実行するコマンド (bash ツール・bg_run・!・子エージェント)。
+書き込めるのは、作業ディレクトリと、設定の visible.write に書いた所だけ。
+ホーム・/tmp・/mnt・/media・/run/user は空で覆われ、設定の visible に書いた所だけが見える。
+それ以外 (/usr・/etc など) は読み取り専用で見える。hide に書いた所は隠れる。GPU は使える。
+
+設定:
+  共有      ~/.config/pi-sandbox/runner.toml         chezmoi 管理 (直接編集しない)
+  この PC   ~/.config/pi-sandbox/runner.local.toml   管理外 ([visible] [hide] [env] だけ)
+  見本      ~/.config/pi-sandbox/runner.local.toml.example
+  反映は、次にコマンドを実行したとき (chezmoi apply は要らない)。
+
+囲いの外が要る作業は、`pi` (囲いなし) か別のターミナルで行う。
+詳細: docs/spec/sandbox/pi-sandbox-runner.md
+"""
 
 
 def _load_settings(path: Path) -> tuple[str, dict | None]:
@@ -165,9 +199,47 @@ def parse_args(argv: Sequence[str]) -> tuple[bool, list[str], str | None]:
     return offline, args, None
 
 
+def status(env: Mapping[str, str], home: Path, offline: bool) -> int:
+    """囲いが使える状態かと、いま効いている設定 (runner の ``--status``) を表示する。終了コードは、使えるなら 0、使えないなら 2。
+
+    runner が「この場所・この設定では起動できない」と答えたとき (終了コード 2) も、使えない状態として数える。
+    """
+    found = problems(env, home, Path.cwd())
+    runner = home / ".local" / "bin" / RUNNER_NAME
+    detail_out = detail_err = ""
+    if os.access(runner, os.X_OK):
+        flags = ["--offline"] if offline else []
+        result = subprocess.run(
+            [str(runner), *flags, "--status"],
+            env=dict(env),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        detail_out, detail_err = result.stdout, result.stderr
+        if result.returncode != 0:
+            found.append("runner が、この場所・この設定では起動できないと報告した (下の詳細)")
+    print("囲い: " + ("使える" if not found else "使えない"))
+    for line in found:
+        print(f"  - {line}")
+    print(detail_out, end="")
+    print(detail_err, end="", file=sys.stderr)
+    return 2 if found else 0
+
+
 def main(argv: Sequence[str], env: Mapping[str, str] | None = None) -> int:
     env = dict(os.environ if env is None else env)
     offline, rest, refused = parse_args(argv)
+    if rest[:1] in (["--help"], ["-h"]):  # 壊れた配備でも読めるよう、検査より先に出す
+        print(HELP, end="")
+        return 0
+    if rest[:1] == ["--status"]:
+        if len(rest) > 1:
+            print(f"{PREFIX} --status に他の引数は付けられない: {rest[1:]}", file=sys.stderr)
+            return 2
+        return status(env, Path(env.get("HOME") or Path.home()), offline)
     found = [refused] if refused else []
     found += problems(env, Path(env.get("HOME") or Path.home()), Path.cwd())
     if found:

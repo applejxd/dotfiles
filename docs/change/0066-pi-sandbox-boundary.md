@@ -168,7 +168,7 @@ ADR-0036 の決定（コマンドの実行は `shellPath` の囲い 1 つ、方�
 | A4 `read`・`write`・`edit` | 囲いの外。パスの判定（`pi-permission-system`）に任せる。ソースで、外かどうかの判定がシンボリックリンクを解決した実体で行われることを確認。`external_directory` は ask で、YOLO では自動承認になる（実機の試験は未実施） |
 | gh・git push・issue / PR の投稿 | 内側では認証が見えず失敗する（`~/.config/gh`・`~/.git-credentials` は見えず、`~/.config/git/credentials` は隠す。内側の `git credential fill` は認証を見つけない） |
 
-実機の自己確認（`scripts/pi_sandbox_selftest.py`。GPU の CUDA カーネルを含む）は、すべて PASS。試験は `test/test_pi_sandbox_runner.py` の 220 件。
+実機の自己確認（`scripts/pi_sandbox_selftest.py`。GPU の CUDA カーネルを含む）は、すべて PASS。試験は `test/test_pi_sandbox_runner.py` の 244 件。
 
 **監査（`reviewer`）で見つかり、直したもの**（コミット前。BLOCKER 2・MAJOR 3・MINOR 1）:
 
@@ -180,6 +180,8 @@ ADR-0036 の決定（コマンドの実行は `shellPath` の囲い 1 つ、方�
 | `~/.cache/huggingface` 全体を書き込み可にし、認証（`token`）を読み書きできた | `hub`・`datasets` の下だけにし、認証は `hide` にも入れた |
 | `visible` のパスの途中がシンボリックリンクだと、書いた名前では使えなかった | 覆われて消えたリンクを `--symlink` で作り直す |
 | 実 bwrap の試験に、偽の合格があった（隠す前の陽性対照が無い・`/tmp` の下の被害者が覆われて見えない） | 陽性対照を足し、覆われない場所に被害者を置く |
+
+**使い勝手の追加**（利用者の要望、承認済み）: `pib --help`（日本語。pi のヘルプを上書きする。pi のヘルプは `pi --help`）と `pib --status`（囲いの状態と、いま効いている設定を、存在の印つきで表示。追記の綴りの誤りに気づける）。
 
 **再監査で見つかり、直したもの**（2 回目: BLOCKER 2・MAJOR 3。3 回目: BLOCKER 1・指摘 3 件。4 回目: BLOCKER 1・指摘 1 件）:
 

@@ -278,7 +278,9 @@ def parse_cli(argv: Sequence[str]) -> tuple[bool, str]:
     if args and args[0] == "--offline":
         offline, args = True, args[1:]
     if len(args) != 2 or args[0] != "-c":
-        raise RunnerError("使い方: pi-sandbox-runner [--offline] -c <コマンド>")
+        raise RunnerError(
+            "使い方: pi-sandbox-runner [--offline] -c <コマンド> | [--offline] --status"
+        )
     if not args[1].strip():
         raise RunnerError("-c の後に実行するコマンドが無い")
     return offline, args[1]
@@ -541,6 +543,58 @@ def load_config(path: Path) -> Config:
     return merge_local(cfg, parse_local(local_text))
 
 
+def describe(env: Mapping[str, str], host: Host, cwd: str, offline: bool) -> tuple[list[str], bool]:
+    """``--status``: いま効いている設定の一覧 (読み取り専用) と、この場所で起動できるか。
+
+    ``visible`` / ``hide`` の無い場所は黙って飛ばされるので、存在の印を付けて、綴りの誤りに気づけるようにする。
+    共有の既定には、この PC に無いもの (入れていない道具) が多いので、このマシンの追記 (runner.local.toml) の分だけ警告する。
+    """
+    path = config_path(env, host.home)
+    cfg = load_config(path)
+    local = path.with_name(LOCAL_NAME)
+    added = parse_local(local.read_text(encoding="utf-8")) if local.is_file() else Additions()
+    mine = {*added.hide_dirs, *added.hide_files, *added.visible_read, *added.visible_write}
+
+    def mark(entry: str) -> str:
+        if host.exists(host.realpath(_expand(entry, host))):
+            return f"{entry} ✓"
+        return f"{entry} ✗ 存在しない (綴りを確かめる)" if entry in mine else f"{entry} -"
+
+    def block(title: str, entries: Sequence[str]) -> list[str]:
+        return [title, *(f"  {mark(e)}" for e in entries)] if entries else [f"{title} (なし)"]
+
+    gpu = _gpu_devices(cfg.gpu_devices, host)
+    if gpu:
+        gpu_line = ", ".join(gpu)
+    else:
+        gpu_line = "渡さない" + (" (設定のデバイスが見つからない)" if cfg.gpu_devices else "")
+    lines = [
+        f"設定: {path}",
+        f"      {local.name}: " + (f"あり ({local})" if local.is_file() else "なし"),
+        "通信: " + ("遮断 (--offline)" if offline else "開いている (pib --offline で遮断)"),
+        f"GPU: {gpu_line}",
+    ]
+    startable = True
+    try:
+        _, notes = build_shell_pre(cfg, cwd, host)
+        lines.append(f"作業ディレクトリ: {cwd} (書き込み可)")
+        lines += [f"  注意: {note}" for note in notes]
+    except (
+        RunnerError
+    ) as exc:  # 一覧は出し続ける (原因を見るため)。起動できないことは、戻り値で伝える
+        startable = False
+        lines.append(f"作業ディレクトリ: {cwd} -> この場所では起動できない: {exc}")
+    lines += block("見える場所 (読み取り専用):", cfg.visible_read)
+    lines += block("見える場所 (書き込み可):", cfg.visible_write)
+    lines += block("隠す場所 (ディレクトリ):", cfg.hide_dirs)
+    lines += block("隠す場所 (ファイル):", cfg.hide_files)
+    lines.append("消す環境変数: " + (", ".join(cfg.env_unset) or "(なし)"))
+    lines.append(
+        "凡例: ✓ ある / - この PC に無い (共有の既定。問題なし) / ✗ このマシンの追記なのに無い"
+    )
+    return lines, startable
+
+
 def build_command(
     argv: Sequence[str],
     env: Mapping[str, str],
@@ -564,6 +618,16 @@ def build_command(
 def main(argv: Sequence[str], env: Mapping[str, str] | None = None) -> int:
     env = os.environ if env is None else env
     home = env.get("HOME") or str(Path.home())
+    rest = list(argv)
+    offline = rest[:1] == ["--offline"]
+    if rest[offline:] == ["--status"]:  # 実行せずに、いま効いている設定を見せる
+        try:
+            lines, startable = describe(env, Host(home=home, uid=os.getuid()), os.getcwd(), offline)
+        except RunnerError as exc:
+            print(f"{PREFIX} {exc}", file=sys.stderr)
+            return 2
+        print("\n".join(lines))
+        return 0 if startable else 2  # 起動できない状態で、成功を返さない
     try:
         command, notes = build_command(argv, env, Host(home=home, uid=os.getuid()), cwd=os.getcwd())
     except RunnerError as exc:

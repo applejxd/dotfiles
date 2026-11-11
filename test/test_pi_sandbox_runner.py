@@ -784,6 +784,137 @@ def test_shell_pre_does_not_trust_a_registration_file_that_links_into_the_worksp
     assert any("書ける場所" in n for n in notes), notes
 
 
+# --- --status (いま効いている設定の一覧) -----------------------------------------
+
+
+def _lines(result):
+    """describe の戻り値 (行, 起動できるか) の、行だけ。"""
+    return result[0]
+
+
+def _status_env(tmp_path, shared="version = 1\n", local=None):
+    conf = tmp_path / "runner.toml"
+    conf.write_text(shared, encoding="utf-8")
+    if local is not None:
+        (tmp_path / "runner.local.toml").write_text(local, encoding="utf-8")
+    return {runner.CONFIG_ENV: str(conf)}
+
+
+def test_status_flags_only_missing_entries_added_on_this_machine(tmp_path):
+    """無い場所は黙って飛ばされる。このマシンの追記だけ ✗ で警告し、共有の既定 (入れていない道具) は - にとどめる。"""
+    env = _status_env(
+        tmp_path,
+        shared='version = 1\n[visible]\nread = ["~/.cargo"]\n[hide]\ndirs = ["~/.kube"]\n',
+        local='version = 1\n[visible]\nread = ["~/papres", "~/papers"]\n[hide]\nfiles = ["~/typo-token"]\n',
+    )
+    fake = shell_fake(dirs={"/home/u/papers"})
+    text = "\n".join(_lines(runner.describe(env, fake.host(), "/w/ws", offline=False)))
+    assert "~/papres ✗ 存在しない (綴りを確かめる)" in text  # 追記の綴りの誤り
+    assert (
+        "~/typo-token ✗ 存在しない (綴りを確かめる)" in text
+    )  # hide の綴りの誤りは、秘密を隠せないので特に重要
+    assert "~/papers ✓" in text
+    assert "~/.cargo -" in text and "~/.kube -" in text  # 共有の既定。警告しない
+    assert "~/.cargo ✗" not in text and "~/.kube ✗" not in text
+    assert "runner.local.toml: あり" in text
+
+
+def test_status_reports_network_gpu_workdir_and_env(tmp_path):
+    env = _status_env(
+        tmp_path, 'version = 1\n[gpu]\ndevices = ["auto"]\n[env]\nunset = ["A_TOKEN"]\n'
+    )
+    fake = shell_fake(files={"/dev/dxg"})
+    on = "\n".join(_lines(runner.describe(env, fake.host(), "/w/ws", offline=False)))
+    off = "\n".join(_lines(runner.describe(env, fake.host(), "/w/ws", offline=True)))
+    assert "通信: 開いている" in on and "通信: 遮断 (--offline)" in off
+    assert "GPU: /dev/dxg" in on
+    assert "作業ディレクトリ: /w/ws (書き込み可)" in on
+    assert "消す環境変数: A_TOKEN" in on
+    assert "runner.local.toml: なし" in on
+
+
+def test_status_says_so_when_no_gpu_is_passed(tmp_path):
+    env = _status_env(tmp_path, 'version = 1\n[gpu]\ndevices = ["auto"]\n')
+    text = "\n".join(_lines(runner.describe(env, shell_fake().host(), "/w/ws", offline=False)))
+    assert "GPU: 渡さない (設定のデバイスが見つからない)" in text
+
+
+def test_status_explains_why_the_workdir_cannot_start(tmp_path):
+    """ホームを含む場所では起動できない。起動してから知るのではなく、--status で理由を見る。戻り値でも、起動できないと伝える。"""
+    env = _status_env(tmp_path)
+    lines, startable = runner.describe(env, shell_fake().host(), "/home", offline=False)
+    assert "この場所では起動できない" in "\n".join(lines)
+    assert startable is False
+    assert runner.describe(env, shell_fake().host(), "/w/ws", offline=False)[1] is True
+
+
+def test_status_shows_the_git_note_for_the_workdir(tmp_path):
+    """worktree の .git を渡せない理由 (git が動かない理由) も、作業ディレクトリの注意として見える。"""
+    env = _status_env(tmp_path)
+    fake = worktree_fake(**{"/w/wt/.git": "gitdir: /home/u/.ssh\n"})
+    text = "\n".join(_lines(runner.describe(env, fake.host(), "/w/wt", offline=False)))
+    assert "注意: .git の領域を渡さない" in text
+
+
+@linux_only
+def test_status_fails_when_the_config_is_broken(tmp_path, capsys):
+    env = _status_env(tmp_path, "version = 2\n")
+    code = runner.main(["--status"], {**env, "HOME": str(tmp_path)})
+    assert code == 2
+    assert "pi-sandbox-runner:" in capsys.readouterr().err
+
+
+@linux_only
+@pytest.mark.parametrize(
+    ("args", "offline"), [(["--status"], False), (["--offline", "--status"], True)]
+)
+def test_status_main_prints_and_never_starts_bwrap(tmp_path, capsys, monkeypatch, args, offline):
+    env = _status_env(tmp_path)
+
+    def boom(*_a, **_k):
+        raise AssertionError("--status は bwrap を起動しない")
+
+    monkeypatch.setattr(runner.os, "execv", boom)
+    monkeypatch.setattr(runner.shutil, "which", boom)
+    monkeypatch.chdir(tmp_path)
+    code = runner.main(args, {**env, "HOME": str(tmp_path.parent)})
+    out = capsys.readouterr().out
+    assert code == 0
+    assert ("通信: 遮断" in out) is offline
+
+
+@linux_only
+@pytest.mark.parametrize("where", ["home", "above_home", "visible_is_home"])
+def test_status_main_fails_when_the_workdir_cannot_start(tmp_path, capsys, monkeypatch, where):
+    """起動できない場所・設定では、一覧を出したうえで、成功 (0) を返さない。"""
+    home = tmp_path / "home"
+    (home / "sub").mkdir(parents=True)
+    visible = (
+        f'version = 1\n[visible]\nread = ["{home}"]\n'
+        if where == "visible_is_home"
+        else "version = 1\n"
+    )
+    env = _status_env(tmp_path, visible)
+    monkeypatch.chdir(
+        {"home": home, "above_home": tmp_path, "visible_is_home": home / "sub"}[where]
+    )
+    code = runner.main(["--status"], {**env, "HOME": str(home)})
+    captured = capsys.readouterr()
+    assert code == 2
+    if where == "visible_is_home":
+        assert "起動できない" in captured.out
+    else:
+        assert "この場所では起動できない" in captured.out
+
+
+@linux_only
+@pytest.mark.parametrize("args", [["--status", "x"], ["--status", "-c", "true"], ["--statuss"]])
+def test_status_is_not_mixed_with_other_arguments(tmp_path, capsys, args):
+    env = _status_env(tmp_path)
+    assert runner.main(args, {**env, "HOME": str(tmp_path)}) == 2
+    assert "使い方" in capsys.readouterr().err
+
+
 def test_shell_pre_needs_nothing_for_a_plain_git_directory_inside_the_workspace():
     fake = shell_fake(dirs={"/w/ws/.git"}, files={"/w/ws/.git/HEAD"})
     pre, notes = runner.build_shell_pre(config(), "/w/ws", fake.host())
@@ -1590,6 +1721,102 @@ def make_setup(tmp_path, *, settings=None, runner=True, shell=True, config=True,
         (fake_bin / "bwrap").write_text("#!/bin/sh\n", encoding="utf-8")
         (fake_bin / "bwrap").chmod(0o755)
     return home, {"PATH": str(fake_bin)}
+
+
+@linux_only
+@pytest.mark.parametrize("args", [["--help"], ["-h"], ["--offline", "--help"]])
+def test_pib_help_is_japanese_and_overrides_the_help_of_pi(tmp_path, args):
+    """pib --help は pib の使い方 (pi のヘルプを上書きする。pi のヘルプは pi --help)。pi は起動しない。"""
+    home, _ = make_setup(tmp_path)
+    result = run_pib(home, fake_pi(tmp_path), args, cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    for word in (
+        "pib —",
+        "--offline",
+        "--status",
+        "runner.local.toml",
+        "pi --help",
+        "囲い",
+        "読み取り専用で見える",
+    ):
+        assert word in result.stdout, word
+    assert not (tmp_path / "pi-args").exists()  # pi を起動していない
+
+
+@linux_only
+def test_pib_help_works_even_when_the_setup_is_broken(tmp_path):
+    """ヘルプは、配備が壊れていても読める (検査より先に出す)。"""
+    home, _ = make_setup(tmp_path, runner=False, shell=False, config=False, settings=False)
+    result = run_pib(home, fake_pi(tmp_path), ["--help"], cwd=tmp_path)
+    assert result.returncode == 0 and "使い方" in result.stdout
+
+
+@linux_only
+def test_pib_passes_help_to_pi_when_it_is_not_the_first_argument(tmp_path):
+    """先頭でない --help は、pi の引数 (pib のヘルプにしない)。"""
+    home, _ = make_setup(tmp_path)
+    work = tmp_path / "work"
+    work.mkdir()
+    result = run_pib(home, fake_pi(tmp_path), ["-p", "--help"], cwd=work)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "pi-args").read_text(encoding="utf-8").split("\n")[:-1] == [
+        "1",
+        "--no-approve",
+        "-p",
+        "--help",
+    ]
+
+
+@linux_only
+@pytest.mark.parametrize(
+    ("args", "expect"),
+    [(["--status"], "--status"), (["--offline", "--status"], "--offline --status")],
+)
+def test_pib_status_reports_readiness_and_runs_the_runner_status(tmp_path, args, expect):
+    home, _ = make_setup(tmp_path)
+    runner_path = home / ".local" / "bin" / "pi-sandbox-runner"
+    runner_path.write_text('#!/bin/sh\necho "RUNNER-ARGS: $*"\n', encoding="utf-8")
+    runner_path.chmod(0o755)
+    work = tmp_path / "work"
+    work.mkdir()
+    result = run_pib(home, fake_pi(tmp_path), args, cwd=work)
+    assert result.returncode == 0, result.stderr
+    assert "囲い: 使える" in result.stdout
+    assert f"RUNNER-ARGS: {expect}" in result.stdout
+    assert not (tmp_path / "pi-args").exists()  # pi を起動していない
+
+
+@linux_only
+def test_pib_status_counts_a_runner_that_cannot_start_as_not_ready(tmp_path):
+    """runner が「この場所では起動できない」と答えたら、見出しを『使える』にせず、終了コード 2。"""
+    home, _ = make_setup(tmp_path)
+    runner_path = home / ".local" / "bin" / "pi-sandbox-runner"
+    runner_path.write_text(
+        '#!/bin/sh\necho "作業ディレクトリ: x -> この場所では起動できない"\nexit 2\n',
+        encoding="utf-8",
+    )
+    runner_path.chmod(0o755)
+    result = run_pib(home, fake_pi(tmp_path), ["--status"], cwd=tmp_path)
+    assert result.returncode == 2
+    assert "囲い: 使えない" in result.stdout
+    assert "この場所では起動できない" in result.stdout  # 詳細も見える
+    assert "囲い: 使える" not in result.stdout
+
+
+@linux_only
+def test_pib_status_lists_what_is_wrong_and_fails(tmp_path):
+    home, _ = make_setup(tmp_path, config=False)
+    result = run_pib(home, fake_pi(tmp_path), ["--status"], cwd=tmp_path)
+    assert result.returncode == 2
+    assert "囲い: 使えない" in result.stdout and "runner の設定が無い" in result.stdout
+
+
+@linux_only
+def test_pib_status_takes_no_other_arguments(tmp_path):
+    home, _ = make_setup(tmp_path)
+    result = run_pib(home, fake_pi(tmp_path), ["--status", "-p", "x"], cwd=tmp_path)
+    assert result.returncode == 2
+    assert "--status に他の引数は付けられない" in result.stderr
 
 
 def test_pib_accepts_a_complete_setup(tmp_path):
