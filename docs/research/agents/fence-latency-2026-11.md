@@ -61,6 +61,23 @@
 - **セキュリティモデル**: 敵対的なコードの封じ込めは目的外（defense-in-depth）。
 - **見つからなかったもの**: pi のシェルをコマンドごとに包む事例、`denyWrite` が未存在のパスに効かない件、git worktree・`/run` の扱い（探した語: worktree、`/run`、defaultDenyRead、denyWrite、nonexistent）。
 
+## 比較: 素の `bwrap` だけの試作（2026-11-12）
+
+Fence を使わず、`bwrap` の約 20 行の引数で、同じ「許可リスト型」の見え方を作れるかを試した（`.tmp/handson/fence-spike/bwrap-proto.sh`。git 管理外）。ルートを読み取り専用で重ね、ホーム・`/mnt`・`/tmp`・`/run/user` を空の tmpfs で覆い、必要な所だけを後から重ねる。
+
+| 項目 | 結果 |
+| --- | --- |
+| ホームの見え方 | 直下が 4 件だけ（`.cache`・`.config`・`.gitconfig`・`.local`。重ねた所の親だけ） |
+| 秘密・履歴 | 見えない（`.bash_history`・`.zsh_history`・`.ssh`・`.config/gh`・`.npmrc`・`.aws`・`.gnupg`・`.claude.json`・`.pi`） |
+| `/mnt` | `/mnt/c`・`/mnt/c/Users`・`/mnt/e`・`/mnt/d/Games` は見えない。重ねた `/mnt/d/VR` だけ見え、書き込みは拒否された（読み取り専用） |
+| `/tmp`・`/run/user` | tmux のソケットも docker のソケットも見えない |
+| 書き込み | 作業ツリーと `~/.cache/uv` に書ける。ホーム直下は空の tmpfs（外へは出ない） |
+| 道具 | `git`・`mise`・`uv`・`node`・`python3` が動く |
+| `PATH` の `/mnt` 配下 | 内側では見えない（`PATH` から外さなくても、遅さの原因にならない） |
+| 1 コマンドあたり | 約 16 ミリ秒（5 回で 0.078 秒）。Fence は約 0.25 秒（`PATH` を外した場合） |
+
+`/mnt` の見え方は、Fence か `bwrap` かとは別の選択である。`/mnt/d` はデータセット以外（ゲーム・Unity・VR・Xilinx・SteamLibrary など）も入る一般のドライブだった。許可型なら、データのあるサブディレクトリを 1 行足せば、読み取り専用で使える。この試作で、GPU・`.git` の保護・worktree は試していない（現行の runner には実装がある）。
+
 ## 解釈（推測を含む）
 
 - 基底の約 1 秒は、公式が認める WSL の遅さと整合する。公式は `/usr/bin` などの参照が遅いとするが、手元では、`PATH` の `/mnt` 配下の要素を外すだけで約 0.77 秒が消えた（`/mnt` 配下は 6 要素で、1 要素あたり約 0.13 秒）。公式の脚注の仮説（`/mnt` をまたぐ `stat` が遅い）と整合する。公式の docs には、この回避策の記述は見つからなかった。

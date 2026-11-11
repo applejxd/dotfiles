@@ -5,6 +5,8 @@
 - **決定者**: applejxd（実装は利用者の依頼。[ADR-0031](0031-evaluate-existing-extensions-first.md) の 3(d)「自作の承認」は、利用者が統合を指示した 2026-11-12 に得た）
 - **関係**: [ADR-0027](0027-isolation-unit-is-environment.md)（隔離の単位は環境）を**置き換えない**。docker・compose を使う開発は従来どおり環境の側で扱い、ここは「ホストで GPU を使う作業」の守りを足す。[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)（stock の pi。隔離は自分の判断）と [ADR-0031](0031-evaluate-existing-extensions-first.md)（自作の条件）に従う。
 
+> **注記（2026-11-12）**: 責務の分担を [ADR-0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) で整理した。実装が入ったら、この ADR は置き換える（拡張を外し、`shellPath` の囲いにする）。それまでは、この ADR が現行。以下の本文は決定当時のまま残している。
+
 ## コンテキスト
 
 - **要件**: GPU の利用が最優先。そのうえで、LLM の認証などの秘密をエージェントから隠し、手間を増やさない。worktree での開発（feature ごとの worktree）を妨げない。守る水準は「うっかり防止」（[ADR-0012](0012-ocs-boundary-for-accidents.md)）。
