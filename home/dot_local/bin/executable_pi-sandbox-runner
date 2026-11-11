@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""pi の sandbox 拡張 (@yuru7/pi-sandbox) の ``runnerCommand`` 用ラッパー。
+"""pi のシェル (``shellPath``) に差す囲い: ``pi-sandbox-runner [--offline] -c <コマンド>``。
 
-``<runner> <bwrap の引数...> -- <コマンド...>`` の ``--`` の直前に、設定 (runner.toml) に従う引数を足して bwrap を exec する。
+``bash -c <コマンド>`` を、bwrap の内側で実行する。作業ディレクトリ (cwd) だけを書き込み可にし、ホーム・/mnt・/tmp・/run/user を
+空で覆って、設定 (runner.toml) に書いた所だけを重ねる (許可リスト型)。GPU・秘密の隠蔽・docker の遮断・git の hooks/config の保護も足す。
 設定 (runner.toml の共有設定と、任意の runner.local.toml の追記) が壊れていれば bwrap を起動しない。契約・設定・限界は docs が正本。
-see docs/spec/sandbox/pi-sandbox-runner.md
+see docs/spec/sandbox/pi-sandbox-runner.md, docs/adr/0036-pi-sandbox-shell-wrap-and-tool-policy.md
 """
 
 from __future__ import annotations
@@ -11,6 +12,8 @@ from __future__ import annotations
 import glob as _glob
 import json
 import os
+import posixpath
+import re
 import shutil
 import stat
 import sys
@@ -39,19 +42,27 @@ GPU_AUTO_GLOBS = ("/dev/nvidia[0-9]*",)
 # 書き込み可で渡る git ディレクトリのうち、ホストの git が後で実行・解釈する場所
 GIT_PROTECTED = ("hooks", "config", "config.worktree")
 DOCKER_SOCKETS = ("/run/docker.sock", "/var/run/docker.sock")
+# ホストと共有しない場所。空の tmpfs で覆う (tmux・X11・ssh-agent のソケット、Windows のドライブ、docker のソケットなどを見せない)
+MASK_ROOTS = ("/tmp", "/var/tmp", "/mnt", "/media", "/run/user")
+# 内側で固定する環境変数。mise の状態 (信頼の記録) は、ホームの外の使い捨ての場所へ向ける (ホームの状態を書き換えさせない)
+COMPAT_ENV = (("MISE_STATE_DIR", "/tmp/pib-mise-state"),)
+_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 _ALLOWED_KEYS: dict[str, set[str]] = {
-    "": {"version", "gpu", "hide", "docker", "git"},
+    "": {"version", "gpu", "hide", "visible", "env", "docker", "git"},
     "gpu": {"devices"},
     "hide": {"dirs", "files"},
+    "visible": {"read", "write"},
+    "env": {"unset"},
     "docker": {"block"},
     "git": {"protect"},
 }
 
-
-# runner.local.toml で書けるのは、共有設定に「足す」うち、**見えなくする方向**のもの (hide) だけ。
-# gpu はデバイスを公開する (緩める方向)、docker・git は共有の block・protect を緩められるので、書けない
-_LOCAL_TABLES = ("hide",)
+# runner.local.toml で書けるのは、共有設定に「足す」ものだけ。
+#   hide (見えなくする)・env.unset (環境変数を消す) は引き締める方向。
+#   visible (見せる) は、利用者が自分のマシンで足す前提 (共有の hide が後から勝つ)。
+#   gpu はデバイスの公開、docker・git は共有の block・protect を緩められるので、書けない
+_LOCAL_TABLES = ("hide", "visible", "env")
 _LOCAL_REFUSED = ("gpu", "docker", "git")
 
 
@@ -64,8 +75,29 @@ class Config:
     gpu_devices: tuple[str, ...] = ()
     hide_dirs: tuple[str, ...] = ()
     hide_files: tuple[str, ...] = ()
+    visible_read: tuple[str, ...] = ()
+    visible_write: tuple[str, ...] = ()
+    env_unset: tuple[str, ...] = ()
     docker_block: bool = True
     git_protect: bool = True
+
+
+@dataclass(frozen=True)
+class Additions:
+    """runner.local.toml が共有設定に足す分。"""
+
+    hide_dirs: tuple[str, ...] = ()
+    hide_files: tuple[str, ...] = ()
+    visible_read: tuple[str, ...] = ()
+    visible_write: tuple[str, ...] = ()
+    env_unset: tuple[str, ...] = ()
+
+
+def _read_text(path: str) -> str:
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
 
 
 @dataclass(frozen=True)
@@ -78,7 +110,9 @@ class Host:
     isdir: Callable[[str], bool] = os.path.isdir
     issock: Callable[[str], bool] = lambda p: _is_socket(p)
     realpath: Callable[[str], str] = os.path.realpath
+    islink: Callable[[str], bool] = os.path.islink
     glob: Callable[[str], list[str]] = lambda pattern: sorted(_glob.glob(pattern))
+    read_text: Callable[[str], str] = _read_text
 
 
 def _is_socket(path: str) -> bool:
@@ -134,15 +168,35 @@ def _gpu(root: Mapping[str, object]) -> tuple[str, ...]:
     return gpu
 
 
+def _paths(table: Mapping[str, object], key: str, where: str) -> tuple[str, ...]:
+    paths = _string_list(table, key, where)
+    for path in paths:
+        if not (path.startswith(("~/", "/")) and path not in ("/", "~/")):
+            raise RunnerError(
+                f"{where}.{key} のパスは ~/ か / で始め、/ と ~/ そのものは不可: {path!r}"
+            )
+        if ".." in path.split("/"):  # リンクをまたぐ .. は、文字列の正規化と実体で意味が変わる
+            raise RunnerError(f"{where}.{key} のパスに .. は書けない: {path!r}")
+    return paths
+
+
 def _hide(root: Mapping[str, object]) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """[hide] を検証して dirs・files を取り出す。共有設定と runner.local.toml で同じ規則を使う。"""
     hide = _table(root, "hide")
-    dirs = _string_list(hide, "dirs", "hide")
-    files = _string_list(hide, "files", "hide")
-    for path in (*dirs, *files):
-        if not (path.startswith(("~/", "/")) and path not in ("/", "~/")):
-            raise RunnerError(f"hide のパスは ~/ か / で始め、/ と ~/ そのものは不可: {path!r}")
-    return dirs, files
+    return _paths(hide, "dirs", "hide"), _paths(hide, "files", "hide")
+
+
+def _visible(root: Mapping[str, object]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    visible = _table(root, "visible")
+    return _paths(visible, "read", "visible"), _paths(visible, "write", "visible")
+
+
+def _env_unset(root: Mapping[str, object]) -> tuple[str, ...]:
+    names = _string_list(_table(root, "env"), "unset", "env")
+    for name in names:
+        if not _ENV_NAME.match(name):
+            raise RunnerError(f"env.unset は環境変数の名前にする: {name!r}")
+    return names
 
 
 def parse_config(text: str) -> Config:
@@ -157,17 +211,21 @@ def parse_config(text: str) -> Config:
         raise RunnerError(f"version = {SUPPORTED_VERSION} が必要 (実際: {version!r})")
 
     dirs, files = _hide(root)
+    read, write = _visible(root)
     return Config(
         gpu_devices=_gpu(root),
         hide_dirs=dirs,
         hide_files=files,
+        visible_read=read,
+        visible_write=write,
+        env_unset=_env_unset(root),
         docker_block=_bool(_table(root, "docker"), "block", True, "docker"),
         git_protect=_bool(_table(root, "git"), "protect", True, "git"),
     )
 
 
-def parse_local(text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """runner.local.toml の本文を検証し、足す分 (hide.dirs・hide.files) を返す。
+def parse_local(text: str) -> Additions:
+    """runner.local.toml の本文を検証し、足す分を返す。
 
     共有設定を緩められるものは書けない: [gpu]・[docker]・[git] があれば RunnerError。
     version は省略できる。書くなら共有設定と同じ値にする。
@@ -190,39 +248,54 @@ def parse_local(text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         raise RunnerError(
             f"{LOCAL_NAME} の version は {SUPPORTED_VERSION} にする (実際: {root['version']!r})"
         )
-    return _hide(root)
+    dirs, files = _hide(root)
+    read, write = _visible(root)
+    return Additions(dirs, files, read, write, _env_unset(root))
 
 
-def merge_local(cfg: Config, local: tuple[tuple[str, ...], tuple[str, ...]]) -> Config:
+def merge_local(cfg: Config, local: Additions) -> Config:
     """共有設定の後ろに、このマシンだけの追記を足す (重複は 1 つにする。順序は共有が先)。"""
 
     def union(base: tuple[str, ...], extra: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(dict.fromkeys((*base, *extra)))
 
-    dirs, files = local
     return Config(
         gpu_devices=cfg.gpu_devices,
-        hide_dirs=union(cfg.hide_dirs, dirs),
-        hide_files=union(cfg.hide_files, files),
+        hide_dirs=union(cfg.hide_dirs, local.hide_dirs),
+        hide_files=union(cfg.hide_files, local.hide_files),
+        visible_read=union(cfg.visible_read, local.visible_read),
+        visible_write=union(cfg.visible_write, local.visible_write),
+        env_unset=union(cfg.env_unset, local.env_unset),
         docker_block=cfg.docker_block,
         git_protect=cfg.git_protect,
     )
 
 
-def split_args(argv: Sequence[str]) -> tuple[list[str], list[str]]:
-    """``<bwrap の引数...> -- <コマンド...>`` を分ける。最初の ``--`` が区切り。"""
+def parse_cli(argv: Sequence[str]) -> tuple[bool, str]:
+    """``[--offline] -c <コマンド>`` を分ける。pi は ``<shell> -c <コマンド>`` で呼ぶので、それ以外は受け付けない。"""
     args = list(argv)
-    if "--" not in args:
-        raise RunnerError("引数に -- (bwrap の引数とコマンドの区切り) が無い")
-    cut = args.index("--")
-    pre, cmd = args[:cut], args[cut + 1 :]
-    if not cmd:
-        raise RunnerError("-- の後に実行するコマンドが無い")
-    return pre, cmd
+    offline = False
+    if args and args[0] == "--offline":
+        offline, args = True, args[1:]
+    if len(args) != 2 or args[0] != "-c":
+        raise RunnerError("使い方: pi-sandbox-runner [--offline] -c <コマンド>")
+    if not args[1].strip():
+        raise RunnerError("-c の後に実行するコマンドが無い")
+    return offline, args[1]
 
 
 def _expand(path: str, host: Host) -> str:
     return host.home + path[1:] if path.startswith("~/") else path
+
+
+def _norm(path: str) -> str:
+    """``.``・``//``・末尾の ``/`` を整える (``..`` は設定の検証で禁止)。先頭のちょうど 2 本の ``//`` も 1 本にする (normpath は残す)。"""
+    return "/" + posixpath.normpath(path).lstrip("/")
+
+
+def _within(path: str, base: str) -> bool:
+    """path が base と同じか、その下か。"""
+    return path == base or path.startswith(base.rstrip("/") + "/")
 
 
 def _gpu_devices(entries: Sequence[str], host: Host) -> list[str]:
@@ -257,11 +330,146 @@ def _writable_bases(pre: Sequence[str]) -> list[str]:
     return bases
 
 
-def build_extra(cfg: Config, pre: Sequence[str], host: Host) -> list[str]:
-    """``--`` の直前に足す bwrap の引数。並びは固定: GPU → git → 隠蔽 → docker。
+def _git_worktree_binds(
+    work: str, host: Host, writable: Sequence[str] = ()
+) -> tuple[list[str], str | None]:
+    """作業ディレクトリが git の worktree のとき、書き込み可で渡す git ディレクトリ (共有の .git と worktree の領域)。
 
-    - GPU は拡張の ``--dev /dev`` より後ろに置く (前だと隠れる)。pre の後ろに足すので満たす。
+    ``.git`` が通常のディレクトリなら作業ディレクトリの中にあるので、何も要らない。``.git`` がファイルのとき、
+    その ``gitdir:`` の先を、エージェントが書き換えた値のまま信じない。git が worktree の登録時に書く back-reference
+    (``<gitdir>/gitdir`` が、この作業ディレクトリの ``.git`` を指す) と ``commondir`` (``<共有 .git>/worktrees/<名前>`` の形)
+    が揃うときだけ渡す。揃わなければ渡さず、理由を返す (git は動かないが、他のディレクトリは見えない)。
+
+    **登録情報 (gitdir・commondir) が、エージェントの書ける場所 (作業ディレクトリ・書き込み可の ``visible``) にあるものは信じない。**
+    そこに偽の登録を作れば、形の検証を通せるため。共有の .git が作業ディレクトリを含むものも渡さない
+    (祖先に HEAD と objects がある場所を、共有の .git に見せかけられるため)。
+    """
+    dot = f"{work}/.git"
+    if host.isdir(dot) or not host.exists(dot):
+        return [], None
+    lines = host.read_text(dot).splitlines()
+    first = lines[0].strip() if lines else ""
+    if not first.startswith("gitdir:"):
+        return [], ".git ファイルの中身が gitdir: で始まらない"
+    raw = first[len("gitdir:") :].strip()
+    gitdir = host.realpath(
+        posixpath.normpath(raw if posixpath.isabs(raw) else posixpath.join(work, raw))
+    )
+    # 共有の .git は、gitdir の位置から決める (commondir の値は、位置と一致するかの確認にだけ使う)。
+    # gitdir は <共有 .git>/worktrees/<名前> の、直接の子でなければならない
+    common = posixpath.dirname(posixpath.dirname(gitdir))
+    if posixpath.dirname(gitdir) != f"{common.rstrip('/')}/worktrees" or not _is_git_dir(
+        common, host
+    ):
+        return [], "gitdir が <共有 .git>/worktrees/<名前> の形でない"
+    # 登録情報 (gitdir・commondir) の置き場が、エージェントの書ける場所にあるものは信じない (自己証明の防止)。
+    # ディレクトリだけでなく、読む 2 つのファイルの実体 (リンク先を含む) も調べる
+    roots = (work, *writable)
+    for registered in (gitdir, f"{gitdir}/gitdir", f"{gitdir}/commondir"):
+        if any(_within(host.realpath(registered), root) for root in roots):
+            return [], "gitdir の登録情報が、エージェントの書ける場所にある (自己申告は信じない)"
+    back = host.read_text(f"{gitdir}/gitdir").strip()
+    if not back or host.realpath(back) != dot:
+        return [], "gitdir の back-reference が、この作業ディレクトリの .git を指さない"
+    commondir = host.read_text(f"{gitdir}/commondir").strip()
+    if not commondir:
+        return [], "commondir が無い"
+    if host.realpath(posixpath.normpath(posixpath.join(gitdir, commondir))) != common:
+        return [], "commondir が、gitdir の位置から決まる共有の .git を指さない"
+    if _within(work, common):
+        return [], "共有の .git が作業ディレクトリを含む"
+    return ["--bind", common, common, "--bind", gitdir, gitdir], None
+
+
+def _link_args(path: str, masked: Sequence[str], host: Host) -> list[str]:
+    """覆った場所の中の ``path`` の途中にあるシンボリックリンクを、内側に作り直す引数 (``--symlink <実体> <リンク>``)。
+
+    覆うとリンク自体が消える (``~/papers -> /data/papers`` を見せても、``~/papers`` が無い)。実体は別に重ねるので、リンクだけ作る。
+    リンクの先がまた覆った場所 (``/mnt`` など) の中なら、その先にあるリンクも作る。覆っていない場所のリンクは、
+    ルートの読み取り専用の重ねに残っているので作らない。リンクかどうかは、実際のリンクで判定する (``.`` や ``//`` の正規化と取り違えない)。
+    """
+    args: list[str] = []
+    current = next((m for m in masked if _within(path, m)), None)
+    if current is None:
+        return args
+    parts = [p for p in path[len(current) :].split("/") if p]
+    while parts:
+        current = f"{current}/{parts.pop(0)}"
+        if host.islink(current):
+            real = host.realpath(current)
+            args += ["--symlink", real, current]
+            if not any(_within(real, m) for m in masked):
+                break  # 実体が覆っていない場所なら、以降のリンクはルートの重ねに残る
+            current = real
+    return args
+
+
+def build_shell_pre(cfg: Config, cwd: str, host: Host) -> tuple[list[str], list[str]]:
+    """シェルモードの土台の引数と、利用者への注意。
+
+    ルートを読み取り専用で重ね、ホームと共有の場所 (MASK_ROOTS) を空の tmpfs で覆い、設定の ``visible`` に書いた所だけを後から重ね、
+    最後に作業ディレクトリを書き込み可で重ねる。**後から重ねた mount が勝つ**ので、並びが意味を持つ。
+    """
+    home = host.realpath(host.home)
+    work = host.realpath(cwd)
+    if work == "/" or _within(home, work):
+        raise RunnerError(f"作業ディレクトリが広すぎる (ホームか、ホームを含む場所): {work}")
+
+    pre = [
+        "--die-with-parent",
+        "--new-session",
+        "--unshare-pid",
+        "--ro-bind", "/", "/",
+        "--dev", "/dev",
+        "--proc", "/proc",
+    ]  # fmt: skip
+    masked: list[str] = []
+    for root in (*MASK_ROOTS, home):
+        real = host.realpath(root)
+        if (
+            host.isdir(real) and real not in masked
+        ):  # 無い場所は覆えない (読み取り専用のルートに作れない)
+            masked.append(real)
+            pre += ["--tmpfs", real]
+
+    writable: list[str] = []
+    linked: set[str] = set()
+    for flag, entries in (("--ro-bind", cfg.visible_read), ("--bind", cfg.visible_write)):
+        for raw in entries:
+            expanded = _norm(_expand(raw, host))
+            # 覆ったホームの中での、書いたままのパス。ホーム自体がリンクのとき、書いたホームの接頭辞を実体に直す
+            # 書いたホームの末尾の / などを整える (切り取る長さと、比べる接頭辞をそろえる)
+            host_home = _norm(host.home)
+            written = (
+                home + expanded[len(host_home) :] if _within(expanded, host_home) else expanded
+            )
+            path = host.realpath(expanded)
+            if _within(home, path):  # ホームそのもの・その親は見せない (ホーム全体が見えてしまう)
+                raise RunnerError(f"visible にホームか、ホームを含む場所は書けない: {raw!r}")
+            if not host.exists(path):
+                continue
+            for i in range(0, len(links := _link_args(written, masked, host)), 3):
+                if links[i + 2] not in linked:
+                    linked.add(links[i + 2])
+                    pre += links[i : i + 3]
+            pre += [flag, path, path]
+            if flag == "--bind":
+                writable.append(path)
+
+    pre += ["--bind", work, work]
+    git_binds, note = _git_worktree_binds(work, host, writable)
+    pre += git_binds
+    pre += ["--chdir", work]
+    notes = [f".git の領域を渡さない: {note}"] if note else []
+    return pre, notes
+
+
+def build_extra(cfg: Config, pre: Sequence[str], host: Host) -> list[str]:
+    """土台 (pre) の後ろに足す bwrap の引数。並びは固定: GPU → git → 隠蔽 → docker。
+
+    - GPU は ``--dev /dev`` より後ろに置く (前だと隠れる)。pre の後ろに足すので満たす。
     - 隠蔽は git の後ろに置く。後から重ねた mount が勝つので、隠す場所を git の bind が再び見せない。
+      ``visible`` で見せた場所の中の秘密 (例: ``~/.config/git/credentials``) も、これで隠せる。
     - 隠す場所はシンボリックリンクを解決した実体で覆う (リンクのままだと bwrap が失敗する)。
     """
     extra: list[str] = []
@@ -334,21 +542,35 @@ def load_config(path: Path) -> Config:
 
 
 def build_command(
-    argv: Sequence[str], env: Mapping[str, str], host: Host, bwrap: str = "bwrap"
-) -> list[str]:
-    pre, cmd = split_args(argv)
+    argv: Sequence[str],
+    env: Mapping[str, str],
+    host: Host,
+    cwd: str,
+    bwrap: str = "bwrap",
+) -> tuple[list[str], list[str]]:
+    """最終の bwrap のコマンドと、利用者への注意 (標準エラーへ出す) を返す。"""
+    offline, command = parse_cli(argv)
     cfg = load_config(config_path(env, host.home))
-    return [bwrap, *pre, *build_extra(cfg, pre, host), "--", *cmd]
+    pre, notes = build_shell_pre(cfg, cwd, host)
+    extra = build_extra(cfg, pre, host)
+    flags: list[str] = ["--unshare-net"] if offline else []
+    for name in cfg.env_unset:
+        flags += ["--unsetenv", name]
+    for name, value in COMPAT_ENV:
+        flags += ["--setenv", name, value]
+    return [bwrap, *pre, *extra, *flags, "--", "/bin/bash", "-c", command], notes
 
 
 def main(argv: Sequence[str], env: Mapping[str, str] | None = None) -> int:
     env = os.environ if env is None else env
     home = env.get("HOME") or str(Path.home())
     try:
-        command = build_command(argv, env, Host(home=home, uid=os.getuid()))
+        command, notes = build_command(argv, env, Host(home=home, uid=os.getuid()), cwd=os.getcwd())
     except RunnerError as exc:
         print(f"{PREFIX} {exc}", file=sys.stderr)
         return 2
+    for note in notes:
+        print(f"{PREFIX} 注意: {note}", file=sys.stderr)
     if env.get(DRYRUN_ENV):
         print(json.dumps(command, ensure_ascii=False))
         return 0

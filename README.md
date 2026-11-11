@@ -189,7 +189,7 @@ sandbox の許可を足すもの（`agents/local.toml` の `[sandbox]`・`runner
 | git の設定 | `~/.config/git/config.local` | すぐ |
 | mise の設定 | `~/.config/mise/conf.d/*.toml` | 次の mise の実行 |
 | Claude Code / Copilot CLI の sandbox の許可 | `~/.config/agents/local.toml` | `chezmoi apply` |
-| pi の囲い（`pib`）で隠す場所の追加（Linux / WSL） | `~/.config/pi-sandbox/runner.local.toml`（同じ場所の `.example` から作る） | 次のコマンドの実行 |
+| pi の囲い（`pib`）で、隠す場所・見せる場所（データセットなど）の追加（Linux / WSL） | `~/.config/pi-sandbox/runner.local.toml`（同じ場所の `.example` から作る） | 次のコマンドの実行 |
 | pi の確認（YOLO など） | `/permission-system` | すぐ（`apply` で戻らない） |
 
 置き場ごとの書き方と注意は
@@ -227,7 +227,7 @@ A. 誰も答えない確認は 5 分で拒否され、エージェントは先�
 
 ### Q. pi（stock）が作業ツリー外のデータセットを読むたびに確認される
 
-A. プロジェクトごとに、読み取りだけを事前許可できる（`/tmp` はグローバルで許可済み）。手順は
+A. プロジェクトごとに、読み取りだけを事前許可できる（`/tmp` はグローバルで許可済み）。`pib` で起動したときは、プロジェクトの `.pi/` の設定を読まない（`--no-approve`）ので、見せたい場所を `~/.config/pi-sandbox/runner.local.toml` の `[visible]` に足す。手順は
 [プロジェクト単位でデータセットを読み取り専用にする](docs/spec/agent-config-generation.md#プロジェクト単位でデータセットを読み取り専用にする)。
 
 ### Q. 外出先から WSL に SSH したい

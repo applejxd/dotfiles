@@ -18,7 +18,7 @@
 | 検証の高速化 | 凍結したスタックの試験を `verify:all` から外す | 統合済み。`verify:all` は 12〜13 分から 1 分 55 秒（`verify:full` は省略なしの 12 分 29 秒） | `main` への統合前に `verify:full` | [ADR-0034](../adr/0034-skip-frozen-stack-tests-in-verify-all.md)（Proposed）を Accepted にするか | [開発の仕様](../spec/development.md) |
 | skill の置き場と掃除 | 自作 skill を `~/.agents/skills` へ移し、stock の pi 向けに書き直す | 完了（置き場の移動・`~/.agents/skills` の読み取り許可・`reviewer` への書き直し・`feature-orchestration` を stock の運用を既定に・`github-operations` の承認を権限の確認に一本化） | なし | なし | [skill の frontmatter](../spec/skill-frontmatter.md) |
 | docs の見直し（この変更） | 読み手別に整理する縮小版（D 案）を試作 | D 案の試作を統合し、使って確かめる段階（ADR-0032 は Proposed）。2026-11-11 に、直近 2 週間の作業の抜け（ADR-0033・0034、この表、仕様の細部）を補った | この 1 枚で今の作業計画が追えるか確かめる → 追えれば、`commit` スキルと `sdd-docs` の変更（共通のスキルを縮小。案件更新の自動呼び出しと索引の自動補完を外す） | 試用のあと、ADR-0032 を Accepted にするか | [ADR-0032](../adr/0032-docs-by-audience.md) |
-| pi の sandbox（層 b）の見直し | GPU を通す sandbox（`pib`）を入れ、実機で使って見つかった問題を洗い出し、自作の境界を決める | `pib` を配備済み（2026-11-12）。問題の洗い出しは完了し、境界の案を CHG-0066 に記載。標準のキャッシュ領域を書き込み可にする変更は保留 | 脅威モデルと実行の入口の判断を受けて、案 X（`shellPath` で一元化）の実現性を試す | 守る対象（D1）・実行の入口（D2）・方針の置き場（D3）ほか（D4〜D8） | [CHG-0066](0066-pi-sandbox-boundary.md)・[ADR-0035](../adr/0035-pi-sandbox-gpu-runner.md) |
+| pi の sandbox（層 b）の見直し | GPU を通す sandbox（`pib`）を、拡張なしの `shellPath` の囲いへ作り替える（bash・`bg_run`・`!`・子の bash を同じ囲いで包む。許可リスト型） | 決定（ADR-0036）と実装を feature に入れた（2026-11-12。未統合）。試験 153 件と実機の自己確認（GPU を含む）は PASS。pi を通した実測も通った | 統合の指示を受けて統合し、`chezmoi update` で配備して `pib` を使い始める。TUI の `!` と、YOLO を切ったときの確認を実機で確かめる | 統合の指示。守る対象（ADR-0036 の 6）の確認 | [CHG-0066](0066-pi-sandbox-boundary.md)・[ADR-0035](../adr/0035-pi-sandbox-gpu-runner.md) |
 
 凍結した案件は「終了」へ移した（入口は [CHG-0065](closed/0065-agent-stack-freeze.md)）。停滞した案件はこの表に入れない（下の「活動中」「保留」に残る）。
 
@@ -70,7 +70,7 @@
 | [0047](0047-gitflow.md) | main 一本から gitflow（main / develop / feature）へ切り替える（feature の起票・クローズの AI 化は CHG-0050 で撤去。動機: コミット粒度・main の安定・並列開発） | In progress | ブランチモデルは運用中。起票・クローズは利用者のシェル、AI は feature の worktree の `pi` から `git_commit`。経緯の本文は撤去前の設計の記録 | 実機で、feature の worktree から `git_commit` が期待どおり動くかを確認 | 2026-10-31 |
 | [0051](0051-verification-tiers.md) | 検査（verify / verify:all）を段階化し、安い検査を先に・重い検査を後にする（失敗の見つかる順序・並列度・印の記録を直す） | In progress | T0 / T1 / T2 の段階化、fail-fast、並列度の上限と nice、印の開始時記録を実装済み。故意の失敗で 23 秒で止まることを確認 | 印の段と義務の置き場の判断、`AGENTS.md` の縮約、`pi` を起動する試験の起動費用の削減 | 2026-10-31 |
 | [0064](0064-dev-environment-isolation.md) | 開発単位の環境で隔離する（WSL は専用ディストロ、ネイティブ Ubuntu は Incus 系。ADR-0027 の P3。SLAM・推論・compose） | Paused | 方針を ADR-0027 に記録。WSL は専用ディストロを開発単位で切る（W1〜W3 は未着手）。**ネイティブ Ubuntu 側（N1〜N3）は保留し、ネイティブ機のセッションで継続**。Incus を使う既存の OSS（特に `isx`）があると分かり、自作より先に評価する | W1（利用者の実行）→ W2・W3 の設計。ネイティブ機: N1（T1〜T5）→ N2（isx の評価）→ N3 | 2026-11-06 |
-| [0066](0066-pi-sandbox-boundary.md) | pi のツール単位 sandbox（層 b）の問題を洗い出し、自作の境界を決める（ADR-0035 の後続。キャッシュ領域の変更は保留） | Exploring | 守る対象（脅威モデル）と、実行の入口（拡張か `shellPath` か）の決定が、利用者の判断待ち | 判断 D1〜D8 を決める。案 X（`shellPath` で一元化）が実際に `bg_run`・`!`・子を包めるか試す | 2026-11-12 |
+| [0066](0066-pi-sandbox-boundary.md) | pi のコマンド実行を包む囲いの問題を洗い出し、境界を決めて実装する（ADR-0036。拡張を外し、`shellPath` の囲いにした） | In progress | 実装は feature に入れた（未統合）。TUI の `!` と、YOLO を切ったときの確認の実機の試験は未実施 | 統合の指示を受けて統合し、配備して使い始める | 2026-11-12 |
 
 ## 保留
 

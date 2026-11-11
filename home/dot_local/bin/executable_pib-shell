@@ -1,0 +1,13 @@
+#!/bin/bash
+# pi の shellPath に差すシェル。`pib` が PIB_SANDBOX を立てたときだけ、pi-sandbox-runner (bwrap の囲い) を通す。
+# 立っていなければ素の bash (普段の `pi` は何も変わらない)。囲いを通すと決まったのに runner が無いときは、
+# exec が失敗して終わる (素の bash へ落とさない = fail-closed)。pi は `<このスクリプト> -c <コマンド>` で呼ぶ。
+# see docs/spec/sandbox/pi-sandbox-runner.md
+set -u
+if [ -n "${PIB_SANDBOX:-}" ]; then
+  here=$(dirname "$(readlink -f "$0")")
+  opts=()
+  [ "$PIB_SANDBOX" = "offline" ] && opts=(--offline)
+  exec "$here/pi-sandbox-runner" ${opts[@]+"${opts[@]}"} "$@"
+fi
+exec /bin/bash "$@"

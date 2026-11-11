@@ -13,6 +13,9 @@ import sys
 PACKAGES_TEXT = {{ .packages | toJson }}
 # 会社 PC (is-work) か。検索の MCP が機で違う (家は websearch、会社 PC は agentcore-websearch)
 IS_WORK = {{ if eq .isWork "true" }}True{{ else }}False{{ end }}
+# pi のシェル。Linux (Ubuntu / WSL) だけが、コマンド実行の囲い (pib-shell) を指す。空文字なら触らない。
+# pib-shell は、環境変数 PIB_SANDBOX が立っているとき (= pib で起動したとき) だけ囲う。普段の pi は素の bash と同じ
+SHELL_PATH = {{ .shellPath | toJson }}
 
 # 自作ハーネスだけが入れる extensions / skills の項目 (scripts/agents/generate.py の宣言に対応)
 HARNESS_EXTENSION_MARKS = (".config/pi/harness", "!extensions/**", "+extensions/", "-builtin:")
@@ -148,6 +151,8 @@ def main() -> int:
             else:
                 del data[key]
     data["packages"] = packages()
+    if SHELL_PATH and "shellPath" not in data:  # 利用者が別のシェルを書いていれば保つ (pib が、囲いを指していないと知らせる)
+        data["shellPath"] = SHELL_PATH
     subagents = data.get("subagents")
     if not isinstance(subagents, dict):
         subagents = {}

@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
-"""pi を、ツール単位の sandbox 拡張 (@yuru7/pi-sandbox) つきで起動する ``pib``。
+"""pi を、コマンド実行の囲い (bwrap) つきで起動する ``pib [--offline] [pi の引数...]``。
 
-runner・設定が配備されていないときは起動しない。拡張が既定の runner に黙って切り替わり、GPU も秘密の隠蔽も効かなくなるため。
+pi のシェル (``shellPath`` = ``pib-shell``) は、環境変数 ``PIB_SANDBOX`` が立っているときだけ ``pi-sandbox-runner`` を通す。
+``pib`` は、その環境変数を立てて ``pi`` を exec する。``--offline`` は、通信を丸ごと遮断する (強い設定)。
+囲いが効かない状態 (runner・設定・bwrap が無い、``shellPath`` が ``pib-shell`` を指していない) では起動しない。
+黙って囲いなしのシェルで動き、守られているつもりになるのを避けるため。
+
+``pi`` は常に ``--no-approve`` で起動する (プロジェクトの ``.pi/`` の設定・拡張・MCP を、この実行では読まない)。
+プロジェクトの ``.pi/settings.json`` は利用者の設定に勝つので、そこに ``shellPath`` があると囲いが外れる。起動時の作業ディレクトリを
+検査するだけでは、セッションの再開や ``/resume`` で別のディレクトリのセッションへ移ったときに、その設定を検査できない。
+``--no-approve`` は、実行時 (runtime) のプロジェクト設定の読み込みに効く (pi の project trust の仕様で、コマンドラインの指定が最優先)。
+起動時のセッション保存先 (プロジェクトの ``sessionDir``) の先読みだけは、pi の仕様で残るが、``shellPath`` には影響しない。
+``--approve`` は囲いを外せるので受け付けない。
 see docs/spec/sandbox/pi-sandbox-runner.md#導入と確認
 """
 
@@ -9,51 +19,164 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
+import shutil
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-EXTENSION = "npm:@yuru7/pi-sandbox@0.5.0"  # 版の固定。更新の手順は docs
 PREFIX = "pib:"
+SANDBOX_ENV = "PIB_SANDBOX"
+SHELL_NAME = "pib-shell"
+RUNNER_NAME = "pi-sandbox-runner"
 
 
-def problems(env: Mapping[str, str], home: Path) -> list[str]:
-    """runner・設定・拡張の設定のうち、足りないもの (空なら起動してよい)。"""
-    runner = home / ".local" / "bin" / "pi-sandbox-runner"
+def _load_settings(path: Path) -> tuple[str, dict | None]:
+    """設定ファイルを pi と同じように読む。(状態, 中身)。状態は missing / unreadable / ok。
+
+    pi は BOM を取り除いて読む (``utf-8-sig``)。読めない (壊れた JSON・オブジェクトでない・ディレクトリなど) ものを、
+    「shellPath が無い」と取り違えない (囲いを外す値を、検査をすり抜けて通してしまうため)。
+    """
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except FileNotFoundError:
+        return "missing", None
+    except (OSError, UnicodeDecodeError):
+        return "unreadable", None
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return "unreadable", None
+    return ("ok", data) if isinstance(data, dict) else ("unreadable", None)
+
+
+def _is_the_shell(value: object, shell: Path, home: Path) -> bool:
+    """``shellPath`` が、配備した pib-shell の絶対パスそのものか (``~/`` の略記は許す)。
+
+    シンボリックリンクなどの別名は認めない。作業ツリーの中のリンクを、囲いの内側から別のシェルへ付け替えられるため
+    (pi は値を realpath にせず、そのパスを実行する)。
+    """
+    if not isinstance(value, str):
+        return False
+    if value.startswith("~/"):
+        value = str(home) + value[1:]
+    return value == str(shell)
+
+
+def _canonical(path: str) -> bool:
+    """正規の絶対パスか (``.``・``..``・連続する ``/``・末尾の ``/``・先頭の ``//`` を含まない)。
+
+    pi は設定のパスを、文字列だけで整える (Node の ``join`` / ``resolve``)。OS はシンボリックリンクを辿ってから ``..`` を解く。
+    こうした整え方の違いは、pib が検査する設定と pi が読む設定を食い違わせる。解釈を合わせようとせず、
+    食い違いようのない表記だけを受け付ける (正規の表記なら、どちらで解いても同じ場所を指す)。
+    """
+    return path.startswith("/") and not path.startswith("//") and posixpath.normpath(path) == path
+
+
+def _agent_dir(env: Mapping[str, str], home: Path) -> tuple[Path | None, str | None]:
+    """pi の設定ディレクトリ。(ディレクトリ, 受け付けない理由)。
+
+    ``PI_CODING_AGENT_DIR`` は、pi が ``~`` と ``~/`` を展開する。展開したものが正規の絶対パスでなければ受け付けない
+    (相対パス・``file://``・``~//x``・``link/../x`` など、解釈が食い違いうる表記)。
+    """
+    raw = env.get("PI_CODING_AGENT_DIR")
+    if not raw:
+        path = f"{home}/.pi/agent"
+    elif raw == "~":
+        path = str(home)
+    elif raw.startswith("~/"):
+        path = f"{home}/{raw[2:]}"
+    else:
+        path = raw
+    if not _canonical(path):
+        return None, (
+            "PI_CODING_AGENT_DIR は、正規の絶対パス (. や .. や連続する / を含まない。~/ の略記は可) に限る"
+            f" (pi との解釈の食い違いを避けるため): {raw!r}"
+        )
+    return Path(path), None
+
+
+def problems(env: Mapping[str, str], home: Path, cwd: Path) -> list[str]:
+    """囲いが効かない理由 (空なら起動してよい)。"""
+    bin_dir = home / ".local" / "bin"
+    runner, shell = bin_dir / RUNNER_NAME, bin_dir / SHELL_NAME
     config = Path(
         env.get("PI_SANDBOX_RUNNER_CONFIG")
         or Path(env.get("XDG_CONFIG_HOME") or home / ".config") / "pi-sandbox" / "runner.toml"
     )
-    agent_dir = Path(env.get("PI_CODING_AGENT_DIR") or home / ".pi" / "agent")
-    settings = agent_dir / "pi-sandbox.json"
+    agent_dir, agent_problem = _agent_dir(env, home)
 
     found: list[str] = []
+    home_text = env.get("HOME") or str(home)
+    # pi は HOME から設定の場所を決める。.. を含むなどの表記は、pib と pi で別の場所になりうる
+    if not _canonical(home_text):
+        found.append(
+            f"HOME は、正規の絶対パス (. や .. や連続する / を含まない) に限る: {home_text!r}"
+        )
+        agent_dir, agent_problem = None, "HOME が正規でないので、設定の場所を決められない"
     if not os.access(runner, os.X_OK):
         found.append(f"runner が無い、または実行できない: {runner}")
+    if not os.access(shell, os.X_OK):
+        found.append(f"シェルが無い、または実行できない: {shell}")
     if not config.is_file():
         found.append(f"runner の設定が無い: {config}")
-    try:
-        data = json.loads(settings.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return [*found, f"拡張の設定を読めない: {settings}"]
-    command = data.get("runnerCommand") if isinstance(data, dict) else None
-    signatures = data.get("runnerFailureSignatures") if isinstance(data, dict) else None
-    if not (isinstance(command, list) and command and Path(str(command[0])).name == runner.name):
-        found.append(f"{settings} の runnerCommand が {runner.name} を指していない")
-    if not (isinstance(signatures, list) and signatures):
-        found.append(f"{settings} に runnerFailureSignatures が無い (runnerCommand と対で要る)")
+    if shutil.which("bwrap", path=env.get("PATH")) is None:
+        found.append("bwrap が見つからない")
+
+    if agent_dir is None:
+        found.append(agent_problem or "pi の設定ディレクトリを解決できない")
+    else:
+        settings = agent_dir / "settings.json"
+        state, data = _load_settings(settings)
+        if state == "unreadable":
+            found.append(f"pi の設定を読めない: {settings}")
+        elif not _is_the_shell(data.get("shellPath") if data else None, shell, home):
+            found.append(
+                f"{settings} の shellPath が {shell} (絶対パスそのもの) を指していない"
+                f" (実際: {data.get('shellPath') if data else None!r})"
+            )
+    # プロジェクトの設定は、利用者の設定を上書きする。ここに shellPath があると、囲いなしのシェルで動く。
+    # pi は null・false・0 なども上書きの値として保ち、通常の bash を選ぶので、「キーがある」ことを検査する
+    project_settings = cwd / ".pi" / "settings.json"
+    state, data = _load_settings(project_settings)
+    if state == "unreadable":
+        found.append(
+            f"プロジェクトの設定を読めない (shellPath を上書きしていないと確かめられない): {project_settings}"
+        )
+    elif (
+        data is not None
+        and "shellPath" in data
+        and not _is_the_shell(data["shellPath"], shell, home)
+    ):
+        found.append(
+            f"{project_settings} の shellPath が囲いを外している (実際: {data['shellPath']!r})"
+        )
     return found
 
 
+def parse_args(argv: Sequence[str]) -> tuple[bool, list[str], str | None]:
+    """(``--offline`` か, pi へ渡す引数, 受け付けない理由)。``--offline`` は先頭だけ。"""
+    args = list(argv)
+    offline = bool(args) and args[0] == "--offline"
+    if offline:
+        args = args[1:]
+    if any(a in ("-a", "--approve") for a in args):
+        return offline, args, "--approve は囲いを外せるので、pib では使えない (pi で起動する)"
+    return offline, args, None
+
+
 def main(argv: Sequence[str], env: Mapping[str, str] | None = None) -> int:
-    env = os.environ if env is None else env
-    found = problems(env, Path(env.get("HOME") or Path.home()))
+    env = dict(os.environ if env is None else env)
+    offline, rest, refused = parse_args(argv)
+    found = [refused] if refused else []
+    found += problems(env, Path(env.get("HOME") or Path.home()), Path.cwd())
     if found:
         for line in found:
             print(f"{PREFIX} {line}", file=sys.stderr)
         print(f"{PREFIX} chezmoi apply で配備してから起動する", file=sys.stderr)
         return 2
-    os.execvp("pi", ["pi", "-e", EXTENSION, *argv])  # 戻らない
+    env[SANDBOX_ENV] = "offline" if offline else "1"
+    os.execvpe("pi", ["pi", "--no-approve", *rest], env)  # 戻らない
 
 
 if __name__ == "__main__":

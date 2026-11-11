@@ -1,11 +1,11 @@
 # GPU を使う作業向けに、pi の sandbox 拡張へ設定つきの runner を足す
 
-- **ステータス**: Accepted（2026-11-12。利用者の統合の指示による）
+- **ステータス**: Superseded by ADR-0036（2026-11-12。決定当時は Accepted。利用者の統合の指示による）
 - **日付**: 2026-11-12
 - **決定者**: applejxd（実装は利用者の依頼。[ADR-0031](0031-evaluate-existing-extensions-first.md) の 3(d)「自作の承認」は、利用者が統合を指示した 2026-11-12 に得た）
 - **関係**: [ADR-0027](0027-isolation-unit-is-environment.md)（隔離の単位は環境）を**置き換えない**。docker・compose を使う開発は従来どおり環境の側で扱い、ここは「ホストで GPU を使う作業」の守りを足す。[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)（stock の pi。隔離は自分の判断）と [ADR-0031](0031-evaluate-existing-extensions-first.md)（自作の条件）に従う。
 
-> **注記（2026-11-12）**: 責務の分担を [ADR-0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) で整理した。実装が入ったら、この ADR は置き換える（拡張を外し、`shellPath` の囲いにする）。それまでは、この ADR が現行。以下の本文は決定当時のまま残している。
+> **置き換え（2026-11-12）**: 拡張 `@yuru7/pi-sandbox` の `runnerCommand` に runner を差す方式は、[ADR-0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) の実装（pi の `shellPath` に差す囲い。拡張は使わない）で置き換えた。runner は、拡張の引数を受ける形から、`bash -c` を包む形に変わった（GPU・秘密の隠蔽・docker の遮断・git の保護は引き継いだ）。以下の本文は決定当時のまま残している。
 
 ## コンテキスト
 
@@ -60,7 +60,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | (a) 既存で満たせない理由 | 調べた拡張 10 個のうち、設定だけで GPU を通せるものが無い（上の「コンテキスト」。全ソースの精読ではない） |
-| (b) 維持費の見込み | runner 約 280 行（コメントと docstring を含む）・設定・試験・自己確認。追従が要る上流は `@yuru7/pi-sandbox` の引数の並び 1 点。更新で並びが変わると GPU が黙って消えるので、版を固定し、更新前に並びと自己確認を見る（[手順](../spec/sandbox/pi-sandbox-runner.md#版の固定と更新)） |
+| (b) 維持費の見込み | runner 約 280 行（コメントと docstring を含む）・設定・試験・自己確認。追従が要る上流は `@yuru7/pi-sandbox` の引数の並び 1 点。更新で並びが変わると GPU が黙って消えるので、版を固定し、更新前に並びと自己確認を見る（[手順](../spec/sandbox/pi-sandbox-runner.md)） |
 | (b) 撤去の条件 | 上流がデバイスの受け渡し（と秘密の隠蔽）を設定で持ったとき／ツール委譲型（案 C）へ移ったとき／`@yuru7/pi-sandbox` を使わなくなったとき。撤去は runner・設定・拡張の設定・自己確認・試験・この ADR の置き換え |
 | (c) 最小性 | pi の内部には触れず、拡張の公開の設定項目だけを使う。runner は標準ライブラリの Python 1 ファイル |
 | (d) 承認 | 実装は利用者の依頼。統合の指示（2026-11-12）をもって承認 |

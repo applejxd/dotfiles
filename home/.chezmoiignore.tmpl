@@ -90,13 +90,13 @@ Documents/**
 .local/bin/ocs-boundary-check
 .local/state/opencode-sandbox
 .local/state/opencode-sandbox/**
-# pi の sandbox 拡張に GPU などを足す runner (bwrap は Linux 専用)
+# pi のコマンド実行を包む囲い (bwrap は Linux 専用)。shellPath は pi の settings.json の modify が Linux だけに入れる
 # see docs/spec/sandbox/pi-sandbox-runner.md
 .local/bin/pi-sandbox-runner
 .local/bin/pib
+.local/bin/pib-shell
 .config/pi-sandbox
 .config/pi-sandbox/**
-.pi/agent/pi-sandbox.json
 {{- if eq .chezmoi.os "windows" }}
 # 本体 (ocs 用のライブラリ) は pis も読むので、pis を配る macOS にも置く
 .local/share/ocs

@@ -27,8 +27,7 @@
 | [0032](0032-docs-by-audience.md)（Proposed） | docs を読み手別に整理 | ADR はエージェント用、案件・調査・仕様は利用者用。入口は「今の作業計画」と本一覧 |
 | [0033](0033-delegate-subagents-by-standing-instruction.md)（Proposed） | 子の起動は常設の指示で授権し、数の上限は設けない | 小さな作業以外は、依頼を待たずに `subagent` へ委譲する。安全は数の上限でなく、外側の権限（作業ツリー外は即拒否・理由つき deny・子ごとの `timeout`）で担保する |
 | [0034](0034-skip-frozen-stack-tests-in-verify-all.md)（Proposed） | 凍結したスタックの試験は `verify:all` から外す | `verify:all` は凍結スタックの試験を省く（変更に当たるものは T1 で回る）。`main` への統合前と凍結コードに触れるときは `verify:full` |
-| [0035](0035-pi-sandbox-gpu-runner.md) | GPU を使う作業向けに、pi の sandbox 拡張へ設定つきの runner を足す | `@yuru7/pi-sandbox` の `runnerCommand` に、GPU のデバイス・秘密の隠蔽・docker の遮断・git の hooks/config の保護を足すラッパーを差す（設定はリストとオン・オフだけ。並びはコードに固定）。調べた拡張 10 個のどれも設定だけでは GPU を通せなかった。Linux 専用。拡張の package 自体は既定にしない |
-| [0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) | pi の sandbox は、コマンドの実行を `shellPath` の囲い 1 つに、ファイルの道具をパスの判定に分ける | コマンドの実行（bash・`bg_run`・`!`・子の bash）は `shellPath` の 1 つの囲いに通し、ファイルの道具（`read`・`write`・`edit`）は権限の層がパスで判定する。見える範囲は許可リスト型（ホーム・`/mnt`・`/tmp` を覆い、必要な所だけ重ねる）で、通信は既定で開ける。方針は 1 か所、自作は 1 部品、既存の囲いの穴は自作で埋めない。実装は素の `bwrap`（現行の runner を拡張。約 16 ミリ秒）。`/mnt` は既定で覆い、見せる所だけユーザー設定で足す。実装が入ったら ADR-0035 を置き換える |
+| [0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) | pi の sandbox は、コマンドの実行を `shellPath` の囲い 1 つに、ファイルの道具をパスの判定に分ける | コマンドの実行（bash・`bg_run`・`!`・子の bash）は `shellPath` の 1 つの囲いに通し、ファイルの道具（`read`・`write`・`edit`）は権限の層がパスで判定する。見える範囲は許可リスト型（ホーム・`/mnt`・`/tmp` を覆い、必要な所だけ重ねる）で、通信は既定で開ける。方針は 1 か所、自作は 1 部品、既存の囲いの穴は自作で埋めない。実装は素の `bwrap`（約 16 ミリ秒。`pib`・`pib-shell`・`pi-sandbox-runner`）。`/mnt` は既定で覆い、見せる所だけユーザー設定で足す。通信は既定で開け、`pib --offline` で遮断する。ADR-0035 を置き換えた |
 
 置き換え・廃止・凍結された決定（0012〜0029 の多く、0016 など）は下の一覧にある。
 
@@ -114,3 +113,4 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0030](0030-freeze-agent-stack-return-to-stock-pi.md) | エージェント基盤（自作のガード・境界・隔離環境）を全面凍結し、pi を公式の既定＋人気の拡張へ戻す | Accepted | 2026-11-08 | 部品が多く保守の負担が価値を上回った。ソース・docs・試験は残して凍結し、stock プロファイル（可逆な旗）で pi を公式の既定＋人気の package へ戻す。他の CLI は触らない。設計の原則（3 つの問い・4 段階・データの流れの向き）と再開の条件を記録。ADR-0017〜0028 の自作基盤を凍結（kcage の clone モードは枝に残す）。 |
 | [0031](0031-evaluate-existing-extensions-first.md) | pi の機能は、既存の拡張・設定の評価を先にし、自作は最後の手段にする | Accepted | 2026-11-09 | ADR-0016 を置き換える。順序は pi 本体の標準 → 入れている package → 公開 package の評価と導入 → skill + CLI / MCP → 最小の自作。自作は、理由・維持費・撤去条件の記録と利用者の承認があるときだけ。AI の提案には「作らない案」を必ず含める。供給網のリスクは版の固定・権限・初回の試用で下げる。例外として家の検索 MCP を記録。 |
 | [0032](0032-docs-by-audience.md) | docs を読み手別に整理し、利用者向けの入口を「今の作業計画」と「俯瞰」にする | Proposed | 2026-11-09 | ADR-0010・0011 を置き換えず補う。試作（縮小版）を利用者が見て決める |
+| [0035](0035-pi-sandbox-gpu-runner.md) | GPU を使う作業向けに、pi の sandbox 拡張へ設定つきの runner を足す | Superseded by ADR-0036 | 2026-11-12 | 拡張を使う方式を、`shellPath` の囲い（拡張なし）で置き換えた。実測・比較は調査記録に残る |
