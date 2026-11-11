@@ -5,7 +5,8 @@
 //   aliasRoot  @earendil-works/* を含む node_modules (pi 本体の install)
 //   policy     config.json の中身 (permission / commandEffects / shellTools)。yoloMode は常に false で評価する
 //   project    作業ツリーの .pi/extensions/pi-permission-system/config.json の中身 (任意)
-// 標準出力へ JSON: { bash: [{state, pattern}...], surface: [{action, pattern}...], access: [[{path, effect, source}...]...] }
+//   alias      [[surface, [別名, 実体, ...]]...]。symlink の別名と解決後の実体を合わせた判定 (任意)
+// 標準出力へ JSON: { bash: [{state, pattern}...], surface: [{action, pattern}...], access: [[{path, effect, source}...]...], alias: [{action, pattern}...] }
 // bash は、実際のゲートと同じく複合コマンドを分解し、ラッパーの床 (opaque / indirection / unparsed) も含めて判定する。
 // access: [cmd...] は、bash のトークンの投影 (作業ツリーの外のパスと、commandEffects を含む向き) を返す。
 // surface の照合は規則の評価だけ (向きに応じた ask の判定は、access の向きと surface の判定を合わせて読む)。
@@ -29,7 +30,7 @@ const { PathNormalizer } = await load("src/path/path-normalizer.ts");
 const { BashProgram } = await load("src/access-intent/bash/program.ts");
 const { warmBashParser } = await load("src/access-intent/bash/parser.ts");
 const { resolveBashAdvisoryCheck } = await load("src/service/bash-advisory-check.ts");
-const { evaluate } = await load("src/policy/rule.ts");
+const { evaluate, evaluateAnyValue } = await load("src/policy/rule.ts");
 const { posixPathFlavor } = await load("src/path/path-flavor.ts");
 const { foldDeclaredCommandEffects } = await load("src/config/command-effects-config.ts");
 
@@ -56,7 +57,7 @@ if (!BashProgram.parseSync("true", normalizer)) {
 }
 
 const rules = manager.getComposedConfigRules();
-const out = { bash: [], surface: [], access: [] };
+const out = { bash: [], surface: [], access: [], alias: [] };
 const declared = foldDeclaredCommandEffects({}, input.policy.commandEffects, "global");
 for (const cmd of input.bash ?? []) {
   const r = resolveBashAdvisoryCheck(cmd, undefined, resolver, normalizer);
@@ -69,5 +70,10 @@ for (const cmd of input.access ?? []) {
 for (const [surface, value] of input.surface ?? []) {
   const r = evaluate(surface, value, rules, posixPathFlavor);
   out.surface.push({ action: r.action, pattern: r.pattern });
+}
+// alias: [[surface, [書いたままの別名, 解決した実体, ...]]...]。実ゲートと同じ evaluateAnyValue (値のどれかに一致した最後の規則が勝つ) で判定する
+for (const [surface, values] of input.alias ?? []) {
+  const { rule } = evaluateAnyValue(surface, values, rules, posixPathFlavor);
+  out.alias.push({ action: rule.action, pattern: rule.pattern });
 }
 console.log(JSON.stringify(out));
