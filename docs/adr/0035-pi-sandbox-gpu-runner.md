@@ -1,8 +1,8 @@
 # GPU を使う作業向けに、pi の sandbox 拡張へ設定つきの runner を足す
 
-- **ステータス**: Proposed
+- **ステータス**: Accepted（2026-11-12。利用者の統合の指示による）
 - **日付**: 2026-11-12
-- **決定者**: applejxd（実装は利用者の依頼。[ADR-0031](0031-evaluate-existing-extensions-first.md) の 3(d)「自作の承認」は、統合の判断で確定する）
+- **決定者**: applejxd（実装は利用者の依頼。[ADR-0031](0031-evaluate-existing-extensions-first.md) の 3(d)「自作の承認」は、利用者が統合を指示した 2026-11-12 に得た）
 - **関係**: [ADR-0027](0027-isolation-unit-is-environment.md)（隔離の単位は環境）を**置き換えない**。docker・compose を使う開発は従来どおり環境の側で扱い、ここは「ホストで GPU を使う作業」の守りを足す。[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)（stock の pi。隔離は自分の判断）と [ADR-0031](0031-evaluate-existing-extensions-first.md)（自作の条件）に従う。
 
 ## コンテキスト
@@ -61,7 +61,7 @@
 | (b) 維持費の見込み | runner 約 280 行（コメントと docstring を含む）・設定・試験・自己確認。追従が要る上流は `@yuru7/pi-sandbox` の引数の並び 1 点。更新で並びが変わると GPU が黙って消えるので、版を固定し、更新前に並びと自己確認を見る（[手順](../spec/sandbox/pi-sandbox-runner.md#版の固定と更新)） |
 | (b) 撤去の条件 | 上流がデバイスの受け渡し（と秘密の隠蔽）を設定で持ったとき／ツール委譲型（案 C）へ移ったとき／`@yuru7/pi-sandbox` を使わなくなったとき。撤去は runner・設定・拡張の設定・自己確認・試験・この ADR の置き換え |
 | (c) 最小性 | pi の内部には触れず、拡張の公開の設定項目だけを使う。runner は標準ライブラリの Python 1 ファイル |
-| (d) 承認 | 実装は利用者の依頼。この ADR の Accepted 化（統合）をもって確定 |
+| (d) 承認 | 実装は利用者の依頼。統合の指示（2026-11-12）をもって承認 |
 
 ## 結果
 
