@@ -30,7 +30,9 @@ READ_ONLY = {"read", "grep", "find", "ls", "contact_supervisor"}
 WRITE_TOOLS = {"bash", "write", "edit"}
 
 
-def render(template: str, home: Path, *, profile_env: str | None = "custom") -> str:
+def render(
+    template: str, home: Path, *, profile_env: str | None = "custom", username: str = "tester"
+) -> str:
     # 引数なしは custom (custom の試験の意味を保つ)。リポジトリの既定は stock (2026-11-10)
     chezmoi = shutil.which("chezmoi")
     if chezmoi is None:
@@ -38,7 +40,7 @@ def render(template: str, home: Path, *, profile_env: str | None = "custom") -> 
     context = {
         "chezmoi": {
             "os": "linux",
-            "username": "tester",
+            "username": username,
             "kernel": {"osrelease": "Linux"},
             "homeDir": str(home),
             "workingTree": str(ROOT),
@@ -64,10 +66,12 @@ def render(template: str, home: Path, *, profile_env: str | None = "custom") -> 
     return result.stdout
 
 
-def script(src: Path, tmp_path: Path, name: str) -> Path:
+def script(src: Path, tmp_path: Path, name: str, username: str = "tester") -> Path:
+    # tester は会社 PC (is-work)、applejxd は家の機
     out = tmp_path / name
     out.write_text(
-        render(src.read_text(encoding="utf-8"), tmp_path, profile_env="stock"), encoding="utf-8"
+        render(src.read_text(encoding="utf-8"), tmp_path, profile_env="stock", username=username),
+        encoding="utf-8",
     )
     return out
 
@@ -212,13 +216,29 @@ def test_custom_settings_modify_has_no_agent_overrides(tmp_path):
 def test_settings_overrides_scout_and_oracle_read_only(settings_script):
     out = json.loads(run(settings_script, "{}"))
     overrides = out["subagents"]["agentOverrides"]
-    assert set(overrides) == {"scout", "oracle"}  # reviewer・worker は変えない
+    # reviewer・worker は変えない。researcher・evidence-auditor は検索の MCP を足す (下の試験)
+    assert set(overrides) == {"scout", "oracle", "researcher", "evidence-auditor"}
     for name in ("scout", "oracle"):
         tools = set(overrides[name]["tools"])
         assert not tools & WRITE_TOOLS, name
         assert tools <= READ_ONLY, name
     assert overrides["oracle"]["tools"] == ["read", "grep", "find", "ls"]
     assert "contact_supervisor" in overrides["scout"]["tools"]  # 親への問い合わせは残す
+
+
+@pytest.mark.parametrize(
+    ("username", "server"),
+    [("tester", "agentcore-websearch"), ("applejxd", "websearch")],
+)
+def test_settings_gives_search_agents_the_machines_search_mcp(tmp_path, username, server):
+    """検索の子は、機の検索の MCP を mcp: で受け取る。組み込みの web_search 系 (pi-web-access) は入れない。"""
+    path = script(SETTINGS_MODIFY, tmp_path, "modify_settings.py", username)
+    overrides = json.loads(run(path, "{}"))["subagents"]["agentOverrides"]
+    assert overrides["researcher"]["tools"] == ["read", "write", f"mcp:{server}"]
+    assert overrides["evidence-auditor"]["tools"] == ["read", f"mcp:{server}"]
+    for name in ("researcher", "evidence-auditor"):
+        assert not {"web_search", "fetch_content", "source_check"} & set(overrides[name]["tools"])
+        assert not {"bash", "edit"} & set(overrides[name]["tools"]), name
 
 
 def test_settings_keeps_user_overrides(settings_script):

@@ -716,7 +716,7 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
     - 値は pi-subagents の設定の検証（`src/shared/types.js`・`config.js`）に通る範囲（`reviewer` の監査で確認）。最大値の記載は文書に無い。実機の `subagent({ action: "doctor" })` で、反映後に読み込みが通ることを確かめる（**未確認**）。
     - 同時数の上限に当たったことは無い（2026-11-10 に 4 本を同時に回して、上限に達しなかった）。先に詰まりやすいのは、全件検査の CPU（`feature-orchestration` の落とし穴に記録。**推測**）と、親の確認の手間。
   - 利用者が足した他のキーは保つ。壊れた JSON は触らない。何度流しても同じ。
-- **settings の `subagents.agentOverrides`**（`modify_pi_stock_settings.py.tmpl`）: 組み込みの `scout`（`read`・`grep`・`find`・`ls`・`contact_supervisor`）と `oracle`（`read`・`grep`・`find`・`ls`）の `tools` を読み取り専用に絞る（組み込みの既定は `bash`・`write` を持つ）。`reviewer`（読み取り専用）・`worker` は変えない。利用者が同じ役の `tools` を書いていれば保つ（無いときだけ補う）。他の `subagents` のキー・他の役の上書きも保つ。
+- **settings の `subagents.agentOverrides`**（`modify_pi_stock_settings.py.tmpl`）: 組み込みの `scout`（`read`・`grep`・`find`・`ls`・`contact_supervisor`）と `oracle`（`read`・`grep`・`find`・`ls`）の `tools` を読み取り専用に絞る（組み込みの既定は `bash`・`write` を持つ）。`reviewer`（読み取り専用）・`worker` は変えない。検索の子 `researcher`（`read`・`write`）・`evidence-auditor`（`read`）には、機の検索の MCP を `mcp:websearch`（家）・`mcp:agentcore-websearch`（会社 PC）で足す（[理由と会社 PC の設定](mcp-servers.md#子のエージェントへの検索-mcp-の渡し方)）。利用者が同じ役の `tools` を書いていれば保つ（無いときだけ補う）。他の `subagents` のキー・他の役の上書きも保つ。
 - **役割ごとのモデル**（`modify_pi_stock_settings.py.tmpl` の `PROVIDER_AGENT_MODELS`。`subagents.agentOverridesByProvider.<プロバイダ>.<名>.model`。`:` の後ろは思考の深さ）: 以前の Copilot / Bedrock のカタログ（`common.toml.tmpl` の `[pi.model.tier.*]`・[役割ごとのモデル](agent-model-assignment.md)）に合わせる。pi-subagents が、**親のセッションのモデルのプロバイダごとに層を重ねる**（`/model` で替えても追従する。apply 時の `defaultProvider` には依らない）ので、両方の表を常に置く。知らないプロバイダの子は、親のモデルを継ぐ。利用者が書いた `model` は保つ。
 
   | 役割 | github-copilot | amazon-bedrock | 理由 |

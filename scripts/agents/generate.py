@@ -705,7 +705,9 @@ def merge_copilot_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[
 # ---------------------------------------------------------------------------
 
 
-def merge_pi_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+def merge_pi_mcp(
+    existing: dict[str, Any], common: dict[str, Any], *, with_exposure: bool = True
+) -> dict[str, Any]:
     """``~/.pi/agent/mcp.json`` の ``mcpServers`` を更新する。
 
     ``pi mcp add`` や ``/mcp`` も書き込むので、common.toml が宣言した名前だけを更新し、
@@ -728,12 +730,23 @@ def merge_pi_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, 
             stale = ("url", "headers")
         for key in stale:
             entry.pop(key, None)
-        if "pi_exposure" in server:
+        if with_exposure and "pi_exposure" in server:
             # 利用者が /mcp で変えた値を保つ (無いときだけ補う)
             entry.setdefault("exposure", server["pi_exposure"])
         servers[name] = entry
     out["mcpServers"] = servers
     return out
+
+
+def merge_pi_mcp_adapter(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
+    """``~/.pi/agent/mcp-adapter.json`` の ``mcpServers`` を更新する (pi-mcp-adapter を入れた機だけ)。
+
+    pi-subagents は、adapter が入っているとき、子の ``mcp:`` 指定を adapter の設定ファイル
+    (``mcp-adapter.json`` など。``~/.pi/agent/mcp.json`` は読まない) から解決する。
+    ``mcp.json`` と同じサーバをここにも置いて、子が検索の MCP を使えるようにする。
+    ``exposure`` は pi 組み込みの MCP の概念なので出さない。
+    """
+    return merge_pi_mcp(existing, common, with_exposure=False)
 
 
 # ---------------------------------------------------------------------------
@@ -3623,6 +3636,7 @@ TARGETS = {
     "opencode-service": merge_opencode_service,
     "pi-harness": build_pi_harness,
     "pi-mcp": merge_pi_mcp,
+    "pi-mcp-adapter": merge_pi_mcp_adapter,
     "pi-settings": merge_pi_settings,
     "pi-keybindings": pi_keybindings,
     "pi-subagents": build_pi_subagents,
@@ -3640,7 +3654,7 @@ FULL_GENERATION_TARGETS = {
 
 
 # 既存ファイルが壊れた JSON のとき、エラーにせず入力をそのまま返す (apply を止めず、利用者の編集中のファイルを壊さない)。
-PASSTHROUGH_BROKEN_TARGETS = {"pi-mcp"}
+PASSTHROUGH_BROKEN_TARGETS = {"pi-mcp", "pi-mcp-adapter"}
 
 
 def load_existing(path: str | None) -> dict[str, Any]:

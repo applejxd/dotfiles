@@ -460,6 +460,49 @@ def test_mcp_json_work_pc_has_no_websearch(tmp_path):
     assert "agentcore-websearch" in out["mcpServers"]
 
 
+# --- pi-mcp-adapter の設定 (~/.pi/agent/mcp-adapter.json。会社 PC の stock だけ) ---
+
+MCP_ADAPTER_MODIFY = HOME_SRC / "dot_pi" / "agent" / "modify_mcp-adapter.json.py.tmpl"
+MCP_ADAPTER_TARGET = ".pi/agent/mcp-adapter.json"
+
+
+def test_mcp_adapter_json_is_for_the_work_pc_in_stock_only(tmp_path):
+    """pi-subagents は adapter があると、子の mcp: を mcp-adapter.json から解決する。adapter を入れる機 (is-work) だけ配る。"""
+
+    def ignored(username: str, profile_env: str) -> bool:
+        rendered = render_file(
+            ".chezmoiignore.tmpl", tmp_path, profile_env=profile_env, username=username
+        )
+        return MCP_ADAPTER_TARGET in lines(rendered)
+
+    assert not ignored("tester", "stock")
+    assert ignored("applejxd", "stock")  # 家の機は pi 組み込みの MCP (mcp.json)
+    assert ignored("tester", "custom")
+
+
+def test_mcp_adapter_json_has_the_search_server_of_the_work_pc(tmp_path):
+    script = tmp_path / "modify_mcp_adapter.py"
+    script.write_text(
+        render(
+            MCP_ADAPTER_MODIFY.read_text(encoding="utf-8"),
+            tmp_path,
+            profile_env="stock",
+            username="tester",
+        ),
+        encoding="utf-8",
+    )
+    existing = {"mcpServers": {"mine": {"command": "x"}}, "settings": {"toolPrefix": "none"}}
+    out = json.loads(run_script(script, json.dumps(existing)))
+    assert out["mcpServers"]["mine"] == {"command": "x"}
+    assert out["settings"] == {"toolPrefix": "none"}
+    server = out["mcpServers"]["agentcore-websearch"]
+    assert server["command"] == "uv"
+    assert "exposure" not in server  # pi 組み込みの MCP の概念
+    mcp_json = json.loads(run_script(mcp_script(tmp_path, "tester"), ""))["mcpServers"]
+    assert {k: v for k, v in mcp_json["agentcore-websearch"].items() if k != "exposure"} == server
+    assert json.loads(run_script(script, json.dumps(out))) == out
+
+
 def test_mcp_json_keeps_user_keys_of_declared_server_and_broken_input(tmp_path):
     script = mcp_script(tmp_path, "applejxd")
     existing = {

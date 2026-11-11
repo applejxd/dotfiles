@@ -383,6 +383,44 @@ def test_pi_mcp_websearch_only_on_personal_machine():
     assert "websearch" not in dict(gen.mcp_servers(COMMON, "copilot"))
 
 
+def test_pi_mcp_adapter_target_is_registered():
+    """会社 PC (is-work) の pi-mcp-adapter 用。pi-subagents が子の mcp: を ~/.pi/agent/mcp.json から解決しないため。"""
+    assert gen.TARGETS["pi-mcp-adapter"] is gen.merge_pi_mcp_adapter
+    assert "pi-mcp-adapter" in gen.PASSTHROUGH_BROKEN_TARGETS
+    modifier = ROOT / "home/dot_pi/agent/modify_mcp-adapter.json.py.tmpl"
+    assert '"target" "pi-mcp-adapter"' in modifier.read_text(encoding="utf-8")
+    ignore = (ROOT / "home/.chezmoiignore.tmpl").read_text(encoding="utf-8")
+    assert ignore.splitlines().count(".pi/agent/mcp-adapter.json") == 2  # custom と、is-work でない機
+
+
+def test_pi_mcp_adapter_has_the_same_servers_as_mcp_json_without_exposure():
+    merged = gen.merge_pi_mcp_adapter({}, TESTER)
+    assert merged["mcpServers"]["agentcore-websearch"] == {
+        "command": merged["mcpServers"]["agentcore-websearch"]["command"],
+        "args": merged["mcpServers"]["agentcore-websearch"]["args"],
+    }
+    plain = gen.merge_pi_mcp({}, TESTER)["mcpServers"]
+    for name, entry in merged["mcpServers"].items():
+        assert entry == {k: v for k, v in plain[name].items() if k != "exposure"}
+    assert "exposure" in plain["agentcore-websearch"]  # mcp.json 側は従来どおり
+    # 利用者のサーバ・キーは保ち、何度流しても同じ
+    existing = {"mcpServers": {"mine": {"url": "https://example.com/mcp"}}, "settings": {"toolPrefix": "none"}}
+    kept = gen.merge_pi_mcp_adapter(existing, TESTER)
+    assert kept["mcpServers"]["mine"] == {"url": "https://example.com/mcp"}
+    assert kept["settings"] == {"toolPrefix": "none"}
+    assert gen.merge_pi_mcp_adapter(kept, TESTER) == kept
+
+
+@pytest.mark.parametrize(
+    ("common", "server"), [(TESTER, "agentcore-websearch"), (COMMON, "websearch")]
+)
+def test_the_server_given_to_search_agents_is_declared_for_pi_on_that_machine(common, server):
+    """settings の researcher・evidence-auditor が mcp: で指すサーバは、その機で pi に宣言されている。"""
+    assert server in dict(gen.mcp_servers(common, "pi"))
+    source = (ROOT / "home/.chezmoitemplates/modify_pi_stock_settings.py.tmpl").read_text(encoding="utf-8")
+    assert f'"mcp:{server}"' in source
+
+
 def test_pi_mcp_keeps_user_servers_and_keys_and_drops_pi_unknown_keys():
     declared = {**STDIO, "exposure": "direct", "requires_env": "FOO", "clis": ["pi"]}
     existing = {
