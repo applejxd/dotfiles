@@ -51,7 +51,7 @@
 - 部品は、runner（`home/dot_local/bin/executable_pi-sandbox-runner`）、設定（`home/dot_config/pi-sandbox/runner.toml`）、拡張の設定（`home/dot_pi/agent/create_pi-sandbox.json.tmpl`）、実機の確認（`scripts/pi_sandbox_selftest.py`）、試験。仕様は [pi-sandbox-runner](../spec/sandbox/pi-sandbox-runner.md)。
 - **設定にするのは、リストとオン・オフだけ。** 引数の並び（GPU → git → 隠蔽 → docker）はコードに固定する。任意の追加引数は作らない。設定は利用者の階層だけを読み、壊れていれば bwrap を起動しない（fail-closed）。
 - **Linux（Ubuntu / WSL）専用。** 他の OS へは配らない。
-- **拡張の package 自体（`@yuru7/pi-sandbox`）は、この決定では `pi-stock-packages` に入れない。** 入れると、全機・全セッションの bash が sandbox に入り（mac・Windows を含む）、昇格のたびに自動レビューの LLM 呼び出しが増え、`pi-permission-system` と重なる。既定にするかは別に決める。試すときは `pi install npm:@yuru7/pi-sandbox@0.5.0`。
+- **拡張の package 自体（`@yuru7/pi-sandbox`）は、この決定では `pi-stock-packages` に入れない。** 入れると、全機・全セッションの bash が sandbox に入り（mac・Windows を含む）、昇格のたびに自動レビューの LLM 呼び出しが増え、`pi-permission-system` と重なる。既定にするかは別に決める。使うときは `pib`（`pi -e npm:@yuru7/pi-sandbox@0.5.0` を呼ぶ。runner が未配備なら起動しない）。
 
 ### 自作の記録（ADR-0031 の 3）
 
