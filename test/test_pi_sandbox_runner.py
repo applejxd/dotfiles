@@ -123,6 +123,10 @@ def test_shipped_config_is_valid_and_hides_credentials():
         ("version = 1\n[gpu]\ndevices = ['/etc/passwd']\n", "gpu.devices"),
         ("version = 1\n[gpu]\ndevices = ['/dev/../etc/passwd']\n", "gpu.devices"),
         ("version = 1\n[gpu]\ndevices = ['nvidia0']\n", "gpu.devices"),
+        ("version = 1\n[gpu]\ndevices = ['/dev/']\n", "gpu.devices"),
+        ("version = 1\n[gpu]\ndevices = ['/dev']\n", "gpu.devices"),
+        ("version = 1\n[gpu]\ndevices = ['/dev//nvidia0']\n", "gpu.devices"),
+        ("version = 1\n[gpu]\ndevices = ['/dev/dri/']\n", "gpu.devices"),
         ("version = 1\n[hide]\nfiles = ['relative/path']\n", "hide のパス"),
         ("version = 1\n[hide]\ndirs = ['/']\n", "hide のパス"),
         ("version = 1\n[hide]\ndirs = ['~/']\n", "hide のパス"),
@@ -355,6 +359,139 @@ def run_cli(args, env_extra=None, cwd=None):
         timeout=30,
         check=False,
     )
+
+
+# --- このマシンだけの追記 (runner.local.toml) ---------------------------------
+
+LOCAL_EXAMPLE = ROOT / "home" / "dot_config" / "pi-sandbox" / "runner.local.toml.example"
+
+
+def test_local_example_is_valid_and_adds_nothing_until_edited():
+    """同梱の見本は、そのままコピーしても有効で、何も足さない (見本の行はコメントアウトしてある)。"""
+    assert runner.parse_local(LOCAL_EXAMPLE.read_text(encoding="utf-8")) == ((), ())
+
+
+def test_local_config_adds_after_the_shared_entries_without_duplicates():
+    shared = config('version = 1\n[gpu]\ndevices = ["auto"]\n[hide]\ndirs = ["~/.ssh"]\n')
+    local = runner.parse_local('[hide]\ndirs = ["~/notes", "~/.ssh"]\nfiles = ["~/.tok"]\n')
+    merged = runner.merge_local(shared, local)
+    assert merged.gpu_devices == ("auto",)  # デバイスは local から増えない
+    assert merged.hide_dirs == ("~/.ssh", "~/notes")  # 共有が先。重複は 1 つ
+    assert merged.hide_files == ("~/.tok",)
+    assert merged.docker_block is shared.docker_block and merged.git_protect is shared.git_protect
+
+
+@pytest.mark.parametrize(
+    ("table", "body"),
+    [
+        ("docker", "block = true"),
+        ("git", "protect = true"),
+        (
+            "gpu",
+            'devices = ["/dev/nvidia0"]',
+        ),  # デバイスの公開は緩める方向なので、local からは足せない
+        ("gpu", 'devices = ["/dev/"]'),
+    ],
+)
+def test_local_config_cannot_touch_the_settings_that_could_loosen_the_shared_ones(table, body):
+    with pytest.raises(runner.RunnerError, match=f"\\[{table}\\] を変えられない"):
+        runner.parse_local(f"[{table}]\n{body}\n")
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("extra_args = []\n", "未知のキー"),
+        ("version = 2\n", "version"),
+        ('version = "1"\n', "version"),
+        ("[hide]\ndirs = ['/']\n", "hide のパス"),
+        ("[hide]\nfiles = ['relative']\n", "hide のパス"),
+        ("[hide]\nextra = 1\n", "未知のキー"),
+        ("[hide\n", "TOML"),
+    ],
+)
+def test_invalid_local_config_is_rejected(text, message):
+    with pytest.raises(runner.RunnerError, match=message):
+        runner.parse_local(text)
+
+
+def test_local_config_may_omit_version_and_may_be_empty():
+    assert runner.parse_local("") == ((), ())
+    assert runner.parse_local("version = 1\n") == ((), ())
+
+
+def test_load_config_reads_the_local_file_next_to_the_shared_one(tmp_path):
+    shared = tmp_path / "runner.toml"
+    shared.write_text('version = 1\n[hide]\ndirs = ["~/.ssh"]\n', encoding="utf-8")
+    assert runner.load_config(shared).hide_dirs == ("~/.ssh",)  # 無くてよい
+    (tmp_path / "runner.local.toml").write_text('[hide]\ndirs = ["~/notes"]\n', encoding="utf-8")
+    assert runner.load_config(shared).hide_dirs == ("~/.ssh", "~/notes")
+
+
+@linux_only
+def test_dry_run_command_contains_the_local_additions(tmp_path):
+    (tmp_path / "runner.toml").write_text(MINIMAL, encoding="utf-8")
+    notes = tmp_path / "notes"
+    notes.mkdir()
+    (tmp_path / "runner.local.toml").write_text(f'[hide]\ndirs = ["{notes}"]\n', encoding="utf-8")
+    env = {
+        "PI_SANDBOX_RUNNER_CONFIG": str(tmp_path / "runner.toml"),
+        "PI_SANDBOX_RUNNER_DRYRUN": "1",
+    }
+    result = run_cli(["--ro-bind", "/", "/", "--", "true"], env)
+    assert result.returncode == 0, result.stderr
+    command = json.loads(result.stdout)
+    assert ["--tmpfs", str(notes.resolve())] == command[command.index("--tmpfs") :][:2]
+
+
+@linux_only
+@pytest.mark.parametrize(
+    ("local_bytes", "needle"),
+    [
+        (b"[docker]\nblock = false\n", "[docker]"),
+        (b"[hide\n", "TOML"),
+        (b"# \xff\xfe\n", "設定を読めない"),
+    ],
+)
+def test_cli_fails_closed_when_the_local_config_is_broken(tmp_path, local_bytes, needle):
+    (tmp_path / "runner.toml").write_text(MINIMAL, encoding="utf-8")
+    (tmp_path / "runner.local.toml").write_bytes(local_bytes)
+    env = {"PI_SANDBOX_RUNNER_CONFIG": str(tmp_path / "runner.toml")}
+    result = run_cli(["--", "true"], env)
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr.startswith("pi-sandbox-runner:")
+    assert needle in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+@linux_only
+@pytest.mark.parametrize("kind", ["broken_symlink", "directory", "symlink_loop"])
+def test_cli_fails_closed_when_the_local_entry_exists_but_cannot_be_read(tmp_path, kind):
+    """エントリがあるのに読めないものを「設定なし」にしない (隠す指定が黙って消えるため)。"""
+    (tmp_path / "runner.toml").write_text(MINIMAL, encoding="utf-8")
+    entry = tmp_path / "runner.local.toml"
+    if kind == "broken_symlink":
+        entry.symlink_to(tmp_path / "gone.toml")
+    elif kind == "directory":
+        entry.mkdir()
+    else:
+        entry.symlink_to(entry.name)  # 自分自身を指すリンク
+    env = {"PI_SANDBOX_RUNNER_CONFIG": str(tmp_path / "runner.toml")}
+    result = run_cli(["--", "true"], env)
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr.startswith("pi-sandbox-runner:")
+    assert "runner.local.toml" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_load_config_follows_a_valid_symlink_for_the_local_file(tmp_path):
+    (tmp_path / "runner.toml").write_text(MINIMAL, encoding="utf-8")
+    real = tmp_path / "elsewhere.toml"
+    real.write_text('[hide]\ndirs = ["~/notes"]\n', encoding="utf-8")
+    (tmp_path / "runner.local.toml").symlink_to(real)
+    assert runner.load_config(tmp_path / "runner.toml").hide_dirs == ("~/notes",)
 
 
 @linux_only

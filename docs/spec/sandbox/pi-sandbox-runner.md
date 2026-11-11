@@ -46,7 +46,8 @@ b の 2 つは、どちらも bash を差し替えるので、1 つのセッシ�
 | 部品 | 置き場（source state） | 配備先 |
 | --- | --- | --- |
 | runner | `home/dot_local/bin/executable_pi-sandbox-runner` | `~/.local/bin/pi-sandbox-runner` |
-| 設定 | `home/dot_config/pi-sandbox/runner.toml` | `~/.config/pi-sandbox/runner.toml` |
+| 設定（共有） | `home/dot_config/pi-sandbox/runner.toml` | `~/.config/pi-sandbox/runner.toml`（chezmoi 管理。apply で上書きされる） |
+| 設定（このマシンだけ） | `home/dot_config/pi-sandbox/runner.local.toml.example`（見本） | `~/.config/pi-sandbox/runner.local.toml`（**chezmoi の管理外**。見本をコピーして作る。任意） |
 | 拡張の設定 | `home/dot_pi/agent/create_pi-sandbox.json.tmpl` | `~/.pi/agent/pi-sandbox.json`（無いときだけ作る） |
 | 起動 | `home/dot_local/bin/executable_pib` | `~/.local/bin/pib` |
 | 実機の確認 | `scripts/pi_sandbox_selftest.py` | `python3 scripts/pi_sandbox_selftest.py`（リポジトリ直下で実行） |
@@ -78,7 +79,7 @@ runner は、**最初の `--` の直前**に次を足して `bwrap` を exec す
 
 ## 設定（`runner.toml`）
 
-利用者の階層（`$XDG_CONFIG_HOME/pi-sandbox/runner.toml`、無ければ `~/.config/pi-sandbox/runner.toml`）だけを読む。**作業ツリーの中の設定は読まない**（エージェントが書き換えられるため）。
+既定では、利用者の階層（`$XDG_CONFIG_HOME/pi-sandbox/runner.toml`、無ければ `~/.config/pi-sandbox/runner.toml`）だけを読む。**作業ツリーは探さない**（エージェントが書き換えられるため）。`PI_SANDBOX_RUNNER_CONFIG` で場所を変えたときは、その場所を読む（試験・調査用。信頼できる利用者が指定する前提）。
 
 ```toml
 version = 1
@@ -94,8 +95,14 @@ protect = true
 ```
 
 - 設定にするのは、リストとオン・オフだけ。任意の追加引数（`extra_args`）は作らない（抜け道になる）。
-- **検証は厳格**: `version = 1`（整数。`true`・`1.0` は不可）が必須。未知のキー・型の誤り・`gpu.devices` の `/dev/` 以外・`hide` の相対パスや `/`・`~/` そのものは、エラー。
-- **fail-closed**: 設定が無い・読めない（UTF-8 でない場合を含む）・壊れている・`--` が無いときは、bwrap を起動せず終了コード 2。エラーは `pi-sandbox-runner:` で始める。bwrap が無いときは 127。
+- **このマシンだけの追記（`runner.local.toml`）**: `runner.toml` と**同じ場所**に置く任意のファイルで、共有設定に**足す**。chezmoi の管理外なので、`chezmoi apply` で消えず、`chezmoi diff` にも出ない。見本（`runner.local.toml.example`）をコピーして作る。
+  - 書けるのは `[hide] dirs` / `files`（**見えなくする方向**）だけ。リストは共有設定の**後ろ**に足し、重複は 1 つにする。`version` は省略できる（書くなら 1）。
+  - **共有設定を緩めるものは書けない**: `[gpu]`（デバイスの公開）・`[docker]`・`[git]`（共有側の `block = true`・`protect = true` を、このマシンだけ false にする抜け道）があれば、起動しない。共有のエントリを消すこともできない。
+  - 検証は共有設定と同じ規則。**エントリがあるのに読めない**（壊れたシンボリックリンク・ディレクトリ・権限・UTF-8 でない・構文エラー）ときは、fail-closed（下）。無視するのは、エントリ自体が無いときだけ。有効なシンボリックリンクはたどる。
+  - 反映は、次にコマンドを実行したとき（runner は毎回読む）。`chezmoi apply` は要らない。
+  - 場所は、共有設定の場所の隣の `runner.local.toml`。作業ツリーは探さない（共有設定と同じ。`PI_SANDBOX_RUNNER_CONFIG` で場所を変えたときは、その隣）。
+- **検証は厳格**: `version = 1`（整数。`true`・`1.0` は不可）が必須。未知のキー・型の誤り・`gpu.devices` の `/dev/` 以外（`/dev/` 自体・末尾の `/`・`//` を含む）・`hide` の相対パスや `/`・`~/` そのものは、エラー。
+- **fail-closed**: 設定（共有・このマシンだけの追記のどちらも）が読めない（UTF-8 でない場合を含む）・壊れている、共有設定が無い、`--` が無いときは、bwrap を起動せず終了コード 2。エラーは `pi-sandbox-runner:` で始める。bwrap が無いときは 127。
 - 環境変数（試験・調査用）: `PI_SANDBOX_RUNNER_CONFIG`（設定の場所）、`PI_SANDBOX_RUNNER_DRYRUN=1`（exec せずに最終の引数を JSON で出す）。
 
 ## 導入と確認
@@ -156,5 +163,5 @@ runner は、拡張が `<runner> <引数> -- <コマンド>` の形で呼ぶこ�
 
 ## 試験
 
-- `uv run --with pytest --no-project pytest test/test_pi_sandbox_runner.py -q`: 設定の検証・引数の組み立て（GPU は `--dev /dev` の後、隠蔽は git の後）・CLI の fail-closed・実際の bwrap（使える環境だけ）での隠蔽（シンボリックリンクと、隠した `.git` を含む）と git の保護。CLI と実 bwrap の試験は Linux 以外では skip する（runner は `os.getuid()` と bwrap を使う）。
+- `uv run --with pytest --no-project pytest test/test_pi_sandbox_runner.py -q`: 設定の検証（このマシンだけの追記の併合・緩める指定の拒否を含む）・引数の組み立て（GPU は `--dev /dev` の後、隠蔽は git の後）・CLI の fail-closed・実際の bwrap（使える環境だけ）での隠蔽（シンボリックリンクと、隠した `.git` を含む）と git の保護。CLI と実 bwrap の試験は Linux 以外では skip する（runner は `os.getuid()` と bwrap を使う）。
 - `python3 scripts/pi_sandbox_selftest.py`: 実機の確認（上の「導入と確認」）。

@@ -2,7 +2,7 @@
 """pi の sandbox 拡張 (@yuru7/pi-sandbox) の ``runnerCommand`` 用ラッパー。
 
 ``<runner> <bwrap の引数...> -- <コマンド...>`` の ``--`` の直前に、設定 (runner.toml) に従う引数を足して bwrap を exec する。
-設定が壊れていれば bwrap を起動しない。契約・設定・限界は docs が正本。
+設定 (runner.toml の共有設定と、任意の runner.local.toml の追記) が壊れていれば bwrap を起動しない。契約・設定・限界は docs が正本。
 see docs/spec/sandbox/pi-sandbox-runner.md
 """
 
@@ -21,6 +21,8 @@ from pathlib import Path
 
 PREFIX = "pi-sandbox-runner:"
 CONFIG_ENV = "PI_SANDBOX_RUNNER_CONFIG"
+# runner.toml (chezmoi 管理の共有設定) と同じ場所に置く、このマシンだけの追記用の設定 (chezmoi の管理外)
+LOCAL_NAME = "runner.local.toml"
 DRYRUN_ENV = "PI_SANDBOX_RUNNER_DRYRUN"
 SUPPORTED_VERSION = 1
 
@@ -45,6 +47,12 @@ _ALLOWED_KEYS: dict[str, set[str]] = {
     "docker": {"block"},
     "git": {"protect"},
 }
+
+
+# runner.local.toml で書けるのは、共有設定に「足す」うち、**見えなくする方向**のもの (hide) だけ。
+# gpu はデバイスを公開する (緩める方向)、docker・git は共有の block・protect を緩められるので、書けない
+_LOCAL_TABLES = ("hide",)
+_LOCAL_REFUSED = ("gpu", "docker", "git")
 
 
 class RunnerError(Exception):
@@ -109,6 +117,34 @@ def _table(root: Mapping[str, object], name: str) -> Mapping[str, object]:
     return value
 
 
+def _gpu(root: Mapping[str, object]) -> tuple[str, ...]:
+    """[gpu] を検証して devices を取り出す。"""
+    gpu = _string_list(_table(root, "gpu"), "devices", "gpu")
+    for dev in gpu:
+        # /dev 自体 (/dev/)・末尾の /・// は不可 (ホストの /dev 全体を渡してしまうため)
+        ok = (
+            dev.startswith("/dev/")
+            and len(dev) > len("/dev/")
+            and not dev.endswith("/")
+            and "//" not in dev
+            and ".." not in dev.split("/")
+        )
+        if dev != "auto" and not ok:
+            raise RunnerError(f'gpu.devices は "auto" か /dev/ 以下の絶対パス: {dev!r}')
+    return gpu
+
+
+def _hide(root: Mapping[str, object]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """[hide] を検証して dirs・files を取り出す。共有設定と runner.local.toml で同じ規則を使う。"""
+    hide = _table(root, "hide")
+    dirs = _string_list(hide, "dirs", "hide")
+    files = _string_list(hide, "files", "hide")
+    for path in (*dirs, *files):
+        if not (path.startswith(("~/", "/")) and path not in ("/", "~/")):
+            raise RunnerError(f"hide のパスは ~/ か / で始め、/ と ~/ そのものは不可: {path!r}")
+    return dirs, files
+
+
 def parse_config(text: str) -> Config:
     """runner.toml の本文を検証して Config にする。未知のキー・型の誤りは RunnerError。"""
     try:
@@ -120,22 +156,56 @@ def parse_config(text: str) -> Config:
     if type(version) is not int or version != SUPPORTED_VERSION:  # bool・float を受け付けない
         raise RunnerError(f"version = {SUPPORTED_VERSION} が必要 (実際: {version!r})")
 
-    gpu = _string_list(_table(root, "gpu"), "devices", "gpu")
-    for dev in gpu:
-        if dev != "auto" and not (dev.startswith("/dev/") and ".." not in dev.split("/")):
-            raise RunnerError(f'gpu.devices は "auto" か /dev/ 以下の絶対パス: {dev!r}')
-    hide = _table(root, "hide")
-    dirs = _string_list(hide, "dirs", "hide")
-    files = _string_list(hide, "files", "hide")
-    for path in (*dirs, *files):
-        if not (path.startswith(("~/", "/")) and path not in ("/", "~/")):
-            raise RunnerError(f"hide のパスは ~/ か / で始め、/ と ~/ そのものは不可: {path!r}")
+    dirs, files = _hide(root)
     return Config(
-        gpu_devices=gpu,
+        gpu_devices=_gpu(root),
         hide_dirs=dirs,
         hide_files=files,
         docker_block=_bool(_table(root, "docker"), "block", True, "docker"),
         git_protect=_bool(_table(root, "git"), "protect", True, "git"),
+    )
+
+
+def parse_local(text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """runner.local.toml の本文を検証し、足す分 (hide.dirs・hide.files) を返す。
+
+    共有設定を緩められるものは書けない: [gpu]・[docker]・[git] があれば RunnerError。
+    version は省略できる。書くなら共有設定と同じ値にする。
+    """
+    try:
+        root = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise RunnerError(f"{LOCAL_NAME} の TOML が読めない: {exc}") from exc
+    for name in _LOCAL_REFUSED:
+        if name in root:
+            raise RunnerError(
+                f"{LOCAL_NAME} では [{name}] を変えられない (共有設定を緩める抜け道になるため)"
+            )
+    unknown = set(root) - {"version", *_LOCAL_TABLES}
+    if unknown:
+        raise RunnerError(f"{LOCAL_NAME} に未知のキーがある: {', '.join(sorted(unknown))}")
+    if "version" in root and (
+        type(root["version"]) is not int or root["version"] != SUPPORTED_VERSION
+    ):
+        raise RunnerError(
+            f"{LOCAL_NAME} の version は {SUPPORTED_VERSION} にする (実際: {root['version']!r})"
+        )
+    return _hide(root)
+
+
+def merge_local(cfg: Config, local: tuple[tuple[str, ...], tuple[str, ...]]) -> Config:
+    """共有設定の後ろに、このマシンだけの追記を足す (重複は 1 つにする。順序は共有が先)。"""
+
+    def union(base: tuple[str, ...], extra: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(dict.fromkeys((*base, *extra)))
+
+    dirs, files = local
+    return Config(
+        gpu_devices=cfg.gpu_devices,
+        hide_dirs=union(cfg.hide_dirs, dirs),
+        hide_files=union(cfg.hide_files, files),
+        docker_block=cfg.docker_block,
+        git_protect=cfg.git_protect,
     )
 
 
@@ -244,7 +314,23 @@ def load_config(path: Path) -> Config:
         raise RunnerError(
             f"設定を読めない ({path}): {getattr(exc, 'strerror', None) or exc}"
         ) from exc
-    return parse_config(text)
+    cfg = parse_config(text)
+    local_path = path.with_name(LOCAL_NAME)
+    try:
+        local_path.lstat()  # リンク自体の有無を見る (壊れたリンクを「無い」と取り違えない)
+    except FileNotFoundError:
+        return cfg  # このマシンだけの設定は任意。エントリ自体が無いときだけ無視する
+    except OSError as exc:
+        raise RunnerError(
+            f"設定を読めない ({local_path}): {getattr(exc, 'strerror', None) or exc}"
+        ) from exc
+    try:
+        local_text = local_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RunnerError(
+            f"設定を読めない ({local_path}): {getattr(exc, 'strerror', None) or exc}"
+        ) from exc
+    return merge_local(cfg, parse_local(local_text))
 
 
 def build_command(

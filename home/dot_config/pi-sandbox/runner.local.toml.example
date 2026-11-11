@@ -1,0 +1,15 @@
+# このマシンだけの pi-sandbox-runner の追記。`runner.local.toml` にコピーして使う（chezmoi の管理外）。
+#
+# 共有の設定（runner.toml。chezmoi が管理し、apply で上書きされる）に「足す」ものだけを書く。
+#   - 書けるのは [hide] dirs / files（見えなくする場所）だけ。リストは共有設定の後ろに足され、重複は 1 つになる。
+#   - [gpu]・[docker]・[git] は書けない（デバイスの公開と、共有設定を緩める抜け道になるため。書くと起動しない）。
+#   - 共有設定のエントリを消すことはできない。
+#   - 壊れている・読めない（壊れたシンボリックリンク、ディレクトリを含む）と、bwrap を起動しない（終了コード 2）。
+# 読まれるのは、共有の runner.toml と同じ場所の runner.local.toml だけ。既定では作業ツリーを探さない。
+# 反映は、次にコマンドを実行したとき（runner は毎回読む）。`chezmoi apply` は要らない。
+version = 1
+
+# 内側から見えなくする場所をこのマシン用に足す。ディレクトリは空の tmpfs、ファイルは /dev/null で覆う。無い場所は何もしない。
+# [hide]
+# dirs = ["~/private-notes"]
+# files = ["~/.config/some-tool/token"]
