@@ -25,10 +25,14 @@
 # PowerShell プロファイルの実体 (Documents 配下は 1 行のローダーのみ)
 !.config/powershell/
 !.config/powershell/**
-# pi のフルガード (harness) は Windows にも配る。境界 (landlock) は Unix 専用なので配らない
+{{- if ne (includeTemplate "pi-profile" .) "stock" }}
+# pi のフルガード (harness) は Windows にも配る (custom のときだけ)。境界 (landlock) は Unix 専用なので配らない
+# stock では配らない: 下の stock の除外 (.config/pi) と、.chezmoiremove の .config/pi が、
+# 配備済みの .config/pi がある機で「inconsistent state (dot_config/pi, remove)」になるため (2026-11-11 実測)
 # see docs/spec/guard/pi-guard.md#windows
 !.config/pi/
 .config/pi/harness/landlock_exec.py
+{{- end }}
 # OpenCode は 314 が Windows にも入れる。permission と guide plugin が無いと保護が無い
 # see docs/spec/agent-permissions.md#windows-での扱い
 !.config/opencode/
