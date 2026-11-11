@@ -52,9 +52,9 @@
 
 ## 公式の情報（取得日 2026-11-12）
 
-- **既知の問題**: [docs/benchmarking.md](https://raw.githubusercontent.com/fencesandbox/fence/main/docs/benchmarking.md)（2026-04-24 の基準値）で、`GetRuntimeDeniedExecutablePaths`（毎回呼ばれる）の `Empty` が WSL で 1,698 ms、native Linux で 1.1 ms。脚注 [¹] に「Known WSL slowdown。WSL の interop 層が `/mnt/*` をまたぐ `stat` / `EvalSymlinks` を直列化するため、と思われる（likely）」とある。「WSL では 1〜3 秒が基準」とも書く。
-- **公式の推奨**: コマンドごとに `fence -c` を回すより、`fence -- <agent>` のように**エージェント全体を 1 回包む**。初期化を償却すると 1 回あたり約 6〜11 µs。docs/agents.md の対応表でも、pi は `code` テンプレートで全体を包む形。
-- **常駐・再利用の仕組み・プロキシだけを省くフラグ**: 見つからなかった（探した場所: docs/configuration.md、ARCHITECTURE.md、benchmarking.md、agents.md）。`network.allowedDomains: ["*"]` はブリッジを省くが、プロキシは起動し、通信の強制が外れる。ブリッジとプロキシの初期化は、公式の計測で約 93〜101 ms。
+- **既知の問題**: [上流の benchmarking.md](https://raw.githubusercontent.com/fencesandbox/fence/main/docs/benchmarking.md)（2026-04-24 の基準値）で、`GetRuntimeDeniedExecutablePaths`（毎回呼ばれる）の `Empty` が WSL で 1,698 ms、native Linux で 1.1 ms。脚注 [¹] に「Known WSL slowdown。WSL の interop 層が `/mnt/*` をまたぐ `stat` / `EvalSymlinks` を直列化するため、と思われる（likely）」とある。「WSL では 1〜3 秒が基準」とも書く。
+- **公式の推奨**: コマンドごとに `fence -c` を回すより、`fence -- <agent>` のように**エージェント全体を 1 回包む**。初期化を償却すると 1 回あたり約 6〜11 µs。上流の agents.md の対応表でも、pi は `code` テンプレートで全体を包む形。
+- **常駐・再利用の仕組み・プロキシだけを省くフラグ**: 見つからなかった（探した場所: 上流の configuration.md・ARCHITECTURE.md・benchmarking.md・agents.md）。`network.allowedDomains: ["*"]` はブリッジを省くが、プロキシは起動し、通信の強制が外れる。ブリッジとプロキシの初期化は、公式の計測で約 93〜101 ms。
 - **cwd の走査**: [issue #233](https://github.com/fencesandbox/fence/issues/233)（2026-09-26、open）と [issue #86](https://github.com/fencesandbox/fence/issues/86)（2026-03-23、open）が、`**/` 始まりのパターンが毎回 cwd を再帰的に歩くことを報告している。[PR #238](https://github.com/fencesandbox/fence/pull/238)（全パターンを 1 回の走査にまとめる。2026-10-10 作成）は、マージされずに 2026-11-05 に close された。
 - **メンテ状況**: 最新リリースは v0.1.67（2026-09-01）。以降 2.5 か月リリースがない。main の最新コミットは 2026-09-10 の dependabot。open の issue は 35 件、PR は 5 件。リポジトリは `Use-Tusk/fence` から `fencesandbox/fence` に移っている。
 - **WSL2 の制約**: `networkingMode=mirrored` は seccomp の user-notification リスナーを占有するので、`runtimeExecPolicy: "argv"` が使えない（microsoft/WSL#9548）。
