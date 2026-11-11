@@ -167,6 +167,12 @@ Documents/**
 .agents/skills/imozuru/**
 {{- end }}
 
+# pi-mcp-adapter の設定 (~/.pi/agent/mcp-adapter.json) は、adapter を入れる機 (is-work) だけ。他の機は pi 組み込みの MCP が mcp.json を読む
+# see docs/spec/mcp-servers.md#子のエージェントへの検索-mcp-の渡し方
+{{- if ne (includeTemplate "is-work" .) "true" }}
+.pi/agent/mcp-adapter.json
+{{- end }}
+
 # Bitwarden 由来のファイルは一度のみ展開する
 # (毎回 Bitwarden を引くと chezmoi diff がマスターパスワードを要求するため)
 #
@@ -303,6 +309,7 @@ orca/**
 .pi/agent/compaction.json
 # stock の MCP 設定 (~/.pi/agent/mcp.json。generate.py --target pi-mcp) も配らない。custom の MCP は harness の rules.json
 .pi/agent/mcp.json
+.pi/agent/mcp-adapter.json
 # cc-safety-net の規則 (~/.cc-safety-net。stock の package の設定) も配らない
 .cc-safety-net
 .cc-safety-net/**

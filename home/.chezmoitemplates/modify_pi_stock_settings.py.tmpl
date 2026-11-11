@@ -11,6 +11,8 @@ import json
 import sys
 
 PACKAGES_TEXT = {{ .packages | toJson }}
+# 会社 PC (is-work) か。検索の MCP が機で違う (家は websearch、会社 PC は agentcore-websearch)
+IS_WORK = {{ if eq .isWork "true" }}True{{ else }}False{{ end }}
 
 # 自作ハーネスだけが入れる extensions / skills の項目 (scripts/agents/generate.py の宣言に対応)
 HARNESS_EXTENSION_MARKS = (".config/pi/harness", "!extensions/**", "+extensions/", "-builtin:")
@@ -59,10 +61,16 @@ def add_compaction_overrides(data: dict) -> None:
 # pi-subagents の組み込みの子の tools を読み取り専用に絞る (subagents.agentOverrides.<name>.tools 。docs/agents.md)。
 # 組み込みの既定: scout = read, grep, find, ls, bash, write, contact_supervisor / oracle = read, grep, find, ls, bash。
 # bash・write を外す (scout は親への問い合わせ contact_supervisor を残す)。reviewer (読み取り専用) と worker は変えない。
+# 検索の子 (researcher・evidence-auditor) は、組み込みの tools が pi-web-access のツール名 (stock では入れない) なので、
+# 機の検索の MCP を mcp: で渡す。家は websearch、会社 PC は agentcore-websearch (~/.pi/agent/mcp-adapter.json も要る)。
 # 利用者がすでに同じ役の tools を書いていれば保つ (無いときだけ補う)。
+# see docs/spec/mcp-servers.md#子のエージェントへの検索-mcp-の渡し方
+SEARCH_MCP = "mcp:agentcore-websearch" if IS_WORK else "mcp:websearch"
 AGENT_TOOL_OVERRIDES = {
     "scout": ["read", "grep", "find", "ls", "contact_supervisor"],
     "oracle": ["read", "grep", "find", "ls"],
+    "researcher": ["read", "write", SEARCH_MCP],
+    "evidence-auditor": ["read", SEARCH_MCP],
 }
 
 

@@ -29,6 +29,7 @@ args = [
 | Codex CLI | `~/.codex/config.toml` の `mcp_servers` | `modify_config.toml` が `fromToml` で描画 |
 | Claude Code | `~/.claude.json` | `400_unix/410` (Unix) と `300_windows/346` (Windows) が `claude mcp add-json` で登録 |
 | pi・stock（Unix・Windows） | `~/.pi/agent/mcp.json` の `mcpServers`（pi 組み込みの MCP も `pi-mcp-adapter` もこれを読む） | `generate.py --target pi-mcp`。配備は `home/dot_pi/agent/modify_mcp.json.py.tmpl`（stock だけ。custom は `.chezmoiignore.tmpl` で配らない）。宣言したサーバの `command` / `args`（http は `url`）だけを更新し、`pi mcp add` や `/mcp` で足したサーバと、宣言済みサーバの利用者のキー（`env`・`enabled`・`exposure` など）は保つ。`[[mcp]]` の `exposure`・`requires_env`・`pi_exposure` は出さない（`pi_exposure` は server の `exposure` へ、無いときだけ補う）。壊れた JSON は触らない |
+| pi・stock の会社 PC（`pi-mcp-adapter` あり） | `~/.pi/agent/mcp-adapter.json` の `mcpServers`（`mcp.json` と同じサーバ。`exposure` は無し） | `generate.py --target pi-mcp-adapter`。配備は `home/dot_pi/agent/modify_mcp-adapter.json.py.tmpl`（`is-work` の stock だけ。それ以外は `.chezmoiignore.tmpl` で配らない）。目的は[子への検索 MCP の渡し方](#子のエージェントへの検索-mcp-の渡し方) |
 | pi・custom（Unix・Windows） | `~/.config/pi/harness/rules.json` の `mcp` | `generate.py --target pi-harness`。フルガードが起動のたびに `registerMcpServer` で登録する（[pi のガード](guard/pi-guard.md#mcp)。`mcp.json` へ書く経路は無い。[経緯](../research/agents/agent-config-generation-notes.md)） |
 
 Gemini CLI と Antigravity は使わないため対象外。既存の定義はそのまま残す。
@@ -128,6 +129,19 @@ TOML の重複宣言になり、Codex が設定ファイル全体を読めなく
 - 理由: pi 組み込みの MCP の既定の `exposure` は `codemode` で、ツールはモデルに宣言されず `codemode` のスクリプトから呼ぶ。この形では、plan mode（`@narumitw/pi-plan-mode`）の許可リストは**完全一致の名前だけ**で、`codemode` を許すと任意の MCP を呼べて境界が広がる。`direct` なら、組み込みのツールと同様にモデルへ宣言され、名前 `mcp__<server>__<tool>`（英数字と `_` 以外は `_` に置換）で許可リストに具体名を足せる。
 - `websearch`・`agentcore-websearch` を `direct` にする。許可リスト側は [pi のプロファイル](agent-config-generation.md#追加の-4-つの-packagebackgroundplan-modegoalrewind)。permission-system の `mcp` 規則（`"websearch": "allow"` など）は `direct` のツール名にも効く（package の docs で確認。実機は未確認）。
 - `agentcore-websearch` のツールの生の名前は `web-search-tool__WebSearch`（実機で確認済み）。pi に登録される完全な名前は、命名規則から導いた `mcp__agentcore_websearch__web_search_tool__WebSearch`。実機の `/mcp` の Tools 表示では**未確認**。検索の送り先が限られる環境では `pi-mcp-adapter` も入るので、adapter が別の名前で同じツールを出す可能性も未確認。
+
+### 子のエージェントへの検索 MCP の渡し方
+
+stock の pi で、検索の子（`researcher`・`evidence-auditor`）が検索できなかった原因と対処（2026-11-11。ソースと公式ドキュメントで確認。**会社 PC の実機は未確認**）。
+
+- **原因 1**: 子の `tools` は厳密な許可リストで、親の MCP ツールは自動では渡らない。2 つの agent 定義の組み込みの `tools` は `pi-web-access` のツール名（`web_search`・`fetch_content`・`get_search_content`・`source_check`）だが、この package は入れない（[評価](../research/agents/pi-stock-packages-evaluation-2026-11.md)）ので、名前に対応するツールが無い。`mcp:` の指定はどの agent にも無かった。
+- **対処 1**: `modify_pi_stock_settings.py.tmpl` の `AGENT_TOOL_OVERRIDES` で、`researcher` = `read`・`write`・`mcp:<検索>`、`evidence-auditor` = `read`・`mcp:<検索>` にする。`<検索>` は家の機が `websearch`、会社 PC が `agentcore-websearch`（`is-work` で切る）。`mcp:<サーバ>` はそのサーバの全ツールを渡す。agent 定義の写し（`~/.pi/agent/agents/`）は組み込みと同一のまま保つ（試験で固定）。settings の上書きは、user の agent ファイルにも効く（pi-subagents 0.87.0 の `applyCustomAgentOverrides`）。
+- **原因 2（会社 PC）**: `pi-mcp-adapter` が入ると、pi-subagents は子の `mcp:` を adapter の設定ファイル（`~/.config/mcp/mcp.json`・`~/.pi/agent/mcp-adapter.json`・`.mcp.json`・`.pi/mcp-adapter.json`）から解決し、`~/.pi/agent/mcp.json` は読まない（0.87.0 の `src/runs/shared/mcp-direct-tool-allowlist.js` の `getConfigPaths`）。adapter 本体は `~/.pi/agent/mcp.json` も読む（7.0.1 の `config.ts`）ので、親では動くのに子では未解決になる食い違いがある。
+- **対処 2**: 同じサーバを `~/.pi/agent/mcp-adapter.json` にも置く（`generate.py --target pi-mcp-adapter`。`command` / `args` は `mcp.json` と同一なので、cache の照合に使う項目も同じになるはずだが、adapter 7.0.1 と pi-subagents 0.87.0 の照合が一致することは未確認）。`exposure` は出さない。家の機は pi 組み込みの MCP が `mcp.json` を読むので配らない。
+- **制約・未確認**:
+  - 会社 PC の実機で、子が `agentcore-websearch` を呼べること（adapter 7.0.1 で `mcp:` が解決されること）は未確認。
+  - adapter 経由の `mcp:` は、背景の子（`async: true`）だけで動く。前景の子は起動が失敗する。adapter のツール情報の cache が要るので、サーバへ一度つないだあと（親が一度使ってから pi を再起動したあと）でないと解決しないことがある（pi-subagents の `docs/agents.md`「MCP tools」）。
+  - `researcher`・`evidence-auditor` の prompt は組み込みの写しのままで、`web_search`・`fetch_content`・`source_check` を前提にしている（`researcher` は `source_check` の登録を前提とする記述もある）。MCP のツール名への読み替えは、子のモデルに任せる想定で、**未検証**。プロンプトとツールの不整合は残る。`source_check` は無く、AgentCore は検索だけで本文の取得も無い。
 
 ### AgentCore Web Search
 

@@ -1,0 +1,7 @@
+{{- /*
+stock の pi の ~/.pi/agent/mcp-adapter.json。pi-mcp-adapter を入れた機 (is-work) だけに配る。
+pi-subagents は adapter があると、子の mcp: 指定をこのファイル (と ~/.config/mcp/mcp.json など) から解決し、~/.pi/agent/mcp.json は読まない。
+[[mcp]] (clis に pi を含むもの) を mcp.json と同じ内容でここにも置く。利用者が足したサーバ・キーは保つ。
+see docs/spec/mcp-servers.md#子のエージェントへの検索-mcp-の渡し方
+*/ -}}
+{{ template "modify_json.py.tmpl" (dict "workingTree" .chezmoi.workingTree "common" (includeTemplate "dot_config/agents/common.toml.tmpl" .) "target" "pi-mcp-adapter") -}}
