@@ -28,7 +28,7 @@
 | [0033](0033-delegate-subagents-by-standing-instruction.md)（Proposed） | 子の起動は常設の指示で授権し、数の上限は設けない | 小さな作業以外は、依頼を待たずに `subagent` へ委譲する。安全は数の上限でなく、外側の権限（作業ツリー外は即拒否・理由つき deny・子ごとの `timeout`）で担保する |
 | [0034](0034-skip-frozen-stack-tests-in-verify-all.md)（Proposed） | 凍結したスタックの試験は `verify:all` から外す | `verify:all` は凍結スタックの試験を省く（変更に当たるものは T1 で回る）。`main` への統合前と凍結コードに触れるときは `verify:full` |
 | [0035](0035-pi-sandbox-gpu-runner.md) | GPU を使う作業向けに、pi の sandbox 拡張へ設定つきの runner を足す | `@yuru7/pi-sandbox` の `runnerCommand` に、GPU のデバイス・秘密の隠蔽・docker の遮断・git の hooks/config の保護を足すラッパーを差す（設定はリストとオン・オフだけ。並びはコードに固定）。調べた拡張 10 個のどれも設定だけでは GPU を通せなかった。Linux 専用。拡張の package 自体は既定にしない |
-| [0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) | pi の sandbox は、コマンドの実行を `shellPath` の囲い 1 つに、ファイルの道具をパスの判定に分ける | コマンドの実行（bash・`bg_run`・`!`・子の bash）は `shellPath` の 1 つの囲いに通し、ファイルの道具（`read`・`write`・`edit`）は権限の層がパスで判定する。見える範囲は許可リスト型（ホーム・`/mnt`・`/tmp` を覆い、必要な所だけ重ねる）で、通信は既定で開ける。方針は 1 か所、自作は 1 部品、既存の囲いの穴は自作で埋めない。実装の方式（`bwrap` か Fence）と `/mnt` の扱いは未決。実装が入ったら ADR-0035 を置き換える |
+| [0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) | pi の sandbox は、コマンドの実行を `shellPath` の囲い 1 つに、ファイルの道具をパスの判定に分ける | コマンドの実行（bash・`bg_run`・`!`・子の bash）は `shellPath` の 1 つの囲いに通し、ファイルの道具（`read`・`write`・`edit`）は権限の層がパスで判定する。見える範囲は許可リスト型（ホーム・`/mnt`・`/tmp` を覆い、必要な所だけ重ねる）で、通信は既定で開ける。方針は 1 か所、自作は 1 部品、既存の囲いの穴は自作で埋めない。実装は素の `bwrap`（現行の runner を拡張。約 16 ミリ秒）。`/mnt` は既定で覆い、見せる所だけユーザー設定で足す。実装が入ったら ADR-0035 を置き換える |
 
 置き換え・廃止・凍結された決定（0012〜0029 の多く、0016 など）は下の一覧にある。
 
