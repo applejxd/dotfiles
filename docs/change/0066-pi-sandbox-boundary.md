@@ -282,6 +282,7 @@ ADR-0036 の決定（コマンドの実行は `shellPath` の囲い 1 つ、方�
 
 | 日付 | 更新 | 理由・証拠 |
 | --- | --- | --- |
+| 2026-11-12 | 配備後の確認で、WSL2 の内側の名前解決が壊れていると分かった。共有設定の `visible.read` に `/mnt/wsl/resolv.conf` を足し、自己確認に名前解決を足した | `/etc/resolv.conf` が `/mnt/wsl/resolv.conf` へのリンクで、`/mnt` を覆うと消える。内側の `npm view` が `EAI_AGAIN`。ホストは成功。見せたあとは内側でも 1.3.0 を返した |
 | 2026-11-12 | 起票。問題の洗い出し（段 1）を完了し、キャッシュ領域の変更（段 5）を保留にした | `pib` を実機で使い、`bg_run` が sandbox の外で動くこと、キャッシュに書けないことを確認した。利用者が、継ぎ足しを避け、境界を決めることを求めた |
 | 2026-11-12 | 「自前だけで sandbox するのか」への整理を反映。自作は引数の組み立てだけで、隔離の実体は既存の bubblewrap。既存の CLI を `shellPath` の先にできるかの評価（案 X′）を、次の調査の 1 行目に足した | 既存の評価が先（[ADR-0031](../adr/0031-evaluate-existing-extensions-first.md)）。これまでの比較は動かしておらず、GPU の記述がない |
 | 2026-11-12 | 凍結前の検討を見返して反映（CHG-0023 の候補 E = bash だけを Fence に通す案は、範囲を理由に見送り済み。Fence は GPU を通せる実測がある）。「既存の囲いの穴を自作で埋めない」を境界の規則に足した | 利用者の指摘。[CHG-0023](closed/0023-guard-terminology.md)・[CHG-0029](closed/0029-worktree-isolation.md)・[CHG-0033](closed/0033-sandbox-build-value-assessment.md) |

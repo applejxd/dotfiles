@@ -25,6 +25,9 @@ read = [
   "~/.config/git/attributes",
   "~/.cargo",
   "~/.rustup",
+  # WSL2 では /etc/resolv.conf が /mnt/wsl/resolv.conf へのリンク。/mnt を覆うと名前解決が壊れる (内側の npm・pip・curl が失敗する)。
+  # このファイル 1 つだけを見せる (/mnt/wsl 全体や Windows のドライブは見せない)。WSL でない機では、無い場所なので何もしない。
+  "/mnt/wsl/resolv.conf",
 ]
 # write = 書き込み可 (標準のキャッシュ。ホストが後で使う成果物 (wheel・hook の環境・モデル) を差し替えられる代償がある)。
 write = [
