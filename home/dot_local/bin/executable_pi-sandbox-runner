@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+"""pi の sandbox 拡張 (@yuru7/pi-sandbox) の ``runnerCommand`` 用ラッパー。
+
+``<runner> <bwrap の引数...> -- <コマンド...>`` の ``--`` の直前に、設定 (runner.toml) に従う引数を足して bwrap を exec する。
+設定が壊れていれば bwrap を起動しない。契約・設定・限界は docs が正本。
+see docs/spec/sandbox/pi-sandbox-runner.md
+"""
+
+from __future__ import annotations
+
+import glob as _glob
+import json
+import os
+import shutil
+import stat
+import sys
+import tomllib
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+
+PREFIX = "pi-sandbox-runner:"
+CONFIG_ENV = "PI_SANDBOX_RUNNER_CONFIG"
+DRYRUN_ENV = "PI_SANDBOX_RUNNER_DRYRUN"
+SUPPORTED_VERSION = 1
+
+# ``devices = ["auto"]`` が試す GPU のデバイス。存在するものだけを渡す
+# (WSL2 は /dev/dxg、ネイティブ Linux は /dev/nvidia*)
+GPU_AUTO_PATHS = (
+    "/dev/dxg",
+    "/dev/nvidiactl",
+    "/dev/nvidia-uvm",
+    "/dev/nvidia-uvm-tools",
+    "/dev/nvidia-modeset",
+)
+GPU_AUTO_GLOBS = ("/dev/nvidia[0-9]*",)
+# 書き込み可で渡る git ディレクトリのうち、ホストの git が後で実行・解釈する場所
+GIT_PROTECTED = ("hooks", "config", "config.worktree")
+DOCKER_SOCKETS = ("/run/docker.sock", "/var/run/docker.sock")
+
+_ALLOWED_KEYS: dict[str, set[str]] = {
+    "": {"version", "gpu", "hide", "docker", "git"},
+    "gpu": {"devices"},
+    "hide": {"dirs", "files"},
+    "docker": {"block"},
+    "git": {"protect"},
+}
+
+
+class RunnerError(Exception):
+    """設定・引数の誤り。bwrap を起動せずに終了させる。"""
+
+
+@dataclass(frozen=True)
+class Config:
+    gpu_devices: tuple[str, ...] = ()
+    hide_dirs: tuple[str, ...] = ()
+    hide_files: tuple[str, ...] = ()
+    docker_block: bool = True
+    git_protect: bool = True
+
+
+@dataclass(frozen=True)
+class Host:
+    """ホストの見え方。試験では差し替える。"""
+
+    home: str
+    uid: int
+    exists: Callable[[str], bool] = os.path.exists
+    isdir: Callable[[str], bool] = os.path.isdir
+    issock: Callable[[str], bool] = lambda p: _is_socket(p)
+    realpath: Callable[[str], str] = os.path.realpath
+    glob: Callable[[str], list[str]] = lambda pattern: sorted(_glob.glob(pattern))
+
+
+def _is_socket(path: str) -> bool:
+    try:
+        return stat.S_ISSOCK(os.stat(path).st_mode)
+    except OSError:
+        return False
+
+
+def _string_list(table: Mapping[str, object], key: str, where: str) -> tuple[str, ...]:
+    value = table.get(key, [])
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        raise RunnerError(f"{where}.{key} は文字列の配列にする")
+    return tuple(value)
+
+
+def _bool(table: Mapping[str, object], key: str, default: bool, where: str) -> bool:
+    value = table.get(key, default)
+    if not isinstance(value, bool):
+        raise RunnerError(f"{where}.{key} は true / false にする")
+    return value
+
+
+def _check_keys(table: Mapping[str, object], where: str) -> None:
+    unknown = set(table) - _ALLOWED_KEYS[where]
+    if unknown:
+        label = where or "(最上位)"
+        raise RunnerError(f"{label} に未知のキーがある: {', '.join(sorted(unknown))}")
+
+
+def _table(root: Mapping[str, object], name: str) -> Mapping[str, object]:
+    value = root.get(name, {})
+    if not isinstance(value, dict):
+        raise RunnerError(f"[{name}] は表にする")
+    _check_keys(value, name)
+    return value
+
+
+def parse_config(text: str) -> Config:
+    """runner.toml の本文を検証して Config にする。未知のキー・型の誤りは RunnerError。"""
+    try:
+        root = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise RunnerError(f"設定の TOML が読めない: {exc}") from exc
+    _check_keys(root, "")
+    version = root.get("version")
+    if type(version) is not int or version != SUPPORTED_VERSION:  # bool・float を受け付けない
+        raise RunnerError(f"version = {SUPPORTED_VERSION} が必要 (実際: {version!r})")
+
+    gpu = _string_list(_table(root, "gpu"), "devices", "gpu")
+    for dev in gpu:
+        if dev != "auto" and not (dev.startswith("/dev/") and ".." not in dev.split("/")):
+            raise RunnerError(f'gpu.devices は "auto" か /dev/ 以下の絶対パス: {dev!r}')
+    hide = _table(root, "hide")
+    dirs = _string_list(hide, "dirs", "hide")
+    files = _string_list(hide, "files", "hide")
+    for path in (*dirs, *files):
+        if not (path.startswith(("~/", "/")) and path not in ("/", "~/")):
+            raise RunnerError(f"hide のパスは ~/ か / で始め、/ と ~/ そのものは不可: {path!r}")
+    return Config(
+        gpu_devices=gpu,
+        hide_dirs=dirs,
+        hide_files=files,
+        docker_block=_bool(_table(root, "docker"), "block", True, "docker"),
+        git_protect=_bool(_table(root, "git"), "protect", True, "git"),
+    )
+
+
+def split_args(argv: Sequence[str]) -> tuple[list[str], list[str]]:
+    """``<bwrap の引数...> -- <コマンド...>`` を分ける。最初の ``--`` が区切り。"""
+    args = list(argv)
+    if "--" not in args:
+        raise RunnerError("引数に -- (bwrap の引数とコマンドの区切り) が無い")
+    cut = args.index("--")
+    pre, cmd = args[:cut], args[cut + 1 :]
+    if not cmd:
+        raise RunnerError("-- の後に実行するコマンドが無い")
+    return pre, cmd
+
+
+def _expand(path: str, host: Host) -> str:
+    return host.home + path[1:] if path.startswith("~/") else path
+
+
+def _gpu_devices(entries: Sequence[str], host: Host) -> list[str]:
+    found: list[str] = []
+    for entry in entries:
+        if entry == "auto":
+            candidates = [*GPU_AUTO_PATHS, *(p for g in GPU_AUTO_GLOBS for p in host.glob(g))]
+        else:
+            candidates = [entry]
+        for dev in candidates:
+            if host.exists(dev) and dev not in found:
+                found.append(dev)
+    return found
+
+
+def _is_git_dir(path: str, host: Host) -> bool:
+    return host.exists(f"{path}/HEAD") and (
+        host.exists(f"{path}/objects") or host.exists(f"{path}/commondir")
+    )
+
+
+def _writable_bases(pre: Sequence[str]) -> list[str]:
+    """``--bind <A> <A>`` (同じパスを書き込み可で渡すもの) の A を集める。"""
+    bases: list[str] = []
+    i = 0
+    while i < len(pre):
+        if pre[i] == "--bind" and i + 2 < len(pre) and pre[i + 1] == pre[i + 2]:
+            bases.append(pre[i + 1])
+            i += 3
+        else:
+            i += 1
+    return bases
+
+
+def build_extra(cfg: Config, pre: Sequence[str], host: Host) -> list[str]:
+    """``--`` の直前に足す bwrap の引数。並びは固定: GPU → git → 隠蔽 → docker。
+
+    - GPU は拡張の ``--dev /dev`` より後ろに置く (前だと隠れる)。pre の後ろに足すので満たす。
+    - 隠蔽は git の後ろに置く。後から重ねた mount が勝つので、隠す場所を git の bind が再び見せない。
+    - 隠す場所はシンボリックリンクを解決した実体で覆う (リンクのままだと bwrap が失敗する)。
+    """
+    extra: list[str] = []
+    for dev in _gpu_devices(cfg.gpu_devices, host):
+        extra += ["--dev-bind", dev, dev]  # --bind は nodev で、デバイスを開けない
+
+    if cfg.git_protect:
+        for base in _writable_bases(pre):
+            for git_dir in (base, f"{base}/.git"):
+                if not _is_git_dir(git_dir, host):
+                    continue
+                for name in GIT_PROTECTED:
+                    target = f"{git_dir}/{name}"
+                    if host.exists(target):  # 無いものは覆えない (docs の限界)
+                        extra += ["--ro-bind", target, target]
+
+    for raw in cfg.hide_dirs:
+        path = host.realpath(_expand(raw, host))
+        if host.isdir(path):
+            extra += ["--tmpfs", path]
+    for raw in cfg.hide_files:
+        path = host.realpath(_expand(raw, host))
+        if host.exists(path) and not host.isdir(path):
+            extra += ["--ro-bind", "/dev/null", path]
+
+    if cfg.docker_block:
+        run_dir = f"/run/user/{host.uid}"  # rootless の docker・podman のソケットはここ
+        if host.isdir(run_dir):
+            extra += ["--tmpfs", run_dir]
+        done: set[str] = set()
+        for sock in DOCKER_SOCKETS:
+            real = host.realpath(sock)
+            if host.issock(sock) and real not in done:
+                done.add(real)
+                extra += ["--ro-bind", "/dev/null", sock]
+    return extra
+
+
+def config_path(env: Mapping[str, str], home: str) -> Path:
+    if env.get(CONFIG_ENV):
+        return Path(env[CONFIG_ENV])
+    base = env.get("XDG_CONFIG_HOME") or f"{home}/.config"
+    return Path(base) / "pi-sandbox" / "runner.toml"
+
+
+def load_config(path: Path) -> Config:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RunnerError(
+            f"設定を読めない ({path}): {getattr(exc, 'strerror', None) or exc}"
+        ) from exc
+    return parse_config(text)
+
+
+def build_command(
+    argv: Sequence[str], env: Mapping[str, str], host: Host, bwrap: str = "bwrap"
+) -> list[str]:
+    pre, cmd = split_args(argv)
+    cfg = load_config(config_path(env, host.home))
+    return [bwrap, *pre, *build_extra(cfg, pre, host), "--", *cmd]
+
+
+def main(argv: Sequence[str], env: Mapping[str, str] | None = None) -> int:
+    env = os.environ if env is None else env
+    home = env.get("HOME") or str(Path.home())
+    try:
+        command = build_command(argv, env, Host(home=home, uid=os.getuid()))
+    except RunnerError as exc:
+        print(f"{PREFIX} {exc}", file=sys.stderr)
+        return 2
+    if env.get(DRYRUN_ENV):
+        print(json.dumps(command, ensure_ascii=False))
+        return 0
+    bwrap = shutil.which("bwrap")
+    if bwrap is None:
+        print(f"{PREFIX} bwrap が見つからない", file=sys.stderr)
+        return 127
+    command[0] = bwrap
+    os.execv(bwrap, command)  # 戻らない
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
