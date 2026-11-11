@@ -60,7 +60,7 @@ def _home(value: str) -> str:
     return value.replace("$HOME", str(Path.home()))
 
 
-def run_engine(tmp_path: Path, *, bash=(), surface=(), access=(), project=None, name="in") -> dict:
+def run_engine(tmp_path: Path, *, bash=(), surface=(), access=(), alias=(), project=None, name="in") -> dict:
     payload = {
         "pkg": str(PERMISSION_PKG),
         "jiti": str(JITI),
@@ -69,6 +69,7 @@ def run_engine(tmp_path: Path, *, bash=(), surface=(), access=(), project=None, 
         "bash": list(bash),
         "surface": [[s[0], _home(s[1])] for s in surface],
         "access": [_home(c) for c in access],
+        "alias": [[a[0], [_home(v) for v in a[1]]] for a in alias],
     }
     if project is not None:
         payload["project"] = project
@@ -89,6 +90,7 @@ def engine_result(tmp_path_factory):
         bash=[c["cmd"] for c in CASES["bash"]],
         surface=CASES["surface"],
         access=[c[0] for c in CASES["access"]],
+        alias=CASES.get("alias", []),
     )
 
 
@@ -114,6 +116,19 @@ def test_every_bash_rule_is_exercised_by_the_table(engine_result):
 def test_surface_decisions_match_the_table(engine_result):
     bad = []
     for case, got in zip(CASES["surface"], engine_result["surface"], strict=True):
+        if got["action"] != case[2]:
+            bad.append(f"{case[0]} {case[1]!r}: 期待 {case[2]} / 実際 {got['action']} ({got['pattern']})")
+    assert not bad, "\n".join(bad)
+
+
+@needs_engine
+def test_alias_decisions_match_the_table(engine_result):
+    """symlink の別名と解決後の実体を合わせた判定 (値のどれかに一致した、設定上で最後の規則が勝つ)。
+
+    別名が allow に一致すれば、実体が既定の ask でも allow になる。実体側が、allow より後ろの ask に一致するときだけ ask に戻る。
+    """
+    bad = []
+    for case, got in zip(CASES.get("alias", []), engine_result["alias"], strict=True):
         if got["action"] != case[2]:
             bad.append(f"{case[0]} {case[1]!r}: 期待 {case[2]} / 実際 {got['action']} ({got['pattern']})")
     assert not bad, "\n".join(bad)
