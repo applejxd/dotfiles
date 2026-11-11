@@ -240,6 +240,22 @@ def test_ocs_launcher_is_linux_only(tmp_path, os_name, ignored):
 
 
 @pytest.mark.parametrize(
+    ("os_name", "ignored"), [("linux", False), ("windows", True), ("darwin", True)]
+)
+def test_pi_sandbox_runner_is_linux_only(tmp_path, os_name, ignored):
+    """pi-sandbox-runner は bwrap を呼ぶので Linux (Ubuntu / WSL) 専用。設定と拡張の設定も配らない。"""
+    rendered = render(home=str(tmp_path), os_name=os_name)
+    targets = (
+        ".local/bin/pi-sandbox-runner",
+        ".config/pi-sandbox",
+        ".config/pi-sandbox/**",
+        ".pi/agent/pi-sandbox.json",
+    )
+    for target in targets:
+        assert (target in rendered) is ignored, target
+
+
+@pytest.mark.parametrize(
     ("os_name", "ignored"), [("linux", False), ("windows", True), ("darwin", False)]
 )
 def test_ocs_library_is_shared_with_pis(tmp_path, os_name, ignored):

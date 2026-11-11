@@ -1,0 +1,40 @@
+# pi-sandbox-runner の設定。仕組み・判断基準・限界は docs/spec/sandbox/pi-sandbox-runner.md
+version = 1
+
+[gpu]
+# "auto" = /dev/dxg (WSL2) と /dev/nvidia* (ネイティブ Linux) のうち、存在するものを渡す。
+# 渡さないときは [] にする。明示するときは /dev/ 以下の絶対パス。
+devices = ["auto"]
+
+[hide]
+# 内側から見えなくする場所。ディレクトリは空の tmpfs、ファイルは /dev/null で覆う。無ければ何もしない。
+dirs = [
+  "~/.ssh",
+  "~/.aws",
+  "~/.gnupg",
+  "~/.config/gh",
+  "~/.config/gcloud",
+  "~/.docker",
+  "~/.kube",
+  "~/.azure",
+  "~/.password-store",
+]
+files = [
+  "~/.netrc",
+  "~/.git-credentials",
+  "~/.pypirc",
+  "~/.vault-token",
+  "~/.pi/agent/auth.json",
+  "~/.pi/agent/oauth.json",
+  "~/.pi/agent/models.json",
+  "~/.pi/agent/models-store.json",
+]
+
+[docker]
+# true: docker のソケットを内側から塞ぐ (塞がないと docker 経由で書き込み制限を破れる)。
+# compose を内側で使うときだけ false にする。
+block = true
+
+[git]
+# true: 書き込み可で渡る git ディレクトリの hooks・config を読み取り専用にする (既存のものだけ。限界は docs)。
+protect = true

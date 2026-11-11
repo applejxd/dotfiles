@@ -79,6 +79,7 @@
 - [OpenCode 隔離起動（`ocs`）](opencode-sandbox.md): 起動の順序、状態・DB、環境変数での追加、制御ファイルの保護。`pis` と `ocs` が共有する境界の正本でもある（OpenCode 専用の部分は撤去予定）。
 - [Claude Code / Copilot CLI の sandbox](agent-sandbox.md): それらの CLI 自身が持つ sandbox（`pis` の Fence とは別物）の層・ネットワーク・seccomp。
 - [隔離 GPU サンドボックス（WSL2）](wsl-sandbox.md): GPU 付きの検証用に専用の WSL2 ディストロを作る手順。`pis` の sandbox とは別目的。
+- [pi-sandbox-runner](pi-sandbox-runner.md): pi の sandbox 拡張（`@yuru7/pi-sandbox`）の `runnerCommand` に差す、GPU・秘密の隠蔽・docker の遮断・git の保護を足すラッパーと設定。ツール単位の sandbox で、`pis` とは別物。方針は [ADR-0035](../../adr/0035-pi-sandbox-gpu-runner.md)。
 - [ガード（総覧）](../guard/index.md): 判定と確認。
 - [箱（Incus。試作名 `kcage`）](incus-box.md): リポジトリごとの Incus の箱の仕様（仕組み・コマンド・許可表・信頼境界・限界）。方針は [ADR-0028](../../adr/0028-per-repo-agent-container.md)。
 

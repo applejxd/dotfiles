@@ -276,6 +276,7 @@ STOCK_PI_TESTS = (  # test_pi_* のうち、今も使っている stock の試�
     "test_pi_permission_decisions",
     "test_pi_subagents_config",
     "test_pi_compaction_config",
+    "test_pi_sandbox_runner",
 )
 FROZEN_TESTS = (
     *(t for t in _PI_TESTS if t not in STOCK_PI_TESTS),
@@ -542,6 +543,16 @@ RULES: tuple[Rule, ...] = (
         ("test_models_tool", "test_pi_model_catalog"),
     ),
     Rule("tmp-clean", ("home/dot_config/pi/harness/tmp_clean.py",), ("test_tmp_clean",)),
+    Rule(
+        "pi-sandbox-runner",
+        (
+            "home/dot_local/bin/executable_pi-sandbox-runner",
+            "home/dot_config/pi-sandbox/**",
+            "home/dot_pi/agent/create_pi-sandbox.json.tmpl",
+            "scripts/pi_sandbox_selftest.py",
+        ),
+        ("test_pi_sandbox_runner",),
+    ),
     Rule("env-check", ("home/dot_agents/skills/env-check/**",), ("test_env_check",)),
     Rule(
         "PR ビューア (apps/pr-viewer)",
