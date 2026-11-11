@@ -239,6 +239,21 @@ def main() -> int:
         else:
             report.line("SKIP", "環境変数の遮断", "設定の env.unset が空")
 
+        host_dns = (
+            shutil.which("getent")
+            and subprocess.run(
+                ["getent", "hosts", "example.com"], capture_output=True, timeout=30, check=False
+            ).returncode
+            == 0
+        )
+        if host_dns:  # ホストで引けない環境では、内側の確認にならない。WSL2 の resolv.conf は /mnt の下 (覆うと壊れる)
+            res = run("getent hosts example.com >/dev/null && echo resolved || echo failed")
+            report.line(
+                "PASS" if res.stdout.strip() == "resolved" else "FAIL", "名前解決が内側でも動く"
+            )
+        else:
+            report.line("SKIP", "名前解決", "ホストでも名前解決できない・getent が無い")
+
         docker_wanted = cfg.get("docker", {}).get("block", True) and shutil.which("docker")
         host_docker = (
             docker_wanted

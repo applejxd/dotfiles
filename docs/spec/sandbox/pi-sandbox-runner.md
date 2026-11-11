@@ -178,6 +178,7 @@ protect = true
 - **環境変数は拒否リスト。** `env.unset` に無い名前（独自のトークンなど）は渡る。
 - **docker を塞ぐので、compose は内側で使えない。** docker 経由で書き込み制限を破れるため（[実測](../../research/agents/pi-gpu-sandbox-2026-11.md#発見)）。塞ぐのは `/run/user` と、`/run/docker.sock`・`/var/run/docker.sock` だけ。ほかの場所のソケット（rootful の podman・containerd など）と、ネットワーク越しの `DOCKER_HOST`（tcp）は塞げない。
 - **`/mnt` を覆うので、Windows 側の実行ファイル（`powershell.exe`・`code` など）は内側で呼べない。** `PATH` に `/mnt/c/...` があっても、内側では存在しない。
+- **WSL2 の名前解決は、`/mnt/wsl/resolv.conf` だけを見せて保つ。** WSL2 では `/etc/resolv.conf` がそのファイルへのリンクで、`/mnt` を覆うと内側の名前解決が壊れる（npm・pip・curl が `EAI_AGAIN`。2026-11-12 の配備後の確認で発見。`uv` はキャッシュで動くため、先の確認では見つからなかった）。共有設定の `visible.read` に、そのファイル 1 つだけを書いてある（`/mnt/wsl` 全体や Windows のドライブは見せない）。自己確認に「名前解決が内側でも動く」がある。
 - **GPU のデバイスをさらす**ため、内側のコードにドライバの入口が開く（攻撃面は広がる。推測）。GPU の使用を制限する機能はない。
 - **標準のキャッシュは書き込み可**（`visible.write`）。ホストが後で使う成果物（wheel・hook の環境・モデル）を、内側から差し替えられる。Hugging Face は、認証（`token`・`stored_tokens`）が同居するので、`hub`・`datasets` の下だけにし、認証は `hide` にも入れてある。
 - **git の保護は限定的**:

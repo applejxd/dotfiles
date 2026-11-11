@@ -124,6 +124,28 @@ def test_shipped_config_is_valid_and_hides_credentials():
     assert {"GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK"} <= set(cfg.env_unset)
 
 
+def test_shipped_config_shows_only_the_wsl_resolv_conf_under_mnt():
+    """WSL2 の /etc/resolv.conf は /mnt/wsl/resolv.conf へのリンク。/mnt を覆うと名前解決が壊れる。
+    そのファイル 1 つだけを、読み取り専用で見せる。"""
+    cfg = runner.parse_config(SHIPPED_CONFIG.read_text(encoding="utf-8"))
+    assert "/mnt/wsl/resolv.conf" in cfg.visible_read
+    assert "/mnt/wsl/resolv.conf" not in cfg.visible_write
+    shown = [*cfg.visible_read, *cfg.visible_write]
+    assert not any(p in ("/mnt", "/mnt/wsl", "/mnt/c") or p.startswith("/mnt/c/") for p in shown)
+
+
+def test_shell_pre_binds_the_wsl_resolv_conf_after_masking_mnt():
+    """/mnt を覆ったあとに、resolv.conf だけを重ねる (順序が逆だと消える)。WSL でない機 (ファイルが無い) では何もしない。"""
+    cfg = runner.parse_config(SHIPPED_CONFIG.read_text(encoding="utf-8"))
+    bind = ["--ro-bind", "/mnt/wsl/resolv.conf", "/mnt/wsl/resolv.conf"]
+    pre, _ = runner.build_shell_pre(cfg, "/w/ws", shell_fake(files={"/mnt/wsl/resolv.conf"}).host())
+    tmpfs_mnt = next(i for i, a in enumerate(pre) if a == "--tmpfs" and pre[i + 1] == "/mnt")
+    at = next(i for i in range(len(pre)) if pre[i : i + 3] == bind)
+    assert at > tmpfs_mnt
+    plain, _ = runner.build_shell_pre(cfg, "/w/ws", shell_fake().host())
+    assert "/mnt/wsl/resolv.conf" not in plain
+
+
 def test_shipped_config_never_makes_the_whole_huggingface_cache_writable():
     """~/.cache/huggingface には認証 (token・stored_tokens) が同居する。モデルとデータセットの下だけを書き込み可にする。"""
     cfg = runner.parse_config(SHIPPED_CONFIG.read_text(encoding="utf-8"))
@@ -1372,6 +1394,26 @@ def test_real_sandbox_shows_a_symlinked_visible_path_under_its_written_name(tmp_
     result = run_in_sandbox(tmp_path, conf, script, home=home)
     assert result.returncode == 0, result.stderr
     assert result.stdout.split() == ["PAPER", "write=ro"]
+
+
+def _wsl_resolv_conf_in_mnt():
+    link = Path("/etc/resolv.conf")
+    target = Path("/mnt/wsl/resolv.conf")
+    return link.is_symlink() and target.exists() and os.path.realpath(link) == str(target)
+
+
+@needs_bwrap
+@pytest.mark.skipif(
+    not _wsl_resolv_conf_in_mnt(), reason="WSL2 ではない (/etc/resolv.conf が /mnt/wsl を指さない)"
+)
+def test_real_sandbox_keeps_etc_resolv_conf_readable_on_wsl(tmp_path):
+    """実際の WSL2 で、/mnt を覆っても /etc/resolv.conf が読める (内側の名前解決が動く条件)。同梱の設定で確かめる。"""
+    shipped = SHIPPED_CONFIG.read_text(encoding="utf-8")
+    result = run_in_sandbox(tmp_path, shipped, "grep -c '^nameserver' /etc/resolv.conf; ls /mnt")
+    assert result.returncode == 0, result.stderr
+    out = result.stdout.split()
+    assert int(out[0]) >= 1
+    assert out[1:] == ["wsl"]  # /mnt の中は wsl だけ (Windows のドライブは見えない)
 
 
 @needs_bwrap
