@@ -247,6 +247,7 @@ def test_pi_sandbox_runner_is_linux_only(tmp_path, os_name, ignored):
     rendered = render(home=str(tmp_path), os_name=os_name)
     targets = (
         ".local/bin/pi-sandbox-runner",
+        ".local/bin/pib",
         ".config/pi-sandbox",
         ".config/pi-sandbox/**",
         ".pi/agent/pi-sandbox.json",

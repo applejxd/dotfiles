@@ -9,6 +9,38 @@ pi の sandbox 拡張 `@yuru7/pi-sandbox` の `runnerCommand` に差す、設定
 - `pis`（pi 全体を Fence で包む。凍結。[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)）とは別物。守りの強さは「うっかり防止」（悪意への耐性は求めない）。
 - 隔離の単位を環境にする方針（[ADR-0027](../../adr/0027-isolation-unit-is-environment.md)）の代わりではない。docker・compose を内側で使う開発は、ここでは扱わない（docker を塞ぐ）。
 
+### 隔離の層（どこに境界を引くか）
+
+判断の層（`pi-permission-system`・`cc-safety-net`。実行前の許可・確認・拒否。境界ではなく「うっかり防止」）の下に、実行の隔離が 4 通りある。
+
+| 層 | 何を包むか | LLM の認証 | 例 |
+| --- | --- | --- | --- |
+| a. pi ごと | pi のプロセス全体 | 内側 | `pi-safe`、Docker（`pi-less-yolo`）、`pis`（凍結） |
+| **b. ツールだけ（同じホスト）** | bash のサブプロセス。パスはホストのまま | 外側 | **この runner（`pib`）**、`pi-permission-modes` |
+| c. ツールを別環境へ（ツール隔離） | ツールの実行先（別の OS・ファイルシステム） | 外側 | `ssh.ts`（公式の例）、Gondolin |
+| d. 環境ごと | エージェントも docker も環境の中 | 環境ごと | 専用 WSL・Incus・devcontainer（[ADR-0027](../../adr/0027-isolation-unit-is-environment.md) の P3） |
+
+```text
+pi 本体・LLM 認証（外側）
+ ├ 判断: pi-permission-system / cc-safety-net
+ └ bash ツール → @yuru7/pi-sandbox（書き込みの防護・昇格の承認）
+                  → pi-sandbox-runner（GPU・隠蔽・docker・git を足す）
+                     → bwrap（カーネルの namespace）→ 内側のコマンド
+```
+
+b と c は、どちらも「ツールだけ」を包む。違いは、b が**隠す一覧に書いたものだけ**を隠す（拒否リスト型。パスはそのまま使えて手軽）のに対し、c は**マウントしたものだけ**を見せる（許可リスト型。環境の準備が要る）こと。
+
+### 起動の選択肢（隔離の強さと手軽さ）
+
+| 起動 | 層 | 守り・手軽さ | 確認 |
+| --- | --- | --- | --- |
+| `pi` | 判断だけ | 隔離なし。最も手軽 | — |
+| `pib` | b | 書き込みを絞る・秘密を隠す・docker 遮断。GPU 可。通信は無制限。実行中は `/permission` で弱める・強める | 実測 |
+| `pi -e npm:pi-permission-modes@2.7.2 --perm build` | b | 秘密を隠す・通信を許可リストで絞る・docker 遮断。GPU 不可。`alt+m` でモードを切り替える | 実機で確認（`-e npm:` の形での起動は未確認） |
+| `pi -e <ssh.ts> --ssh root@host:/work` | c | read・write・edit・bash が環境の中で動く。GPU・compose は環境が持つ。環境の準備が要る | 使い捨てのコンテナで試験（[調査記録](../../research/agents/pi-gpu-sandbox-2026-11.md#sshts-によるツール委譲の試験)） |
+
+b の 2 つは、どちらも bash を差し替えるので、1 つのセッションでは併用できない。
+
 ## 部品
 
 | 部品 | 置き場（source state） | 配備先 |
@@ -16,6 +48,7 @@ pi の sandbox 拡張 `@yuru7/pi-sandbox` の `runnerCommand` に差す、設定
 | runner | `home/dot_local/bin/executable_pi-sandbox-runner` | `~/.local/bin/pi-sandbox-runner` |
 | 設定 | `home/dot_config/pi-sandbox/runner.toml` | `~/.config/pi-sandbox/runner.toml` |
 | 拡張の設定 | `home/dot_pi/agent/create_pi-sandbox.json.tmpl` | `~/.pi/agent/pi-sandbox.json`（無いときだけ作る） |
+| 起動 | `home/dot_local/bin/executable_pib` | `~/.local/bin/pib` |
 | 実機の確認 | `scripts/pi_sandbox_selftest.py` | `python3 scripts/pi_sandbox_selftest.py`（リポジトリ直下で実行） |
 | 試験 | `test/test_pi_sandbox_runner.py` | — |
 
@@ -68,7 +101,9 @@ protect = true
 ## 導入と確認
 
 1. `chezmoi apply` で、上の部品が配備される（`pi-sandbox.json` は無いときだけ作る。既にあるなら、`runnerCommand` と `runnerFailureSignatures` を手で足す）。
-2. 拡張を入れる: `pi install npm:@yuru7/pi-sandbox@0.5.0`（版は固定する）。
+2. **`pib` で起動する。** `pi -e npm:@yuru7/pi-sandbox@0.5.0` を呼ぶだけ。初回に拡張を自動で取得し（`~/.pi/agent/tmp/extensions/` にキャッシュ。版を固定しているので再確認はしない）、以降はキャッシュを使う。
+   - runner・設定・`pi-sandbox.json` の `runnerCommand` のどれかが足りないときは、**起動しない**（拡張が既定の runner に黙って切り替わり、GPU も秘密の隠蔽も効かなくなるため）。`chezmoi apply` で配備する。
+   - `settings.json` の `packages` には入れない（`chezmoi apply` が stock の一覧で上書きするため）。`pi install` も使わない。
 3. `python3 scripts/pi_sandbox_selftest.py` で、書き込み・秘密の隠蔽・docker の遮断・git の保護・GPU の CUDA カーネルを内側から確かめる（GPU が無い機は SKIP）。
 4. pi の中で `/permission` を開き、runner が `custom` になっていることを見る（コードでは `runnerCommand` があると `custom` を返す。画面の表示は未確認）。
 
@@ -78,7 +113,7 @@ protect = true
 
 runner は、拡張が `<runner> <引数> -- <コマンド>` の形で呼ぶことと、bwrap の引数の中で `--dev /dev` が `--` より前にあることに依存する。拡張の内部の並びで、公開の契約ではない。**更新で GPU が黙って使えなくなる**ことがある。
 
-1. 版は `npm:@yuru7/pi-sandbox@<版>` で固定する。
+1. 版は `home/dot_local/bin/executable_pib` の `EXTENSION`（`npm:@yuru7/pi-sandbox@<版>`）で固定する。この文書の版の記述と一致しているかは、試験が確かめる。
 2. 更新前に、変更履歴と、`src/runners.ts` の `bwrapProfileArgs`・`src/confine.ts` の `runnerCommand` の組み立てを読み、並びが同じか確かめる。
 3. `python3 scripts/pi_sandbox_selftest.py`（拡張 0.5.0 の引数の再現で確認）に加えて、**実拡張でも確かめる**: 使い捨ての作業ディレクトリで、`PI_CODING_AGENT_DIR` に `pi-sandbox.json` を置いた一時の場所を指すか、配備した設定のまま、`pi -p` で「`sh ./probe.sh` を 1 回実行して出力を返す」を依頼し、GPU・docker・hooks を見る。
 4. 試験（`test/test_pi_sandbox_runner.py`）の「GPU は `--dev /dev` の後」の引数は 0.5.0 のものを写している。拡張の並びが変わったら、試験も直す。

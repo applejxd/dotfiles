@@ -29,6 +29,16 @@ runner = importlib.util.module_from_spec(_spec)
 sys.modules[_loader.name] = runner
 _loader.exec_module(runner)
 
+PIB = ROOT / "home" / "dot_local" / "bin" / "executable_pib"
+SPEC = ROOT / "docs" / "spec" / "sandbox" / "pi-sandbox-runner.md"
+
+_pib_loader = importlib.machinery.SourceFileLoader("pib_under_test", str(PIB))
+_pib_spec = importlib.util.spec_from_loader(_pib_loader.name, _pib_loader)
+assert _pib_spec
+pib = importlib.util.module_from_spec(_pib_spec)
+sys.modules[_pib_loader.name] = pib
+_pib_loader.exec_module(pib)
+
 MINIMAL = "version = 1\n"
 
 # runner は bwrap と os.getuid() を使う Linux 専用。設定の検証と引数の組み立て (純粋な部分) だけは、どの OS でも回す
@@ -524,3 +534,116 @@ def test_real_sandbox_keeps_a_hidden_git_dir_hidden(tmp_path):
     result = run_in_sandbox(tmp_path, conf, [work], script)
     assert result.returncode == 0, result.stderr
     assert result.stdout.split() == ["0", "0"]
+
+
+# --- pib (拡張つきの起動) ------------------------------------------------------
+
+
+def make_setup(tmp_path, *, settings=None, runner=True, config=True):
+    """配備済みの HOME を作る。settings が None なら正しい拡張の設定を置く。"""
+    home = tmp_path / "home"
+    (home / ".local" / "bin").mkdir(parents=True)
+    (home / ".config" / "pi-sandbox").mkdir(parents=True)
+    (home / ".pi" / "agent").mkdir(parents=True)
+    if runner:
+        path = home / ".local" / "bin" / "pi-sandbox-runner"
+        path.write_text("#!/bin/sh\n", encoding="utf-8")
+        path.chmod(0o755)
+    if config:
+        (home / ".config" / "pi-sandbox" / "runner.toml").write_text(MINIMAL, encoding="utf-8")
+    if settings is None:
+        settings = {
+            "runnerCommand": [str(home / ".local" / "bin" / "pi-sandbox-runner")],
+            "runnerFailureSignatures": ["pi-sandbox-runner:", "bwrap:"],
+        }
+    if settings is not False:
+        (home / ".pi" / "agent" / "pi-sandbox.json").write_text(
+            json.dumps(settings), encoding="utf-8"
+        )
+    return home
+
+
+def test_pib_pins_the_extension_version_written_in_the_docs():
+    assert pib.EXTENSION.startswith("npm:@yuru7/pi-sandbox@")
+    assert pib.EXTENSION in SPEC.read_text(encoding="utf-8")
+
+
+def test_pib_accepts_a_complete_setup(tmp_path):
+    assert pib.problems({}, make_setup(tmp_path)) == []
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "needle"),
+    [
+        ({"runner": False}, "runner が無い"),
+        ({"config": False}, "runner の設定が無い"),
+        ({"settings": False}, "拡張の設定を読めない"),
+        ({"settings": {}}, "runnerCommand"),
+        (
+            {"settings": {"runnerCommand": ["/usr/bin/bwrap"], "runnerFailureSignatures": ["x"]}},
+            "runnerCommand",
+        ),
+        ({"settings": {"runnerCommand": ["/x/pi-sandbox-runner"]}}, "runnerFailureSignatures"),
+        ({"settings": []}, "runnerCommand"),
+    ],
+)
+def test_pib_names_what_is_missing(tmp_path, kwargs, needle):
+    found = pib.problems({}, make_setup(tmp_path, **kwargs))
+    assert any(needle in line for line in found), found
+
+
+def test_pib_honours_the_agent_dir_and_config_overrides(tmp_path):
+    home = make_setup(tmp_path, settings=False, config=False)
+    agent = tmp_path / "agent"
+    agent.mkdir()
+    (agent / "pi-sandbox.json").write_text(
+        json.dumps({"runnerCommand": ["/x/pi-sandbox-runner"], "runnerFailureSignatures": ["x"]}),
+        encoding="utf-8",
+    )
+    conf = tmp_path / "elsewhere.toml"
+    conf.write_text(MINIMAL, encoding="utf-8")
+    env = {"PI_CODING_AGENT_DIR": str(agent), "PI_SANDBOX_RUNNER_CONFIG": str(conf)}
+    assert pib.problems(env, home) == []
+
+
+def run_pib(home, fake_pi_dir, args=()):
+    env = {"HOME": str(home), "PATH": f"{fake_pi_dir}{os.pathsep}{os.environ['PATH']}"}
+    return subprocess.run(
+        [sys.executable, str(PIB), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        timeout=30,
+        check=False,
+    )
+
+
+def fake_pi(tmp_path):
+    """引数を記録するだけの pi。"""
+    bin_dir = tmp_path / "fakebin"
+    bin_dir.mkdir()
+    pi = bin_dir / "pi"
+    pi.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" > "{tmp_path}/pi-args"\n', encoding="utf-8")
+    pi.chmod(0o755)
+    return bin_dir
+
+
+@linux_only
+def test_pib_runs_pi_with_the_pinned_extension_and_passes_arguments_through(tmp_path):
+    result = run_pib(make_setup(tmp_path), fake_pi(tmp_path), ["-p", "hello"])
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "pi-args").read_text(encoding="utf-8").split("\n")[:-1] == [
+        "-e",
+        pib.EXTENSION,
+        "-p",
+        "hello",
+    ]
+
+
+@linux_only
+def test_pib_does_not_start_pi_when_the_setup_is_incomplete(tmp_path):
+    result = run_pib(make_setup(tmp_path, runner=False), fake_pi(tmp_path))
+    assert result.returncode == 2
+    assert result.stderr.startswith("pib:")
+    assert not (tmp_path / "pi-args").exists()  # pi は起動していない

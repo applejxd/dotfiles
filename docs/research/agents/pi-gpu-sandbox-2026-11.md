@@ -71,6 +71,22 @@
 - Claude Code の sandbox 向けの GPU 対応ラッパー（[gist](https://gist.github.com/wassname/c1d2d99097f9a91bbff52b613658caff)）。
 - `pearu/agent-sandbox` の PR #244（GPU を既定で通す）、`didvc/ai-bwrap` の PR #13（`--dev-bind` の追加。nodev で開けない問題を説明）。
 
+## ssh.ts によるツール委譲の試験
+
+pi をホストに置き、read・write・edit・bash の実行を別の環境へ送る構成（公式の例 `examples/extensions/ssh.ts`）を、使い捨てのコンテナで試した（2026-11-12）。
+
+- **構成**: `debian:12` に openssh-server・python3 を入れたコンテナ（428 MB、ビルド 25 秒）。`--gpus all`、`127.0.0.1:2222` へ公開、プロジェクトを `/work` にマウント。`ssh.ts` は `host:port` を受け付けないので、PATH の `ssh` を、`-p 2222 -i <使い捨ての鍵>` を足す薄いラッパーに差し替えた。
+- **結果**: `pi -p -e ssh.ts --ssh root@localhost:/work` で、
+  - bash がコンテナの中で動いた（`ls -A ~` はコンテナのホーム。ホストの鍵は無い）。
+  - CUDA カーネルが動いた（`kernel=ok`）。
+  - read ツールが README を読み、write ツールが作った `NOTE.txt` が、ホスト側のプロジェクトに反映された（所有者はホストの自分）。
+- **費用**: ssh 1 回（新規接続）が約 0.2 秒（10 回の平均 217 ms）。
+- **制約**: `ssh.ts` は read・write・edit・bash の 4 つだけを差し替える（grep・find・ls と、他の拡張のツールはホスト）。プロジェクトを環境の中に置く手間（マウントか同期）と、worktree の `.git` の扱いが課題。
+
+## `pi -e npm:` での起動（2026-11-12）
+
+`pi -e npm:@yuru7/pi-sandbox@0.5.0` は、初回に拡張を自動で取得し（28 パッケージ、約 2 秒。起動まで 8 秒）、`~/.pi/agent/tmp/extensions/` にキャッシュする。2 回目は 5 秒。版を固定した指定は、再確認されない（pi 公式の packages の文書）。stock の拡張（`pi-permission-system`・`cc-safety-net` など）を残したままでも、HOME への書き込みが拒否された。
+
 ## 限界・未検証
 
 - 対話での確認画面の使い勝手、`pi-permission-modes` の `default` モード（毎回確認）、サブエージェントとの併用は未検証。
