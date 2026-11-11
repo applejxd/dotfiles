@@ -123,6 +123,32 @@
 
 当時の教訓（[CHG-0033](closed/0033-sandbox-build-value-assessment.md)）: 既存の囲い（Fence）の穴（`denyWrite` が未存在のパスに効かない、通信の中継、入れ子ができない）を自作で埋めた結果、自作層が約 2,266 行になり、直近 2 週間で 13 コミットの保守が続いた。**既存の囲いの穴は、自作で埋めず、「保証しない」と書くか別の囲いに替える**を、境界の規則に足す。
 
+### 実測: Fence を `shellPath` の先に置く（2026-11-12）
+
+使い捨ての作業ツリー（`.tmp/handson/fence-spike/`。git 管理外）で試した。pi 1.5.0・Fence 0.1.67・WSL2。作業ツリーの `.pi/settings.json` に `shellPath` を置き、呼ばれたことを囲いの外のログで確かめた。
+
+| 試験 | 結果 |
+| --- | --- |
+| pi の bash ツールが `shellPath` を通る。HOME への書き込みは止まる | 通った（呼び出しがログに残り、`touch` が拒否された） |
+| `bg_run` が `shellPath` を通る（A1） | 通った（HOME への書き込みが止まった） |
+| 利用者の bash（`!` と同じ経路。RPC の `bash`）が `shellPath` を通る（A2） | 通った（止まった）。TUI での `!` は未確認 |
+| 子エージェント（`worker`）の bash が `shellPath` を通る（A6） | 通った（呼び出しがログに残った）。子が HOME へ書く試験は、権限の層（`external_directory`）が先に拒否したので、囲いでの確認は未実施 |
+| GPU（`/dev/dxg`） | 通った（`nvidia-smi -L` が RTX 3070 を認識。`devices.allow`） |
+| 秘密・履歴・Windows ドライブ（B1） | 見えない（`defaultDenyRead` の許可リスト方式。`.bash_history`・`.ssh`・`.config/gh`・`/mnt/c` など） |
+| `/tmp` のソケット（A7） | 見えない（`/tmp` は内側専用） |
+| `/run/user`（rootless docker のソケット） | **既定では見える**。`denyRead` に `/run/user` を足して塞いだ |
+| `.git/config`・`.git/hooks` | 書けない（保護対象にしたとき）。`git commit` はできる |
+| 標準のキャッシュ（`~/.cache/uv`）（C3） | `allowWrite` に足せば書ける。足していない `~/.cache` 直下は書けない |
+| 通信（B3・D8） | 許可したドメインだけ通る（`example.com` は通り、`github.com` は止まる） |
+| git の worktree | `.` だけでは `git` が動かない（`gitdir` が外）。設定の生成で `gitdir`・`commondir` を足せば、`commit` もでき、共有の `hooks`・`config` は書けない |
+| 1 コマンドあたりの遅さ | **約 1 秒**（囲いなし 約 5 ミリ秒、`bwrap` 直接 約 8 ミリ秒）。設定を空にしても同じ。原因は未調査 |
+
+読み取り:
+
+- Fence は、洗い出した問題の多く（A1・A2・A6・A7・B1・B3・C3）を、設定だけで塞いだ。自作は、設定の生成（worktree の `gitdir`・`commondir` の追加を含む）だけで済む。
+- 代償は 2 つ。**1 コマンドごとの約 1 秒**と、許可リスト方式の**道具の置き場の保守**（`allowRead`）。[CHG-0033](closed/0033-sandbox-build-value-assessment.md) の利用者の回答で、使わなかった理由に挙がった「許可の追加が面倒」と同じ種類の摩擦になりうる。
+- 未確認: `read`・`write`・`edit`（プロセス内のツールは囲いの外。権限の層に任せる前提）、MCP・拡張のプロセス、TUI の `!`、実際の開発作業での使い勝手。
+
 ## 未解決点
 
 判断が要ること。推奨は、段 3 の境界を「入口を 1 つ・方針を 1 か所・拡張に依存しない」にそろえる前提で書いた。
@@ -142,7 +168,7 @@
 
 | 不確実性 | 方法 |
 | --- | --- |
-| 閉じ込めの部品を自作せず、既存の sandbox の CLI（`srt`・`landrun`・`firejail`・`nono` など）を `shellPath` の先に置けるか。条件は、GPU（`/dev/dxg`）が通る・「読ませない場所」を隠せる・`/tmp` を分けられる・`.git` の一部を読み取り専用にできる | 各 CLI で、使い捨ての作業ツリーに対し、条件の 4 つを実機で試す。これまでの比較（[調査記録](../research/agents/sandbox-alternatives-comparison.md)）は、文書を読んだだけで動かしておらず、GPU は原文に記述なし。ADR-0031 の順序（既存の評価が先）に従う |
+| （Fence は 2026-11-12 に実測済み。結果は「現在地」。他の CLI は未評価）閉じ込めの部品を自作せず、既存の sandbox の CLI（`landrun`・`firejail`・`nono` など）を `shellPath` の先に置けるか。条件は、GPU（`/dev/dxg`）が通る・「読ませない場所」を隠せる・`/tmp` を分けられる・`.git` の一部を読み取り専用にできる | 各 CLI で、使い捨ての作業ツリーに対し、条件の 4 つを実機で試す。これまでの比較（[調査記録](../research/agents/sandbox-alternatives-comparison.md)）は、文書を読んだだけで動かしておらず、GPU は原文に記述なし。ADR-0031 の順序（既存の評価が先）に従う |
 | 案 X（`shellPath`）が、`bg_run`・`!`・子の pi プロセスを実際に包めるか | 使い捨ての agent dir で、`shellPath` に bwrap のラッパーを差し、各経路から HOME への書き込みを試す |
 | `read` ツールでの秘密の読み取りが、権限の層で止まるか（A4） | 無害な（秘密でない）ファイルを deny ルールの一時的な対象にして試す |
 | 層 b の sandbox が、子エージェントの bash を包むか（A6） | 子の `worker` に HOME への書き込みを実行させる |
@@ -169,7 +195,7 @@
 | 現状 | bash だけ（拡張） | 複数（権限ポリシー・共通設定・`runner.toml`・`pi-sandbox.json`） | runner（約 280 行）と `pib` | 抜け道が多い（A1・A2）。継ぎ足しで塞ぐと増える |
 | 案 Y（現状＋シェル層） | bash は拡張、`bg_run`・`!` は `shellPath` | 同上＋ラッパーの設定 | 2 部品 | 継ぎ足し（入口 2・方針 2）。採らない |
 | **案 X（シェル層に一元化）** | `shellPath` の 1 部品。bash・`bg_run`・`!`・子の pi | 権限ポリシー（読ませない場所）＋ `runner.toml`（閉じ込めの追加設定だけ） | 1 部品（bwrap の引数を組み立てる runner のシェルモード）。拡張は外す。隔離の実体は既存の bubblewrap | 有望（未検証。次の調査の 2 行目） |
-| **案 X′（案 X の部品を既存の CLI にする）** | `shellPath` の先が、既存の sandbox の CLI。最有力は Fence（入手済みで、GPU は `devices.allow` で通る実測あり。穴は当時の記録のとおり） | 同上（CLI の設定を生成） | 設定の生成だけ（部品は自作しない。穴は自作で埋めない） | 未評価。通れば自作が最小になる（次の調査の 1 行目） |
+| **案 X′（案 X の部品を既存の CLI にする）** | `shellPath` の先が、既存の sandbox の CLI。最有力は Fence（入手済みで、GPU は `devices.allow` で通る実測あり。穴は当時の記録のとおり） | 同上（CLI の設定を生成） | 設定の生成だけ（部品は自作しない。穴は自作で埋めない） | **実測で成立**（上の「実測: Fence を `shellPath` の先に置く」）。代償は 1 コマンド約 1 秒と、許可リストの保守 |
 | 層 c（`ssh.ts`） | ツールを別環境へ | 環境側 | 環境の運用 | 子の穴・スキルの read・大きな書き込みで不利（[調査記録](../research/agents/pi-gpu-sandbox-2026-11.md#sshts-によるツール委譲の試験)）。別案件 |
 
 ### 責務の分担（案 X の場合）
@@ -212,3 +238,4 @@
 | 2026-11-12 | 起票。問題の洗い出し（段 1）を完了し、キャッシュ領域の変更（段 5）を保留にした | `pib` を実機で使い、`bg_run` が sandbox の外で動くこと、キャッシュに書けないことを確認した。利用者が、継ぎ足しを避け、境界を決めることを求めた |
 | 2026-11-12 | 「自前だけで sandbox するのか」への整理を反映。自作は引数の組み立てだけで、隔離の実体は既存の bubblewrap。既存の CLI を `shellPath` の先にできるかの評価（案 X′）を、次の調査の 1 行目に足した | 既存の評価が先（[ADR-0031](../adr/0031-evaluate-existing-extensions-first.md)）。これまでの比較は動かしておらず、GPU の記述がない |
 | 2026-11-12 | 凍結前の検討を見返して反映（CHG-0023 の候補 E = bash だけを Fence に通す案は、範囲を理由に見送り済み。Fence は GPU を通せる実測がある）。「既存の囲いの穴を自作で埋めない」を境界の規則に足した | 利用者の指摘。[CHG-0023](closed/0023-guard-terminology.md)・[CHG-0029](closed/0029-worktree-isolation.md)・[CHG-0033](closed/0033-sandbox-build-value-assessment.md) |
+| 2026-11-12 | Fence を `shellPath` の先に置く実測を記録した（bash・`bg_run`・`!` 相当・子の bash が囲いを通る。GPU・秘密・`/tmp`・通信・キャッシュも設定で通る。代償は 1 コマンド約 1 秒と許可リストの保守） | 利用者が囲いなし（yolo）で起動し直して、試験を依頼した |
