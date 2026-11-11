@@ -506,6 +506,17 @@ stock にしても何も消えず、`chezmoi apply` が配備しなくなり、�
 | `~/.pi/agent/keybindings.json` | 配る | 同じ（自作の拡張のキーを含まないため） |
 | 他の CLI（Claude・Codex・OpenCode など）・`pis`・`pk` | そのまま | そのまま（触らない） |
 
+### Windows の `.config/pi`（2026-11-11）
+
+- **症状**: Windows の機で、stock が既定になった（2026-11-10）あとの `chezmoi apply` が、`chezmoi: .config/pi: inconsistent state (…\dot_config\pi, remove)` で止まった。
+- **原因**（再現した。試験 `test_chezmoi_stops_when_a_deployed_dir_is_both_unignored_and_removed`）: 次の 3 つが重なると、chezmoi は止まる。
+  1. `.chezmoiignore.tmpl` の Windows の節が `!.config/pi/` で除外を外し、`.config/pi` が管理対象になる（フルガードを Windows にも配すため。custom の都合）。
+  2. `.chezmoiremove` が、stock のとき `.config/pi` を削除の対象にする。
+  3. 以前の custom で配備済みの `.config/pi` が、その機にある。
+  - ソース（`dot_config/pi`）と削除（`remove`）が同じ対象を指すので、`inconsistent state` になる。Linux・macOS は `!.config/pi/` が無く、`.config/pi` が除外されるので起きない。
+- **直し方**: `!.config/pi/`（と `landlock_exec.py` の除外）を、**custom のときだけ**出す。stock は、どの OS でも `.config/pi` を除外のままにする（試験 `test_stock_never_unignores_config_pi`）。
+- **すでに止まっている機の回避策**: 配備済みの `~/.config/pi`（自作のハーネス。stock では使わない）を削除してから `chezmoi apply`。削除の対象が実在しなければ、衝突しない（修正を取り込む前でも通る）。
+
 ### permission-system の設定（stock）
 
 stock の確認画面は package `@gotgenes/pi-permission-system`。設定ファイルが無いと**全部のツール呼び出しを ask にする**ので、
@@ -660,7 +671,7 @@ chezmoi apply
 ### Windows
 
 プロファイルの判定は Windows でも同じ（`%USERPROFILE%\.config\chezmoi\pi-profile` か環境変数）。
-Windows 実機では未検証（`.chezmoiignore.tmpl` の Windows 向けの戻し `!.config/pi/` との兼ね合いを含む）。
+Windows 実機では、stock の既定に切り替えた直後に `.config/pi: inconsistent state` で apply が止まった（2026-11-11。下の「Windows の `.config/pi`」）。直したあとの実機での確認は未実施。
 
 試験は `test/test_pi_profile.py`（`chezmoi execute-template` で描画して確かめる。実機の apply は行わない）。
 

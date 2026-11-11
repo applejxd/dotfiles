@@ -61,6 +61,7 @@ def render(
     bw_session: str = "",
     os_name: str = "linux",
     data: dict | None = None,
+    pi_profile: str = "",
 ) -> set[str]:
     context = {
         "chezmoi": {
@@ -76,6 +77,10 @@ def render(
         env["BW_SESSION"] = bw_session
     else:
         env.pop("BW_SESSION", None)
+    if pi_profile:
+        env["CHEZMOI_PI_PROFILE"] = pi_profile
+    else:
+        env.pop("CHEZMOI_PI_PROFILE", None)  # 既定 (stock)
     rendered = execute_with_context(IGNORE_TEMPLATE, context, env)
     return {line.strip() for line in rendered.splitlines()}
 
@@ -132,8 +137,9 @@ WINDOWS_PI_IGNORES = (
 
 
 def test_pi_settings_and_the_full_guard_are_deployed_on_windows(tmp_path):
-    windows = render(home=str(tmp_path), os_name="windows")
-    linux = render(home=str(tmp_path), os_name="linux")
+    # フルガード (.config/pi) を Windows にも配るのは custom のときだけ (stock は下の試験)
+    windows = render(home=str(tmp_path), os_name="windows", pi_profile="custom")
+    linux = render(home=str(tmp_path), os_name="linux", pi_profile="custom")
     for target in WINDOWS_PI_IGNORES:
         assert target in windows, target
         assert target not in linux, target
@@ -148,6 +154,53 @@ def test_pi_settings_and_the_full_guard_are_deployed_on_windows(tmp_path):
     # settings / keybindings / AGENTS.md の .pi/ は Windows にも配る (丸ごとの除外は無い)
     assert ".pi/" not in windows and ".pi/**" not in windows
     assert ".config/*" in windows
+
+
+@pytest.mark.parametrize("os_name", ["windows", "linux", "darwin"])
+def test_stock_never_unignores_config_pi(tmp_path, os_name):
+    """stock では、どの OS でも .config/pi を除外したままにする。
+
+    .chezmoiremove は stock のとき `.config/pi` を消す対象にする。除外が外れる (`!.config/pi/`) と、
+    配備済みの .config/pi がある機で「.config/pi: inconsistent state (dot_config/pi, remove)」で apply が止まる
+    (2026-11-11 に Windows の機で発生)。
+    """
+    ignored = render(home=str(tmp_path), os_name=os_name)  # 既定は stock
+    assert ".config/pi" in ignored and ".config/pi/**" in ignored
+    assert not [line for line in ignored if line.startswith("!.config/pi")], os_name
+
+
+def test_custom_still_deploys_the_full_guard_only_on_windows(tmp_path):
+    windows = render(home=str(tmp_path), os_name="windows", pi_profile="custom")
+    linux = render(home=str(tmp_path), os_name="linux", pi_profile="custom")
+    assert "!.config/pi/" in windows
+    assert "!.config/pi/" not in linux
+    assert ".config/pi" not in windows  # custom は .config/pi を丸ごとは除外しない
+
+
+def test_chezmoi_stops_when_a_deployed_dir_is_both_unignored_and_removed(tmp_path):
+    """上の試験の前提 (chezmoi の挙動): 除外が外れたディレクトリを .chezmoiremove も指し、配備済みなら、apply が止まる。"""
+    chezmoi = chezmoi_bin()
+
+    def run(unignore: bool) -> subprocess.CompletedProcess:
+        base = tmp_path / ("a" if unignore else "b")
+        src, dst = base / "src", base / "dst"
+        (src / "dot_config" / "pi" / "harness").mkdir(parents=True)
+        (src / "dot_config" / "pi" / "harness" / "x.ts").write_text("x", encoding="utf-8")
+        (dst / ".config" / "pi" / "harness").mkdir(parents=True)
+        (dst / ".config" / "pi" / "harness" / "x.ts").write_text("old", encoding="utf-8")
+        ignore = ".config/pi\n.config/pi/**\n" + ("!.config/pi/\n" if unignore else "")
+        (src / ".chezmoiignore").write_text(ignore, encoding="utf-8")
+        (src / ".chezmoiremove").write_text(".config/pi\n", encoding="utf-8")
+        (base / "cfg.toml").write_text("", encoding="utf-8")
+        return subprocess.run(
+            [chezmoi, "diff", "--source", str(src), "--destination", str(dst), "--config", str(base / "cfg.toml"),
+             "--cache", str(base / "cache"), "--persistent-state", str(base / "state.boltdb")],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+        )
+
+    broken = run(unignore=True)
+    assert "inconsistent state" in broken.stderr, broken.stderr
+    assert run(unignore=False).returncode == 0
 
 
 def test_git_user_and_ignore_are_deployed_on_windows(tmp_path):
