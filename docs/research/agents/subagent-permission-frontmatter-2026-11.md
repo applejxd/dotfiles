@@ -31,4 +31,4 @@ agent ファイルの frontmatter の `permission:` で、`external_directory` �
 ## 結論
 
 組み込みの agent を写し、`permission: { external_directory: deny }` を足す。設定（`subagents.agentOverrides`）は `permission` を扱えないので、ファイルの写しが要る。
-詳細と維持費・撤去条件は [pi-subagents の設定（stock）](../../spec/agent-config-generation.md#pi-subagents-の設定stock)。
+詳細と維持費・撤去条件は [pi-subagents の設定（stock）](../../spec/agent-config-generation.md#pi-subagents-の設定)。

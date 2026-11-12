@@ -25,15 +25,6 @@ sdist/
 var/
 wheels/
 
-# Re-include hook helper library (Python の build artifact ではなく chezmoi の
-# 配布対象。`lib/` の gitignore に巻き添えで除外されないよう明示的に例外化)
-!home/dot_claude/hooks/lib/
-!home/dot_claude/hooks/lib/**
-# ただし hook 実行時に生成される bytecode cache は除外したまま
-# ★入れ子のパッケージ (bashrules/ など) も含める。直下だけを書くと、上の
-#   `!.../lib/**` が入れ子の __pycache__ まで除外解除してしまう。
-home/dot_claude/hooks/lib/__pycache__/
-home/dot_claude/hooks/lib/**/__pycache__/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
@@ -187,19 +178,9 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/python
 .tmp/
 
-# 隔離版 OpenCode の作業領域 (ランチャーが作る)。
-# snapshot・隔離用 DB・隔離版の設定が入る。ignore しないと
-# 未保存変更のゲートが必ず落ちる。
-# see docs/change/closed/0004-opencode-sandbox.md
-.opencode-sandbox/
-
-# srt が境界を張るとき、保護対象をワークスペース内に**読み取り専用の
-# 空ファイル**として実体化する (DANGEROUS_FILES / DANGEROUS_DIRECTORIES)。
-# ocs を起動するたびに現れ、ignore しないと `git add -A` が巻き込み、
-# pre-commit が読み取り専用の .opencode で失敗する (実際に踏んだ)。
-# ★このリポジトリの source state は home/ 配下なので、ルート直下に
-#   同名の正規ファイルは存在しない。
-# see docs/change/closed/0004-opencode-sandbox.md
+# 境界 (srt・bwrap など) が保護対象をワークスペース内に読み取り専用の空ファイルとして実体化することがある。
+# ignore しないと `git add -A` が巻き込む。
+# ★このリポジトリの source state は home/ 配下なので、ルート直下に同名の正規ファイルは存在しない。
 /.bashrc
 /.bash_profile
 /.zshrc

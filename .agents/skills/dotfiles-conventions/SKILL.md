@@ -13,13 +13,12 @@ description: "chezmoi の dotfiles リポジトリのファイルを編集する
 
 | 対象 | コマンド |
 | --- | --- |
-| agent 設定・hook | `uv run --with pytest --with pytest-xdist --with pyyaml --no-project pytest test/agents/ -q -n 4 --dist worksteal` |
+| pi の設定・agent 関連 | `uv run --with pytest --with pytest-xdist --with pyyaml --no-project pytest test/agents/ -q -n 4 --dist worksteal` |
 | Windows 資産（静的） | `uv run --with pytest --no-project pytest test/test_windows_assets.py -q` |
 | chezmoi の展開範囲 | `uv run --with pytest --no-project pytest test/test_chezmoi_templates.py -q` |
 | シェルスクリプト | `git ls-files '*.sh' \| xargs mise exec shellcheck -- shellcheck` |
 | テンプレート（描画して検査） | `mise exec -- python3 scripts/lint_templates.py` |
 | docs の索引整合 | `mise exec -- python3 home/dot_agents/skills/sdd-docs/scripts/lint_docs.py` |
-| OpenCode の実機試験 | `mise run opencode:probe -- '<prompt>'`（実 DB を汚さない） |
 | 展開結果 | `chezmoi diff`（sandbox 内では不可） |
 
 初回のみ `mise install && uv sync && uv run pre-commit install`。install 済みでも、pre-push を入れるためにもう一度 `uv run pre-commit install` を実行する。
@@ -33,7 +32,7 @@ description: "chezmoi の dotfiles リポジトリのファイルを編集する
 
 ### Windows 実機での検証
 
-`*.ps1` / `*.ps1.tmpl`、`home/dot_config/powershell/`、`home/.chezmoiscripts/300_windows/`、`scripts/agents/hooks.py`（Windows 向けの hook 起動コマンド生成）を触ったら **Windows の PowerShell で**検証する。WSL では対話テストが skip されるだけなので、通っても **Windows 側は未検証**。実機で回せないときはそう明記する（[手順と拾える範囲](../../../docs/spec/development.md#windows-実機での検証)）。
+`*.ps1` / `*.ps1.tmpl`、`home/dot_config/powershell/`、`home/.chezmoiscripts/300_windows/` を触ったら **Windows の PowerShell で**検証する。WSL では対話テストが skip されるだけなので、通っても **Windows 側は未検証**。実機で回せないときはそう明記する（[手順と拾える範囲](../../../docs/spec/development.md#windows-実機での検証)）。
 
 ## 公開情報に無いことをするとき
 
@@ -51,7 +50,7 @@ description: "chezmoi の dotfiles リポジトリのファイルを編集する
 - `.tmpl` は OS 分岐・chezmoi データ・秘密情報が要るときだけ付ける。変数確認は `{{- if and (hasKey . "var") .var }}` の形にする。
 - `.ps1` / `.ps1.tmpl` は UTF-8 BOM 付きで保存する（BOM が無いと PowerShell 5.1 が CP932 として読み、日本語コメントが次行のコードを無警告で飲み込む）。
 - `SKILL.md` の frontmatter は `name` をディレクトリ名と一致させ、`:` や `#` を含む `description` は二重引用符で囲む（囲まないと CLI がスキルを黙って読み飛ばす）。
-- AI CLI の permission / hook / sandbox は `home/dot_config/agents/common.toml.tmpl` が単一ソース。生成先を直接編集しない。
+- pi の MCP の宣言は `home/.chezmoitemplates/pi-mcp-servers.toml` が単一ソース。生成先（`~/.pi/agent/mcp.json`）の宣言した項目を直接編集しない。
 - **設定ファイル・スクリプトのコメントは「その行を編集するときに要る注記」だけにする。** 仕組み・判断基準・既知の不具合・実測値・経緯は `docs/` が正本で、コメントからは参照先だけを示す（`# see docs/spec/structure.md#見出し`）。同じ説明をコメントと `docs/` の両方に書かない。正本の対応は [コメントの書き分け](../../../docs/spec/agent-config-generation.md#コメントの書き分け)。
 - 秘密情報はソースに書かず Bitwarden / sops + age を使う。sudo のパスワードは保存せず、スクリプトが実行時に端末で尋ねる（[sudo パスワード](../../../docs/spec/development.md#sudo-パスワード)）。
 - 対話入力が必須なスクリプトや長時間実行スクリプトは追加しない。
@@ -73,10 +72,6 @@ description: "chezmoi の dotfiles リポジトリのファイルを編集する
 
 - Conventional Commits（`feat:` / `fix:` / `docs:` / `chore:`）。**本文は件名 + 1〜3 行の要約だけにし、箇条書きにしない**（詳細は案件・docs に書く。承認画面で長い本文が読みにくいため）。件名・本文は日本語。
 
-## dotfiles の開発とサンドボックス
-
-- **このリポジトリは、サンドボックスの中（`pis` の既定）で開発しない。`pis --no-sandbox` で行う**（[ADR-0025](../../../docs/adr/0025-dotfiles-dev-without-os-sandbox.md)）。内側では隠した秘密の追跡ファイルが `/dev/null` に見えて `git status` が dirty になり、統合が `stash failed` で失敗する。内側の合図（`git status` が dirty に見える・読めないファイルがある）が出たら、作業を止めて、サンドボックスなしの起動へ切り替えるよう利用者に伝える。
-
 ## AGENTS.md 自体の編集
 
-- `AGENTS.md` は印なしの平らな文書（45 行以内）。子向けの抜粋の仕組み（`<!-- child:... -->` の印・`child-context.ts`）は凍結（[ADR-0030](../../../docs/adr/0030-freeze-agent-stack-return-to-stock-pi.md)）で、新しく印を足さない。常時の規則を増やさず、編集の場面でだけ要るものはこのスキルへ書く。
+- `AGENTS.md` は印なしの平らな文書（45 行以内）。子向けの抜粋の仕組み（`<!-- child:... -->` の印）は撤去した（ADR-0037）。常時の規則を増やさず、編集の場面でだけ要るものはこのスキルへ書く。

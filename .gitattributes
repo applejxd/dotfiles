@@ -1,6 +1,3 @@
 *.yaml text eol=lf
 *.yml text eol=lf
 scripts/windows/wsl-sandbox/guest/* text eol=lf
-docs/change-history/0062.md merge=union
-# 同梱の構文解析器は改行・末尾を整形させない (sha256 が変わる)
-home/dot_config/pi/harness/vendor/** -text

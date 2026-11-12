@@ -1,5 +1,1 @@
-{{ if eq (includeTemplate "pi-profile" .) "stock" -}}
 {{ includeTemplate "agent-instructions-stock.md" . }}
-{{- else -}}
-{{ includeTemplate "agent-instructions.md" . }}
-{{- end }}

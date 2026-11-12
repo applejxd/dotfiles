@@ -6,7 +6,7 @@
 - 入力欄の枠 (思考レベルの色) が 7 段階で互いに違い、xhigh までは error の赤を使わないこと
 - pi 本体の組み込み dark.json があるときだけ、colors のキーの集合が一致すること
 実機の pi は起動しない。
-see docs/spec/agent-config-generation.md#テーマicebergstock
+see docs/spec/agent-config-generation.md#テーマiceberg
 """
 
 from __future__ import annotations

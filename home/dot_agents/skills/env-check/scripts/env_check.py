@@ -10,8 +10,7 @@
   get    1 つの変数の設定の有無。値は許可リストかプロキシ・ブローカー系だけ。それ以外は長さだけ
 
 秘密らしい名前 (TOKEN / KEY / SECRET など) は、どの形でも値を出さない。
-許可リストは hook が使う tables.toml の ``[rules_files] env_readable_names`` と同じ。
-see docs/spec/guard/agent-command-policy.md#環境変数の診断
+許可リストは READABLE_NAMES (このファイルの定数)。
 """
 
 from __future__ import annotations
@@ -19,10 +18,8 @@ from __future__ import annotations
 import os
 import re
 import sys
-import tomllib
-from pathlib import Path
 
-# bashrules/_shared.py の _SENSITIVE_ENV_RE と同じ (試験 test_env_check.py が一致を固定する)
+# 秘密らしい名前の規則。値は、どの形でも出さない
 SENSITIVE_ENV_PATTERN = (
     r"(?:SECRET|TOKEN|PASSWORD|PASSWD|PASSPHRASE|CREDENTIAL|SESSION"
     r"|API[_-]?KEY|PRIV(?:ATE)?[_-]?KEY|ACCESS[_-]?KEY"
@@ -34,23 +31,15 @@ NETWORK = re.compile(r"proxy|broker|_CA_BUNDLE|SSL_CERT|BASE_URL", re.IGNORECASE
 USERINFO = re.compile(r"(?<=://)[^/@\s,]*@")
 
 
-def _tables_path() -> Path:
-    here = Path(__file__).resolve()
-    candidates = []
-    if len(here.parents) > 5:  # リポジトリのソースから動かすとき
-        candidates.append(
-            here.parents[5] / "home" / "dot_config" / "pi" / "harness" / "judge" / "tables.toml"
-        )
-    candidates.append(Path.home() / ".config" / "pi" / "harness" / "judge" / "tables.toml")
-    for path in candidates:
-        if path.is_file():
-            return path
-    raise FileNotFoundError("tables.toml が見つからない: " + ", ".join(map(str, candidates)))
+# 名前で値を出してよい変数 (プロキシ・ブローカー系は NETWORK の規則で別に出す)。認証情報が入りうるものは載せない。
+READABLE_NAMES = [
+    "HOME", "USER", "LOGNAME", "SHELL", "PWD", "TERM", "TZ", "EDITOR", "VISUAL", "PAGER",
+    "LANG", "LANGUAGE", "LC_ALL", "VIRTUAL_ENV", "WSL_DISTRO_NAME", "WEBSEARCH_BROKER_URL",
+]  # fmt: skip
 
 
 def readable_names() -> list[str]:
-    with _tables_path().open("rb") as fh:
-        return list(tomllib.load(fh)["rules_files"]["env_readable_names"])
+    return list(READABLE_NAMES)
 
 
 def mask(value: str) -> str:

@@ -3,74 +3,34 @@
 spec・索引・README で使う用語をそろえる。1 つのものを 1 つの名前で呼ぶ。
 
 `research/`・`change/closed/`・`adr/` の本文は書いた当時の言い方のまま残している。
-そこで旧称に出会ったら、各項目の「旧称」で読み替える。
+そこで旧称に出会ったら、各項目の「旧称」で読み替える。撤去した自作基盤の用語は、最後の「撤去した用語」で引ける。
 
-## 境界と起動の形
+## 囲いと判断
 
-- **境界**（OS が強制するアクセス境界）: bwrap・seccomp・proxy などで OS が強制する
-  読み書きと通信の制限。permission・hook・plugin による規則の照合は「安全網」と呼び、
-  境界とは呼ばない。旧称: OS 境界、権限境界。**pi の文脈では「サンドボックス」と呼ぶ**
-  （下の「pi のガード」。OpenCode・`ocs` の文書は境界のまま）
-- **機構の境界**: 「どの機構（sandbox / permission / hook）に書くか」の線引き。
-  上の境界とは別の意味（[ADR-0007](../adr/0007-filesystem-guard-boundary.md)）
-- **sandbox**: Claude Code / Copilot CLI に組み込みの sandbox 機能。`common.toml` の
-  `[sandbox]` が設定する（[sandbox (Claude Code / Copilot CLI)](sandbox/agent-sandbox.md)）
-- **sandbox runtime（`srt`）**: `@anthropic-ai/sandbox-runtime`。Claude Code は同じ
-  パッケージの seccomp フィルタだけを使う。以前は隔離起動も境界を張るのに使っていた
-- **Fence**: bubblewrap・Landlock・seccomp とドメイン単位のプロキシで境界を張る道具
-  （[fencesandbox/fence](https://github.com/fencesandbox/fence)）。隔離起動が使う
-- **隔離起動（`ocs`）**: OpenCode のプロセス全体を Fence の境界の内側で起動すること。
-  Ubuntu / WSL のみ（[OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md)）。
-  旧称: 隔離版 OpenCode、境界版
-- **通常起動（`opencode`）**: 境界なしで OpenCode を起動すること。
-  旧称: 素の OpenCode、通常版
-- **通常版の設定 / 隔離版の設定**: 通常起動が読む `~/.config/opencode/` と、隔離起動の
-  たびに `ocs` が書き出す `~/.config/opencode-sandbox/`。「版」は設定を指すときだけ使う
-- **隔離用 DB**（廃止）: 今は DB を通常起動と共有する
-  （[セッションの引き継ぎ](sandbox/opencode-sandbox.md#セッションの引き継ぎ)）。旧称: 隔離 DB
-
-## pi のガード
-
-[CHG-0023](../change/closed/0023-guard-terminology.md) で整理した呼び方。詳細は [pi のガード](guard/pi-guard.md#用語)。
-
-- **ハーネス**: pi 本体を含む仕組み全体（一般の用法）。pi に足す特定の拡張は指さない。
-  旧称では、pi に足す判定の拡張を「ハーネス」と呼んでいた
-- **ガード**: ツール呼び出しを判定し、allow / ask / deny に振り分ける層。上の「安全網」のうち pi に足すもの
-- **フルガード**: `pis` で効くガード（役割・確認・伏字化まで含む）。旧称: ハーネス
-- **簡易ガード**（廃止）: 素の `pi` に付いていた、deny と伏字化だけのガード。旧称: 素の pi のガード
-- **サンドボックス**（pi の文脈）: Fence による OS レベルの隔離（`pis` の標準。外すときは `--no-sandbox`）。ガードとは別の層で、上の「境界」と同じもの。旧称: 境界
+- **囲い**（サンドボックス）: bwrap などで OS が強制する、読み書きの制限。pi では、コマンドの実行だけを包む `pib`
+  （[pi-sandbox-runner](sandbox/pi-sandbox-runner.md)）を指す。permission の規則の照合は「判断」と呼び、囲いとは呼ばない。
+  旧称: 境界、OS 境界、権限境界
+- **判断**: ツール呼び出しを allow / ask / deny に振り分ける層。pi では `pi-permission-system` と `cc-safety-net`
+  （[permission-system の設定](agent-config-generation.md#permission-system-の設定)）。囲いとは別の層で、誤操作の抑止であって境界ではない
+- **ハーネス**: pi 本体を含む仕組み全体（一般の用法）。pi に足す特定の拡張は指さない
+- **通常起動**: 囲いなしで `pi` を起動すること。囲い付きは `pib`
 
 ## 生成と配置
 
 - **source state**: `home/` 配下。chezmoi が配置先のファイルを作る元
 - **出力内容**（生成物）: `generate.py` や modify\_ スクリプトが書き出す中身
-- **配置先**（生成先・配備先）: 出力内容を書くパス（`~/.claude/settings.json` など）。
-  `chezmoi apply` のたびに作り直すので直接編集しない
+- **配置先**（生成先・配備先）: 出力内容を書くパス（`~/.pi/agent/mcp.json` など）。
+  `chezmoi apply` のたびに宣言した項目を更新するので、宣言した項目は直接編集しない
 - **実体**: symlink・shim・ローダーの先にあり、実際に実行・参照されるファイル
-
-## 対象の CLI
-
-- **CLI 名を先に書く。** 「両 CLI」「両方」は、直前に CLI 名を挙げた文や表の中でだけ使う。
-  節をそれで書き始めない
-- **無印キー**: `[sandbox]` で接頭辞の無いキー。**新しく足すキー**は、Claude Code と
-  Copilot CLI の両方に効くときだけ無印にし、片方にしか効かないなら `claude_` / `copilot_`
-  を付ける。既存の `seccomp_apply_path`（Claude のみ）と `shell_network_allow`
-  （Claude と隔離起動）は既存の例外で、無印でも Copilot には効かない
-  （[キー名の規則](sandbox/agent-sandbox.md#キー名の規則)）
 
 ## 許可の種類
 
 「許可」だけで書かず、どの許可かを明記する。
 
-- **読み取りの許可**: sandbox や境界の内側からパスを読めるようにすること
-  （`claude_read_allow`・`copilot_read_allow`・`[opencode.sandbox] read`）
-- **書き込みの許可**: 同じく書けるようにすること（`*_write_allow`・`allowWrite`）
-- **自動承認**: 確認画面を出さずに実行させること（permission の `allow`）。Copilot CLI が
-  hook の `ask` を自動承認するのは不具合として扱う
-- **通信の許可**: 接続してよいドメイン（`[web] allow_domains`・`shell_network_allow`・
-  `network_allow`）
-- **開発ツール自動許可**: Copilot の `allowDevToolAccess` の呼び名。自動承認ではなく、
-  開発ツールの置き場へ読み書きの許可を自動で足す機能（[ADR-0008](../adr/0008-explicit-dev-tool-grants.md)）
+- **読み取りの許可**: 囲いの内側からパスを読めるようにすること（`runner.local.toml` の `[visible]`・permission-system の `path_read`）
+- **書き込みの許可**: 同じく書けるようにすること
+- **自動承認**: 確認画面を出さずに実行させること（permission の `allow`。YOLO mode は ask を全部自動承認する）
+- **通信の許可**: 接続してよいドメイン
 
 ## 秘密情報
 
@@ -92,28 +52,26 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
 
 ## 統合と並列運用
 
-- **bundle**（旧称: train）: 複数の feature を 1 本にまとめた統合用の枝 `feature/bundle-N`。
-  1 回の全件検査・1 回の「統合する」で取り込む（[統合用の枝](orchestration.md#統合用の枝bundle)）。
-  旧称は merge train（複数の変更を同じ列車に乗せてまとめて出す）の比喩だったが、意味が伝わりにくいので改めた
-- **自由区**: 確認を省略してよい `feature/*` の linked worktree のコミット
-  （[自由区の fail closed](guard/pi-extensions.md#自由区の-fail-closed)）
 - **窓口**: 取り込み（保護ブランチを進める操作）を行う会話を 1 つに決めたもの。ほかの会話はコミットまで
-  （[複数の会話を並行して使う運用](guard/pi-subagents.md#複数の会話を並行して使う運用)）
-- **claim / release**: worktree の所有を lock の理由欄で表明する操作と、その解除
-  （[worktree の所有の表明](orchestration.md#worktree-の所有の表明)）
-- **ジョブ**（撤去済み）: PR ビューアの「変更を依頼」を押したときに、feature の worktree で `pis -p` を 1 回起動していた処理
-  （[撤去の記録](pr-viewer.md#ジョブ段-a4a撤去済み)）
-- **cwd**: `guarded_task` の子の実行場所。親のリポジトリの worktree 一覧にある絶対パスだけ指定できる
-  （[子エージェント](guard/pi-subagents.md#子エージェント)）
+- **feature の worktree**: `.tmp/worktrees/<名前>`。作業はここで行い、`develop` / `main` には直接コミットしない
 
 ## 文書化の分担（`checkpoint` と `sdd-docs`）
 
-- **復帰記録（A1）**: 圧縮を跨ぐためのセッション別の記録。`checkpoint` スキルと
-  plugin が `.tmp/` へ書く（[文脈の引き継ぎ](checkpoint.md)）
+- **復帰記録（A1）**: 圧縮を跨ぐためのセッション別の記録。`.tmp/` へ書く
 - **案件の更新（A2）**: `docs/change/` の案件を更新する。`sdd-docs` スキルが持つ
 - **恒久的な文書化（B）**: `docs/research/`・`docs/adr/`・`docs/spec/` と索引へ書く。
   `sdd-docs` スキルが持つ。指示なしの `/sdd-docs` の挙動もスキル側が決める
   （[スキルの手順](../../home/dot_agents/skills/sdd-docs/SKILL.md)）
-- CHG-0005 の A1〜A4 はその案件の段階番号で、上の A1 / A2 とは関係が無い
+
+## 撤去した用語
+
+2026-11-12 の撤去（[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）で、実体が無くなった用語。古い文書で出会ったときの読み替え用。
+
+- **フルガード**・**簡易ガード**・**`pis`**: 自作の判定の拡張と、それで pi を Fence の中で起動するコマンド。今は `pi` ＋ permission-system、囲いは `pib`
+- **Fence**・**隔離起動（`ocs`）**・**通常起動（`opencode`）**: OpenCode を Fence の境界の内側で起動する仕組み。撤去
+- **kcage**（箱）: Incus による隔離環境。撤去
+- **PR ビューア**・**ジョブ**・**作業台帳**: 撤去
+- **bundle**（旧称: train）・**自由区**・**claim / release**: 並列運用の自作の仕組み。撤去
+- **`guarded_task`・`guarded_action`**: 自作の子エージェント・コミットの道具。今は `pi-subagents` の `subagent` と、bash の `git commit`
 
 [仕様一覧へ戻る](index.md)

@@ -116,4 +116,4 @@ Oxide の RFD のように、1 つのアイデアを 1 文書で扱い、状態�
 
 - [ADR-0011](0011-close-change-records-into-subdirectory.md): 終了した案件の置き場を
   `change/closed/` へ改めた（部分改定）
-- [ADR-0009](0009-save-before-documenting.md): 保存と文書化の分離
+- ADR-0009: 保存と文書化の分離

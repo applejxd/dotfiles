@@ -1,6 +1,6 @@
 # 圧縮の 400 エラー（thinking: disabled）の経緯
 
-> `docs/spec/guard/pi-extensions.md#圧縮旧-checkpoint` から移した記録。移設時点で再測定していない。
+> 撤去した仕様から移した記録。移設時点で再測定していない。
 
 ## 記録 — 観測日は各文に記載（移設 2026-10-26）
 
@@ -13,13 +13,13 @@
 
 ### 根拠
 
-pi の `core/agent-session.js` の `compact` 呼び出しと、実際のモデルでの再現（[表 B の 19](../../spec/pi-upstream.md#b-明示が無いここに書く)。現行の仕様と試験の正本は表 B の 19）。
+pi の `core/agent-session.js` の `compact` 呼び出しと、実際のモデルでの再現（表 B の 19。現行の仕様と試験の正本は表 B の 19）。
 
 ### 結果（元の文）
 
 - **`compact()` に、セッションの思考レベル（`pi.getThinkingLevel()`）と、一時的な失敗の再試行方針（pi の既定値。利用者の `retry` 設定は拡張から読めないため、設定にかかわらず既定値に固定）を渡す**。
   渡さないと「thinking: disabled」で送られ、それを受け付けないモデル（Copilot の `claude-sonnet-5.5` など）が 400 を返して、
-  **どの PC でも指示つきの圧縮が失敗して既定に落ちた**（実測 [表 B の 19](../../spec/pi-upstream.md#b-明示が無いここに書く)）。
+  **どの PC でも指示つきの圧縮が失敗して既定に落ちた**（実測 表 B の 19）。
   思考レベルが `off` で同じ 400 になったときは、思考を `minimal` にして 1 回だけやり直す（pi の既定の圧縮は、同じ指定で失敗して全く圧縮できない）
 
 - `compact()` を `ctx.modelRegistry.streamSimple` 経由で呼ぶ bullet から: （Copilot はトークンごとに違う。pi 自身も同じ。反映しないと 401 になった）

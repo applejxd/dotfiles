@@ -61,7 +61,6 @@ def render(
     bw_session: str = "",
     os_name: str = "linux",
     data: dict | None = None,
-    pi_profile: str = "",
 ) -> set[str]:
     context = {
         "chezmoi": {
@@ -77,10 +76,6 @@ def render(
         env["BW_SESSION"] = bw_session
     else:
         env.pop("BW_SESSION", None)
-    if pi_profile:
-        env["CHEZMOI_PI_PROFILE"] = pi_profile
-    else:
-        env.pop("CHEZMOI_PI_PROFILE", None)  # 既定 (stock)
     rendered = execute_with_context(IGNORE_TEMPLATE, context, env)
     return {line.strip() for line in rendered.splitlines()}
 
@@ -112,95 +107,16 @@ def test_bitwarden_targets_are_personal_only(tmp_path, target):
     assert target in render(home=str(tmp_path), username="other", bw_session="dummy")
 
 
-@pytest.mark.parametrize(
-    "target",
-    ["!.config/opencode/", "!.config/opencode/**"],
-)
-def test_opencode_config_is_deployed_on_windows(tmp_path, target):
-    """Windows でも OpenCode の permission と guide plugin を配る。
-
-    314 が OpenCode を入れるのに設定が .config/* の除外に巻き込まれると、
-    読み取り禁止も shell の制限も効かないまま動く。
-    """
-    rendered = render(home=str(tmp_path), os_name="windows")
-    assert ".config/*" in rendered
-    assert target in rendered
 
 
-# Windows の除外の書き方 (除外の行が出るか)。Linux には一切出ない
-WINDOWS_PI_IGNORES = (
-    ".pi/agent/prompts/",  # /fleet は Windows では配らない
-    ".local/bin/pis",
-    "!.config/pi/",  # harness と commit-confirm のためにディレクトリを戻す
-    ".config/pi/harness/landlock_exec.py",  # 境界は Unix 専用
-)
 
 
-def test_pi_settings_and_the_full_guard_are_deployed_on_windows(tmp_path):
-    # フルガード (.config/pi) を Windows にも配るのは custom のときだけ (stock は下の試験)
-    windows = render(home=str(tmp_path), os_name="windows", pi_profile="custom")
-    linux = render(home=str(tmp_path), os_name="linux", pi_profile="custom")
-    for target in WINDOWS_PI_IGNORES:
-        assert target in windows, target
-        assert target not in linux, target
-    # harness は丸ごと除外しない (rules.json を含めて Windows にも配る)
-    assert ".config/pi/harness/\n" not in windows
-    assert ".config/pi/harness/**" not in windows
-    # pis と ocs は Windows に配らないまま
-    assert ".local/share/ocs" in windows
-    # Windows だけ、subagents を配る (Unix は配らない)
-    assert ".pi/agent/extensions/subagents/" not in windows
-    assert ".pi/agent/extensions/subagents/" in linux
-    # settings / keybindings / AGENTS.md の .pi/ は Windows にも配る (丸ごとの除外は無い)
-    assert ".pi/" not in windows and ".pi/**" not in windows
-    assert ".config/*" in windows
 
 
-@pytest.mark.parametrize("os_name", ["windows", "linux", "darwin"])
-def test_stock_never_unignores_config_pi(tmp_path, os_name):
-    """stock では、どの OS でも .config/pi を除外したままにする。
-
-    .chezmoiremove は stock のとき `.config/pi` を消す対象にする。除外が外れる (`!.config/pi/`) と、
-    配備済みの .config/pi がある機で「.config/pi: inconsistent state (dot_config/pi, remove)」で apply が止まる
-    (2026-11-11 に Windows の機で発生)。
-    """
-    ignored = render(home=str(tmp_path), os_name=os_name)  # 既定は stock
-    assert ".config/pi" in ignored and ".config/pi/**" in ignored
-    assert not [line for line in ignored if line.startswith("!.config/pi")], os_name
 
 
-def test_custom_still_deploys_the_full_guard_only_on_windows(tmp_path):
-    windows = render(home=str(tmp_path), os_name="windows", pi_profile="custom")
-    linux = render(home=str(tmp_path), os_name="linux", pi_profile="custom")
-    assert "!.config/pi/" in windows
-    assert "!.config/pi/" not in linux
-    assert ".config/pi" not in windows  # custom は .config/pi を丸ごとは除外しない
 
 
-def test_chezmoi_stops_when_a_deployed_dir_is_both_unignored_and_removed(tmp_path):
-    """上の試験の前提 (chezmoi の挙動): 除外が外れたディレクトリを .chezmoiremove も指し、配備済みなら、apply が止まる。"""
-    chezmoi = chezmoi_bin()
-
-    def run(unignore: bool) -> subprocess.CompletedProcess:
-        base = tmp_path / ("a" if unignore else "b")
-        src, dst = base / "src", base / "dst"
-        (src / "dot_config" / "pi" / "harness").mkdir(parents=True)
-        (src / "dot_config" / "pi" / "harness" / "x.ts").write_text("x", encoding="utf-8")
-        (dst / ".config" / "pi" / "harness").mkdir(parents=True)
-        (dst / ".config" / "pi" / "harness" / "x.ts").write_text("old", encoding="utf-8")
-        ignore = ".config/pi\n.config/pi/**\n" + ("!.config/pi/\n" if unignore else "")
-        (src / ".chezmoiignore").write_text(ignore, encoding="utf-8")
-        (src / ".chezmoiremove").write_text(".config/pi\n", encoding="utf-8")
-        (base / "cfg.toml").write_text("", encoding="utf-8")
-        return subprocess.run(
-            [chezmoi, "diff", "--source", str(src), "--destination", str(dst), "--config", str(base / "cfg.toml"),
-             "--cache", str(base / "cache"), "--persistent-state", str(base / "state.boltdb")],
-            capture_output=True, text=True, encoding="utf-8", check=False,
-        )
-
-    broken = run(unignore=True)
-    assert "inconsistent state" in broken.stderr, broken.stderr
-    assert run(unignore=False).returncode == 0
 
 
 def test_git_user_and_ignore_are_deployed_on_windows(tmp_path):
@@ -223,20 +139,6 @@ def test_git_user_is_still_rendered_once_on_windows(tmp_path):
     assert ".config/git/user" in render(home=str(tmp_path), os_name="windows", bw_session="s")
 
 
-@pytest.mark.parametrize(
-    ("os_name", "ignored"), [("linux", False), ("windows", True), ("darwin", True)]
-)
-def test_ocs_launcher_is_linux_only(tmp_path, os_name, ignored):
-    """ocs は bwrap で OpenCode を囲うので Ubuntu / WSL 専用 (CHG-0004)。"""
-    rendered = render(home=str(tmp_path), os_name=os_name)
-    targets = (
-        ".local/bin/ocs",
-        ".local/bin/ocs-boundary-check",
-        ".local/state/opencode-sandbox",
-        ".local/state/opencode-sandbox/**",
-    )
-    for target in targets:
-        assert (target in rendered) is ignored, target
 
 
 @pytest.mark.parametrize(
@@ -256,32 +158,10 @@ def test_pi_sandbox_runner_is_linux_only(tmp_path, os_name, ignored):
         assert (target in rendered) is ignored, target
 
 
-@pytest.mark.parametrize(
-    ("os_name", "ignored"), [("linux", False), ("windows", True), ("darwin", False)]
-)
-def test_ocs_library_is_shared_with_pis(tmp_path, os_name, ignored):
-    """pis (Unix) が ocs の本体を読むので、macOS にも置く。Windows には pis が無いので置かない。"""
-    rendered = render(home=str(tmp_path), os_name=os_name)
-    for target in (".local/share/ocs", ".local/share/ocs/**"):
-        assert (target in rendered) is ignored, target
 
 
-@pytest.mark.parametrize(
-    ("os_name", "ignored"), [("linux", False), ("windows", True), ("darwin", True)]
-)
-def test_oc_utils_is_linux_only(tmp_path, os_name, ignored):
-    """oc-utils は Linux (Ubuntu / WSL) でしか試していないので他へ配らない。"""
-    rendered = render(home=str(tmp_path), os_name=os_name)
-    assert (".local/bin/oc-utils" in rendered) is ignored
 
 
-@pytest.mark.parametrize(
-    ("os_name", "ignored"), [("linux", True), ("windows", False), ("darwin", True)]
-)
-def test_opencode_service_port_is_managed_on_windows_only(tmp_path, os_name, ignored):
-    """Windows の常駐サービスだけポートを WSL からずらす。ほかは OpenCode に任せる。"""
-    rendered = render(home=str(tmp_path), os_name=os_name)
-    assert (".config/opencode/service.json" in rendered) is ignored
 
 
 SHELL_PLUGINS = {
@@ -305,55 +185,21 @@ def render_external(
     *,
     home: Path,
     os_name: str = "linux",
-    provider: str = "amazon-bedrock",
     raspi: bool = False,
     arch: str = "amd64",
 ) -> dict:
-    # llm_provider / is_raspi は共有テンプレートの上書き用キー (実機の判定に依らず固定する)
+    # is_raspi は共有テンプレートの上書き用キー (実機の判定に依らず固定する)
     context = {
         "chezmoi": {"os": os_name, "homeDir": str(home), "arch": arch},
-        "llm_provider": provider,
         "is_raspi": raspi,
     }
     return tomllib.loads(execute_with_context(EXTERNAL_TEMPLATE, context, dict(os.environ)))
 
 
-ENVOY_SHA256 = {
-    "amd64": ("x86_64", "7104734ba4adaf505acff192cddf5427fb7b0c53827a2039171969fb2d694060"),
-    "arm64": ("aarch_64", "2ca4468240d277b3af0b869bea3b21a58945bc517ef2c263be57bd5431e80498"),
-}
 
 
-@pytest.mark.parametrize("arch", ["amd64", "arm64"])
-def test_envoy_is_fetched_for_copilot_linux_hosts(tmp_path, arch):
-    """pis の Copilot ブローカー用の Envoy は、github-copilot の Linux 機にだけ、sha256 固定で置く。"""
-    externals = render_external(home=tmp_path, provider="github-copilot", arch=arch)
-    asset, sha256 = ENVOY_SHA256[arch]
-    entry = externals[".local/bin/envoy"]
-    assert entry["type"] == "file"
-    assert entry["executable"] is True
-    assert entry["checksum"] == {"sha256": sha256}
-    assert entry["url"].endswith(f"/v1.40.1/envoy-1.40.1-linux-{asset}")
-    # 既存の宣言は残る
-    assert set(externals) == {*SHELL_PLUGINS, ".local/bin/envoy"}
 
 
-@pytest.mark.parametrize(
-    ("os_name", "provider", "raspi", "arch"),
-    [
-        ("windows", "github-copilot", False, "amd64"),
-        ("darwin", "github-copilot", False, "arm64"),
-        ("linux", "amazon-bedrock", False, "amd64"),
-        ("linux", "github-copilot", True, "arm64"),
-        ("linux", "github-copilot", False, "386"),
-    ],
-    ids=["windows", "macos", "bedrock", "raspi", "unsupported-arch"],
-)
-def test_envoy_is_not_fetched_elsewhere(tmp_path, os_name, provider, raspi, arch):
-    externals = render_external(
-        home=tmp_path, os_name=os_name, provider=provider, raspi=raspi, arch=arch
-    )
-    assert ".local/bin/envoy" not in externals
 
 
 @pytest.mark.parametrize("os_name", ["linux", "darwin"])
@@ -580,14 +426,26 @@ def test_is_work_follows_the_personal_username_unless_overridden(username, data,
     [
         ("applejxd", None, False),
         ("worker", None, True),
-        # LLM のプロバイダ (llm_provider) を会社 PC で github-copilot に上書きしても、個人専用のスキルは配らない
-        ("worker", {"llm_provider": "github-copilot"}, True),
         ("applejxd", {"work": True}, True),
         ("worker", {"work": False}, False),
     ],
 )
-def test_personal_only_skills_follow_is_work_not_the_llm_provider(
+def test_personal_only_skills_follow_is_work(
     tmp_path, username, data, ignored
 ):
     rendered = render(home=str(tmp_path), username=username, data=data)
     assert (".agents/skills/imozuru/" in rendered) is ignored
+
+
+def test_pi_prompts_are_not_deployed_on_windows_and_the_removed_harness_is_not_unignored(tmp_path):
+    """/fleet・/stepback は Windows では配らない。撤去した自作ハーネスの除外は、どの OS にも出ない。"""
+    windows = render(home=str(tmp_path), os_name="windows")
+    linux = render(home=str(tmp_path), os_name="linux")
+    assert ".pi/agent/prompts/" in windows
+    assert ".pi/agent/prompts/" not in linux
+    # settings / keybindings / AGENTS.md の .pi/ は Windows にも配る (丸ごとの除外は無い)
+    assert ".pi/" not in windows and ".pi/**" not in windows
+    assert ".config/*" in windows
+    for rendered in (windows, linux):
+        assert "!.config/pi/" not in rendered
+        assert not [line for line in rendered if "opencode" in line or "pis" in line.split("/")]

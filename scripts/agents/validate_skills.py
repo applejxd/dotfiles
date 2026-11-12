@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """SKILL.md の YAML frontmatter を検証する。
 
-Claude Code / Copilot CLI は frontmatter のパースに失敗したスキルを黙って
-読み飛ばし、起動時に "Failed to load 1 skill." とだけ表示する。原因の特定に
-`copilot skill list` が要るので、リポジトリ側で先に弾く。
+pi は frontmatter のパースに失敗したスキルを黙って読み飛ばす。
+原因の特定が難しいので、リポジトリ側で先に弾く。
 
 実行方法:
 
@@ -27,10 +26,9 @@ ROOT = Path(__file__).resolve().parents[2]
 # 配布する skill のルート。増やしたら .pre-commit-config.yaml の
 # skill-frontmatter-local の files も合わせる（テストが突き合わせる）。
 # 再帰で探さないのは、skill に同梱した資材の中の SKILL.md を拾わないため。
-# このリポジトリだけで使う skill (.agents/skills) も含める。`pis` が --skill で足すので、frontmatter が壊れると黙って読み飛ばされる。
+# このリポジトリだけで使う skill (.agents/skills) も含める。frontmatter が壊れると黙って読み飛ばされる。
 SKILL_ROOTS = (
     "home/dot_agents/skills",
-    "home/dot_config/opencode/skills",
     ".agents/skills",
 )
 
@@ -48,10 +46,8 @@ FRAGILE_PLAIN_PATTERNS = {
 
 # 本文がこれらを含むスキルは、入力が**親の会話そのもの**なので
 # 独立したサブエージェントでは成立しない。
-# OpenCode は `context` を読み捨てるので無害だが (記録 E1)、Claude Code 側で
-# 効くと会話が見えないまま要約や知見を書くことになる。
+# fork すると会話が見えないまま要約や知見を書くことになる。
 # 2026-09-19 に adr skill を廃止した理由がこれ (ac7749a)。
-# see docs/research/opencode/skill-frontmatter.md
 CONVERSATION_MARKERS = (
     "これまでの会話",
     "現在の会話",

@@ -13,9 +13,8 @@
 
 ## 作業ツリーの外にある実体の読み方
 
-作業ツリーの外を read / grep / glob ツールで開くと、確認が出る環境がある。配布元の dotfiles の
-OpenCode では、shell の引数に書いた外のパスでは確認が出ず、`grep -n` は許可済みと実測している
-（`docs/research/opencode/permission/external-read-and-skill-scripts.md`）。これを使ってよいのは、
+作業ツリーの外を read / grep / glob ツールで開くと、確認が出る環境がある。shell の引数に書いた外のパスは、
+権限の方針で確認が出ないことがある。これを使ってよいのは、
 **利用者がその対象の調査を頼んでいる場合だけ**。確認待ち・拒否になった読み取りの回避には使わない。
 shell / sandbox 側の確認と拒否にも従う。
 

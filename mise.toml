@@ -12,8 +12,8 @@ node = "latest"
 
 [env]
 UV_PROJECT_ENVIRONMENT = "{% if os() == 'windows' %}.venv-windows{% else %}.venv{% endif %}"
-# uvx が作る tools ディレクトリを作業ツリー内の .tmp へ置く。pis (Fence) の内側では ~/.local/share/uv へ書けず、
-# pre-commit の uvx hook (ruff / yamllint) が os error 13 で落ちる。see docs/spec/sandbox/fence-boundary.md#uvx-の一時領域
+# uvx が作る tools ディレクトリを作業ツリー内の .tmp へ置く。pib の囲いの内側では ~/.local/share/uv へ書けず、
+# pre-commit の uvx hook (ruff / yamllint) が os error 13 で落ちる。
 UV_TOOL_DIR = "{{config_root}}/.tmp/uv-tools"
 
 [tasks.e2e]
@@ -27,30 +27,6 @@ run = "python3 scripts/verify.py --changed"
 [tasks."verify:all"]
 description = "検証を全件実行する（安い検査を先に回し、前の段が落ちたら止まる。コミット前に 1 回）"
 run = "python3 scripts/verify.py --all"
-
-[tasks."verify:full"]
-description = "閉じたモジュールの省略をせず、必ず全件を実行する（main への統合の前はこれ）"
-run = "python3 scripts/verify.py --all --full"
-
-[tasks.prs]
-description = "develop へのマージ待ちの一覧（枝名・先行数・件名だけ。詳細・統合・掃除はエージェントへ）"
-run = "python3 scripts/prs.py"
-
-[tasks."models:check"]
-description = "子エージェントのモデルのカタログを pi --list-models と比べる（一覧に無い項目・新しい世代・reviewed_on を警告。一覧の取得失敗は終了コード 2）"
-run = "python3 scripts/models.py check"
-
-[tasks."models:probe"]
-description = "カタログのモデルを、短い応答とツール呼び出しで確かめる（既定は未確認のもの。--model / --effort / --all / --dry-run。verified は手で直す）"
-run = "python3 scripts/models.py probe"
-
-[tasks."tmp:clean"]
-description = "作業ツリーの .tmp/ を掃除する（既定は一覧だけ。引数: --apply で消す、--all で未知の名前も）"
-run = "python3 home/dot_config/pi/harness/tmp_clean.py"
-
-[tasks."opencode:probe"]
-description = "隔離環境で opencode を実行する（実 DB を汚さない）"
-run = "./scripts/opencode_probe.sh"
 
 [tasks."websearch:keys"]
 description = "web-search の API キーを Bitwarden から取り直す（BW_SESSION が無ければ bw unlock を求める）"

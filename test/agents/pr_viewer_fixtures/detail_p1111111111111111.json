@@ -1,7 +1,0 @@
-{"commits": [
-  {"oid": "dddddddddddddddddddddddddddddddddddddddd", "subject": "fix: 誤字を直す", "author": "you", "at": "2020-01-01T00:00:00+00:00"}
- ],
- "files": [
-  {"path": "README.md", "oldPath": null, "status": "M", "additions": 1, "deletions": 1, "binary": false}
- ],
- "filesTruncated": false}

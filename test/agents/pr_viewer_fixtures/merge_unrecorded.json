@@ -1,8 +1,0 @@
-{"merge": {
-  "commit": "ffffffffffffffffffffffffffffffffffffffff",
-  "targetOld": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-  "targetNew": "ffffffffffffffffffffffffffffffffffffffff",
-  "cleanup": {"requested": "none", "done": []},
-  "warnings": [],
-  "recorded": false
-}}

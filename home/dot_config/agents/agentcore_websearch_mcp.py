@@ -8,8 +8,6 @@ Gateway の URL はアカウント固有なので環境変数 ``AGENTCORE_GATEWA
 起動の失敗が毎回の通知になるのを避ける。認証が無ければ何も起きない)。空になるのは次のとき:
 
 - ``AGENTCORE_GATEWAY_URL`` が無い・``https://`` で始まらない
-- pi のサンドボックスの内側 (``PI_HARNESS_BOUNDARY=1``)。内側では AWS の認証情報を使えない
-  (ブローカーでの中継は、Bedrock のブローカー (段 U7b) の後。CHG-0037)
 
 see docs/spec/mcp-servers.md#agentcore-web-search
 """
@@ -23,7 +21,6 @@ import sys
 
 PROXY = "mcp-proxy-for-aws-cli==1.7.0"
 URL_ENV = "AGENTCORE_GATEWAY_URL"
-BOUNDARY_ENV = "PI_HARNESS_BOUNDARY"
 DEFAULT_PROTOCOL = "2025-06-18"
 EMPTY_LISTS = {
     "tools/list": {"tools": []},
@@ -76,8 +73,6 @@ def main() -> int:
     url = os.environ.get(URL_ENV, "").strip()
     if not url.startswith("https://"):
         return serve_empty(f"{URL_ENV} が無い。Gateway の MCP URL (https://...) があれば使える")
-    if os.environ.get(BOUNDARY_ENV) == "1":
-        return serve_empty("サンドボックスの内側では AWS の認証情報を使えない")
     command = ["uvx", PROXY, url, *sys.argv[1:]]
     if os.name == "nt":
         # Windows の execvp は親を先に終わらせ、MCP クライアントとの stdio が切れる

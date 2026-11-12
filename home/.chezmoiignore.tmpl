@@ -8,10 +8,8 @@
 .chezmoiscripts/400_unix/
 .chezmoiscripts/400_unix/**
 .config/*
-# AI CLI の共通ポリシーは Windows native でも必要
+# pi の MCP (検索) は Windows native でも必要
 !.config/agents/
-!.config/agents/command_policy.py
-!.config/agents/common.toml
 !.config/agents/agentcore_websearch_mcp.py
 # 検索の核と MCP サーバ (スキル web-search の外の中立な場所)。鍵の同期 (349) も呼ぶので Windows にも配る
 !.config/agents/websearch/
@@ -25,18 +23,6 @@
 # PowerShell プロファイルの実体 (Documents 配下は 1 行のローダーのみ)
 !.config/powershell/
 !.config/powershell/**
-{{- if ne (includeTemplate "pi-profile" .) "stock" }}
-# pi のフルガード (harness) は Windows にも配る (custom のときだけ)。境界 (landlock) は Unix 専用なので配らない
-# stock では配らない: 下の stock の除外 (.config/pi) と、.chezmoiremove の .config/pi が、
-# 配備済みの .config/pi がある機で「inconsistent state (dot_config/pi, remove)」になるため (2026-11-11 実測)
-# see docs/spec/guard/pi-guard.md#windows
-!.config/pi/
-.config/pi/harness/landlock_exec.py
-{{- end }}
-# OpenCode は 314 が Windows にも入れる。permission と guide plugin が無いと保護が無い
-# see docs/spec/agent-permissions.md#windows-での扱い
-!.config/opencode/
-!.config/opencode/**
 .config/tmuxinator/
 .config/tmuxinator/**
 .bash_profile
@@ -49,13 +35,9 @@
 .xsessionrc
 .zshenv
 .zshrc
-# Windows は権限不要の directory junction をスクリプトで作成
-.copilot/skills
-# pi 本体と設定は Windows にも配る。pis は Unix だけ。prompts (/fleet など) は Windows では配らない
-# see docs/spec/guard/pi-guard.md#windows
+# pi 本体と設定は Windows にも配る。prompts (/fleet など) は Windows では配らない
 .pi/agent/prompts/
 .pi/agent/prompts/**
-.local/bin/pis
 {{- else }}
 # windows のみで導入
 .chezmoiscripts/300_windows/
@@ -68,11 +50,6 @@ AppData/**
 Documents/
 Documents/**
 {{- end }}
-{{- if ne .chezmoi.os "windows" }}
-# 子エージェント拡張 (task)。Windows だけ settings で明示ロードする。Unix のフルガードは guarded_task を持つので配らない
-.pi/agent/extensions/subagents/
-.pi/agent/extensions/subagents/**
-{{- end }}
 
 {{- if ne .chezmoi.os "darwin" }}
 # Mac OS X のみ
@@ -84,12 +61,6 @@ Documents/**
 {{- end }}
 
 {{- if ne .chezmoi.os "linux" }}
-# OpenCode を bwrap で囲う起動スクリプトは Ubuntu / WSL 専用
-# see docs/change/closed/0004-opencode-sandbox.md
-.local/bin/ocs
-.local/bin/ocs-boundary-check
-.local/state/opencode-sandbox
-.local/state/opencode-sandbox/**
 # pi のコマンド実行を包む囲い (bwrap は Linux 専用)。shellPath は pi の settings.json の modify が Linux だけに入れる
 # see docs/spec/sandbox/pi-sandbox-runner.md
 .local/bin/pi-sandbox-runner
@@ -97,20 +68,6 @@ Documents/**
 .local/bin/pib-shell
 .config/pi-sandbox
 .config/pi-sandbox/**
-{{- if eq .chezmoi.os "windows" }}
-# 本体 (ocs 用のライブラリ) は pis も読むので、pis を配る macOS にも置く
-.local/share/ocs
-.local/share/ocs/**
-{{- end }}
-# OpenCode の運用の小道具。Linux 以外では試していない
-# see docs/spec/agent-permissions.md#保存した承認の確認とリセット
-.local/bin/oc-utils
-{{- end }}
-
-{{- if ne .chezmoi.os "windows" }}
-# 常駐サービスのポートを Windows だけ WSL からずらす。ほかでは OpenCode に任せる
-# see docs/spec/opencode-config-generation.md#常駐サービスのポート
-.config/opencode/service.json
 {{- end }}
 
 {{- if eq .chezmoi.os "linux" }}
@@ -165,7 +122,6 @@ Documents/**
 {{- end }}
 
 # 会社 PC は検索を AgentCore の MCP に一本化する。それに依存しない自作の検索の核と imozuru は個人用 (is-work でない機) だけに配る
-# (LLM のプロバイダ (llm-provider) とは別の軸。会社 PC で Copilot を使っても配らない)
 # see docs/spec/web-search.md#配る範囲、docs/spec/imozuru.md#配る範囲
 {{- if eq (includeTemplate "is-work" .) "true" }}
 .config/agents/websearch/
@@ -208,10 +164,6 @@ Documents/**
 # 再生成・更新するため chezmoi では追跡しない。
 # ここに列挙しておくと `chezmoi add` も警告を出して取り込みを拒否する。
 #
-# なお Orca は各 AI CLI の設定ファイルへ hook を注入する。それらは
-# scripts/agents/generate.py が「自分の生成したエントリだけを差し替える」
-# 実装になっているため、chezmoi apply で消えることはない。
-# see docs/spec/agent-permissions.md
 .orca
 .orca/**
 .orca-relay
@@ -278,44 +230,3 @@ orca/**
 .agents/skills/conference-video/.tmp/**
 .agents/skills/conference-video/**/__pycache__
 .agents/skills/conference-video/**/__pycache__/**
-
-# herdr の skill は run_after の herdr_integration が `herdr --skill` から毎回生成する。
-# 取り込むと版が固定されて本体の更新に追従しなくなる。see docs/spec/structure.md
-.claude/skills/herdr
-.claude/skills/herdr/**
-{{ if eq (includeTemplate "pi-profile" .) "stock" }}
-# pi の stock プロファイル: 自作の拡張・ハーネス・broker 用の設定を配らない (prompts は stock の文面で配る)
-# (settings.json と AGENTS.md は中身をプロファイルで切り替える)。
-# 拡張は自作のディレクトリだけ (一覧は pi-own-extensions)。pi-permission-system の設定は配る。
-# see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
-{{ range (includeTemplate "pi-own-extensions" . | splitList "\n") -}}
-{{ $name := trim . -}}
-{{ if and $name (not (hasPrefix "#" $name)) -}}
-.pi/agent/extensions/{{ $name }}
-.pi/agent/extensions/{{ $name }}/**
-{{ end -}}
-{{ end -}}
-.pi/agent/models.json
-.config/pi
-.config/pi/**
-{{ else }}
-# custom: stock だけが配る permission-system の設定 (modify_ スクリプト) は配らない
-.pi/agent/extensions/pi-permission-system
-.pi/agent/extensions/pi-permission-system/**
-# plan mode の設定 (@narumitw/pi-plan-mode) も stock の package の設定なので配らない
-.pi/agent/pi-plan-mode.json
-# pi-subagents の設定 (単数形 subagent/。複数形 subagents/ は自作の拡張) も stock の package の設定なので配らない
-.pi/agent/extensions/subagent
-.pi/agent/extensions/subagent/**
-# pi-subagents の agent 定義 (組み込みの worker・reviewer・scout・oracle の写し。permission を足したもの) も stock だけ
-.pi/agent/agents
-.pi/agent/agents/**
-# 圧縮の設定 (@thgilciffart/pi-compaction) も stock の package の設定なので配らない
-.pi/agent/compaction.json
-# stock の MCP 設定 (~/.pi/agent/mcp.json。generate.py --target pi-mcp) も配らない。custom の MCP は harness の rules.json
-.pi/agent/mcp.json
-.pi/agent/mcp-adapter.json
-# cc-safety-net の規則 (~/.cc-safety-net。stock の package の設定) も配らない
-.cc-safety-net
-.cc-safety-net/**
-{{ end -}}

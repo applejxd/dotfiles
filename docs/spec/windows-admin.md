@@ -65,7 +65,7 @@ winget の既定は user scope なので、user 版があるものは UAC なし
 | 両 scope 対応 | PowerShell・Obsidian・Oh My Posh・PowerToys・Git・mise・Python 3.12・Bitwarden（本体・CLI） | 既定（user）のまま `310_winget` |
 | user 版しかない | QuickLook・Spotify・Discord | `310_winget` |
 | scope 未宣言の NSIS | Orca | `310_winget`。Electron の NSIS は既定が per-user のはずだが**未確認**。UAC が出たら 309 へ移す |
-| Microsoft Store | Keyhac・iCloud・Kindle・Codex App | `310_winget`（Store 版はユーザー単位） |
+| Microsoft Store | Keyhac・iCloud・Kindle | `310_winget`（Store 版はユーザー単位） |
 
 - 309 の導入判定は `winget list` の出力の ID 列に一致するか。これらは winget では user 版を入れられないので、入っていれば machine 版とみなす（Python Launcher は例外）。winget 以外の経路で入れた同名の user 版が残っていても「導入済み」とみなす（機能を満たすので許容。machine 版にしたいときは手でアンインストールして再実行）
 

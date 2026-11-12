@@ -15,6 +15,8 @@
     // conference-video の vendor/ (manim-skill、MIT) の上流の文書。無改変で保つ (vendor/UPSTREAM.md)
     "home/dot_agents/skills/conference-video/vendor/**",
     // pi-subagents (MIT) の組み込みの agent の写し。prompt なので上流と同一に保つ (permission の行だけ足してある。試験が食い違いを見る)
-    "home/dot_pi/agent/agents/**"
+    "home/dot_pi/agent/agents/**",
+    // pi の prompt template。先頭は frontmatter で、見出しから始まらない（コマンドの本文そのもの）
+    "home/dot_pi/agent/prompts/**"
   ]
 }

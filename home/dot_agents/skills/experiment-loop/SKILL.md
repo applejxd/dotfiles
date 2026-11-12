@@ -51,5 +51,3 @@ description: "ベンチマークのスコアを上げる実験を、複数 seed 
   - `reviewer` は読み取り専用で shell を使えない。`exp log`・`exp best`・`exp compare` の出力、`.exp/decisions.md`、計測コードの `git diff` は、親が実行して依頼文に貼る。
   - 実機では未確認（`pi-subagents` の docs とエージェント定義を読んで書いた）。
 - スクリプト（`python3 ~/.agents/skills/experiment-loop/scripts/exp.py …`）は、stock の pi では確認なしで実行できる見込み（`python3` は読み取りと宣言済み。実機では未確認）。`uv run …`・`node …` は、作業ツリーの外のパスだと確認になりうる。
-
-> 凍結した custom（`pis`）では、監査役は `guarded_task` の `review`、スクリプトの許可は利用者が `[pi.skill_scripts.allow]` へ足していた（このスキルは足さない）。

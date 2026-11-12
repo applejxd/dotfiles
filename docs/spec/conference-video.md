@@ -3,7 +3,7 @@
 研究のリポジトリや論文から、3〜5 分の学会発表動画風の日本語解説動画（`video.mp4`・ナレーション・字幕・説明文）を作るスキル。
 流れは、取材 → 台本 → 音声（VOICEVOX）→ 描画（Manim）→ 仕上げ → 確認。利用者の承認を、構成案と台本の 2 回で取る。
 
-- **配布の場所**: `home/dot_agents/skills/conference-video/`（`chezmoi apply` で `~/.agents/skills/conference-video/` へ）。Copilot・pi・Codex など、`~/.agents/skills` を読む CLI から使える。
+- **配布の場所**: `home/dot_agents/skills/conference-video/`（`chezmoi apply` で `~/.agents/skills/conference-video/` へ）。pi など、`~/.agents/skills` を読む CLI から使える。
 - **正本は skill-lab**（個人のスキル開発用リポジトリの `skills/conference-video/`）。ここへは**複製**（vendor）で、このリポジトリでは編集しない。直すときは skill-lab 側で直して、取り込み直す。
 - **取り込んだ版**: skill-lab のコミット `5b070ac`（2026-10-30）の `skills/conference-video/` の追跡ファイル（62 件。`git archive` で取り出した）。キャッシュ（`.ruff_cache`・`__pycache__`）は含めない。
 - **中の第三者のコード**: `vendor/manim-skill/`（MIT。Yusuke Miyashita。`vendor/UPSTREAM.md` に取得元・コミット・方針、`LICENSE` を保持）。無改変で使う。

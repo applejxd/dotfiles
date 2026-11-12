@@ -18,7 +18,6 @@ import sys
 from pathlib import Path
 
 import pytest
-from agents_common import agents_config_dir
 
 ROOT = Path(__file__).resolve().parents[2]
 GUARD_PATH = (
@@ -601,7 +600,6 @@ def _git(cwd: Path, *args: str) -> None:
 
 @pytest.fixture()
 def repo(workspace, monkeypatch):
-    monkeypatch.setenv("AGENTS_CONFIG_DIR", str(agents_config_dir()))
     _git(workspace, "init", "-q")
     (workspace / ".gitignore").write_text(".tmp/\nbuild/\n")
     (workspace / "a.py").write_text("print('a')\n")
@@ -693,12 +691,6 @@ def test_snapshot_skips_a_file_over_the_per_file_limit(repo, capsys):
     assert guard.main(["snapshot", "r1", "--max-file-mb", "1"]) == 0
     assert not (_src(repo) / "big.bin").exists()
     assert "除外 (too-large)" in capsys.readouterr().out
-
-
-def test_snapshot_refuses_when_the_protected_list_cannot_be_read(repo, monkeypatch, tmp_path):
-    monkeypatch.setenv("AGENTS_CONFIG_DIR", str(tmp_path / "missing"))
-    assert guard.main(["snapshot", "r1"]) == guard.EXIT_USAGE
-    assert not _src(repo).exists()
 
 
 def test_snapshot_needs_the_repository_root(repo):

@@ -127,15 +127,15 @@ Windows は `.config/*` を丸ごと除外しているので、`.chezmoiignore.t
   Out-String が作る ErrorRecord の体裁はトークンを途中省略して伏せ字を漏らすことが分かった。
   そのため外部コマンドは `Invoke-Native`（呼ぶ間だけ Continue、出力は行の文字列）を通す
 - **未検証**: 本物のトークンでのログイン、実際の Bitwarden の項目との組み合わせ、Windows での `uvx hf` の実行
-- **未対応**: `~/.cache/huggingface/token` は、エージェントの読み取り拒否（permission・sandbox の deny 一覧）にまだ入れていない
+- **未対応**: `~/.cache/huggingface/token` は、エージェントの読み取り拒否（permission-system の規則と囲いの deny 一覧）にまだ入れていない
 
 ### 脅威と守らないもの
 
 | 防ぐ | 防がない |
 | --- | --- |
 | 公開リポジトリからの個人情報・鍵の流出 | 侵害済みの PC からの読み出し（隔離する仕組みではない） |
-| 平文 `.env` の誤コミットと放置 | プロジェクト内で起動した子プロセスへの API キーの継承。**Codex や Claude Code をプロジェクト内で起動すると、それらにも API キーが渡る** |
-| AI エージェントによる age 鍵の読み出し（`~/.config/sops/age` と `**/keys.txt` を permission・hook・sandbox で拒否。[エージェント権限仕様](agent-permissions.md)） | エージェント以外のプロセス（利用者のシェルなど）による読み出し |
+| 平文 `.env` の誤コミットと放置 | プロジェクト内で起動した子プロセスへの API キーの継承。**pi や他のエージェント CLI をプロジェクト内で起動すると、それらにも API キーが渡る** |
+| AI エージェントによる age 鍵の読み出し（`~/.config/sops/age` と `**/keys.txt` を permission-system の規則と囲い（`pib`）で拒否） | エージェント以外のプロセス（利用者のシェルなど）による読み出し |
 
 ### ツールの役割
 
@@ -188,70 +188,34 @@ chezmoi 本体の age 暗号化（`~/.config/chezmoi/key.txt` と `.chezmoi.toml
 
 ## AI エージェントの実行境界（Ubuntu / WSL）
 
-標準の起動は `pis`（pi を Fence というサンドボックスで包む）。脅威モデル・責務の分担・内側から見えるものの正本は
-[サンドボックス（総覧）](sandbox/index.md#目的と脅威モデル)。ここでは要点だけを書く。
+pi の実行境界は、判断の層（`pi-permission-system`・`cc-safety-net`）と、コマンドの実行だけを bwrap で包む囲い（`pib`）の 2 つ。
+構成の全体は [サンドボックス（総覧）](sandbox/index.md)、囲いの仕様は [pi-sandbox-runner](sandbox/pi-sandbox-runner.md)。ここでは要点だけを書く。
+旧来の自作の境界（`pis`・Fence・認証ブローカー・OpenCode の `ocs`）は撤去した（[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）。
 
-- **最優先**: 本物の認証キー（LLM・GitHub・検索 API）を内側（エージェントが動く領域）に置かない。
-  認証は内側の外にあるブローカーが中継する（[ブローカー](sandbox/broker.md)）
-- **次に**: 読み書きできる範囲を作業ツリーと必要な場所に絞る。読み取りは既定で拒否する
+- **最優先**: 本物の認証情報（`~/.ssh`・`~/.aws`・トークン）を、エージェントが実行するコマンドから隠す。囲いは読み取りを許可リスト型にする
+- **次に**: 書き込める範囲を作業ツリーと必要な場所に絞る
 - **守らないこと**: 内側で許された操作の中身の妥当性（認証済みの操作の範囲は PAT・IAM・ブランチ保護が決める）、ワークスペースの中（`.env` など）
-- コマンドの判定（[ガード](guard/index.md)）は境界ではなく、うっかり防止
+- pi 本体・LLM の認証・拡張・MCP は囲いの外で動く（信頼するコード）。ファイルの道具（`read`・`write`・`edit`）は囲いの外で、権限の層がパスで判定する
+- 権限の判定（permission-system・cc-safety-net）は境界ではなく、うっかり防止。**列挙型の規則では任意コード実行の権限境界を作れない**
 
 ### 何を守り、何を守らないか
 
-`pis` の守る・守らないは上の要点と [内側から見えるもの・見えないもの](sandbox/index.md#内側から見えるもの見えないもの) のとおり。
-**列挙型の規則では任意コード実行の権限境界を作れない**ため、保護の主役を OS 側（Fence）へ置く。
+囲いの守る・守らないは [pi-sandbox-runner の限界](sandbox/pi-sandbox-runner.md#保証しないこと限界) のとおり。
 permission 規則のうち**ワークスペース内を対象とするものは「ツール操作上の禁止」にすぎない**。
-`read` / `edit` ツールは止まるが、shell からは同じ対象へ届く。誤操作の抑止にはなるが、任意コードに対する保護ではない。
-
-> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [サンドボックス（総覧）](sandbox/index.md)。
-
-OpenCode の隔離起動 `ocs`（[Fence](https://github.com/fencesandbox/fence) で囲う。通常起動 `opencode` と併用。
-構成と境界の組み立て規則は [OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md)、
-目的は[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) のとおりエージェントのうっかりの防止）の守る・守らないは次のとおり。
-
-| 守る | 守らない |
-| --- | --- |
-| ホストの秘密情報（`~/.ssh`・資格情報）。読み取りは既定で拒否し、道具の置き場と作業用の親ディレクトリだけを開ける。**例外: モデル API の資格情報**は共有する DB にあり、内側から平文で読める（[決めた例外](sandbox/opencode-sandbox.md#既知の制約)） | **ワークスペースの中**。`.env` や `.git/hooks` は shell から届く |
-| Windows 側（`/mnt`）とホストの `/tmp` | 開けた作業用ディレクトリ（`~/src` など）に紛れた秘密の読み取り |
-| 起動ディレクトリの外（`~/.cache`・OpenCode のデータディレクトリなどの例外を除く）への書き込み | ローカルの Git 履歴（未コミット作業は起動前に退避する） |
-| 通信を許可したドメイン以外への通信 | 通信を許可したドメインへ何を送るか |
-| 保護機構そのもの（`denyWrite` と起動の拒否。効く範囲は[条件付き](sandbox/fence-boundary.md#制御ファイルの保護が効く範囲)） | 他のプロジェクトの会話（DB を共有する） |
+`read` / `edit` ツールは止まるが、囲いの外の shell からは同じ対象へ届く。誤操作の抑止にはなるが、任意コードに対する保護ではない。
 
 ### プロジェクトごとの追加の許可
 
-> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [サンドボックス（総覧）](sandbox/index.md)。
+囲いの内側に見せる場所は、利用者が `~/.config/pi-sandbox/runner.local.toml` に足す（[導入と確認](sandbox/pi-sandbox-runner.md#導入と確認)）。
+プロジェクトの `.pi/` に置いた設定は、`pib` では読まない（`--no-approve`）。
 
-起動ディレクトリの外を開けたいときは、`ocs` ではプロジェクトが `.opencode/sandbox.toml` で足す
-（書き方は [プロジェクトごとの追加](sandbox/fence-boundary.md#プロジェクトごとの追加)）。
-`pis` の追加の入口は [境界の構成](sandbox/opencode-sandbox.md)（`pis` と `ocs` が共有）にある。
-
-**承認は取らない。** 精査していないリポジトリが自分で境界を広げることは、ADR-0012 で
-非目的にした。境界の内側のエージェントが宣言を書き足すことはできない（`.opencode` は保護対象）。
+**承認は取らない。** 精査していないリポジトリが自分で境界を広げることは、非目的にしている。
 
 ### 受容しているリスク
 
-`pis` と `ocs` に共通:
-
 - 未コミット・未追跡・ignored のファイルは失いうる
 - ローカルの Git 履歴も失いうる（`.git` は書き込み可能領域の中）
-- 信頼済みリモートへ push 済みの内容は、**ローカルの破壊だけでは**失われない
-  （復旧にはリモート側の保持と可用性が要る）
-
-> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [サンドボックス（総覧）](sandbox/index.md)。
-
-`ocs` だけのもの:
-
-- DB を共有するので、エージェントのうっかりで DB を壊すと全部の履歴と snapshot に響く
-- `ocs` は境界を張る前にホストで `git`（退避と worktree の判定）と Fence を動かし、
-  OpenCode の DB を読み取り専用で開く（既定モデルの選択）。`opencode` はホストでは動かさず、
-  Fence の子として境界の内側で起動する。環境変数は、落とす資格情報と Fence・`git`・内側の
-  opencode 向けに変えるもの（[信頼の鎖](sandbox/fence-boundary.md#信頼の鎖)）を除き、利用者の
-  環境のまま渡す。精査していないワークスペースがそれらを騙すことは対象外
-  （[ADR-0012](../adr/0012-ocs-boundary-for-accidents.md) の非目的）
-
-snapshot（`/undo`）は**日常の取り消し機能**であって保全ではない。復旧データ
-自身が同じ shell から消せるうえ、捕捉は best effort。
+- 信頼済みリモートへ push 済みの内容は、**ローカルの破壊だけでは**失われない（復旧にはリモート側の保持と可用性が要る）
 
 ### `chezmoi apply` は人間が行う
 
@@ -268,13 +232,7 @@ snapshot（`/undo`）は**日常の取り消し機能**であって保全では�
 > 2. テンプレートと参照先の審査が済んでから `chezmoi diff` を使う
 
 **未審査の作業コピーを開くときは、project trust（作業先の `.pi/` の拡張・MCP・設定を読むかの確認）に従うこと。**
-素の `pi` は信頼の確認が出るので、精査するまで許可しない。`pis` は作業先の `.pi/` を常に読まない（`--no-approve`。
-[pi のガード](guard/pi-guard.md#起動)）。
-
-> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md#起動)。
-
-OpenCode の通常起動（`opencode`）は、起動時にプロジェクト設定を探索し、plugin・MCP・formatter・LSP が動きうるので、
-未審査の作業コピーでは開かない。
+素の `pi` は信頼の確認が出るので、精査するまで許可しない。`pib` は作業先の `.pi/` を常に読まない（`--no-approve`）。
 
 ## セキュリティ要件
 

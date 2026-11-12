@@ -6,7 +6,7 @@ description: "GitHub の issue・PR・Projects v2 を gh CLI で管理する。�
 # github-operations skill
 
 > **fork しない（`context: fork` / `agent` を付けない）。** 不足情報の質問・実行前の承認・
-> 親会話の参照が要るため。see docs/research/opencode/skill-frontmatter.md
+> 親会話の参照が要るため。
 
 操作はすべて `gh` の直接呼び出しで行う（書き込みをスクリプトに包まない。権限層が
 コマンドを見て判定できるようにするため）。gh の使い方は `gh <cmd> --help` を見る。
@@ -14,9 +14,9 @@ description: "GitHub の issue・PR・Projects v2 を gh CLI で管理する。�
 
 ## 権限の方針
 
-- 権限の正本は配布元 dotfiles の `home/dot_config/agents/common.toml.tmpl`
-  （`gh api` は hook の `check_bash.py` が REST の method と GraphQL の query / mutation を解析する）。
-  実際の permission / hook / sandbox の判定を優先する。参照先が読めないことを操作許可の根拠にしない
+- 権限の正本は配布元 dotfiles の `home/.chezmoitemplates/pi-permission-policy.json`
+  （変更系の `gh` は確認になる）。
+  実際の permission-system の判定を優先する。参照先が読めないことを操作許可の根拠にしない
 - 拒否されたら迂回しない。別コマンド・別 API・別ツールで同じ結果を得ようとせず、ユーザーに報告して止まる
 - 認証スコープを勝手に足さない（`gh auth refresh` はユーザーに案内する）。token の値を取得・表示しない
 

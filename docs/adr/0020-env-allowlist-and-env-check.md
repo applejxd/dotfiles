@@ -57,7 +57,7 @@
 ### ネガティブな結果
 
 - 秘密らしい名前の正規表現を、`env_check.py` に複製して持つ（`test_env_check.py` が一致を固定する）
-- 名前に `SESSION` を含む無害な変数（`WT_SESSION`）が、`echo $WT_SESSION` で止まる誤検知が残る（未修正。[記録 S2](../research/agents/pis-sandbox-field-test.md#記録-s2--2026-10-25内側のネットワークページ取得クリップボード)）
+- 名前に `SESSION` を含む無害な変数（`WT_SESSION`）が、`echo $WT_SESSION` で止まる誤検知が残る（未修正。記録 S2）
 
 ### 中立的な結果
 
@@ -65,5 +65,5 @@
 
 ## 関連 ADR
 
-- [ADR-0005](0005-agent-runtime-config-as-secret.md): ランタイム設定を秘密として扱う
-- [ADR-0006](0006-instructions-to-mechanisms.md): 指示を減らし、強制を機構へ寄せる
+- ADR-0005: ランタイム設定を秘密として扱う
+- ADR-0006: 指示を減らし、強制を機構へ寄せる

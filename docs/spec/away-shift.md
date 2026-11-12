@@ -3,9 +3,9 @@
 利用者が席を外している間、**専用の git worktree（枝つき）で子エージェントに検証・実験を反復させ**、戻ったときに枝とレポートを渡すスキル。
 利用者がすることは、離席と戻りの時刻を言うだけ（準備は全自動）。統合するかどうかは利用者が決める。
 本体は `home/dot_agents/skills/away-shift/`（`chezmoi apply` で `~/.agents/skills/away-shift/` へ）。準備・停止判定・記録・事後監査は `scripts/away_guard.py`。
-2026-11-10 に、自作基盤（フルガード）前提から、**pi の stock**（公式の既定＋人気の拡張。[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md)）前提へ直し、
+2026-11-10 に、自作基盤（フルガード）前提から、**pi**（公式の既定＋人気の拡張。ADR-0030）前提へ直し、
 続けて「親が監督し、サイクルごとに新しい子を専用 worktree で動かす」形へ再設計した（下のリハーサル）。
-経緯: [CHG-0030](../change/closed/0030-away-shift-on-pi.md)（フルガードでの対応。凍結で打ち切り）、[CHG-0016](../change/0016-away-shift-opencode.md)（深層学習ジョブの運用。保留）。
+経緯: CHG-0030（フルガードでの対応。撤去で打ち切り）、CHG-0016（深層学習ジョブの運用。保留していたが、撤去に伴い文書を削除した。復元はタグ `archive/custom-harness-2026-11-12`）。
 
 ## 構成（親・子・worktree）
 
@@ -57,9 +57,9 @@
 - **`prepare` は `git worktree add -b`** を使う（`git flow feature start` に依存しない。どのリポジトリでも動く）。枝名は `feature/away-<run_id>`。
 - **`audit --kill` は、cwd が worktree の中のプロセスだけを止める**。端末つき（利用者の操作）と、run より前に起動したプロセスは止めない。
   `/proc` を読むので Linux だけ。`stop` が子のサブプロセスを止めない実測が理由。
-- **事前判定 `preflight.py` は stock では使わない。** 凍結した旧ハーネスの判定器を呼ぶ作りで、stock の実際のガードと食い違う。custom プロファイル用として残す。
+- **事前判定 `preflight.py` は使わない。** 旧ハーネスの判定器を呼ぶ作りで、pi の実際の権限と食い違う。撤去した（ADR-0037）。
 - **認可チェーンのリンクは作らない。** 標準の機能（方針の `deny` に理由を付ける）で足りる。グローバルな環境変更は ask ではなく deny + 理由で止める。
-- **`snapshot`（作業コピー）は使わない。** worktree が上位互換。コードは残す（custom プロファイルの手順書が参照しうる）。
+- **`snapshot`（作業コピー）は使わない。** worktree が上位互換。
 - **再開は子の完了通知。** `bg_run` の `sleep`（手段 C）は、子を使わない待機の部品として残す。`/goal` の `goal_wait` は採らない（下）。
 
 ## 再開の仕組み

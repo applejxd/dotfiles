@@ -14,9 +14,8 @@ dependencies = [
 keypirinha-stub = { git = "https://github.com/applejxd/keypirinha-stub.git" }
 
 [tool.pytest.ini_options]
-# 一時領域の肥大を防ぐ (CHG-0042 段 4)。pytest 既定は直近 3 回分を全部残し、TMPDIR に 5 GB 積み上がった。
+# 一時領域の肥大を防ぐ。pytest 既定は直近 3 回分を全部残し、TMPDIR に 5 GB 積み上がった。
 # 落ちたテストの分だけ、1 回分を残す
-# see docs/change/0042-tmp-lifecycle.md
 tmp_path_retention_count = 1
 tmp_path_retention_policy = "failed"
 
@@ -29,9 +28,6 @@ extend-exclude = [
   "home/AppData",
   "home/.chezmoitemplates/modify_json.py.tmpl",
   "home/dot_config/gdb",
-  # 計測の課題 (作業役が読む) と隠しテスト。直すと前の計測と条件が変わる
-  "scripts/model-eval/worker/base",
-  "scripts/model-eval/worker/hidden",
   # imozuru (MIT) の上流スクリプト。上流との差分を小さく保つため整形しない (imozuru_root.py と試験は対象)
   "home/dot_agents/skills/imozuru/scripts/chain.py",
   "home/dot_agents/skills/imozuru/scripts/fetch.py",
@@ -46,10 +42,8 @@ line-length = 100
 
 [tool.ruff.lint]
 # ruff の既定ルールはバージョンで変わるので明示する。
-# S (bandit) と BLE は選ばない。hook は「設定を読めなければ fail-closed で
-# deny する」ために意図的な広い except と subprocess 実行を持つため。
-# PERF も選ばない。permission リストの組み立ては「設定キー -> 権限の形」の
-# 対応を並列構造で見せる意図があり、要素数も数十なので内包表記に畳む利得が無い。
+# S (bandit) と BLE は選ばない。外部コマンドの実行と、失敗しても apply を止めない広い except を意図して使うため。
+# PERF も選ばない。表の組み立てを並列構造で見せる意図があり、内包表記に畳む利得が無い。
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "PIE", "RUF"]
 # RUF001-003 は全角括弧などを「紛らわしい文字」として弾く。
 # このリポジトリはコメント・メッセージを日本語で書くので意図した文字。
@@ -60,8 +54,3 @@ ignore = ["RUF001", "RUF002", "RUF003", "SIM108"]
 # E501 の上限だけを広げる (line-length は整形の幅として 100 のまま)。ruff は全角を幅 2 で数えるので、
 # 日本語のコメント・docstring は 100 桁だと 50 文字ぶんしか書けない。実測の最長は 139。
 max-line-length = 140
-
-[tool.ruff.lint.per-file-ignores]
-# pytest の fixture を別ファイルから import して使う (引数名が再定義に見える)
-"test/agents/test_pi_harness_extensions.py" = ["F811"]
-"test/agents/test_pi_speed.py" = ["F811"]
