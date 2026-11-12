@@ -1,5 +1,7 @@
 # pi の子エージェント
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 子エージェント（`guarded_task`）の仕様: 起動と役割、`review` への依頼の書き方、子を保持して追加依頼する job、子の操作、worktree 隔離。Windows の素の pi の読み取り専用の `task` と、二つの task を別物にしている理由も含む。起動・設定は [pi のガード](pi-guard.md)。
 
 ## Windows の子エージェント

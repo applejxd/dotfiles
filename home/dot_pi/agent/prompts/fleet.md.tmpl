@@ -1,4 +1,6 @@
-{{- $fleet := (includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml).pi.commands.fleet -}}
+{{- $pi := (includeTemplate "dot_config/agents/common.toml.tmpl" . | fromToml).pi -}}
+{{- $fleet := $pi.commands.fleet -}}
+{{- if eq (includeTemplate "pi-profile" .) "stock" -}}{{- $fleet = $pi.stock_commands.fleet -}}{{- end -}}
 ---
 description: {{ $fleet.description | toJson }}
 argument-hint: {{ $fleet.argument_hint | toJson }}

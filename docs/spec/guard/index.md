@@ -1,5 +1,7 @@
 # ガード（総覧）
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 pi のツール呼び出し（`bash`・`read`・`edit`・`write`・`grep`・`find`・`ls`・`task` など）を、**実行の前に判定し、必要なら確認を出す**仕組みの全体像。
 サンドボックス（[総覧](../sandbox/index.md)）が OS で強制するのに対し、ガードは**「うっかり防止」**。Python などで迂回できるので、境界とは呼ばない。
 

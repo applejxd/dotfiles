@@ -1,5 +1,7 @@
 # ドライバの接着層（driver-run）
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 ドライバの純関数（[driver.md](driver.md)）を、pi の実際の子の起動に繋ぐ薄い層（`home/dot_config/pi/harness/work/driver-run.ts`）。
 
 ## 旗

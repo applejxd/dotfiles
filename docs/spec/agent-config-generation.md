@@ -497,7 +497,7 @@ stock にしても何も消えず、`chezmoi apply` が配備しなくなり、�
 | 自作の拡張 `~/.pi/agent/extensions/` の各ディレクトリ（`activity`・`ask`・`btw` など。一覧は `pi-own-extensions`） | 配る | 配らない・配備済みは自作のディレクトリだけ削除（`extensions/` 全体は消さない） |
 | `~/.pi/agent/extensions/pi-permission-system/config.json`（確認画面の方針） | 配らない（拡張が無い） | `modify_` スクリプトで配る（下の「permission-system の設定」） |
 | `~/.pi/agent/pi-plan-mode.json`（plan mode の設定） | 配らない | `modify_` スクリプトで配る（下の「追加の 4 つの package」） |
-| `~/.pi/agent/prompts/` | 配る | 配らない・配備済みは削除 |
+| `~/.pi/agent/prompts/`（`/fleet`・`/stepback`） | 配る（`guarded_task` を指示する文面） | 配る（`subagent` ツールを指示する文面。[下](#プロンプトテンプレートfleetstepback)） |
 | ハーネス `~/.config/pi/`（harness・commit-confirm） | 配る | 配らない・配備済みは削除 |
 | `~/.pi/agent/models.json`（pis の broker 用） | 配る | 配らない・配備済みは削除（認証は公式の `/login`） |
 | `~/.pi/agent/settings.json` | 生成器が管理 | ハーネスの `extensions`・`skills` を取り除き、`defaultTools` を `["+grep", "+find", "+ls"]`（pi の既定 read・bash・edit・write に読み取り専用の探索ツールを足す増分指定。plan mode の探索にも使う。利用者が `+`/`-` だけの増分指定にしたら保つ）にし、`packages` を設定。テーマ・既定のモデルなど利用者のキーは触らない |
@@ -714,6 +714,35 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
   - `auto`・`model`・`effort`・`style` は配らない（利用者が `/compaction-settings` で足したキーは保つ。`models` など他のキーも保つ）。壊れた JSON は触らない。何度流しても同じ結果。
 - **`compaction.modelOverrides`（`~/.pi/agent/settings.json`）**: `modify_pi_stock_settings.py.tmpl` が、窓が 100 万のモデル（`github-copilot/` の `claude-sonnet-5.5`・`claude-opus-5.5`・`claude-sonnet-5`・`gpt-6-sol`・`gpt-5.3-codex`・`gemini-3.8-flash`）に `reserveTokens = 300000` を、**無いときだけ**補う（利用者が別の値を書いていれば保つ。`compaction` の他のキーも保つ）。`reserveTokens` = 窓 − 発動点なので、発動点は 70 万トークン（窓の 7 割）。
 - 試験は `test/test_pi_compaction_config.py`。
+
+### プロンプトテンプレート（/fleet・/stepback）
+
+`~/.pi/agent/prompts/fleet.md`・`stepback.md` を、**stock にも custom にも配る**（Unix のみ。Windows は `.chezmoiignore.tmpl` で除外）。
+元データは `home/dot_config/agents/common.toml.tmpl`、配る形は `home/dot_pi/agent/prompts/*.md.tmpl`。
+
+| コマンド | 元データ | 文面 |
+| --- | --- | --- |
+| `/stepback` | `[pi.commands.stepback]` | 両プロファイル共通（ツールに依らない） |
+| `/fleet`（stock） | `[pi.stock_commands.fleet]` | pi-subagents の `subagent` ツールに合わせる |
+| `/fleet`（custom） | `[pi.commands.fleet]` | 凍結した自作ハーネスの `guarded_task`・`pis` を指示する（凍結のまま） |
+
+`fleet.md.tmpl` が `pi-profile` を見て、どちらの元データを使うかを選ぶ。
+
+- **stock の `/fleet` の仕組み**: 専用の機能ではなく、指示文と `subagent` ツール。依頼を作業に分ける → 同時に動かせる組（波）に分ける
+  → 波ごとに `subagent({ workflow: "parallel", ... })` を背景で起動して応答を終える → 完了の通知で再開 → 親が patch を適用し、
+  同じコマンドで再検証する、という順を文面で指示する。書き込む作業は `worktree: true`（子ごとに管理された git worktree。
+  元の作業ツリーが清潔なことが前提）か、リポジトリが定める手順（feature の worktree など）で隔離する。
+  `worktree: true` の子の変更は親の作業ツリーへ自動では入らない（patch と handoff の manifest が残る）ので、親が確認して適用する。
+  適用で作業ツリーが汚れ、次の波の起動が拒否されるときは、利用者に commit か stash の判断を仰ぐ（無断でコミットしない）。
+  読むだけの作業は同じ作業ディレクトリで並列にしてよい。
+- **委譲の根拠**: pi-subagents は「利用者が依頼したときだけ」委譲を許す。`/fleet` の呼び出しを、その依頼として扱う旨を文面に書いてある。
+  コミット・統合・push は文面で禁じている（利用者の指示を待つ）。
+- **経緯（2026-11-12）**: stock は prompts を配らず、配備済みを撤去していた（custom の文面が `guarded_task` を指示するため）。
+  その結果、stock には `/fleet` が無く、消し損ねて残った古い版は存在しない道具（`guarded_task`・`pis`）を呼ばせた。
+  stock 用の文面を足して配る形に直した。
+- **試験**: `test/test_pi_profile.py`（stock が prompts を配り・撤去しない、stock の文面に自作ハーネスの語が無い、custom は不変）、
+  `test/test_pi_commands_doc.py`（[早見](pi-commands.md)と実物の一致）。
+- **既存の機への反映**: `chezmoi apply`（`~/.pi/agent/prompts` だけに絞ってよい）。全体の `apply` は他のスクリプトも動かすので、絞る。
 
 ### pi-subagents の設定（stock）
 

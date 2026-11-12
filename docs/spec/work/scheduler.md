@@ -1,5 +1,7 @@
 # 並列実行基盤（スケジューラ）
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 作業台帳を唯一の状態にして、「次に何を起動するか」を決める純関数群（`home/dot_config/pi/harness/work/`）。外部依存・fs・pi の API・乱数・時計は持たない（時刻・乱数は引数で注入）。台帳の核（reduce・project）は import せず、アダプタが台帳から `SchedState` を作る（配線は別の feature）。背景と決定の経緯: [ADR-0026](../../adr/0026-work-ledger-integrated-architecture.md)。
 
 | ファイル | 役割 |

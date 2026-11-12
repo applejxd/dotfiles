@@ -1,5 +1,7 @@
 # `/goal` の pi への配線 (goal-run)
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 `work/goal-run.ts` の `registerGoal(pi, opts)` が、台帳の上の `/goal`（[goal.md](goal.md)）を pi に登録する接着層。
 変換・導出は `goal.ts`、引数の解析と予算の検査は `goal-core.ts` の純関数に任せ、ここは pi の API へ繋ぐだけ。`index.ts` は `registerWork` の次で 1 回呼ぶ。
 

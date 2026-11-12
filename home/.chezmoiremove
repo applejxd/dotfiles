@@ -146,7 +146,6 @@
 .pi/agent/extensions/{{ $name }}
 {{ end -}}
 {{ end -}}
-.pi/agent/prompts
 .pi/agent/models.json
 .config/pi
 {{ end -}}

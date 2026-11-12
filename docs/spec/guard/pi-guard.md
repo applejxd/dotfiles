@@ -1,5 +1,7 @@
 # pi のガード
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 pi（earendil-works/pi）の拡張として、ツールの実行を判定器（TypeScript の `judge/`。[`decide`](pi-decide.md)）に通す仕組み。
 OpenCode のガード（permission の生成・guide plugin）の後継で、移行の計画と経緯は
 [CHG-0020](../../change/closed/0020-pi-migration.md)、設計の根拠になった試作の観測は

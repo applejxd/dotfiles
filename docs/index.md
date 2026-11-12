@@ -49,7 +49,9 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | 調べものスキル（imozuru）を使う・変える・上流を更新する | [imozuru](spec/imozuru.md) |
 | OpenCode のモデル・プロバイダ（Copilot / Bedrock）を PC ごとに変える | [モデルの割り当て](spec/agent-model-assignment.md#モデルの割り当て) |
 | 新しいモデルが出たときに OpenCode のモデルの割り当てを見直す | [モデルの割り当ての見直し](spec/model-lineup-review.md) |
-| OpenCode で作業を並列に進める（`/fleet`） | [並列作業](spec/opencode-config-generation.md#並列作業fleet) |
+| pi（stock）で作業を並列に進める（`/fleet`・`subagent`） | [プロンプトテンプレート](spec/agent-config-generation.md#プロンプトテンプレートfleetstepback)・[pi のコマンド早見](spec/pi-commands.md) |
+| pi（stock）のスラッシュコマンドを調べる（`/fleet`・`/subagents-fleet`・`/plan` など） | [pi のスラッシュコマンド（stock）の早見](spec/pi-commands.md) |
+| OpenCode で作業を並列に進める（`/fleet`。撤去予定） | [並列作業](spec/opencode-config-generation.md#並列作業fleet) |
 | OpenCode のプラグインを検討する | [プラグイン生態系の棚卸し](research/opencode/plugin/ecosystem.md) |
 
 ### 安全性
@@ -63,6 +65,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | OpenCode を境界の内側で起動する仕組み（隔離起動 `ocs`）を知る | [OpenCode 隔離起動のアーキテクチャ](spec/sandbox/opencode-sandbox.md) |
 | 隔離起動の境界内で読めない・書けない原因を調べる | [境界の組み立ての規則](spec/sandbox/fence-boundary.md#組み立ての規則) |
 | sandbox で何ができるか調べる | [sandbox機能の包括調査](research/agents/sandbox-capabilities.md) |
+| pi のコマンド実行を囲いの中だけで動かす（`pib`）・内側から見えない・書けない原因を調べる | [pi-sandbox-runner](spec/sandbox/pi-sandbox-runner.md) |
 
 ### 凍結した自作基盤（保存のみ・開発しない）
 

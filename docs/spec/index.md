@@ -69,6 +69,13 @@
 | [コマンド・ファイルの判定](guard/agent-command-policy.md) | 照合規則、allow / ask / deny の使い分けと例外、bash 検査ルールの足し方、CLI 差 |
 | [OpenCode のガードの仕様](guard/opencode-guard.md) | OpenCode の guide plugin が出す誘導・deny の説明・allow したコマンドの書き込み形。保留中のレガシー（撤去予定） |
 
+### pi（stock）
+
+| 文書 | 内容 |
+| --- | --- |
+| [pi のスラッシュコマンド（stock）の早見](pi-commands.md) | 組み込み・package・prompt template のコマンドと、凍結した基盤にだけあるもの。実物と突き合わせる試験つき |
+| [pi-sandbox-runner（pi のコマンド実行を包む囲い）](sandbox/pi-sandbox-runner.md) | `shellPath` に差す囲い（`pib`・`pib-shell`・runner）。bwrap の引数の並び・設定（`runner.toml`・`runner.local.toml`）・導入と確認・認証情報の扱い・限界。Linux 専用 |
+
 ## 凍結した自作基盤の仕様
 
 **凍結＝保存のみ。開発しない**（[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。フルガード・`pis`・kcage・PR ビューア・作業台帳が対象）。
@@ -93,7 +100,6 @@
 | [OpenCode 隔離起動のアーキテクチャ](sandbox/opencode-sandbox.md) | `ocs` の構成、起動順序、Fence の境界の組み立て規則、DB の共有、起動前の退避、境界チェック（`ocs --check`）、環境変数 `PIS_EXTRA_READ` での読み取りの追加、`devices`・`PIS_EXTRA_DEVICES` でのデバイスの追加 |
 | [隔離 GPU サンドボックス（WSL2）](sandbox/wsl-sandbox.md) | 専用 WSL2 ディストロ + Docker + Tailscale SSH の作成スクリプト（`scripts/windows/wsl-sandbox/`、手動実行）。手順、手作業で残る ACL、隔離の限界（mirrored）、運用上の注意、検証の状況 |
 | [箱（Incus。試作名 `kcage`）](sandbox/incus-box.md) | リポジトリごとの Incus の箱（`scripts/kcage/`）: 全体図、信頼境界、コマンド、許可表と kcage.toml、デバイス、外向き通信 3 モード、認証ブローカー、テンプレート、フルガードの deny、検証状況、既知の限界 |
-| [pi-sandbox-runner（pi のコマンド実行を包む囲い）](sandbox/pi-sandbox-runner.md) | `shellPath` に差す囲い（`pib`・`pib-shell`・runner）。bwrap の引数の並び・設定（`runner.toml`・`runner.local.toml`）・導入と確認・認証情報の扱い・限界。Linux 専用 |
 | [pis のサンドボックス（pi の側）](guard/pi-sandbox.md) | agent 置き場・セッション・認証、プロキシ必須の環境での通信、拒否リスト型の通信、緩和のゲート |
 
 ### ガード（`guard/`）

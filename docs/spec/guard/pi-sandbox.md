@@ -1,5 +1,7 @@
 # pis のサンドボックス（pi の側）
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 `pis` が pi を Fence の中で起動するときの仕様: agent 置き場・セッション・認証・後始末、プロキシ必須の環境での通信、拒否リスト型の通信、緩和のゲート。境界の組み立ての規則は [Fence 境界の組み立て](../sandbox/fence-boundary.md)、サンドボックスの総覧は [サンドボックス](../sandbox/index.md)、起動・設定は [pi のガード](pi-guard.md)。
 
 > **使う場所**: dotfiles のリポジトリの開発では、このサンドボックスを使わない（`pis --no-sandbox`。[ADR-0025](../../adr/0025-dotfiles-dev-without-os-sandbox.md)）。

@@ -21,12 +21,11 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 HOME_SRC = ROOT / "home"
 STOCK_ONLY_IGNORES = (
-    ".pi/agent/prompts",
     ".pi/agent/models.json",
     ".config/pi",
     ".config/pi/**",
 )
-STOCK_REMOVES = (".pi/agent/prompts", ".pi/agent/models.json", ".config/pi")
+STOCK_REMOVES = (".pi/agent/models.json", ".config/pi")
 PERMISSION_DIR = ".pi/agent/extensions/pi-permission-system"
 PLAN_MODE_CONFIG = ".pi/agent/pi-plan-mode.json"
 PLAN_MODE_MODIFY = HOME_SRC / "dot_pi" / "agent" / "modify_pi-plan-mode.json.py.tmpl"
@@ -834,3 +833,43 @@ def test_permission_policy_validates_against_bundled_schema(tmp_path):
     schema = json.loads(Path(schema_path).read_text(encoding="utf-8"))
     out = json.loads(run_script(permission_script(tmp_path), ""))
     jsonschema.validate(out, schema)
+
+
+# --- プロンプトテンプレート (/fleet・/stepback) --------------------------------
+
+PROMPTS_DIR = ".pi/agent/prompts"
+# stock の pi に無いもの (自作ハーネスのツール・役割・起動)。stock の /fleet が指示してはならない
+HARNESS_ONLY = ("guarded_task", "guarded_", "pis ", "--role", "フルガード", "kcage", "bypass")
+
+
+def test_stock_deploys_the_prompts_and_does_not_remove_them(tmp_path):
+    """stock にも /fleet・/stepback を配る (stock の文面で)。除外にも、撤去にも入れない。"""
+    ignore = lines(render_file(".chezmoiignore.tmpl", tmp_path, profile_env="stock"))
+    remove = lines(render_file(".chezmoiremove", tmp_path, profile_env="stock"))
+    for entry in (PROMPTS_DIR, f"{PROMPTS_DIR}/", f"{PROMPTS_DIR}/**"):
+        assert entry not in ignore, entry
+        assert entry not in remove, entry
+
+
+def test_stock_fleet_prompt_instructs_the_subagent_tool_not_the_harness(tmp_path):
+    """stock の pi の道具は subagent (pi-subagents)。自作ハーネスの guarded_task・pis の指示が残ると、存在しない道具を呼ばせる。"""
+    text = render_file("dot_pi/agent/prompts/fleet.md.tmpl", tmp_path, profile_env="stock")
+    assert "$ARGUMENTS" in text and text.startswith("---\n")
+    assert "subagent" in text and "worktree" in text  # 書き手ごとの作業ディレクトリ (git worktree) の隔離
+    for word in HARNESS_ONLY:
+        assert word not in text, word
+
+
+def test_custom_fleet_prompt_keeps_the_frozen_harness_text(tmp_path):
+    """custom (凍結したハーネス) の文面は、そのまま (guarded_task を使う)。"""
+    text = render_file("dot_pi/agent/prompts/fleet.md.tmpl", tmp_path, profile_env="custom")
+    assert "guarded_task" in text
+
+
+@pytest.mark.parametrize("profile_env", ["stock", "custom"])
+def test_stepback_prompt_is_the_same_for_both_profiles(tmp_path, profile_env):
+    text = render_file("dot_pi/agent/prompts/stepback.md.tmpl", tmp_path, profile_env=profile_env)
+    assert "$ARGUMENTS" in text and "ステップバック" in text
+    for word in HARNESS_ONLY:
+        assert word not in text, word
+    assert "尽ねて" not in text  # 誤字 (尋ねて)

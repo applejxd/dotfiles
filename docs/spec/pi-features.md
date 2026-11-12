@@ -1,5 +1,7 @@
 # pi の機能の地図
 
+> **凍結した自作基盤の文書**（[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](pi-commands.md)。
+
 `pi`（このリポジトリが配るフルガード付きの pi）の機能は、**3 本の柱**と**基本機能**に分けて読む。文書の置き場は歴史的な経緯で、`docs/spec/guard/` に子エージェントや拡張の文書も入っている。
 **この地図が入口**で、各柱から正本へリンクする（文書は動かさない）。
 人間向けの早見（機能・設定の変え方・独自コマンド）は [pi / pis マニュアル](pi-manual.md)。

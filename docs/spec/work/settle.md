@@ -1,5 +1,7 @@
 # 調停の接着層 (settle)
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 `work/settle.ts`。調停 ([arbiter](arbiter.md) の `settle(facts)`) を `agent_before_settle` に登録する薄い層。判断は持たない。
 autocheckpoint・todo・goal がそれぞれ登録して `entries` の置換や継続を取り合うのを、1 つのハンドラにまとめるための入口。
 
