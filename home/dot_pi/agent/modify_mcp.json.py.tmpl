@@ -1,7 +1,6 @@
 {{- /*
-stock の pi の ~/.pi/agent/mcp.json。[[mcp]] (clis に pi を含むもの) から mcpServers を作る。
+stock の pi の ~/.pi/agent/mcp.json。pi-mcp-servers.toml の [[mcp]] から mcpServers を作る。
 pi 組み込みの MCP も pi-mcp-adapter も、このファイルを読む。利用者が pi mcp add で足したサーバは保つ。
-stock でだけ配る (custom は .chezmoiignore.tmpl で除外。custom の MCP は harness の rules.json)。
-see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
+see docs/spec/mcp-servers.md
 */ -}}
-{{ template "modify_json.py.tmpl" (dict "workingTree" .chezmoi.workingTree "common" (includeTemplate "dot_config/agents/common.toml.tmpl" .) "target" "pi-mcp") -}}
+{{ template "modify_json.py.tmpl" (dict "workingTree" .chezmoi.workingTree "common" (includeTemplate "pi-mcp-servers.toml" .) "target" "pi-mcp") -}}

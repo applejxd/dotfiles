@@ -3,7 +3,7 @@
 - **ステータス**: Accepted（責務の分担・原則・実装の方式。残りは、下の「未決」）
 - **日付**: 2026-11-12
 - **決定者**: applejxd（責務の分担を 2026-11-12 に承認。「責務が私のポリシーと一致している」。実装の方式を素の `bwrap` と決めた）
-- **関係**: [ADR-0035](0035-pi-sandbox-gpu-runner.md)（拡張に runner を差す）を**置き換える**（2026-11-12 の実装で、拡張を外した。ADR-0035 は `Superseded by ADR-0036`）。[ADR-0027](0027-isolation-unit-is-environment.md)（隔離の単位は環境）は**置き換えない**。[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)（凍結）と [ADR-0031](0031-evaluate-existing-extensions-first.md)（既存の評価が先）に沿う
+- **関係**: [ADR-0035](0035-pi-sandbox-gpu-runner.md)（拡張に runner を差す）を**置き換える**（2026-11-12 の実装で、拡張を外した。ADR-0035 は `Superseded by ADR-0036`）。ADR-0027（隔離の単位は環境）は**置き換えない**。ADR-0030（凍結）と [ADR-0031](0031-evaluate-existing-extensions-first.md)（既存の評価が先）に沿う
 - **根拠の記録**: [CHG-0066](../change/0066-pi-sandbox-boundary.md)（問題の洗い出しと、境界の検討）、[調査記録](../research/agents/fence-latency-2026-11.md)（Fence と bwrap の実測）
 
 ## コンテキスト
@@ -16,7 +16,7 @@ ADR-0035 の構成（`pib` ＝ 拡張 `@yuru7/pi-sandbox` ＋ runner）を実機
 - **拒否リスト型である。** 一覧に無い秘密は見える。実測で、シェル履歴と Windows のドライブ（`/mnt/c` ほか）が内側から読めた。共有の `/tmp` には、tmux と X11 のソケットがある。
 - **守る対象が未定義である。**
 
-凍結前にも、近い検討をしていた（[CHG-0023](../change/closed/0023-guard-terminology.md) の候補 E「bash だけを Fence に通す」）。当時は、pi のプロセス全体を囲う方針（ADR-0012）を前提に、範囲を理由に見送った。今回の前提は違う。自作の判定器とハーネスは凍結し、stock の pi に権限の拡張を載せている。
+凍結前にも、近い検討をしていた（CHG-0023 の候補 E「bash だけを Fence に通す」）。当時は、pi のプロセス全体を囲う方針（ADR-0012）を前提に、範囲を理由に見送った。今回の前提は違う。自作の判定器とハーネスは凍結し、stock の pi に権限の拡張を載せている。
 
 実測で、次のことが分かった（調査記録）。
 
@@ -141,4 +141,4 @@ pi 標準の設定 `shellPath` に、囲い付きの起動を差す。拡張（`
 
 ## 関連
 
-[CHG-0066](../change/0066-pi-sandbox-boundary.md)・[調査記録: Fence と bwrap の実測](../research/agents/fence-latency-2026-11.md)・[ADR-0035](0035-pi-sandbox-gpu-runner.md)・[CHG-0023 の候補 E](../change/closed/0023-guard-terminology.md)
+[CHG-0066](../change/0066-pi-sandbox-boundary.md)・[調査記録: Fence と bwrap の実測](../research/agents/fence-latency-2026-11.md)・[ADR-0035](0035-pi-sandbox-gpu-runner.md)・CHG-0023 の候補 E

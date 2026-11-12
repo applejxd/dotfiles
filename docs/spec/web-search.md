@@ -2,8 +2,8 @@
 
 Web 検索・ページ取得・論文検索。**自作の MCP サーバ `websearch`**（ツール `web_search` / `fetch_page` / `search_papers`）の 1 経路に一本化した。
 コードの本体は標準ライブラリだけの Python の**核**（`home/dot_config/agents/websearch/core.py`）で、MCP サーバと鍵の同期が呼ぶ。
-以前あった skill `web-search`（薄い CLI `websearch.py`）は**廃止した（2026-11-09）**。入口の選び方は [入口の選び方](guard/pi-extensions.md#入口の選び方)、方針は
-[ADR-0031](../adr/0031-evaluate-existing-extensions-first.md)（既存の評価を先にし、自作は最後の手段。旧 [ADR-0016](../adr/0016-pi-extensions-own-first.md) を置き換え）。
+以前あった skill `web-search`（薄い CLI `websearch.py`）は**廃止した（2026-11-09）**。入口の選び方は 入口の選び方、方針は
+[ADR-0031](../adr/0031-evaluate-existing-extensions-first.md)（既存の評価を先にし、自作は最後の手段。旧 ADR-0016 を置き換え）。
 
 ## 配る範囲
 
@@ -13,7 +13,7 @@ Web 検索・ページ取得・論文検索。**自作の MCP サーバ `websear
 - 核と MCP の配布: `home/.chezmoiignore.tmpl` が、`is-work` のとき `.config/agents/websearch/` を除く（skill `web-search` は廃止したので、スキルの配布は無い）
 - 他の CLI で検索が要るなら、その CLI の MCP 宣言（`[[mcp]]`）で足す（スキルの CLI は戻さない）
 - 鍵ファイルの作成（441 / 349）: `applejxd` の機械だけ
-- 判定は `is-work`（[会社 PC の判定](agent-model-assignment.md#会社-pc-の判定)が正本）。検査は `test/test_chezmoi_templates.py` と、OpenCode 向けの規則を見る `test/agents/test_opencode_external_read.py`（OpenCode 専用。撤去予定。CHG-0020 段 6 は保留中）
+- 判定は `is-work`（会社 PC の判定が正本）。検査は `test/test_chezmoi_templates.py`
 - 既に配られたファイルは、除外しても自動では消えない（chezmoi の除外は「管理しない」で、削除ではない）
 
 ## 構成
@@ -49,9 +49,9 @@ python3 ~/.config/agents/websearch/core.py search "クエリ" [-n 8] [--json] [-
 
 - 結果は **信頼できない外部の内容**として扱う（各ツールの説明にも書き、出力にも注意書きを付ける）。ツールは読み取り専用（`readOnlyHint`）
 - 入力の誤り・秘匿チェックや SSRF 防止での停止・全プロバイダの失敗は、`isError: true` のテキストで返す（サーバは落ちない）。想定外の例外は型名だけ返し、詳細（鍵を含みうる）は出さない
-- 環境変数は CLI と同じ（`BRAVE_API_KEY` など・`WEBSEARCH_BROKER_URL`・`PIS_FETCH_VIA_PROXY`・`WEBSEARCH_CACHE_DIR`）。`WEBSEARCH_MAILTO` は Crossref の polite pool 用（任意）
+- 環境変数は CLI と同じ（`BRAVE_API_KEY` など・`WEBSEARCH_CACHE_DIR`）。`WEBSEARCH_MAILTO` は Crossref の polite pool 用（任意）
 - **検索の送り先が限られる環境では登録しない**（このサーバは外部の検索サービスへ通信する。登録の条件づけは `[[mcp]]` の対象 CLI・条件で行う）
-- **登録**: `common.toml` の `[[mcp]]`（`id = "websearch"`）。`is-work` の機では宣言しない。stock の pi は `~/.pi/agent/mcp.json`（`generate.py --target pi-mcp`）、custom は harness の `rules.json` へ出る。stock の package は `pi-web-access` を入れない（検索はこの MCP に揃えた）。permission は allow。詳細は [MCP サーバの設定](mcp-servers.md#websearch家の機の検索)
+- **登録**: `pi-mcp-servers.toml` の `[[mcp]]`（`id = "websearch"`）。`is-work` の機では宣言しない。`~/.pi/agent/mcp.json`（`generate.py --target pi-mcp`）へ出る。stock の package は `pi-web-access` を入れない（検索はこの MCP に揃えた）。permission は allow。詳細は [MCP サーバの設定](mcp-servers.md#websearch家の機の検索)
 - **未確認**（実機）: `uv` が PATH にあること、stdio の起動、pi 組み込みの MCP が `websearch` を読むこと
 - 配布は `home/.chezmoiignore.tmpl`。個人用の機にだけ配る。Windows にも配る（鍵の同期 349 が呼ぶため）
 
@@ -82,7 +82,6 @@ MCP の `search_papers` は、`OpenAlex → Semantic Scholar → Crossref → ar
 | arXiv（`export.arxiv.org/api/query`） | 不要 | 3 秒に 1 回・単一接続（利用規約）。鎖の最後なので頻度は低い | [利用規約](https://info.arxiv.org/help/api/tou.html)。年の絞り込みは取得後に手元で行う |
 
 - 鎖の記録（`[経過]`）に、飛ばした・失敗した API が残る。全部だめなら `isError`
-- ブローカー（`WEBSEARCH_BROKER_URL`）の内側では、ブローカーが中継する OpenAlex だけを試す（他は `no-broker` で飛ばす）
 - **CLI の `papers` は従来どおり OpenAlex だけ**（挙動を変えない。fallback は MCP の `search_papers` が持つ。核の `run_papers` が実体で、CLI へ載せる判断は後）
 
 ### 次へ回す条件
@@ -134,7 +133,7 @@ python3 ~/.config/agents/websearch/core.py sync-keys --force --unlock   # どこ
 
 | 対象 | 内容 |
 | --- | --- |
-| クエリ | 秘密鍵・AWS のキー・GitHub のトークン・API キー・JWT・`password = …` の代入・内部アドレス（`10.*`、`192.168.*`、`*.internal` など）・長いトークンらしき文字列（40 文字以上の英数字の列。**URL の中でだけ**、`/` で区切った各パスの区切りが「語を `-` `_` でつないだだけ」なら、長さの数えから除く。「語」は英字だけ（20 文字まで、大文字も可）、数字（8 桁まで）、短い英小文字と数字の混在（`z3`、末尾の `2ea0` など 6 文字まで、最大 2 つ）。区切りが 4 部分以上なら英字だけの語が 3 つ以上、あるいは 3 部分以下なら混在なし・30 文字以下。大文字・小文字・数字が混ざるトークン・`=` を含む値・16 進の群をつないだ値・URL の外の語をつないだパスフレーズには当たらない（引き続き止める）。**限界**: URL の中の、語をつないだ長いパスフレーズは通る。[CHG-0032](../change/closed/0032-guard-url-false-positive.md)）を含むと、**外部へ送らず**止める（終了コード 2）。フォールバックで同じクエリを送る相手が増えるため |
+| クエリ | 秘密鍵・AWS のキー・GitHub のトークン・API キー・JWT・`password = …` の代入・内部アドレス（`10.*`、`192.168.*`、`*.internal` など）・長いトークンらしき文字列（40 文字以上の英数字の列。**URL の中でだけ**、`/` で区切った各パスの区切りが「語を `-` `_` でつないだだけ」なら、長さの数えから除く。「語」は英字だけ（20 文字まで、大文字も可）、数字（8 桁まで）、短い英小文字と数字の混在（`z3`、末尾の `2ea0` など 6 文字まで、最大 2 つ）。区切りが 4 部分以上なら英字だけの語が 3 つ以上、あるいは 3 部分以下なら混在なし・30 文字以下。大文字・小文字・数字が混ざるトークン・`=` を含む値・16 進の群をつないだ値・URL の外の語をつないだパスフレーズには当たらない（引き続き止める）。**限界**: URL の中の、語をつないだ長いパスフレーズは通る。CHG-0032）を含むと、**外部へ送らず**止める（終了コード 2）。フォールバックで同じクエリを送る相手が増えるため |
 | 結果 | 先頭に「信頼できない外部の内容」の注意を付ける。スニペットは 300 文字、取得本文は 20,000 文字（`--max-chars`）で打ち切る |
 | `fetch` | `http` / `https` の 80・443 だけ。名前を解決した**全ての IP**が公開アドレスでなければ止める（`127.0.0.1`、`10.*`、`169.254.169.254`、`::1`、IPv4 マップの IPv6 など）。認証情報つき URL・`file:` は止める。リダイレクトは 5 回まで、**毎回**検証する。接続は検証した IP に固定し、`Host` と SNI は元の名前（DNS の再解決で差し替えられない）。本文は 2 MB、`text/*` と JSON・XML だけ（PDF などは止める） |
 | キャッシュ | `~/.cache/websearch/`（Windows は `%LOCALAPPDATA%\websearch`）に、クエリ単位で 1 時間。休止の状態は `state.json`。結果だけを置き、鍵は置かない |
@@ -145,53 +144,12 @@ python3 ~/.config/agents/websearch/core.py sync-keys --force --unlock   # どこ
 実測（鍵なし・実際の鍵での確認、Vault 未同期の症状）は [記録](../research/agents/web-search-spec-notes.md)に移した。
 試験は `uv run --with pytest --no-project pytest test/test_websearch.py`。`sync-keys` は取りに行く前に `bw sync` する。
 
-## `pis` の許可規則
+## 許可規則
 
-**スキル `web-search` の許可規則（`[pi.skill_scripts]` の `websearch.py`）は撤去した**（2026-11-09）。検索は MCP で、MCP のツールの許可は
-[MCP サーバの設定](mcp-servers.md#websearch家の機の検索)にある（permission は allow。plan mode の許可リストにも載せた）。
-旧スキルのパス（`~/.claude/skills/web-search/scripts/websearch.py`）の実行は、許可規則が無く、確認に戻る。
+検索は MCP で、MCP のツールの許可は [MCP サーバの設定](mcp-servers.md#websearch家の機の検索)にある（permission は allow。plan mode の許可リストにも載せた）。
+旧スキル `web-search`（2026-11-09 に廃止）のスクリプトの実行は、許可規則が無く、確認に戻る。
 
 - 外へ出るのはクエリだけで、秘匿チェックが止める。`fetch_page` の取得先は SSRF 対策で公開アドレスに限る
-- 検査は `test/agents/test_decide.py::test_web_search_script_is_no_longer_allowed`
-
-## `pis` の内側のプロキシ越しの取得
-
-**症状**: `pis` の内側で `fetch` が `取得を止めた: 名前を解決できない`（終了コード 2）になる。imozuru の `fetch.py` も
-`ホストを引けない（Temporary failure in name resolution）` で全 URL が失敗する。
-
-**実測**（`pis -p` の内側）は [記録](../research/agents/web-search-spec-notes.md)。内側は DNS を引けず、`HTTPS_PROXY=http://127.0.0.1:3128`（Fence のプロキシ）経由なら許可ドメインに届く。
-**ドメインの許可はプロキシが強制している**。
-
-**原因**: `fetch` は接続の前に自分で名前を引き、全ての IP が公開アドレスかを検査して、その IP に接続を固定する。
-内側では名前を引けないので、プロキシに届く前に検査で落ちる。
-
-**対処（プロキシモード）**: 次の**両方**が揃うときだけ、事前の名前解決を省いて、プロキシへ `CONNECT` して取る。
-
-1. `PIS_FETCH_VIA_PROXY=1`（`pis` の `inner_env` だけが付ける。ホストの同名の値は落とす）
-2. `HTTPS_PROXY`（または `https_proxy`）が `http://127.0.0.1:<port>` の形（ループバックだけ。認証情報つき・`socks5h` などは使わない）
-
-境界の外（普通のシェル、`--no-sandbox`）では、フラグが無いので従来どおり（名前を引いて公開 IP に固定する）。
-環境変数は境界の証明にならない（`PI_HARNESS_BOUNDARY` と同じく「期待」にすぎない）ので、既存のプロキシ設定だけでは有効にしない。
-
-プロキシモードの規則:
-
-| 項目 | 内容 |
-| --- | --- |
-| 対象 | **https の URL だけ**。http（と、リダイレクトで http に落ちた先）は従来の経路。中継は平文の HTTP を 403 にするため |
-| ホスト名 | 小文字の ASCII で、ドットで区切った名前だけ。最後の部分は英字で始める（10進・16進・省略形の IPv4 を名前として通さない）。IP の直指定、`localhost`、`*.local` / `*.internal` / `*.lan` / `*.home.arpa` / `*.localhost` / `*.intranet` / `*.corp`、末尾のドット、`@`・`%`、非 ASCII は止める |
-| 接続 | プロキシへ `CONNECT <ホスト>:443`。TLS は元のホスト名で証明書を検証する。検査・CONNECT・SNI に同じホスト名を使う |
-| 残す検査 | 認証情報つき URL、ポート 443 のみ、リダイレクトは 5 回まで**毎回**同じ検査、本文 2 MB、`text/*` と JSON・XML のみ |
-| 失敗の分類 | CONNECT が拒否されたら `取得を止めた: プロキシが接続を拒否した …`（終了コード 2。許可ドメインの外の可能性）。ページが 403 なら `HTTP 403`（終了コード 3） |
-
-**防御の位置が移る**: 内部アドレスに解決される名前の防御は、ツール内の IP 検査から、プロキシの許可ドメインへ移る。
-許可リストに内部名を足さない限り、内部の宛先へは届かない。
-
-**未対応**: imozuru（`fetch.py` / `imozuru_net.py` / `watch.py`）は、同じ事前の名前解決で止まるので、未対応のまま。
-
-**修正後の実測**（2026-10-25）は [記録](../research/agents/web-search-spec-notes.md)。許可外のドメインは `取得を止めた: プロキシが接続を拒否した …`（終了コード 2）。
-
-検査は `test/test_websearch.py`（`fetch_proxy`、ホストの検査、名前を引かないこと、http の経路、リダイレクト、CONNECT の拒否）と
-`test/agents/test_pi_boundary.py`（フラグを `inner_env` が付けること）。
 
 ## 未実装・未決
 

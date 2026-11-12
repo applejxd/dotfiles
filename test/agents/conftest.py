@@ -11,25 +11,6 @@ import os
 import pytest
 
 
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """テストが作った一時領域を、セッションの終わりに消す。
-
-    ★pytest-xdist のワーカーは ``os._exit`` で終わるので ``atexit`` が走らない。
-      このフックはワーカーの中でも呼ばれる (CHG-0042 段 4)。
-    """
-    try:
-        import agents_common
-    except ImportError:  # このディレクトリ外から収集されたとき
-        return
-    agents_common.cleanup_agents_config_dirs()
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    config.addinivalue_line(
-        "markers", "raw_git_env: ランチャーの git_env() を包まずに使う (契約そのものを見るテスト)"
-    )
-
-
 @pytest.fixture(autouse=True)
 def neutral_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """実行者の ``GIT_*`` と system / global の git 設定を遮断する。
@@ -49,9 +30,7 @@ def neutral_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
     ``HOME`` / ``XDG_CONFIG_HOME`` は変えない (期待値が実ホームに依存するテストがある)。
     既定の ``core.excludesFile`` (``~/.config/git/ignore``) まで要る準備は、
-    その場で ``HOME`` を一時領域へ向ける。ランチャーの実装が動かす git は
-    ``GIT_*`` を落とすのでここでは塞げない。``test_opencode_launcher.py`` の
-    ``_isolate_launcher_git`` が塞ぐ。
+    その場で ``HOME`` を一時領域へ向ける。
 
     出典: <https://git-scm.com/docs/git-config#ENVIRONMENT> — 「GIT_CONFIG_COUNT
     ... this is the highest priority」

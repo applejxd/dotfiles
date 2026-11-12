@@ -1,7 +1,7 @@
 # stock の pi の package の評価（2026-11）
 
 - **日付**: 2026-11-08〜09（月間ダウンロード数は 2026-11-07 時点。npm の公開 API）
-- **目的**: [ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md) で pi を公式の既定＋人気の package へ戻すにあたり、入れる package を 1 つずつ評価して決めた記録。方針は [ADR-0031](../../adr/0031-evaluate-existing-extensions-first.md)。
+- **目的**: ADR-0030 で pi を公式の既定＋人気の package へ戻すにあたり、入れる package を 1 つずつ評価して決めた記録。方針は [ADR-0031](../../adr/0031-evaluate-existing-extensions-first.md)。
 - **方法**: `npm view`・`npm pack`（展開して README・設定・ソースを**読むだけ**）。出典は各 package の同梱 README と、npm の公開 API。数値は人気の目安で、安全性の証拠ではない。
 - **一覧の正本**: `home/.chezmoitemplates/pi-stock-packages`（版固定）。
 
@@ -22,7 +22,7 @@
 
 ## 追加の 4 つの評価と決定（2026-11-09）
 
-利用者が確認して決めた。原文の評価は [archive の pi-eval](../archive/2026-11-agent-stack/pi-eval/)（`background.txt`・`plan-goal.txt`・`rewind-notify.txt`。通知・ステータス表示の節は、下の「通知・ステータス表示の決定」）。月間 DL は npm の last-month（2026-11-07 まで）。
+利用者が確認して決めた。原文の評価は archive の pi-eval（`background.txt`・`plan-goal.txt`・`rewind-notify.txt`。通知・ステータス表示の節は、下の「通知・ステータス表示の決定」）。月間 DL は npm の last-month（2026-11-07 まで）。
 
 | # | package（版） | 月間 DL | 役割 | 権限の範囲（ソースの読み） | 決定 |
 | --- | --- | --- | --- | --- | --- |
@@ -103,7 +103,7 @@
 - **worktree の運用は、利用者の選択で N（拡張ネイティブ）から始める**: トップレベルで 1 回の `async: true` の workflow を呼び、書き込む子に `worktree: true`（使い捨ての worktree と枝 `pi-subagents/…`。patch と handoff の記録）。合わなければ F（親が feature worktree を作り、`subagent({agent, task, cwd, async:true})` で渡す。`cwd` は正規の引数）へ切り替える。比較: N は拡張の意図に沿い、後始末は拡張が行うが、git flow（1 feature = 1 枝）との形が合わず、`subagent_launch` の確認が毎回出る。F は git flow に合い、学習量が小さいが、並列は workflow ではなく複数の独立した呼び出しで、patch・lane の記録は得られない。運用の手順は `.agents/skills/feature-orchestration/references/pi-subagents.md`。
 - **他の候補の判定**: `dynamic-workflows`・`pi-crew`・`agent-fleet` は、子に拡張が載らず permission が効かないので除外。`pi-herdsman` は外部（herdr）依存で除外。`pi-gauntlet` は `pi-subagents` との入れ替え専用で保留（「verify が通るまで review に進まない」の考え方だけ運用に取り込む）。`pi-loop` は `MonitorCreate` だけに関心が残るが `pi-background` で足りる。`@tintinweb/pi-subagents` は入れ替える理由なし。
 - **実機で確かめる 4 点**: idle の親が完了通知で起きること／背景の子の bash が permission-system と cc-safety-net に止められること／**子の ask が親の画面へ転送されること**（最大の不確実性。0.87.0 のコードは `PI_SUBAGENT_PARENT_SESSION` を渡すが、permission-system の docs は別の package にしか触れていない）／`worktree: true` の子の patch を親が適用できること。
-- **設定値（実装済み。仕様は [agent-config-generation](../../spec/agent-config-generation.md#pi-subagents-の設定stock)）**: `subagent/config.json` = `forceTopLevelAsync: true`（強制）・`worktreeProvider: "native"`・`maxActiveAsyncRunsPerSession: 4`・`maxSubagentDepth: 1`・`maxSubagentSpawnsPerRun: 32`（後 4 つは無いときだけ補う）。`agentOverrides.scout.tools` = `read, grep, find, ls, contact_supervisor`、`agentOverrides.oracle.tools` = `read, grep, find, ls`（`tools` は文字列の配列。`+`/`-` の増分指定は不可）。permission は `subagent_supervisor` = allow・`subagent_launch` = ask。
+- **設定値（実装済み。仕様は [agent-config-generation](../../spec/agent-config-generation.md#pi-subagents-の設定)）**: `subagent/config.json` = `forceTopLevelAsync: true`（強制）・`worktreeProvider: "native"`・`maxActiveAsyncRunsPerSession: 4`・`maxSubagentDepth: 1`・`maxSubagentSpawnsPerRun: 32`（後 4 つは無いときだけ補う）。`agentOverrides.scout.tools` = `read, grep, find, ls, contact_supervisor`、`agentOverrides.oracle.tools` = `read, grep, find, ls`（`tools` は文字列の配列。`+`/`-` の増分指定は不可）。permission は `subagent_supervisor` = allow・`subagent_launch` = ask。
 - **実機で確かめる 4 点（すべて未確認）**:
   1. idle の親が、完了通知で起きる。
   2. 背景の子の bash が、permission-system と cc-safety-net に止められる（`/subagents-doctor`）。
@@ -113,7 +113,7 @@
 
 ## Ralph Wiggum ループ系の評価と決定（2026-11-09）
 
-出典は、npm の検索（`keywords:pi-package ralph`。20 件ほど）と、上位 3 件の tarball（`npm pack` で展開して読んだだけ。実行なし）。原文は [archive の pi-eval](../archive/2026-11-agent-stack/pi-eval/ralph.txt)。
+出典は、npm の検索（`keywords:pi-package ralph`。20 件ほど）と、上位 3 件の tarball（`npm pack` で展開して読んだだけ。実行なし）。原文は archive の pi-eval。
 
 - **結論: 追加の package は入れない。** 既定は `/goal`（`pi-goal`。導入済み）。新しい文脈が要るときは、`pi-subagents` の workflow で「毎回新しい子を起こす」ループを書く（[運用ガイド](../../../.agents/skills/feature-orchestration/references/pi-subagents.md)の「Ralph ループ」。スクリプト例つき。検証は未実施）。
 - **候補の判定**:
@@ -169,7 +169,7 @@
   - `pi-show-token-rate`: 398 DL。→ **採用**（ステータス行とコマンドだけ。ファイル・ネットワーク・子プロセスが無い）。
   - `@nbafrank/pi-tks`: 357 DL・0.1.3（2026-10-22）・展開後 44KB。ローカルモデル向けで、ライブ TPS・最終の decode 速度・prefill 速度・TTFT を出す。コマンド `/tps`。ファイル・ネットワーク・子プロセスは grep で 0 件。→ **代替の第 1 候補**。
   - `pi-tps`（summertime-wu）91 DL・`@kinarajv/pi-tps-extensions` 69 DL・`@yqt5420/pi-token-speed` 50 DL・`pi-ttft`（TTFT のみ）25 DL: 利用が少なく、検索結果の説明文しか見ていない。→ 未評価。
-  - 自作の `speed`（`home/dot_pi/agent/extensions/speed/index.ts`。100 行。直近 1 回の TTFT と decode 速度、取れない値は直前の値を残す、reasoning がストリームに出ない経路では `~` を付ける）: stock では配備されない（凍結。[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)）。→ **代替の第 2 候補**。復活には [ADR-0031](../../adr/0031-evaluate-existing-extensions-first.md) の記録（理由・維持費・撤去条件）と承認が要る。
+  - 自作の `speed`（`home/dot_pi/agent/extensions/speed/index.ts`。100 行。直近 1 回の TTFT と decode 速度、取れない値は直前の値を残す、reasoning がストリームに出ない経路では `~` を付ける）: stock では配備されない（凍結。ADR-0030）。→ **代替の第 2 候補**。復活には [ADR-0031](../../adr/0031-evaluate-existing-extensions-first.md) の記録（理由・維持費・撤去条件）と承認が要る。
   - 先行の調査記録: [pi-public-extensions-survey](pi-public-extensions-survey.md) の記録 P8（2026-10-31。当時は公開の拡張を導入せず、README だけで比較した）。
 - **ほかに確認したこと**: pi 1.5.0 の本体には TPS の表示が無い（docs と dist の grep。`tokens per second` のヒットは、OpenRouter の経路指定の項目 `preferred_min_throughput` の説明だけで、表示の機能ではない）。
 - **理由**: [ADR-0031](../../adr/0031-evaluate-existing-extensions-first.md)（既存の拡張で足りるかを先に確認する）。ステータス行だけを触り、ファイル・ネットワーク・子プロセスを使わない最小の候補。日本語の文字数の推定が考慮されている。導入は 1 行の版固定で済む。

@@ -1,20 +1,15 @@
-"""MCP サーバ定義が common.toml の単一ソースから生成されることを固定する。
+"""pi の MCP サーバの宣言 (pi-mcp-servers.toml) から mcp.json が生成されることを固定する。
 
-生成先は Claude Code / Copilot CLI / Codex CLI の 3 つ。
-Gemini CLI と Antigravity は使わないので対象外。
-
-ユーザ・OS による出し分けは common.toml 側の chezmoi テンプレートが行うので、
-生成側 (generate.py / Codex / Claude) には条件が無い。ここでは
-「描画結果が生成先 3 つへそのまま伝わること」を確かめる。
+ユーザ・機 (is-work) による出し分けは pi-mcp-servers.toml 側の chezmoi テンプレートが行うので、
+生成側 (generate.py) には条件が無い。ここでは「描画結果が mcp.json・mcp-adapter.json へそのまま
+伝わること」と、壊れた宣言が apply を止めることを確かめる。
 
 Run with: ``uv run --with pytest --no-project pytest test/agents/ -q``
 """
 
 from __future__ import annotations
 
-import copy
 import json
-import shutil
 import subprocess
 import sys
 import tomllib
@@ -26,84 +21,27 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "agents"))
 
 import generate as gen  # noqa: E402
-from agents_common import load_common, render_common  # noqa: E402
+from agents_common import load_mcp_servers, render_mcp_servers  # noqa: E402
 
-COMMON = load_common()
-# AgentCore Web Search は全機に配る (使うかは実行時に決まる)。個人の機 (applejxd) では pi だけに出し、
-# 会社 PC (tester) では claude / opencode / pi に出す。
-TESTER = load_common("tester")
-CLAUDE_SCRIPT = ROOT / "home/.chezmoiscripts/400_unix/run_onchange_after_410_claude_mcp.sh.tmpl"
-CLAUDE_WINDOWS_SCRIPT = (
-    ROOT / "home/.chezmoiscripts/300_windows/run_onchange_after_346_claude_mcp.ps1.tmpl"
-)
-CODEX_CONFIG = ROOT / "home/dot_codex/modify_config.toml"
-COPILOT_MODIFIER = ROOT / "home/dot_copilot/modify_mcp-config.json.py.tmpl"
-TEMPLATE = ROOT / "home/dot_config/agents/common.toml.tmpl"
-# applejxd では除外されるサーバがあるので、両方のユーザで確かめる
+# 家の機 (applejxd) と会社 PC (それ以外)。出し分けの両側を確かめる
+HOME = load_mcp_servers("applejxd")
+WORK = load_mcp_servers("tester")
 USERS = ["applejxd", "tester"]
 
 HTTP = {"id": "x", "transport": "http", "url": "https://example.com/mcp"}
 STDIO = {"id": "x", "transport": "stdio", "command": "uvx", "args": ["demo"]}
 
 
-def render(
-    path: Path,
-    username: str | None = None,
-    stdin: str | None = None,
-    source: Path | None = None,
-) -> str:
-    """テンプレートを描画する。
-
-    ``username`` を渡すと ``.chezmoi.username`` を差し替える。
-    ``stdin`` を渡すと modify-template の既存ファイル内容として扱う。
-    ``source`` を渡すと ``includeTemplate`` の解決先を差し替える。
-    """
-    chezmoi = shutil.which("chezmoi")
-    if chezmoi is None:
-        pytest.skip("chezmoi is not installed")
-    template = path.read_text(encoding="utf-8")
-    if username is not None:
-        context = {
-            "chezmoi": {
-                "username": username,
-                "homeDir": "/test-home",
-                "stdin": stdin or "",
-            }
-        }
-        template = (
-            f"{{{{ with {json.dumps(json.dumps(context))} | fromJson }}}}\n"
-            f"{template}\n{{{{ end }}}}"
-        )
-        stdin = None
-
-    command = [chezmoi, "--source", str(source or ROOT), "execute-template"]
-    if stdin is None:
-        command_input = template
-    else:
-        command += ["--with-stdin", template]
-        command_input = stdin
-    result = subprocess.run(
-        command, input=command_input, capture_output=True, text=True, encoding="utf-8", check=False
-    )
-    assert result.returncode == 0, result.stderr
-    return result.stdout
-
-
-def servers_for(username, cli=None):
-    return gen.mcp_servers(load_common(username), cli)
-
-
 # ---------------------------------------------------------------------------
-# common.toml 側の健全性
+# 宣言 (pi-mcp-servers.toml) の健全性
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("username", USERS)
-def test_rendered_common_is_valid_toml(username):
+def test_rendered_declaration_is_valid_toml(username):
     """テンプレート化で check-toml が効かなくなる分をここで担保する。"""
-    rendered = tomllib.loads(render_common(username))
+    rendered = tomllib.loads(render_mcp_servers(username))
     assert len(rendered.get("mcp", [])) >= 1
-    assert rendered["bash"]["deny"], "描画で他の節が壊れていない"
 
 
 def test_deepwiki_is_declared_nowhere():
@@ -111,93 +49,34 @@ def test_deepwiki_is_declared_nowhere():
 
     索引が古く、実ソース (v2.0.14) と食い違う説明を返した。上流を読むなら
     `gh api` でタグを指定して取る。
-    see docs/change/closed/0001-compaction-context-handover.md
     """
-    for username in USERS:
-        ids = [s["id"] for s in load_common(username).get("mcp", [])]
-        assert "deepwiki" not in ids, f"{username}: deepwiki が残っている"
+    for common in (HOME, WORK):
+        assert "deepwiki" not in [s["id"] for s in common["mcp"]]
 
 
-def test_common_declares_mcp_servers():
-    for server in TESTER["mcp"]:
+@pytest.mark.parametrize("common", [HOME, WORK], ids=["home", "work"])
+def test_declared_servers_pass_validation(common):
+    assert [name for name, _ in gen.mcp_servers(common)] == [s["id"] for s in common["mcp"]]
+    for server in common["mcp"]:
         assert server["purpose"], f"{server['id']}: purpose が空"
-        allowed = gen.MCP_COMMON_KEYS | gen.MCP_TRANSPORT_KEYS[server["transport"]]
-        assert set(server) <= allowed
 
 
-def test_declared_servers_pass_validation():
-    assert [name for name, _ in gen.mcp_servers(TESTER)] == [s["id"] for s in TESTER["mcp"]]
-
-
-def test_agentcore_websearch_goes_to_claude_and_opencode_on_work_pcs():
-    """★会社 PC では AgentCore Web Search が Claude Code・OpenCode・pi に入る。
-
-    Bedrock 経由では内蔵の検索が無い (OpenCode は別契約の検索先が要る)。
-    Copilot / Codex は使わないので入れない。
-    """
-    ids = {cli: [name for name, _ in gen.mcp_servers(TESTER, cli)] for cli in sorted(gen.MCP_CLIS)}
-    assert ids["claude"] == ids["opencode"] == ids["pi"] == ["agentcore-websearch"]
-    assert ids["copilot"] == ids["codex"] == []
-
-
-def test_agentcore_websearch_goes_only_to_pi_on_personal_pcs():
-    """個人の機 (家) では、動かない MCP を Claude Code・OpenCode に登録しない。pi だけ (使うかは実行時)。"""
-    personal = load_common("applejxd")
-    ids = {
-        cli: [name for name, _ in gen.mcp_servers(personal, cli)] for cli in sorted(gen.MCP_CLIS)
-    }
-    # 家の機には自作の検索 MCP (websearch) も入る。pi 限定
-    assert ids["pi"] == ["agentcore-websearch", "websearch"]
-    assert ids["claude"] == ids["opencode"] == ids["copilot"] == ids["codex"] == []
-
-
-@pytest.mark.parametrize("username", USERS)
-def test_pi_registers_agentcore_only_where_the_gateway_url_exists(username):
-    """pi のフルガードは、AGENTCORE_GATEWAY_URL が空の機では登録しない (requires_env)。"""
-    entries = {e["name"]: e for e in gen.pi_mcp_servers(load_common(username))}
-    entry = entries["agentcore-websearch"]
-    assert entry["requires_env"] == "AGENTCORE_GATEWAY_URL"
-    assert entry["config"]["command"] == "uv" and entry["config"]["exposure"] == "direct"
+def test_home_has_the_own_search_and_work_has_only_agentcore():
+    """個人の機には自作の検索 MCP (websearch) が入る。会社 PC は AgentCore の 1 本だけ。"""
+    assert [name for name, _ in gen.mcp_servers(HOME)] == ["agentcore-websearch", "websearch"]
+    assert [name for name, _ in gen.mcp_servers(WORK)] == ["agentcore-websearch"]
 
 
 def test_agentcore_websearch_runs_the_deployed_wrapper():
     """ラッパーを絶対パスで指す (MCP クライアントは `~` を展開しない)。"""
-    (server,) = [s for s in TESTER["mcp"] if s["id"] == "agentcore-websearch"]
+    (server,) = [s for s in WORK["mcp"] if s["id"] == "agentcore-websearch"]
     assert server["command"] == "uv"
+    assert server["requires_env"] == "AGENTCORE_GATEWAY_URL"
     assert "/test-home/.config/agents/agentcore_websearch_mcp.py" in server["args"]
     assert (ROOT / "home/dot_config/agents/agentcore_websearch_mcp.py").is_file()
-    # Windows でも展開する (Claude の MCP 登録は Windows にもある)
+    # Windows でも展開する
     ignore = (ROOT / "home/.chezmoiignore.tmpl").read_text(encoding="utf-8")
     assert "!.config/agents/agentcore_websearch_mcp.py" in ignore
-
-
-def test_bedrock_disables_the_builtin_websearch():
-    """検索ツールを 1 本にする。Copilot の PC では OpenCode 内蔵の検索を残す。"""
-    personal = load_common("applejxd")
-    assert TESTER["opencode"]["websearch"] is False
-    assert "websearch" not in personal["opencode"]
-    assert gen.merge_opencode_config({}, TESTER)["websearch"] is False
-    assert "websearch" not in gen.merge_opencode_config({}, personal)
-
-
-@pytest.mark.parametrize("value", [True, {"provider": "exa"}, "false"])
-def test_websearch_accepts_only_false(value):
-    with pytest.raises(ValueError):
-        gen.merge_opencode_config({}, {"opencode": {"websearch": value}})
-
-
-def test_clis_filters_only_the_servers_that_declare_it():
-    common = {"mcp": [{**HTTP, "id": "everywhere"}, {**HTTP, "id": "only", "clis": ["claude"]}]}
-    assert [n for n, _ in gen.mcp_servers(common, "claude")] == ["everywhere", "only"]
-    assert [n for n, _ in gen.mcp_servers(common, "codex")] == ["everywhere"]
-    # cli を渡さなければ絞らない
-    assert [n for n, _ in gen.mcp_servers(common)] == ["everywhere", "only"]
-
-
-@pytest.mark.parametrize("clis", [[], "claude", ["claude", "nope"]])
-def test_a_broken_clis_stops_apply(clis):
-    with pytest.raises(ValueError):
-        gen.mcp_servers({"mcp": [{**HTTP, "clis": clis}]})
 
 
 @pytest.mark.parametrize(
@@ -217,6 +96,8 @@ def test_a_broken_clis_stops_apply(clis):
         {**STDIO, "args": "demo"},
         {**STDIO, "args": [1]},
         {**HTTP, "typo": 1},
+        # 生成先が 1 つになったので、clis は書けない
+        {**HTTP, "clis": ["pi"]},
     ],
 )
 def test_broken_declaration_stops_generation(server):
@@ -230,144 +111,16 @@ def test_duplicate_id_stops_generation():
         gen.mcp_servers({"mcp": [HTTP, dict(HTTP)]})
 
 
-# ---------------------------------------------------------------------------
-# ユーザによる出し分け (common.toml のテンプレート側)
-# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("value", ["", "lower", "1BAD", "A B", 3, ["X"]])
+def test_requires_env_must_be_an_uppercase_variable_name(value):
+    with pytest.raises(ValueError):
+        gen.mcp_servers({"mcp": [{**STDIO, "requires_env": value}]})
 
 
-@pytest.mark.parametrize("username", ["applejxd", "APPLEJXD", "CORP\\applejxd"])
-def test_personal_forms_get_the_personal_cli_list(username):
-    assert [name for name, _ in servers_for(username, "claude")] == []
-    assert [name for name, _ in servers_for(username, "pi")] == [
-        "agentcore-websearch",
-        "websearch",
-    ]
-
-
-# ---------------------------------------------------------------------------
-# Copilot 生成 (~/.copilot/mcp-config.json)
-# ---------------------------------------------------------------------------
-
-
-def copilot_entry(server):
-    if server["transport"] == "http":
-        return {"type": "http", "url": server["url"], "headers": {}, "tools": ["*"]}
-    # Copilot は stdio を "local" と呼ぶ (実測: `copilot mcp add` の出力)
-    return {
-        "type": "local",
-        "command": server["command"],
-        "args": server["args"],
-        "tools": ["*"],
-    }
-
-
-@pytest.mark.parametrize("username", USERS)
-def test_copilot_mcp_is_generated_from_common(username):
-    common = load_common(username)
-    merged = gen.merge_copilot_mcp({}, common)
-    assert merged["mcpServers"] == {
-        name: copilot_entry(server) for name, server in gen.mcp_servers(common, "copilot")
-    }
-
-
-def test_copilot_mcp_covers_stdio():
-    # 宣言済みの stdio サーバは claude 限定になったので、合成した定義で確かめる。
-    merged = gen.merge_copilot_mcp({}, {"mcp": [STDIO]})
-    assert any(entry["type"] == "local" for entry in merged["mcpServers"].values())
-
-
-def test_copilot_mcp_keeps_servers_and_fields_it_does_not_own():
-    # 宣言済みの http サーバが 0 件になったので、合成した定義で確かめる。
-    common = {"mcp": [HTTP]}
-    name = HTTP["id"]
-    existing = {
-        "mcpServers": {
-            # CLI 側で足したサーバは消さない
-            "added-by-cli": {"type": "http", "url": "https://other.example.com/mcp"},
-            # 同じサーバでも headers (秘密) と tools (公開範囲) は触らない
-            name: {
-                "type": "http",
-                "url": "https://stale.example.com/mcp",
-                "headers": {"Authorization": "${EXAMPLE_TOKEN}"},
-                "tools": ["search"],
-            },
-        },
-        "unmanaged": True,
-    }
-    before = copy.deepcopy(existing)
-    merged = gen.merge_copilot_mcp(existing, common)
-
-    assert merged["unmanaged"] is True
-    assert merged["mcpServers"]["added-by-cli"] == before["mcpServers"]["added-by-cli"]
-    kept = merged["mcpServers"][name]
-    assert kept["headers"] == {"Authorization": "${EXAMPLE_TOKEN}"}
-    assert kept["tools"] == ["search"]
-    # url は common.toml が正本なので更新する
-    assert kept["url"] == HTTP["url"]
-    assert existing == before
-    assert gen.merge_copilot_mcp(merged, common) == merged
-
-
-def test_copilot_mcp_drops_keys_of_the_previous_transport():
-    """http から stdio へ変えたとき、url と headers を残さない。"""
-    existing = {
-        "mcpServers": {"x": {"type": "http", "url": "https://old.example.com/mcp", "headers": {}}}
-    }
-    merged = gen.merge_copilot_mcp(existing, {"mcp": [STDIO]})
-    assert merged["mcpServers"]["x"] == copilot_entry(STDIO)
-
-
-def test_copilot_mcp_target_is_registered():
-    assert gen.TARGETS["copilot-mcp"] is gen.merge_copilot_mcp
-    assert '"target" "copilot-mcp"' in COPILOT_MODIFIER.read_text(encoding="utf-8")
-    assert not (ROOT / "home/dot_copilot/mcp-config.json").exists()
-
-
-# --- stock の pi (~/.pi/agent/mcp.json) ---
-
-
-def test_pi_mcp_target_is_registered():
-    assert gen.TARGETS["pi-mcp"] is gen.merge_pi_mcp
-    modifier = ROOT / "home/dot_pi/agent/modify_mcp.json.py.tmpl"
-    assert '"target" "pi-mcp"' in modifier.read_text(encoding="utf-8")
-
-
-@pytest.mark.parametrize("username", USERS)
-def test_pi_mcp_is_generated_from_common(username):
-    common = load_common(username)
-    merged = gen.merge_pi_mcp({}, common)
-    assert merged["mcpServers"] == {
-        name: {
-            "command": s["command"],
-            "args": s["args"],
-            **({"exposure": s["pi_exposure"]} if "pi_exposure" in s else {}),
-        }
-        for name, s in gen.mcp_servers(common, "pi")
-    }
-
-
-def test_pi_mcp_websearch_is_direct_so_plan_mode_can_allow_it():
-    assert gen.merge_pi_mcp({}, COMMON)["mcpServers"]["websearch"]["exposure"] == "direct"
-    # agentcore-websearch も direct (plan mode の許可リストに具体名を足すため)
-    for common in (COMMON, TESTER):
-        servers = gen.merge_pi_mcp({}, common)["mcpServers"]
-        assert servers["agentcore-websearch"]["exposure"] == "direct"
-
-
-def test_pi_exposure_fills_only_when_missing_and_stays_out_of_other_clis():
-    declared = {**STDIO, "pi_exposure": "direct", "clis": ["pi", "claude", "opencode", "copilot"]}
-    common = {"mcp": [declared]}
-    merged = gen.merge_pi_mcp({}, common)
-    assert merged["mcpServers"]["x"]["exposure"] == "direct"
-    # 利用者が /mcp で変えた値は保つ
-    kept = gen.merge_pi_mcp({"mcpServers": {"x": {"exposure": "codemode"}}}, common)
-    assert kept["mcpServers"]["x"]["exposure"] == "codemode"
-    assert gen.merge_pi_mcp(merged, common) == merged
-    # 他の生成先は pi_exposure を出さない
-    for out in (gen.merge_copilot_mcp({}, common), gen.merge_opencode_config({}, common)):
-        assert "pi_exposure" not in json.dumps(out, default=str)
-    # harness の rules.json は exposure を従来どおり (pi_exposure を読まない)
-    assert "pi_exposure" not in json.dumps(gen.pi_mcp_servers(common))
+def test_requires_env_is_accepted_and_does_not_reach_mcp_json():
+    common = {"mcp": [{**STDIO, "requires_env": "X_URL"}]}
+    assert [n for n, _ in gen.mcp_servers(common)] == ["x"]
+    assert "requires_env" not in gen.merge_pi_mcp({}, common)["mcpServers"]["x"]
 
 
 def test_pi_exposure_is_validated():
@@ -375,54 +128,92 @@ def test_pi_exposure_is_validated():
         gen.mcp_servers({"mcp": [{**STDIO, "pi_exposure": "bogus"}]})
 
 
-def test_pi_mcp_websearch_only_on_personal_machine():
-    assert "websearch" in gen.merge_pi_mcp({}, COMMON)["mcpServers"]
-    assert "websearch" not in gen.merge_pi_mcp({}, TESTER)["mcpServers"]
-    # 定義は pi 限定。他の CLI へは出ない
-    assert "websearch" not in dict(gen.mcp_servers(COMMON, "claude"))
-    assert "websearch" not in dict(gen.mcp_servers(COMMON, "copilot"))
+# ---------------------------------------------------------------------------
+# stock の pi (~/.pi/agent/mcp.json)
+# ---------------------------------------------------------------------------
 
 
-def test_pi_mcp_adapter_target_is_registered():
-    """会社 PC (is-work) の pi-mcp-adapter 用。pi-subagents が子の mcp: を ~/.pi/agent/mcp.json から解決しないため。"""
-    assert gen.TARGETS["pi-mcp-adapter"] is gen.merge_pi_mcp_adapter
-    assert "pi-mcp-adapter" in gen.PASSTHROUGH_BROKEN_TARGETS
-    modifier = ROOT / "home/dot_pi/agent/modify_mcp-adapter.json.py.tmpl"
-    assert '"target" "pi-mcp-adapter"' in modifier.read_text(encoding="utf-8")
+def test_pi_mcp_targets_are_registered():
+    assert {
+        "pi-mcp": gen.merge_pi_mcp,
+        "pi-mcp-adapter": gen.merge_pi_mcp_adapter,
+    } == gen.TARGETS
+    for modifier, target in (
+        ("modify_mcp.json.py.tmpl", "pi-mcp"),
+        ("modify_mcp-adapter.json.py.tmpl", "pi-mcp-adapter"),
+    ):
+        text = (ROOT / "home/dot_pi/agent" / modifier).read_text(encoding="utf-8")
+        assert f'"target" "{target}"' in text
     ignore = (ROOT / "home/.chezmoiignore.tmpl").read_text(encoding="utf-8")
-    assert ignore.splitlines().count(".pi/agent/mcp-adapter.json") == 2  # custom と、is-work でない機
+    # adapter は adapter を入れる機 (is-work) だけ
+    assert ignore.splitlines().count(".pi/agent/mcp-adapter.json") == 1
+
+
+@pytest.mark.parametrize("common", [HOME, WORK], ids=["home", "work"])
+def test_pi_mcp_is_generated_from_the_declaration(common):
+    merged = gen.merge_pi_mcp({}, common)
+    assert merged["mcpServers"] == {
+        name: {
+            "command": s["command"],
+            "args": s["args"],
+            **({"exposure": s["pi_exposure"]} if "pi_exposure" in s else {}),
+        }
+        for name, s in gen.mcp_servers(common)
+    }
+
+
+def test_pi_mcp_search_servers_are_direct_so_plan_mode_can_allow_them():
+    for common in (HOME, WORK):
+        servers = gen.merge_pi_mcp({}, common)["mcpServers"]
+        assert servers["agentcore-websearch"]["exposure"] == "direct"
+    assert gen.merge_pi_mcp({}, HOME)["mcpServers"]["websearch"]["exposure"] == "direct"
+
+
+def test_pi_exposure_fills_only_when_missing():
+    common = {"mcp": [{**STDIO, "pi_exposure": "direct"}]}
+    merged = gen.merge_pi_mcp({}, common)
+    assert merged["mcpServers"]["x"]["exposure"] == "direct"
+    # 利用者が /mcp で変えた値は保つ
+    kept = gen.merge_pi_mcp({"mcpServers": {"x": {"exposure": "codemode"}}}, common)
+    assert kept["mcpServers"]["x"]["exposure"] == "codemode"
+    assert gen.merge_pi_mcp(merged, common) == merged
+
+
+def test_pi_mcp_websearch_only_on_personal_machine():
+    assert "websearch" in gen.merge_pi_mcp({}, HOME)["mcpServers"]
+    assert "websearch" not in gen.merge_pi_mcp({}, WORK)["mcpServers"]
 
 
 def test_pi_mcp_adapter_has_the_same_servers_as_mcp_json_without_exposure():
-    merged = gen.merge_pi_mcp_adapter({}, TESTER)
-    assert merged["mcpServers"]["agentcore-websearch"] == {
-        "command": merged["mcpServers"]["agentcore-websearch"]["command"],
-        "args": merged["mcpServers"]["agentcore-websearch"]["args"],
-    }
-    plain = gen.merge_pi_mcp({}, TESTER)["mcpServers"]
+    """会社 PC (is-work) の pi-mcp-adapter 用。pi-subagents が子の mcp: を ~/.pi/agent/mcp.json から解決しないため。"""
+    merged = gen.merge_pi_mcp_adapter({}, WORK)
+    plain = gen.merge_pi_mcp({}, WORK)["mcpServers"]
     for name, entry in merged["mcpServers"].items():
         assert entry == {k: v for k, v in plain[name].items() if k != "exposure"}
     assert "exposure" in plain["agentcore-websearch"]  # mcp.json 側は従来どおり
     # 利用者のサーバ・キーは保ち、何度流しても同じ
-    existing = {"mcpServers": {"mine": {"url": "https://example.com/mcp"}}, "settings": {"toolPrefix": "none"}}
-    kept = gen.merge_pi_mcp_adapter(existing, TESTER)
+    existing = {
+        "mcpServers": {"mine": {"url": "https://example.com/mcp"}},
+        "settings": {"toolPrefix": "none"},
+    }
+    kept = gen.merge_pi_mcp_adapter(existing, WORK)
     assert kept["mcpServers"]["mine"] == {"url": "https://example.com/mcp"}
     assert kept["settings"] == {"toolPrefix": "none"}
-    assert gen.merge_pi_mcp_adapter(kept, TESTER) == kept
+    assert gen.merge_pi_mcp_adapter(kept, WORK) == kept
 
 
-@pytest.mark.parametrize(
-    ("common", "server"), [(TESTER, "agentcore-websearch"), (COMMON, "websearch")]
-)
-def test_the_server_given_to_search_agents_is_declared_for_pi_on_that_machine(common, server):
-    """settings の researcher・evidence-auditor が mcp: で指すサーバは、その機で pi に宣言されている。"""
-    assert server in dict(gen.mcp_servers(common, "pi"))
-    source = (ROOT / "home/.chezmoitemplates/modify_pi_stock_settings.py.tmpl").read_text(encoding="utf-8")
+@pytest.mark.parametrize(("common", "server"), [(WORK, "agentcore-websearch"), (HOME, "websearch")])
+def test_the_server_given_to_search_agents_is_declared_on_that_machine(common, server):
+    """settings の researcher・evidence-auditor が mcp: で指すサーバは、その機に宣言されている。"""
+    assert server in dict(gen.mcp_servers(common))
+    source = (ROOT / "home/.chezmoitemplates/modify_pi_stock_settings.py.tmpl").read_text(
+        encoding="utf-8"
+    )
     assert f'"mcp:{server}"' in source
 
 
 def test_pi_mcp_keeps_user_servers_and_keys_and_drops_pi_unknown_keys():
-    declared = {**STDIO, "exposure": "direct", "requires_env": "FOO", "clis": ["pi"]}
+    declared = {**STDIO, "requires_env": "FOO"}
     existing = {
         "mcpServers": {
             "mine": {"url": "https://example.com/mcp"},
@@ -437,243 +228,14 @@ def test_pi_mcp_keeps_user_servers_and_keys_and_drops_pi_unknown_keys():
     assert gen.merge_pi_mcp(merged, {"mcp": [declared]}) == merged
 
 
-# ---------------------------------------------------------------------------
-# Codex 生成 (~/.codex/config.toml の mcp_servers)
-# ---------------------------------------------------------------------------
-
-
-def codex_entry(server):
-    if server["transport"] == "http":
-        return {"enabled": True, "url": server["url"]}
-    return {"enabled": True, "command": server["command"], "args": server["args"]}
-
-
-@pytest.mark.parametrize("username", USERS)
-def test_codex_config_renders_the_servers_for_this_user(username):
-    rendered = tomllib.loads(render(CODEX_CONFIG, username=username))
-    # サーバが 0 件なら [mcp_servers.*] を 1 つも書かない (節ごと生えない)。
-    assert rendered.get("mcp_servers", {}) == {
-        name: codex_entry(server) for name, server in servers_for(username, "codex")
-    }
-    # 既存の手書き設定を壊していないこと
-    assert rendered["approval_policy"] == "untrusted"
-    assert rendered["sandbox_mode"] == "read-only"
-
-
-def test_codex_config_keeps_the_users_own_settings():
-    user_block = '[profiles.mine]\nmodel = "gpt-5"\n'
-    existing = f"# chezmoi-managed:start\nstale = true\n# chezmoi-managed:end\n\n{user_block}"
-    rendered = render(CODEX_CONFIG, username="tester", stdin=existing)
-
-    assert user_block in rendered
-    assert "stale = true" not in rendered
-    assert tomllib.loads(rendered)["profiles"]["mine"] == {"model": "gpt-5"}
-
-
-USER_TABLE = '[profiles.mine]\nmodel = "gpt-5"\n'
-
-
-@pytest.mark.parametrize(
-    "existing",
-    [
-        pytest.param("", id="new-file"),
-        pytest.param(USER_TABLE, id="user-only"),
-        pytest.param(
-            f"# chezmoi-managed:start\nstale = true\n# chezmoi-managed:end\n\n{USER_TABLE}",
-            id="managed",
-        ),
-        # 旧テンプレートが管理ブロック無しの既存ファイルに書いた形
-        pytest.param(
-            f"# chezmoi-managed:start\nstale = true\n# chezmoi-managed:end{USER_TABLE}",
-            id="glued",
-        ),
-    ],
-)
-def test_codex_config_is_stable_from_the_first_apply(existing):
-    """1 回目の apply で安定し、管理ブロックの終端とユーザ設定を分ける。"""
-    first = render(CODEX_CONFIG, username="tester", stdin=existing)
-    second = render(CODEX_CONFIG, username="tester", stdin=first)
-
-    assert second == first
-    assert "# chezmoi-managed:end\n" in first
-    assert first.endswith("\n")
-    if "profiles.mine" in existing:
-        assert tomllib.loads(first)["profiles"]["mine"] == {"model": "gpt-5"}
-
-
-USER_ROOT = 'model = "o3"\n'
-# ab28fee までの形式。管理ブロック 1 つにテーブルまで入り、ユーザ部分は後ろ
-SINGLE_BLOCK = (
-    '# chezmoi-managed:start\nstale = true\n[windows]\nsandbox = "x"\n# chezmoi-managed:end\n\n'
-)
-
-
-@pytest.mark.parametrize(
-    "existing",
-    [
-        pytest.param(USER_ROOT, id="root-only"),
-        pytest.param(f"{USER_ROOT}\n{USER_TABLE}", id="root-and-table"),
-        pytest.param(f"{SINGLE_BLOCK}{USER_ROOT}{USER_TABLE}", id="single-block"),
-        # 管理ブロックより前にトップレベルのキーが書かれた形
-        pytest.param(f"{USER_ROOT}{SINGLE_BLOCK}{USER_TABLE}", id="before-block"),
-    ],
-)
-def test_codex_config_keeps_user_root_keys_at_the_root(existing):
-    """ユーザのトップレベルのキーが管理側のテーブルに吸収されない。
-
-    まとめて後ろへ足すと、`model = ...` が直前の `[windows]` などに属して
-    `windows.model` になっていた。
-    """
-    first = render(CODEX_CONFIG, username="tester", stdin=existing)
-    second = render(CODEX_CONFIG, username="tester", stdin=first)
-    parsed = tomllib.loads(first)
-
-    assert second == first
-    assert parsed["model"] == "o3"
-    assert parsed["windows"] == {"sandbox": "elevated"}
-    assert "stale" not in parsed
-    if "profiles.mine" in existing:
-        assert parsed["profiles"]["mine"] == {"model": "gpt-5"}
-
-
-# ---------------------------------------------------------------------------
-# Claude 登録スクリプト (~/.claude.json は管理外なので CLI 経由)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("username", USERS)
-def test_claude_script_embeds_only_this_users_servers(username):
-    rendered = render(CLAUDE_SCRIPT, username=username)
-    assert "mcp add-json -s user" in rendered
-
-    embedded = json.loads(rendered.split("json.loads(r'''", 1)[1].split("''')", 1)[0])
-    assert [server["id"] for server in embedded] == [
-        name for name, _ in servers_for(username, "claude")
-    ]
-
-
-def test_windows_claude_script_covers_the_same_servers():
-    """Windows の Claude にも登録する (非 applejxd には install.ps1 で claude が入る)。"""
-    source = CLAUDE_WINDOWS_SCRIPT.read_bytes()
-    # WinPS 5.1 は BOM が無いと CP932 として読む
-    assert source.startswith(b"\xef\xbb\xbf")
-
-    rendered = render(CLAUDE_WINDOWS_SCRIPT, username="tester")
-    assert "mcp add-json -s user" in rendered
-    # AI CLI は mise で入れないので、mise に claude を尋ねない
-    assert "which claude" not in rendered
-    assert "'.local\\bin\\claude.exe'" in rendered
-    embedded = json.loads(rendered.split("$managed = @'", 1)[1].split("'@", 1)[0])
-    assert [server["id"] for server in embedded] == [name for name, _ in servers_for("tester")]
-    # 自動変数 $args と衝突する名前を使っていないこと
-    assert "$args" not in rendered
-    assert "$serverArgs" in rendered
-
-
-def test_windows_claude_script_is_skipped_without_claude():
-    """applejxd の Windows には claude を入れないので、中身を出さない。
-
-    BOM だけは残る (Windows PowerShell 5.1 対策で先頭に置いているため)。
-    空のスクリプトを実行しても何も起きない。
-    """
-    rendered = render(CLAUDE_WINDOWS_SCRIPT, username="applejxd")
-    assert rendered.replace("\ufeff", "").strip() == ""
-
-
-# ---------------------------------------------------------------------------
-# 単一ソース性
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("path", [CLAUDE_SCRIPT, CODEX_CONFIG, COPILOT_MODIFIER])
-def test_cli_sources_do_not_hardcode_servers(path):
-    """各 CLI 側のソースに定義を書かない (書くと 3 つが静かに食い違う)。"""
-    source = path.read_text(encoding="utf-8")
-    for server in load_common("tester")["mcp"]:
-        for value in (server.get("url"), server.get("command"), server["id"]):
-            assert value is None or value not in source, f"{path.name} が定義を直書き"
-    assert 'includeTemplate "dot_config/agents/common.toml.tmpl"' in source
-
-
-def test_cli_sources_do_not_filter_by_user():
-    """出し分けは common.toml 側だけ。生成側に規則を複製しない。"""
-    sources = (CLAUDE_SCRIPT, CODEX_CONFIG, COPILOT_MODIFIER, ROOT / "scripts/agents/generate.py")
-    for path in sources:
-        source = path.read_text(encoding="utf-8")
-        assert "exclude_users" not in source
-        assert "applejxd" not in source, f"{path.name} にユーザ名が書かれている"
-    assert 'includeTemplate "llm-provider"' in TEMPLATE.read_text(encoding="utf-8")
-
-
-@pytest.fixture(scope="module")
-def codex_source(tmp_path_factory):
-    """codex を対象にした ``[[mcp]]`` を 1 つ足した合成ソース。
-
-    ``clis`` で絞った結果、codex 向けのサーバは 0 件になった。衝突ガードは
-    ``range`` の内側にあるので、宣言が 1 つも無いと発火しない。ここだけ
-    common.toml を差し替えて確かめる。
-    """
-    root = tmp_path_factory.mktemp("codex-src")
-    (root / ".chezmoiroot").write_text("home\n", encoding="utf-8")
-    # common.toml.tmpl が includeTemplate で共有テンプレートを読む
-    shutil.copytree(ROOT / "home/.chezmoitemplates", root / "home/.chezmoitemplates")
-    target = root / "home/dot_config/agents"
-    target.mkdir(parents=True)
-    target.joinpath("common.toml.tmpl").write_text(
-        TEMPLATE.read_text(encoding="utf-8")
-        + '\n[[mcp]]\nid = "ddgs"\npurpose = "試験用"\nclis = ["codex"]\n'
-        'transport = "stdio"\ncommand = "uvx"\nargs = ["demo"]\n',
-        encoding="utf-8",
-    )
-    return root
-
-
-def test_codex_stops_when_an_unmanaged_table_would_collide(codex_source):
-    """管理ブロック外の同名 MCP を放置すると TOML が重複宣言になる。"""
-    conflict = (
-        "# chezmoi-managed:start\nstale = true\n# chezmoi-managed:end\n\n"
-        '[mcp_servers.ddgs]\ncommand = "old"\n'
-    )
-    with pytest.raises(AssertionError, match=r"mcp_servers\.ddgs"):
-        render(CODEX_CONFIG, username="tester", stdin=conflict, source=codex_source)
-
-
-def test_rendered_policy_is_validated_by_a_hook():
-    """check-toml を外した分を機械で埋めていること。"""
-    config = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-    assert "scripts/agents/validate_common.py" in config
-    assert (ROOT / "scripts/agents/validate_common.py").is_file()
-
-
-# ---------------------------------------------------------------------------
-# requires_env と、pi の MCP の出どころ (rules.json)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("value", ["", "lower", "1BAD", "A B", 3, ["X"]])
-def test_requires_env_must_be_an_uppercase_variable_name(value):
-    with pytest.raises(ValueError):
-        gen.mcp_servers({"mcp": [{**STDIO, "requires_env": value}]})
-
-
-def test_requires_env_is_accepted_and_does_not_reach_other_clis():
-    common = {"mcp": [{**STDIO, "requires_env": "X_URL"}]}
-    assert [n for n, _ in gen.mcp_servers(common)] == ["x"]
-    (entry,) = gen.pi_mcp_servers(common)
-    assert entry["requires_env"] == "X_URL" and "requires_env" not in entry["config"]
-    assert "requires_env" not in gen.merge_copilot_mcp({}, common)["mcpServers"]["x"]
-
-
-def test_pi_mcp_servers_come_from_rules_json_on_every_os_and_mcp_json_is_stock_only():
-    """custom (フルガードを載せた pi) は MCP を rules.json から登録する (pi-harness は変えない)。
-
-    stock の pi は ~/.pi/agent/mcp.json (pi-mcp)。custom では配らない (.chezmoiignore.tmpl)。
-    """
-    assert gen.TARGETS["pi-mcp"] is gen.merge_pi_mcp
-    ignore = (ROOT / "home/.chezmoiignore.tmpl").read_text(encoding="utf-8")
-    assert ".pi/agent/mcp.json" in ignore
-    (entry,) = gen.pi_mcp_servers(TESTER)
-    assert entry["name"] == "agentcore-websearch" and entry["config"]["exposure"] == "direct"
+def test_broken_existing_json_is_returned_untouched(tmp_path, capsys, monkeypatch):
+    """利用者も書くファイル。壊れていたら触らずそのまま返す (apply を止めない)。"""
+    common = tmp_path / "pi-mcp-servers.toml"
+    common.write_text(render_mcp_servers("applejxd"), encoding="utf-8")
+    broken = tmp_path / "mcp.json"
+    broken.write_text("{broken", encoding="utf-8")
+    assert gen.main(["--target", "pi-mcp", "--common", str(common), "--existing", str(broken)]) == 0
+    assert capsys.readouterr().out == "{broken"
 
 
 # ---------------------------------------------------------------------------
@@ -687,7 +249,7 @@ def _run_wrapper(messages, env_extra=None, args=()):
     env = {
         k: v
         for k, v in __import__("os").environ.items()
-        if k not in ("AGENTCORE_GATEWAY_URL", "PI_HARNESS_BOUNDARY")
+        if k != "AGENTCORE_GATEWAY_URL"
     }
     env.update(env_extra or {})
     stdin = "".join(json.dumps(m) + "\n" for m in messages)
@@ -717,12 +279,8 @@ LIST = {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
     [
         {},  # URL が無い (家)
         {"AGENTCORE_GATEWAY_URL": "http://insecure.example/mcp"},  # https でない
-        {
-            "AGENTCORE_GATEWAY_URL": "https://gw.example/mcp",
-            "PI_HARNESS_BOUNDARY": "1",
-        },  # サンドボックスの内側
     ],
-    ids=["no-url", "not-https", "inside-the-sandbox"],
+    ids=["no-url", "not-https"],
 )
 def test_wrapper_without_a_usable_gateway_serves_an_empty_mcp_server(env):
     done = _run_wrapper(

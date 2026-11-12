@@ -7,7 +7,6 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash(python3 ~/.agents/skills/ipyn
 # ipynb → marimo → GitHub Pages 移行スキル
 
 > **fork しない（`context: fork` を付けない）。** 作業前の確認と有料 API 実行の合意でユーザーとやり取りするため。
-> see docs/research/opencode/skill-frontmatter.md
 
 Jupyter notebook を marimo notebook へ移行し、学習・共有に耐える形へ整理して
 静的HTMLとして公開するまでの手順。2つのリポジトリでの実施結果を基にしている

@@ -137,5 +137,5 @@ Python の実体の探索（uv / mise の導入先）は実行時の `$HOME` の
 
 ## 関連 ADR
 
-- [ADR-0001](0001-external-tool-config-coexistence.md): `common.toml` を単一ソースに
+- ADR-0001: `common.toml` を単一ソースに
   する設定生成方式。本 ADR はその Python runtime の最小バージョンを定める

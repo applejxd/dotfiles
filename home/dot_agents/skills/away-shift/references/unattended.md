@@ -17,9 +17,9 @@
 | Claude `-p` (非対話) | スキップして継続 |
 | Copilot cloud agent | `deny` 扱い |
 | 対話セッションで離席 | 応答が来るまで止まる（run 全体が無駄になる） |
-| pi（stock）TUI | 確認の画面を出して待つ。**5 分（`promptTimeoutMs`）で拒否**し、「誰も答えなかった」と伝える（承認にはならない） |
-| pi（stock）の背景の子エージェント | 確認は親の画面へ転送され、親の `promptTimeoutMs` が効く（実測: 利用者が答えれば続行する） |
-| pi（凍結した custom）`pis --bypass` | `ask` を `allow` にする（`deny` と誘導は効く）。stock にはない |
+| pi の TUI | 確認の画面を出して待つ。**5 分（`promptTimeoutMs`）で拒否**し、「誰も答えなかった」と伝える（承認にはならない） |
+| pi の背景の子エージェント | 確認は親の画面へ転送され、親の `promptTimeoutMs` が効く（実測: 利用者が答えれば続行する） |
+| pi の YOLO mode | `ask` を全部自動で承認する（`deny` は効く） |
 
 つまり「承認が要る操作」を計画に入れた時点で、そのサイクルは失敗する。
 
@@ -30,7 +30,7 @@ Copilot CLI の `permissions-config.json` はプロジェクト単位で
 `commandIdentifiers` に `git` が入っていれば Copilot は `git` 系で
 プロンプトを出さない。`kind: "write"` があればファイル書き込みも同様。
 
-さらに、`common.toml` の `ask` / `deny` に載っていない破壊的な形もある
+さらに、権限の方針（`pi-permission-policy.json`）の `ask` / `deny` に載っていない破壊的な形もある
 （例: `docker run -v /:/host`、`uv tool install`、`mise use -g`）。
 **止められていない = やってよい、ではない。**
 
@@ -69,8 +69,8 @@ Copilot CLI の `permissions-config.json` はプロジェクト単位で
 | `nc` による疎通確認 | 外部 | 必要性をレポートに書く |
 | 長時間のバックグラウンド常駐 | 環境（`subagent stop` では止まらない） | `timeout` で上限を付ける。サイクル内で完結させる |
 
-この表は代表例で、網羅ではない。`~/.config/agents/common.toml` の
-`[bash] ask` / `[bash] deny` に載っているものは当然やらないが、
+この表は代表例で、網羅ではない。権限の方針の
+`ask` / `deny` に載っているものは当然やらないが、
 **そこに無くても上の 3 基準に当たるならやらない**。
 `uv tool install` や `docker run -v /:...` のように、
 `ask` にも `deny` にも載っていない環境変更が実在する。

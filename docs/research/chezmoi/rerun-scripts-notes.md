@@ -19,7 +19,7 @@
 
 印は apply（ホスト）が書くので、置き場はどのエージェントの sandbox からも書けない
 場所にする。`~/.local/state` は Claude Code / Copilot CLI の sandbox から書ける
-（[agent-sandbox.md](../../spec/sandbox/agent-sandbox.md)）ので使わない。書けると、印を `~/.bashrc` への
+（agent-sandbox.md）ので使わない。書けると、印を `~/.bashrc` への
 symlink に差し替えてホストの apply に中身を書き潰させられる。
 同じ理由で、印は同じディレクトリの一時ファイルから `mv` で差し替え、既存の symlink を
 追わない。中身を埋め込まないのは、書き換えられたときにスクリプトへコードが入らないため。

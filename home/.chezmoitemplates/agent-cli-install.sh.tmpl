@@ -1,47 +1,20 @@
 {{- /*
-AI CLI (Claude Code / Copilot CLI / OpenCode V2 / oh-my-pi / pi) を各社公式のインストーラーで導入する。
+pi を公式のインストーラーで導入する。
 呼び出し側は 100_linux / 200_mac の run_onchange_after_ スクリプト。
 共有するのは本体だけで、呼び出し側が shebang と set -eu を置く。
 */ -}}
 {{ template "retry-marker.sh.tmpl" (dict "homeDir" .chezmoi.homeDir "name" "agent-cli-failed") }}
 
-# 既に入っているものは触らない。更新は README の手順 (手動) に従う。
-# 公式インストーラーはどれも導入先が PATH にあるかを確認する。特に Copilot CLI は
-# 見つからないと rc ファイル追記の可否を /dev/tty から対話で聞くため、
-# chezmoi apply が止まらないよう先に通しておく。
-PATH="${HOME}/.local/bin:${HOME}/.opencode/bin:${HOME}/bin:${PATH}"
+# 既に入っているものは触らない。更新は pi update (手動)。
+PATH="${HOME}/.local/bin:${HOME}/bin:${PATH}"
 export PATH
 
-# AI CLI を mise 管理から公式インストーラーへ移したとき、mise の shim と
-# installs は残る。これが 2 通りに悪さをする。
-#
-#   - shim は PATH 上で ~/.local/bin より前にあるので、公式版を入れても
-#     起動するのは shim のまま (実測: shims が 50 番目、~/.local/bin が 60 番目)
-#   - 版を解決できない shim は「mise use -g で global default version を
-#     指定しろ」と言って止まる。~/.config/mise/config.toml は chezmoi 管理なので、
-#     言われたとおり mise use -g しても次の apply で宣言が消え、同じ状態へ戻る。
-#     さらに mise registry の opencode は aqua:anomalyco/opencode (V1 系) で、
-#     生成する設定は V2 スキーマなので configuration invalid になる
-#
-# see docs/spec/troubleshooting-bootstrap.md#ai-cli-が-mise-に-global-default-version-を指定しろと言う
 mise_root="${HOME}/.local/share/mise"
 
-# shim 名と installs 名は一致しない (claude-code の shim は claude) ので別に消す。
-for stale in claude copilot opencode omp; do
-    if [ -e "${mise_root}/shims/${stale}" ]; then
-        echo "mise の残骸 shim を削除します: ${stale}"
-        rm -f "${mise_root:?}/shims/${stale}"
-    fi
-done
-for stale in claude claude-code copilot opencode omp; do
-    if [ -e "${mise_root}/installs/${stale}" ]; then
-        echo "mise の残骸を削除します: installs/${stale}"
-        rm -rf "${mise_root:?}/installs/${stale:?}"
-    fi
-done
-
-# 残骸 shim は実体が無くても command -v を満たす。そのまま「導入済み」と
-# 判定すると公式版の導入が永久にスキップされるので、shim は数えない。
+# 版を解決できない mise の shim は「mise use -g で global default version を指定しろ」と言って止まり、
+# 残骸 shim は実体が無くても command -v を満たす。そのまま「導入済み」と判定すると公式版の導入が
+# 永久にスキップされるので、shim は数えない。
+# see docs/spec/troubleshooting-bootstrap.md#ai-cli-が-mise-に-global-default-version-を指定しろと言う
 is_installed() {
     resolved=$(command -v "$1" 2>/dev/null) || return 1
     case "${resolved}" in
@@ -50,15 +23,7 @@ is_installed() {
     esac
 }
 
-# 各インストーラーは本体を pipe で流し込むので、失敗を個別に受け止められるよう
-# 関数に包む。特に oh-my-pi は api.github.com の releases/latest を curl -fsSL で
-# 引くため、未認証のレート制限 (60 回/時) を超えると 403 で落ちる。
-install_claude() { curl -fsSL https://claude.ai/install.sh | bash; }
-install_copilot() { curl -fsSL https://gh.io/copilot-install | bash; }
-# --no-modify-path: インストーラーが .zshrc / .bashrc へ PATH を追記すると
-# chezmoi 管理のシェル設定と衝突する。PATH は shellenv.sh 側で通している。
-install_opencode() { curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path; }
-install_omp() { curl -fsSL https://omp.sh/install | sh; }
+# インストーラーは本体を pipe で流し込むので、失敗を個別に受け止められるよう関数に包む。
 # Node.js が無いとインストーラーが /dev/tty で導入の可否を聞くので、mise の node が無ければ失敗にする
 # (次の apply で走り直す)。標準出力を端末から外すのは、最後の「Start pi now? [Y/n]」を出させないため
 install_pi() {
@@ -69,61 +34,32 @@ install_pi() {
     )
 }
 
-# 1 つの導入失敗で残り全部を巻き添えにしない。呼び出し側は set -euo pipefail だが、
-# if の条件に置いた失敗では errexit が働かないので、ここで取りこぼしを集める。
 failed_clis=""
 
-ensure_cli() {
-    name="$1"
-    command_name="$2"
-    installer="$3"
-
-    if is_installed "${command_name}"; then
-        echo "${name} は導入済みです"
-        return 0
-    fi
-    echo "${name} を導入します..."
-    if "${installer}"; then
-        echo "${name} を導入しました"
+if is_installed pi; then
+    echo "pi は導入済みです"
+else
+    echo "pi を導入します..."
+    if install_pi; then
+        echo "pi を導入しました"
     else
-        echo "⚠️  ${name} の導入に失敗しました" >&2
-        failed_clis="${failed_clis}${failed_clis:+ }${command_name}"
+        echo "⚠️  pi の導入に失敗しました" >&2
+        failed_clis="pi"
     fi
-}
-
-ensure_cli 'Claude Code' claude install_claude
-ensure_cli 'Copilot CLI' copilot install_copilot
-ensure_cli 'OpenCode V2' opencode install_opencode
-# oh-my-pi (omp)。Pi のフォークで LSP / DAP / subagent を持つ。
-# ★境界 (ocs) の外で動く。permission 機構を持たない設計なので、
-#   保護は「どこで起動するか」と git の使い方に依存する。
-#   see docs/change/closed/0006-pi-harness-trial.md
-# 設定は ~/.omp/agent/ だが、omp は ~/.claude も config root として読むため
-# 既存の skills は追加設定なしで見える。
-ensure_cli 'oh-my-pi' omp install_omp
-# pi。OpenCode のガードの移行先 (起動は pis。see docs/spec/guard/pi-guard.md)。
-# 本体は ~/.pi/agent/install、入口は ~/bin/pi。更新は pi update
-ensure_cli 'pi' pi install_pi
+fi
 
 if [ -n "${failed_clis}" ]; then
-    # ここで非ゼロを返すと apply 全体が止まり、後続のスクリプトまで巻き添えに
-    # なる。外部インストーラーの一時的な不調で dotfiles の適用を止めたくないので
-    # 警告に留め、印を書き直して次の apply で走り直させる。
+    # ここで非ゼロを返すと apply 全体が止まり、後続のスクリプトまで巻き添えになる。
+    # 外部インストーラーの一時的な不調で dotfiles の適用を止めたくないので警告に留め、
+    # 印を書き直して次の apply で走り直させる。
     mark_for_retry "${failed_clis}"
-    cat >&2 <<EOF
+    cat >&2 <<'MSG'
 
-⚠️  導入できなかった CLI:${failed_clis}
-    GitHub API のレート制限 (未認証で 60 回/時) に当たると 403 で失敗する。
-    残量は次で見られる:
-      curl -s https://api.github.com/rate_limit
-    次の chezmoi apply で入っていないものだけを導入し直す。すぐに入れるなら手で入れる:
-      curl -fsSL https://claude.ai/install.sh | bash
-      curl -fsSL https://gh.io/copilot-install | bash
-      curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path
-      curl -fsSL https://omp.sh/install | sh
+⚠️  pi を導入できませんでした。次の chezmoi apply で入っていなければ導入し直します。
+    すぐに入れるなら手で入れる:
       curl -fsSL https://pi.dev/install.sh | sh
-EOF
-    echo "⚠️  完了：一部の AI CLI が入っていません"
+MSG
+    echo "⚠️  完了：pi が入っていません"
 else
-    echo "✅ 完了：AI CLI を導入しました"
+    echo "✅ 完了：pi を導入しました"
 fi

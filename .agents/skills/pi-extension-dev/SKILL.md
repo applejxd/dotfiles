@@ -1,12 +1,12 @@
 ---
 name: pi-extension-dev
-description: "pi の機能を足す・変える・直すときの進め方。最初に pi 本体の標準機能・設定と、すでに入れている package で足りるかを見て、足りなければ公開の package を探して評価し (保守・利用実績・権限・版固定)、skill + CLI や MCP で足りるかを判断する。自作は最後の手段で、理由・維持費・撤去条件を記録して利用者が承認したときだけ (ADR-0031)。直すときは、症状の切り分け → 公式の Issue などを先に検索 → 再現 → 原因の確定 → 修理の順。「pi の拡張を作って」「pi に〇〇の機能を足したい」「pi で〇〇ができる拡張はある？」「拡張の不具合を直して」「pi の仕様を調べて」で使う。凍結した自作ハーネス (custom プロファイル) の拡張を触るときの手順は references/custom-harness.md。pi を使うだけの質問や、他のリポジトリの拡張には使わない。"
+description: "pi の機能を足す・変える・直すときの進め方。最初に pi 本体の標準機能・設定と、すでに入れている package で足りるかを見て、足りなければ公開の package を探して評価し (保守・利用実績・権限・版固定)、skill + CLI や MCP で足りるかを判断する。自作は最後の手段で、理由・維持費・撤去条件を記録して利用者が承認したときだけ (ADR-0031)。直すときは、症状の切り分け → 公式の Issue などを先に検索 → 再現 → 原因の確定 → 修理の順。「pi の拡張を作って」「pi に〇〇の機能を足したい」「pi で〇〇ができる拡張はある？」「拡張の不具合を直して」「pi の仕様を調べて」で使う。pi を使うだけの質問や、他のリポジトリの拡張には使わない。"
 ---
 
 # pi-extension-dev
 
 pi の機能を足す・変えるときは、**既存の拡張・設定の評価が先で、自作は最後の手段**（[ADR-0031](../../../docs/adr/0031-evaluate-existing-extensions-first.md)。
-旧 [ADR-0016](../../../docs/adr/0016-pi-extensions-own-first.md)「自作を基本」を置き換えた）。
+旧 ADR-0016「自作を基本」を置き換えた）。
 このスキルは、足す・直すときの**進め方と調べ方**だけを持つ。仕組みの正本は `docs/` にある。
 
 ## 原則
@@ -41,7 +41,7 @@ pi の機能を足す・変えるときは、**既存の拡張・設定の評価
 
 [pi 本体の仕様を当たる方法](references/pi-spec-guide.md)に沿って、これから触る機能に関する**仕様を先に読む**。
 順序は、版の確認 → 文書 → 型定義 → ソース → 同梱の例 → 変更履歴 → 上流の Issue → 実測。
-話題から読む文書を選ぶ索引がある。公式に明示がある項目・無い項目の棚卸しは [pi-upstream.md](../../../docs/spec/pi-upstream.md) が正本で、
+話題から読む文書を選ぶ索引がある。公式に明示がある項目・無い項目の棚卸しは pi-upstream.md が正本で、
 頼ろうとする挙動がそこに載っているかを先に見る。表の**該当する行の「確認した版」**を、入れている版と照合する（違うなら、インストール済みの文書・実装・試験で確かめ直す）。
 
 **調べるだけの依頼**（「pi の仕様を調べて」）は、この段で終えてよい。確かめたこと・出典・未確認の点を報告し、段 1 以降や修理、ファイルの編集には進まない。
@@ -91,7 +91,6 @@ pi の機能を足す・変えるときは、**既存の拡張・設定の評価
 - **置き場と配備の細部は未決**（最初の自作のときに決め、`docs/spec/agent-config-generation.md` の「pi のプロファイル」へ書く。stock は自作の拡張ディレクトリを配らない）
 - 試験は、公式の拡張点の範囲で自動化できるものを書く。skip は通過ではない。TUI の表示など自動で確かめられないものは、未確認として実機確認の項目へ足す
 - ADR-0031 の「例外として残す自作の一覧」へ、理由・維持費の見込み・撤去の条件を足す
-- 凍結した自作ハーネス（custom プロファイル）の拡張を触るときは [custom-harness.md](references/custom-harness.md)
 
 ## 終わるとき（共通）
 
@@ -103,7 +102,6 @@ pi の機能を足す・変えるときは、**既存の拡張・設定の評価
 
 ## 関連
 
-- 方針: [ADR-0031](../../../docs/adr/0031-evaluate-existing-extensions-first.md)（旧 [ADR-0016](../../../docs/adr/0016-pi-extensions-own-first.md)）、[ADR-0030](../../../docs/adr/0030-freeze-agent-stack-return-to-stock-pi.md)（凍結）
+- 方針: [ADR-0031](../../../docs/adr/0031-evaluate-existing-extensions-first.md)（旧 ADR-0016）、ADR-0030（凍結）・ADR-0037（撤去）
 - 探し方と評価: [references/public-research.md](references/public-research.md)
-- 入口の選び方（skill + CLI / MCP / 拡張）: [pi-extensions.md](../../../docs/spec/guard/pi-extensions.md#入口の選び方)
-- 凍結した自作ハーネスの拡張: [references/custom-harness.md](references/custom-harness.md)
+- 入口の選び方（skill + CLI / MCP / 拡張）: pi-extensions.md

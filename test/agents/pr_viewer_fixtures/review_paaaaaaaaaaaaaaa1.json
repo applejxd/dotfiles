@@ -1,4 +1,0 @@
-{"schema": 1, "readonly": false, "bad": null, "stale": false,
- "staleParts": {"source": false, "target": false, "base": false}, "merged": false,
- "summary": {"done": "検索ボックスを追加しました。\n2 つのファイルを変更。", "files": ["src/search.ts", "src/app.ts"],
-  "findings": [{"ref": "c2", "reply": "旧定数を削除"}], "notes": "db.find の例外処理を確認してください。", "at": "2099-01-01T00:20:00+00:00", "by": "pi"}}

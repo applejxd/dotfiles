@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib.util
 import posixpath
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -89,9 +88,6 @@ def test_no_change():
 @pytest.mark.parametrize(
     "path",
     [
-        "home/dot_config/agents/common.toml.tmpl",
-        "scripts/agents/generate.py",
-        "scripts/agents/hooks.py",
         "pyproject.toml",
         ".pre-commit-config.yaml",
         "mise.toml",
@@ -126,19 +122,8 @@ def test_docs_only_runs_no_pytest():
     assert any("pre-commit run --files docs/spec/development.md" in c for c in flat)
 
 
-def test_hook_change_selects_hook_tests():
-    result = _plan("home/dot_claude/hooks/check_bash.py")
-    assert not result.full
-    targets = _pytest_targets(result)
-    assert "test/agents/test_command_policy.py" in targets
-    assert "test/agents/test_shellparse.py" in targets
-    assert "test/agents/test_pi_harness.py" not in targets
 
 
-def test_pi_judge_change():
-    targets = _pytest_targets(_plan("home/dot_config/pi/harness/judge/index.ts"))
-    assert "test/agents/test_pi_judge_ts.py" in targets
-    assert "test/agents/test_pi_boundary.py" in targets
 
 
 def test_template_change_adds_template_lint():
@@ -206,28 +191,22 @@ def test_plan_normalizes_paths_before_matching():
 def test_references_pick_up_path_chains():
     refs = verify.test_references(["test/agents/test_modifier_wrappers.py"])
     assert (
-        "home/dot_config/opencode/modify_opencode.json.py.tmpl"
-        in refs["test/agents/test_modifier_wrappers.py"]
+        "home/dot_pi/agent/modify_mcp.json.py.tmpl" in refs["test/agents/test_modifier_wrappers.py"]
     )
 
 
 def test_file_a_test_reads_selects_that_test():
-    result = _plan_real("home/dot_config/opencode/modify_opencode.json.py.tmpl")
+    result = _plan_real("home/dot_pi/agent/modify_mcp.json.py.tmpl")
     assert "test/agents/test_modifier_wrappers.py" in _pytest_targets(result)
 
 
 @pytest.mark.parametrize(
     ("path", "test"),
     [
-        ("home/.chezmoitemplates/agent-instructions.md", "test/agents/test_pi_harness.py"),
-        (
-            "home/dot_config/opencode/guide-plugin/commit-message.js",
-            "test/agents/test_pi_commit_confirm.py",
-        ),
-        ("home/dot_config/pi/harness/commit-message.js", "test/agents/test_pi_commit_confirm.py"),
+        ("home/.chezmoitemplates/agent-instructions-stock.md", "test/test_pi_stock_config.py"),
         (
             "home/.chezmoiscripts/100_linux/run_onchange_after_126_agent_cli.sh.tmpl",
-            "test/agents/test_herdr_integration.py",
+            "test/test_bootstrap_scripts.py",
         ),
         (
             "home/.chezmoiscripts/400_unix/run_after_441_websearch_keys.sh.tmpl",
@@ -237,11 +216,10 @@ def test_file_a_test_reads_selects_that_test():
             "home/.chezmoiscripts/300_windows/run_after_349_websearch_keys.ps1.tmpl",
             "test/test_websearch.py",
         ),
-        ("home/dot_agents/skills/commit/SKILL.md", "test/agents/test_check_bash_config.py"),
-        ("home/dot_agents/skills/sdd-docs/SKILL.md", "test/agents/test_opencode_external_read.py"),
-        ("docs/spec/guard/agent-command-policy.md", "test/agents/test_check_bash_config.py"),
+        ("home/dot_agents/skills/commit/SKILL.md", "test/agents/test_skill_frontmatter.py"),
+        ("home/dot_agents/skills/sdd-docs/SKILL.md", "test/test_docs_state.py"),
         (
-            "home/dot_config/opencode/modify_opencode.json.py.tmpl",
+            "home/dot_pi/agent/modify_mcp.json.py.tmpl",
             "test/agents/test_modifier_wrappers.py",
         ),
     ],
@@ -250,10 +228,6 @@ def test_rules_select_tests_that_read_the_file(path, test):
     assert test in _pytest_targets(_plan(path))
 
 
-def test_hook_change_does_not_run_away_guard():
-    assert "test/agents/test_away_guard.py" not in _pytest_targets(
-        _plan("home/dot_claude/hooks/check_bash.py")
-    )
 
 
 def test_shell_script_runs_shellcheck():
@@ -344,23 +318,23 @@ def test_hook_pytest_files_are_what_the_pre_commit_hook_runs():
 
 def test_all_runs_the_tests_for_the_changed_paths_first(monkeypatch, capsys):
     # verify:all でも、変更に当たる試験を T1 として先に回し、T2 では除く
-    monkeypatch.setattr(verify, "collect_changed", lambda _run: ["test/agents/test_pi_confirm.py"])
+    monkeypatch.setattr(verify, "collect_changed", lambda _run: ["test/test_pk.py"])
     monkeypatch.setattr(verify, "tracked_shell_files", lambda _run: [])
     assert verify.main(["--all", "--dry-run"]) == 0
     lines = capsys.readouterr().out.splitlines()
     t1 = next(
-        i for i, line in enumerate(lines) if line.endswith("test/agents/test_pi_confirm.py -q")
+        i for i, line in enumerate(lines) if line.endswith("test/test_pk.py -q")
     )
     t2 = next(
-        i for i, line in enumerate(lines) if "--ignore=test/agents/test_pi_confirm.py" in line
+        i for i, line in enumerate(lines) if "--ignore=test/test_pk.py" in line
     )
     gates = [i for i, line in enumerate(lines) if line.startswith("# ---")]
     assert t1 < t2 and len(gates) == 2 and gates[0] < t1 < gates[1] < t2
 
 
 def test_plan_records_the_selected_tests():
-    result = _plan("home/dot_config/pi/harness/actions.ts")
-    assert "test/agents/test_pi_actions_harness.py" in result.selected
+    result = _plan("home/dot_local/bin/executable_pk")
+    assert "test/test_pk.py" in result.selected
 
 
 class _FakeStamp:
@@ -735,346 +709,75 @@ def test_base_is_not_needed_for_all(tmp_path, monkeypatch, capsys):
     assert "基準を決められません" not in capsys.readouterr().err
 
 
-def test_pr_viewer_tests_without_node_are_unverified(tmp_path, monkeypatch, capsys):
-    repo = _repo(tmp_path)
-    _g(repo, "switch", "-q", "-c", "feature/x")
-    (repo / "apps" / "pr-viewer").mkdir(parents=True)
-    (repo / "apps" / "pr-viewer" / "a.ts").write_text("x\n", encoding="utf-8")
-    _g(repo, "add", ".")
-    _g(repo, "commit", "-q", "-m", "ts")
-    bin_dir = tmp_path / "bin"  # git だけがある PATH (node は見つからない)
-    bin_dir.mkdir()
-    (bin_dir / "git").symlink_to(shutil.which("git"))
-    monkeypatch.setenv("PATH", str(bin_dir))
-    monkeypatch.delenv("VERIFY_ALLOW_SKIP", raising=False)
-    monkeypatch.setattr(verify, "ROOT", repo)
-    monkeypatch.setattr(verify, "execute", lambda *a, **k: [])
-    assert verify.main([]) == 1
-    captured = capsys.readouterr()
-    assert "未検証" in captured.err and "node" in captured.err
-    monkeypatch.setenv("VERIFY_ALLOW_SKIP", "1")
-    assert verify.main([]) == 0
-    captured = capsys.readouterr()
-    assert "警告" in captured.err and "未検証" not in captured.err
 
 
-def test_missing_prerequisites_only_for_pr_viewer_tests():
-    pr = ["test/agents/test_pr_viewer_merge.py"]
-    assert verify.missing_prerequisites(pr, node_ok=lambda: False)
-    assert verify.missing_prerequisites(pr, node_ok=lambda: True) == []
-    # 意図的に skip される別の試験は対象にしない
-    assert (
-        verify.missing_prerequisites(["test/agents/test_pi_judge_ts.py"], node_ok=lambda: False)
-        == []
-    )
 
 
 # --- 閉じたモジュール (T2 の省略) ---
 
-KCAGE_FILE = "scripts/kcage/example.py"
 
 
-def _closed(*paths: str):
-    return verify.closed_scope(list(paths), TEST_FILES, exists=lambda _p: True, refs={})
 
 
-def test_closed_scope_accepts_only_changes_inside_the_module():
-    scope = _closed(KCAGE_FILE, "test/kcage/test_cli.py", "home/dot_local/bin/executable_kcage")
-    assert [m.name for m in scope] == ["kcage"]
-    assert _closed(KCAGE_FILE, "docs/spec/development.md") is None  # 範囲外が 1 つでもあれば全件
-    assert _closed(KCAGE_FILE, "scripts/verify.py") is None
-    assert _closed("unknown/file.txt") is None  # どの規則にも当たらない
-    assert _closed() is None  # 変更なしは全件のまま
 
 
-def test_closed_scope_falls_back_for_deleted_paths_and_outside_readers():
-    gone = verify.closed_scope([KCAGE_FILE], TEST_FILES, exists=lambda _p: False, refs={})
-    assert gone is None
-    outside = "test/test_zzz_outside.py"
-    refs = {outside: frozenset({KCAGE_FILE})}
-    files = [*TEST_FILES, outside]
-    reader = verify.closed_scope([KCAGE_FILE], files, exists=lambda _p: True, refs=refs)
-    assert reader is None  # モジュール外の試験が読むファイルは閉じていない
 
 
-def test_full_stages_can_skip_t2():
-    stages = verify.full_stages(["test/kcage/test_cli.py"], [], TEST_FILES, skip_t2=True)
-    flat = [c for s in stages for c in s]
-    assert not any("--ignore=" in part for c in flat for part in c)
-    assert len(stages) == 2  # T0 と T1 だけ
-    assert len(verify.full_stages([], [], TEST_FILES, skip_t2=True)) == 1
 
 
-def _kcage_repo(tmp_path: Path, *extra: str) -> Path:
-    repo = _repo(tmp_path)
-    _g(repo, "switch", "-q", "-c", "feature/x")
-    for rel in (KCAGE_FILE, *extra):
-        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
-        (repo / rel).write_text("x\n", encoding="utf-8")
-    _g(repo, "add", ".")
-    _g(repo, "commit", "-q", "-m", "change")
-    return repo
 
 
-def _t2_lines(out: str) -> list[str]:
-    return [line for line in out.splitlines() if "--ignore=" in line]
 
 
-def test_all_skips_t2_for_closed_module_changes_and_says_so(tmp_path, monkeypatch, capsys):
-    repo = _kcage_repo(tmp_path)
-    assert _run_main(monkeypatch, repo, "--all") == 0
-    out = capsys.readouterr().out
-    assert "閉じたモジュール (kcage)" in out and "mise run verify:full" in out
-    assert _t2_lines(out) == []
-    assert "pre-commit run --all-files" in out  # T0 は残る
-    assert "test/test_verify.py" in out  # 登録ずれの検査も残る
 
 
-def test_all_full_never_skips(tmp_path, monkeypatch, capsys):
-    repo = _kcage_repo(tmp_path)
-    assert _run_main(monkeypatch, repo, "--all", "--full") == 0
-    out = capsys.readouterr().out
-    assert "T2" not in out and "閉じたモジュール" not in out
-    assert len(_t2_lines(out)) == 1
 
 
-def test_all_runs_everything_when_a_path_is_outside_the_module(tmp_path, monkeypatch, capsys):
-    repo = _kcage_repo(tmp_path, "docs/a.md")
-    assert _run_main(monkeypatch, repo, "--all") == 0
-    out = capsys.readouterr().out
-    assert "閉じたモジュール" not in out and len(_t2_lines(out)) == 1
 
 
-def test_all_runs_everything_when_the_base_is_unknown(tmp_path, monkeypatch, capsys):
-    repo = _repo(tmp_path, branch="zzz")
-    (repo / "scripts" / "kcage").mkdir(parents=True)
-    (repo / KCAGE_FILE).write_text("x\n", encoding="utf-8")
-    assert _run_main(monkeypatch, repo, "--all") == 0
-    out = capsys.readouterr().out
-    assert "閉じたモジュール" not in out and len(_t2_lines(out)) == 1
 
 
-def test_full_requires_all(capsys):
-    with pytest.raises(SystemExit):
-        verify.main(["--full"])
 
 
-def test_stamp_notes_the_scope_when_t2_was_skipped(tmp_path, monkeypatch):
-    repo = _kcage_repo(tmp_path)
-    monkeypatch.setattr(verify, "ROOT", repo)
-    monkeypatch.setattr(verify, "execute", lambda *a, **k: [])
-    monkeypatch.setattr(verify, "acquire_all_lock", lambda *_a, **_k: None)
-    written: list[str] = []
-
-    class Stamp(_FakeStamp):
-        def write_stamp(self, _root, entries=None, scope="full"):
-            written.append(scope)
-
-    monkeypatch.setattr(verify, "_stamp_module", lambda: Stamp({}))
-    monkeypatch.setattr(verify, "_stamp_snapshot", dict)
-    assert verify.main(["--all"]) == 0
-    assert written == ["closed:kcage"]
-    written.clear()
-    assert verify.main(["--all", "--full"]) == 0
-    assert written == ["full"]  # 従来どおり scope を渡さない (印の既定は full)
 
 
 # 閉じていることの機械検査 (表 CLOSED_MODULES が正本)
 
 
-def _tracked_files() -> list[str]:
-    out = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=False
-    ).stdout.decode("utf-8", "replace")
-    return [f for f in out.split("\0") if f and (ROOT / f).exists()]
 
 
-@pytest.mark.parametrize("module", verify.CLOSED_MODULES, ids=lambda m: m.name)
-def test_closed_module_globs_match_real_paths(module):
-    files = _tracked_files()
-    assert files
-    for pattern in module.scope_paths:
-        assert any(verify._match(pattern, f) for f in files), f"{module.name}: {pattern}"
-    for pattern in module.shared_reads:
-        assert any(verify._match(pattern, f) for f in files), f"{module.name}: {pattern}"
 
 
-@pytest.mark.parametrize("module", verify.CLOSED_MODULES, ids=lambda m: m.name)
-def test_closed_module_tests_read_only_inside_the_module(module):
-    """モジュールの試験が読むパスは、モジュールの範囲か共有の読み取り専用に収まる。"""
-    # 走査系 (scanners) はリポジトリ全体を読むので、モジュール自身の試験の検査から外す
-    scanners = set(verify.resolve_tests(module.scanners, TEST_FILES))
-    tests = sorted(verify.module_test_files(module, TEST_FILES) - scanners)
-    assert tests
-    allowed = (*module.scope_paths, *module.shared_reads)
-    stray = []
-    for test, refs in verify.test_references(tests).items():
-        for ref in sorted(refs):
-            if test == ref or any(
-                verify._match(p, ref) or verify._match(p, ref + "/") for p in allowed
-            ):
-                continue
-            stray.append(f"{test} <- {ref}")
-    assert stray == []
 
 
-@pytest.mark.parametrize("module", verify.CLOSED_MODULES, ids=lambda m: m.name)
-def test_closed_module_files_are_not_read_by_outside_tests(module):
-    """モジュールの変更パスを、モジュール外の試験が読んでいない (読むなら閉じていない)。"""
-    own = verify.module_test_files(module, TEST_FILES)
-    own |= set(module.ignored_readers) | {*verify.T0_PYTEST_FILES, verify.REGISTRATION_TEST}
-    outside = [t for t in TEST_FILES if t not in own]
-    refs = verify.test_references(outside)
-    leaks = []
-    for f in _tracked_files():
-        if not any(verify._match(p, f) for p in module.scope_paths):
-            continue
-        for test, rs in refs.items():
-            if any(f == r or f.startswith(r + "/") for r in rs):
-                leaks.append(f"{test} <- {f}")
-    assert leaks == []
 
 
-@pytest.mark.parametrize("module", verify.CLOSED_MODULES, ids=lambda m: m.name)
-def test_every_tracked_file_of_a_closed_module_is_closed(module):
-    files = [f for f in _tracked_files() if any(verify._match(p, f) for p in module.scope_paths)]
-    assert files
-    for f in files:
-        scope = verify.closed_scope([f], TEST_FILES)
-        assert scope is not None and [m.name for m in scope] == [module.name], f
 
 
-def test_closed_scope_accepts_the_modules_own_docs_with_code():
-    """kcage のコードと kcage の文書だけの変更は閉じている (文書の lint は T0 が全件で回す)。"""
-    paths = ["scripts/kcage/cli.py", "docs/spec/sandbox/incus-box.md"]
-    hit = verify.closed_scope(paths, TEST_FILES)
-    assert hit is not None and [m.name for m in hit] == ["kcage"]
 
 
-def test_closed_scope_rejects_other_docs():
-    """モジュール外の文書が混ざれば閉じていない (従来どおり全件)。"""
-    paths = ["scripts/kcage/cli.py", "docs/spec/development.md"]
-    assert verify.closed_scope(paths, TEST_FILES) is None
 
 
 # 凍結したスタックの試験の省略 (全件の T2 から外す。変更に当たるものは T1 で回る)
 
-FROZEN_FILES = set(verify.resolve_tests(verify.FROZEN_TESTS, TEST_FILES))
 
 
-def test_every_pi_and_pr_viewer_test_is_classified_as_frozen_or_stock():
-    """test_pi_*・test_pr_viewer_* が、凍結か stock かのどちらかに分類されている (新しい試験の分類漏れを防ぐ)。"""
-    stock = set(verify.resolve_tests(verify.STOCK_PI_TESTS, TEST_FILES))
-    unclassified = [
-        f
-        for f in TEST_FILES
-        if posixpath.basename(f).startswith(("test_pi_", "test_pr_viewer_"))
-        and f not in FROZEN_FILES
-        and f not in stock
-    ]
-    assert unclassified == [], "凍結 (FROZEN_TESTS) か stock (STOCK_PI_TESTS) に分類する"
-    assert not (FROZEN_FILES & stock)
-    assert FROZEN_FILES  # 空にすると省略が効かなくなる
 
 
-def test_full_stages_skips_frozen_tests_from_t2_but_not_from_t1():
-    frozen = ["test/agents/test_pi_harness.py", "test/agents/test_pi_actions.py"]
-    t1 = ["test/agents/test_pi_actions.py"]  # 変更に当たる試験は T1 で回る
-    stages = verify.full_stages(t1, [], TEST_FILES, skip_tests=frozen)
-    flat = [c for s in stages for c in s]
-    t2 = stages[-1][0]
-    assert "--ignore=test/agents/test_pi_harness.py" in t2  # 省く
-    assert t2.count("--ignore=test/agents/test_pi_actions.py") == 1  # T1 と重複して数えない
-    assert any(c[-2:] == ["test/agents/test_pi_actions.py", "-q"] for c in flat)  # T1 で回る
-    assert not any(c[-2:] == ["test/agents/test_pi_harness.py", "-q"] for c in flat)  # 省いた分は回らない
 
 
-def test_full_stages_drops_t2_when_everything_left_is_skipped():
-    files = ["test/test_verify.py", "test/agents/test_pi_harness.py"]
-    stages = verify.full_stages([], [], files, skip_tests=["test/agents/test_pi_harness.py"])
-    assert len(stages) == 1  # T0 だけ。補集合が空のまま pytest を走らせない
 
 
-def _frozen_repo(tmp_path: Path, monkeypatch, *changed: str) -> Path:
-    repo = _repo(tmp_path)
-    # discover_test_files の既定の根は import 時の ROOT なので、この一時リポジトリを走査させる
-    monkeypatch.setattr(
-        verify,
-        "discover_test_files",
-        lambda: sorted(p.relative_to(repo).as_posix() for p in (repo / "test").rglob("test_*.py")),
-    )
-    for rel in (
-        "test/agents/test_pi_harness.py",  # 凍結
-        "test/agents/test_pi_profile.py",  # stock
-        "test/test_other.py",
-    ):
-        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
-        (repo / rel).write_text("def test_x():\n    pass\n", encoding="utf-8")
-    _g(repo, "add", ".")
-    _g(repo, "commit", "-q", "-m", "tests")
-    _g(repo, "switch", "-q", "-c", "feature/x")
-    for rel in changed:
-        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
-        (repo / rel).write_text("x\n", encoding="utf-8")
-    _g(repo, "add", ".")
-    _g(repo, "commit", "-q", "-m", "change")
-    return repo
 
 
-def test_all_skips_frozen_tests_and_says_so(tmp_path, monkeypatch, capsys):
-    repo = _frozen_repo(tmp_path, monkeypatch, "docs/a.md")
-    assert _run_main(monkeypatch, repo, "--all") == 0
-    out = capsys.readouterr().out
-    assert "凍結した自作スタックの試験 (1 ファイル)" in out and "mise run verify:full" in out
-    (t2,) = _t2_lines(out)
-    assert "--ignore=test/agents/test_pi_harness.py" in t2
-    assert "--ignore=test/agents/test_pi_profile.py" not in t2  # stock は外さない
 
 
-def test_all_full_never_skips_frozen_tests(tmp_path, monkeypatch, capsys):
-    repo = _frozen_repo(tmp_path, monkeypatch, "docs/a.md")
-    assert _run_main(monkeypatch, repo, "--all", "--full") == 0
-    out = capsys.readouterr().out
-    assert "凍結した自作スタック" not in out
-    (t2,) = _t2_lines(out)
-    assert "test_pi_harness" not in t2
 
 
-def test_all_does_not_skip_frozen_tests_for_unknown_paths(tmp_path, monkeypatch, capsys):
-    repo = _frozen_repo(tmp_path, monkeypatch, "unknown_area/x.dat")  # どの規則にも当たらない → 全件
-    assert _run_main(monkeypatch, repo, "--all") == 0
-    out = capsys.readouterr().out
-    assert "凍結した自作スタック" not in out
-    (t2,) = _t2_lines(out)
-    assert "test_pi_harness" not in t2
 
 
-def test_all_runs_the_frozen_tests_that_the_change_selects(tmp_path, monkeypatch, capsys):
-    repo = _frozen_repo(tmp_path, monkeypatch, "home/dot_config/pi/harness/actions.ts")
-    assert _run_main(monkeypatch, repo, "--all") == 0
-    out = capsys.readouterr().out
-    assert any(line.endswith("test/agents/test_pi_harness.py -q") for line in out.splitlines())  # T1
-    assert "凍結した自作スタックの試験" not in out  # 省略した分が無いので、案内も出さない
 
 
-def test_stamp_notes_the_scope_when_frozen_tests_were_skipped(tmp_path, monkeypatch):
-    repo = _frozen_repo(tmp_path, monkeypatch, "docs/a.md")
-    monkeypatch.setattr(verify, "ROOT", repo)
-    monkeypatch.setattr(verify, "execute", lambda *a, **k: [])
-    monkeypatch.setattr(verify, "acquire_all_lock", lambda *_a, **_k: None)
-    written: list[str] = []
-
-    class Stamp(_FakeStamp):
-        def write_stamp(self, _root, entries=None, scope="full"):
-            written.append(scope)
-
-    monkeypatch.setattr(verify, "_stamp_module", lambda: Stamp({}))
-    monkeypatch.setattr(verify, "_stamp_snapshot", dict)
-    assert verify.main(["--all"]) == 0
-    assert written == ["no-frozen"]
-    written.clear()
-    assert verify.main(["--all", "--full"]) == 0
-    assert written == ["full"]
 
 
 # 選択の予算: 代表的な変更で、選ばれる試験が増えすぎない (粗い glob が重い試験を引き込む退行を防ぐ)
@@ -1099,4 +802,3 @@ def test_representative_changes_stay_within_the_selection_budget(paths, budget):
     result = _plan_real(*paths)
     assert not result.full
     assert len(result.selected) <= budget, result.selected
-    assert not set(result.selected) & FROZEN_FILES, "凍結したスタックの試験を引き込んでいる"

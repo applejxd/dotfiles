@@ -4,8 +4,8 @@
 
 ## シェルの起動契約
 
-シェルの主な利用者は AI エージェントである。OpenCode は `/usr/bin/zsh` を
-非対話・非 TTY で起動し、`.zshenv` だけが読まれる。そのため、どのファイルが
+シェルの主な利用者は AI エージェントである。エージェントは、シェルを非対話・非 TTY で起動する
+（zsh なら `.zshenv` だけが読まれる）。そのため、どのファイルが
 どの起動形態で読まれるかを次のとおり固定する。
 
 | ファイル | 読まれる起動 | 置いてよいもの |
@@ -19,7 +19,7 @@
 `.zshenv` には環境変数のほかに例外が 1 つある。リポジトリ内にいる間 `TMPDIR` を
 そのリポジトリの `.tmp` に向けるため、関数を 1 つ定義して `mkdir -p` を実行する
 （出力はしない）。`TMPDIR` が既に `<repo>/.tmp/s/` の配下（pi のセッションの置き場。
-[CHG-0042](../change/0042-tmp-lifecycle.md)）のときは、そのまま維持する（子の zsh が戻さない。試験は
+CHG-0042）のときは、そのまま維持する（子の zsh が戻さない。試験は
 `test_zshenv_tmpdir.py`）。
 
 `shellenv.sh` は mise の shims（`${MISE_DATA_DIR:-~/.local/share/mise}/shims`）を、
@@ -35,11 +35,6 @@ WSL では `shellenv.sh` が `wslenv.sh` を読み、Windows 側のディレク�
 ここで足したものしか名前で呼べない。入れ子のシェルで読み直しても重複しないよう、
 PATH と `LD_LIBRARY_PATH`（`/usr/lib/wsl/lib`）は既にあれば足さない。足すための
 補助関数は読み終えたら `unset -f` で消す（方針 1）。
-
-Copilot CLI がツールとして起動するシェルへ渡す git の既定値（入力待ちにしない）は、
-対話側の `shellrc.sh` にある `copilot()` 関数が、未設定の変数だけをコマンド前置きの
-代入で入れる（空文字は空のまま、呼び出し元の環境は変えない）。値の正本は
-`common.toml.tmpl` の `[agent_env]`（[詳細](agent-config-generation.md#shell-ツールの環境変数)）。
 
 `.zshrc` の冒頭は `/etc/zsh/zshrc` の読み込みも含む（`.zshenv` の `no_global_rcs`
 で自動では読まれないため、対話のときだけ読む）。
@@ -78,14 +73,12 @@ Nix 化・`rm` の alias 差し替え・環境変数の列挙による人間判�
 
 | 置き場 | 何を置くか | いつ読まれるか | 注意 |
 | --- | --- | --- | --- |
-| `~/.config/shell/userenv.sh`・`.bash`・`.zsh` | 環境変数・プロキシ。例: `export PIS_EXTRA_READ="$HOME/dataset:/data2"` | シェルの起動ごと（`userenv.sh` は `shellenv.sh` が読む） | chezmoi の管理外。同じ場所の `.example` から作る。`PIS_EXTRA_READ` は読み取り専用で、詳細は [環境変数での追加](sandbox/fence-boundary.md#環境変数での追加) |
+| `~/.config/shell/userenv.sh`・`.bash`・`.zsh` | 環境変数・プロキシ。例: `export http_proxy=http://address:port` | シェルの起動ごと（`userenv.sh` は `shellenv.sh` が読む） | chezmoi の管理外。同じ場所の `.example` から作る |
 | `~/.config/mise/conf.d/*.toml` | `mise` の設定のマシン固有分 | `mise` が設定を読むとき | chezmoi の管理外。`[env]` は mise を有効化したシェルでしか効かない（**推測**。公式 docs では未確認） |
-| `<起動ディレクトリ>/.opencode/sandbox.toml` | リポジトリごとの `read`・`write`・`network_allow` | `pis` の起動時 | パスがマシン依存なら、1 行目の環境変数のほうがよい（環境変数で足せるのは読み取りだけ） |
-| `~/.config/chezmoi/chezmoi.toml` の `[data]` | chezmoi のテンプレートに渡すマシン固有の値（例: `llm_provider`・`no_proxy`） | `chezmoi apply` のとき | chezmoi の管理外。値の使い道はテンプレートが決める（[プロバイダの判定](agent-model-assignment.md#プロバイダの判定)） |
+| `~/.config/chezmoi/chezmoi.toml` の `[data]` | chezmoi のテンプレートに渡すマシン固有の値（例: `no_proxy`） | `chezmoi apply` のとき | chezmoi の管理外。値の使い道はテンプレートが決める |
 | `~/.config/git/config.local` | git の設定のマシン固有分 | git が設定を読むとき | chezmoi の管理外。`home/dot_config/git/config.tmpl` が、共有設定の後ろに `[include]` で読む（**共有設定を上書きもできる**） |
-| `~/.config/agents/local.toml` | Claude Code / Copilot CLI の sandbox の許可の追記 | `chezmoi apply` のとき（生成時に読む） | chezmoi の管理外。`[sandbox]` は追記のみで、共有を緩められない（[このマシンだけで許可を足す](sandbox/cli-sandbox-local-allow.md)） |
 | `~/.config/pi-sandbox/runner.local.toml` | pi の囲い（`pib`）で、隠す場所の追記 | `pib` の囲いでコマンドを実行するたび | chezmoi の管理外。追記のみで、`[gpu]`・`[docker]`・`[git]` は書けない。同じ場所の `runner.local.toml.example` から作る（[設定](sandbox/pi-sandbox-runner.md#設定runnertoml)）。Linux / WSL のみ |
-| pi の確認（YOLO など） | `/permission-system` で切り替える | すぐ | 機械ごとの設定で、`chezmoi apply` では戻らない（[YOLO mode](agent-config-generation.md#permission-system-の設定stock)） |
+| pi の確認（YOLO など） | `/permission-system` で切り替える | すぐ | 機械ごとの設定で、`chezmoi apply` では戻らない（[YOLO mode](agent-config-generation.md#permission-system-の設定)） |
 
 **共通の約束**（共有の設定とマシン固有の設定を分ける）:
 
@@ -207,19 +200,13 @@ macOS では同じです。
   エージェントやスクリプトからの起動でも毎回読み込まれます。プロンプト
   （oh-my-posh）、キーバインド、モジュール読み込み、関数（`open` や
   `commands/*.ps1`）は対話時だけ定義・実行します。docker の `dclean` などは
-  hookがコマンド名しか見ないため、非対話で定義すると権限規則を素通りします。
+  権限の規則がコマンド名しか見ないため、非対話で定義すると権限規則を素通りします。
   cmdletの既定エンコーディング（`*:Encoding`）は非対話でも `utf8` にします。
   外すと5.1の既定（`Out-File` はUTF-16LE、`Set-Content` はANSI）に戻るためです。
   5.1では `utf8` がBOM付きになりますが、こちらを許容します。
   Consoleのエンコーディングは非対話でも設定し、失敗は無視します。
   判定はstdioのリダイレクトに加え、起動引数（`-Command` / `-File` /
   `-EncodedCommand` / `-NonInteractive`。ただし `-NoExit` があれば対話）も見ます。
-- **`copilot` 関数**: 対話ブロックに置き、`common.toml.tmpl` の `[agent_env]` の値を
-  未設定のものだけ環境変数へ入れてから本物の `copilot` を起動し、`finally` で入れた分だけ
-  消します。PowerShellの環境変数はプロセス全体なので、Copilotの実行中は親の環境も
-  変わります。Windowsは空文字の変数を保持できないため、親から空で渡された値は残し、
-  シェル内で空を代入した変数は未設定と同じ扱いになります
-  （[shell ツールの環境変数](agent-config-generation.md#shell-ツールの環境変数)）。
 - **起動経路でcmdletを使わない**: `Microsoft.PowerShell.Management`
   （`Test-Path`、`Join-Path`）、`Microsoft.PowerShell.Utility`
   （`New-Object`、`Set-Alias`）、`Get-Command` のコマンド探索は、初回呼び出しに

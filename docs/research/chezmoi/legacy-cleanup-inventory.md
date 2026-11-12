@@ -37,7 +37,7 @@
 | `_z` の再 source | `home/dot_zshrc.tmpl` の `zshrc-reload-z` | `efcf925`（2026-09-05） | 再発しにくいが、他の経路は未確認 | `~/.zinit/completions/_z` は無い | 外して `z` が動くことを実機で確認できたとき。毎回の zsh 起動で `z.sh` を再 source するので起動時間にも効く |
 | 旧 npm 版 pi の撤去 | `home/.chezmoiscripts/300_windows/310_packages/run_onchange_after_314_agent_cli.ps1.tmpl` 88〜96 行 | pi を npm global から mise（aqua）へ移した変更（コミットは不明） | しない（手動の `npm i -g` を除く） | **Windows 側に旧 npm 版が実在する**（`AppData\Roaming\npm\node_modules\@earendil-works`）。まだ撤去が走っていない | 全 Windows 機で撤去済み |
 | Copilot の skills の symlink 撤去 | `home/.chezmoiscripts/300_windows/run_after_342_copilot_skills.ps1.tmpl` | 過去に symlink で配備した可能性（推測。コミットは不明） | ほぼしない（利用者が手動で作れば起こる） | **Windows 側の `.copilot/skills` が symlink で実在する** | 全 Windows 機で Junction へ移行済み |
-| agents の `__pycache__` 削除 | `home/.chezmoiscripts/300_windows/run_once_after_344_cleanup_agents_pycache.ps1` | 古い `.pyc` による import の失敗（`docs/spec/agent-permissions.md`） | `__pycache__` 自体は今後も作られる。壊れ方の再発は根拠が足りない | Windows 側に無い | `run_once_` なので再発の防止にはならない。削除してよい可能性が高いが根拠は弱い |
+| agents の `__pycache__` 削除 | `home/.chezmoiscripts/300_windows/run_once_after_344_cleanup_agents_pycache.ps1` | 古い `.pyc` による import の失敗 | `__pycache__` 自体は今後も作られる。壊れ方の再発は根拠が足りない | Windows 側に無い | `run_once_` なので再発の防止にはならない。削除してよい可能性が高いが根拠は弱い |
 | Raspberry Pi の旧 GUI の撤去 | `scripts/raspi/uninstall_gui.sh`（手動） | Pi 判定が効く前の旧 `apply`（`3f2e4b1`、2026-09-26） | しない | 該当なし（x86_64） | Pi の全台で実行済み |
 | 壊れた systemd ユニットの再作成 | `scripts/ubuntu/docker.sh` 151〜154 行 | `9e3b908`（2026-10-18） | 今の手順では新規には起きない | ユニットは存在する | 入れたばかり。別の日に再検討 |
 

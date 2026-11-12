@@ -51,8 +51,6 @@ subagent({ agent: "reviewer", async: true, cwd: "<作業ツリー>", task: "<ref
 - `reviewer` の標準の出力は P0 / P1 / P2。依頼文に出力形式（重大度・原因クラス）を指定する。P0 / P1 / P2 で返ってきたら、親が手順 3-2 の重大度の表で分類し直す
 - 修正は親（実装役）が行う。`reviewer` は読み取り専用で、worktree への書き手は親だけになる
 
-> 凍結した custom（`pis`）では、`guarded_task` の `agent: review` がレビュー役だった。
-
 OpenCode に `code-review` / `security-review` は無い。作業先のリポジトリが同じ名前の子を
 定義していても、`bypass` からは起動できない（起動できる子は許可リストで決まっている）。
 テスト / lint の実行（手順 3-4）は、どの CLI でも本エージェントが行う。

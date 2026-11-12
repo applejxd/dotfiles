@@ -60,13 +60,13 @@ chezmoi apply
 
 鍵の復旧条件と確認方法は [秘密情報の管理セットアップ](docs/spec/sops-age.md#8-新しい-pcwsl-環境で復旧する)。
 
-`apply` で入るツール（gh、Herdr、AI CLI、oh-my-pi、Claude Code の seccomp フィルタ）と
+`apply` で入るツール（gh、Herdr、pi）と
 その更新方法は [プロジェクト構造](docs/spec/structure.md) を参照。
 
-- [mise による CLI 管理](docs/spec/cli-management.md#mise-による-cli-管理)（gh、seccomp フィルタ）
-- [AI CLI の導入](docs/spec/cli-management.md#ai-cli-の導入)（Claude Code / Copilot CLI / OpenCode V2、oh-my-pi、pi）
+- [mise による CLI 管理](docs/spec/cli-management.md#mise-による-cli-管理)（gh など）
+- [pi の導入](docs/spec/cli-management.md#pi-の導入)
 - [Herdr の管理](docs/spec/cli-management.md#herdr-の管理)
-- [pi / pis マニュアル](docs/spec/pi-manual.md)（機能・設定の変え方・独自コマンドの早見）
+- [pi の設定の生成と所有権](docs/spec/agent-config-generation.md)・[pi の独自コマンド](docs/spec/pi-commands.md)
 
 ### Raspberry Pi (64bit / ヘッドレス)
 
@@ -118,22 +118,15 @@ chezmoi diff
 chezmoi apply
 ```
 
-### 隔離版 OpenCode（Ubuntu / WSL）
+### 囲い付きの pi（Ubuntu / WSL）
 
 ```bash
-ocs         # 隔離起動（境界の内側で起動する）
-opencode    # 通常起動（境界なし）
+pib         # 囲いの内側で pi を起動する（作業ディレクトリ以外の書き込み・秘密の読み取りを OS が止める）
+pi          # 通常起動（囲いなし。確認は permission-system が行う）
 ```
 
-- **作業対象のディレクトリで起動する。** その配下が読み書き可能になる。
-  `~` や `/tmp` そのものでは起動を断る
-- 境界は Fence（mise が入れる）で張る。入っていなければ `mise install` の後に
-  `chezmoi apply` する。境界を確かめるときは `ocs --check`
-- 履歴は通常起動と共有する。内側のセッションは外の `opencode -s <ID>` で再開できる。
-  起動のたびに作業ツリーを境界の外へ退避する（復元は
-  [OpenCode 隔離起動](docs/spec/sandbox/opencode-sandbox.md) を参照）
-- 起動ディレクトリの外を開けたいときは、プロジェクトに `.opencode/sandbox.toml` を置く
-  （書き方は[プロジェクトごとの追加](docs/spec/sandbox/fence-boundary.md#プロジェクトごとの追加)）
+- 作業対象のディレクトリで起動する。起動のしかた・隠す場所と見せる場所・確かめ方（`pib --status`）は
+  [pi-sandbox-runner](docs/spec/sandbox/pi-sandbox-runner.md)。
 
 ## 安全上の注意
 
@@ -142,9 +135,6 @@ opencode    # 通常起動（境界なし）
   [`chezmoi apply` は人間が行う](docs/spec/security.md#chezmoi-apply-は人間が行う)）
 - 境界（OS が強制するアクセス境界）が守るもの・守らないものは
   [何を守り、何を守らないか](docs/spec/security.md#何を守り何を守らないか)
-- **`omp`（oh-my-pi、試用中）は permission 機構を持たない。** 対象リポジトリ直下で
-  起動し、開始前に作業を区切ってコミットする
-  （[oh-my-pi の設定](docs/spec/cli-management.md#oh-my-piompの設定)）
 
 ## ドキュメント
 
@@ -175,57 +165,45 @@ root が要るスクリプトは飛ばし、sudo が使えるようになった�
 A. `chezmoi apply --refresh-externals` を実行する
 （[external が取得されない](docs/spec/troubleshooting-bootstrap.md#apply-しても-zinit-などの-external-が取得されない)）。
 
-### Q. PC ごとに違う設定（データセットの置き場・プロキシ・sandbox の許可など）を、chezmoi の管理と分けて置きたい
+### Q. PC ごとに違う設定（データセットの置き場・プロキシ・囲いの許可など）を、chezmoi の管理と分けて置きたい
 
 A. 共有の設定はこのリポジトリ（chezmoi が管理）に置き、PC ごとの設定は **chezmoi の管理外のファイル**に書く。
-後者は `chezmoi apply` で消えず、`chezmoi diff` にも出ない。生成された設定（`~/.claude/settings.json` など）は直接編集しない。
-sandbox の許可を足すもの（`agents/local.toml` の `[sandbox]`・`runner.local.toml`）は、共有の設定に**足すだけ**で、
+後者は `chezmoi apply` で消えず、`chezmoi diff` にも出ない。生成された設定（`~/.pi/agent/settings.json` など）は、宣言した項目だけを `chezmoi apply` が更新する。
+囲いの許可を足すもの（`runner.local.toml`）は、共有の設定に**足すだけ**で、
 緩める指定は効かない（無視されるか、起動しない）。git の `config.local` のように、共有の設定を上書きできるものもある。
 
 | 変えたいもの | このマシンだけの置き場 | 反映 |
 | --- | --- | --- |
-| 環境変数・プロキシ・データセットの置き場（`PIS_EXTRA_READ` など） | `~/.config/shell/userenv.sh`（同じ場所の `.example` から作る） | 次のシェルの起動 |
-| chezmoi のテンプレートに渡す値（LLM プロバイダなど） | `~/.config/chezmoi/chezmoi.toml` の `[data]` | `chezmoi apply` |
+| 環境変数・プロキシ・データセットの置き場 | `~/.config/shell/userenv.sh`（同じ場所の `.example` から作る） | 次のシェルの起動 |
+| chezmoi のテンプレートに渡す値 | `~/.config/chezmoi/chezmoi.toml` の `[data]` | `chezmoi apply` |
 | git の設定 | `~/.config/git/config.local` | すぐ |
 | mise の設定 | `~/.config/mise/conf.d/*.toml` | 次の mise の実行 |
-| Claude Code / Copilot CLI の sandbox の許可 | `~/.config/agents/local.toml` | `chezmoi apply` |
 | pi の囲い（`pib`）で、隠す場所・見せる場所（データセットなど）の追加（Linux / WSL） | `~/.config/pi-sandbox/runner.local.toml`（同じ場所の `.example` から作る）。効いているかは `pib --status` で確かめる（存在しない場所に `✗`） | 次のコマンドの実行 |
 | pi の確認（YOLO など） | `/permission-system` | すぐ（`apply` で戻らない） |
 
 置き場ごとの書き方と注意は
 [マシン固有の設定の置き場](docs/spec/shell.md#マシン固有の設定の置き場)。
 
-### Q. AI CLI の設定（OpenCode のモデル・プロバイダを含む）を手で変えたい
+### Q. pi の設定を手で変えたい
 
-A. 生成された設定ファイルは直接編集せず、次のどちらかで変える。
+A. 宣言した項目（`~/.pi/agent/settings.json`・`mcp.json` など）は `chezmoi apply` が更新し、宣言していない項目と利用者が足した項目は保つ。
+変え方と所有権は [pi の設定の生成と所有権](docs/spec/agent-config-generation.md)。確認の設定（YOLO など）は `/permission-system`（機械ごとで、apply では戻らない）。
 
-- 全マシン共通: `home/dot_config/agents/common.toml.tmpl` を編集する
-  （[設定の生成と所有権](docs/spec/agent-config-generation.md)）
-- このマシンだけ: プロバイダは `chezmoi.toml` の `[data]` に `llm_provider` を書く
-  （[プロバイダの判定](docs/spec/agent-model-assignment.md#プロバイダの判定)）。
-  sandbox の許可は `~/.config/agents/local.toml` に足す
-  （[このマシンだけで許可を足す](docs/spec/sandbox/cli-sandbox-local-allow.md#このマシンだけで許可を足す-chezmoi-管理に影響を与えない)）
-
-### Q. Bedrock だとハーネスで Web 検索ができない
+### Q. Bedrock だと Web 検索ができない
 
 A. [AgentCore Web Search](docs/spec/mcp-servers.md#agentcore-web-search) を参照。
 
-### Q. OpenCode で確認されるはずの操作が確認なしで実行される
-
-A. 以前「常に許可」した承認が残っている。
-[保存した承認の確認とリセット](docs/spec/agent-permissions.md#保存した承認の確認とリセット) を参照。
-
-### Q. pi（stock）で確認（ask）が出ない・出してほしい確認が出ない
+### Q. piで確認（ask）が出ない・出してほしい確認が出ない
 
 A. YOLO が入っていると、確認は全部自動で承認される（deny だけが効く）。`/permission-system` で YOLO を OFF にする
-（[YOLO mode](docs/spec/agent-config-generation.md#permission-system-の設定stock)。機械ごとの設定で、apply では戻らない）。
+（[YOLO mode](docs/spec/agent-config-generation.md#permission-system-の設定)。機械ごとの設定で、apply では戻らない）。
 
-### Q. pi（stock）の確認で、自律稼働が止まる（待たされる）
+### Q. piの確認で、自律稼働が止まる（待たされる）
 
 A. 誰も答えない確認は 5 分で拒否され、エージェントは先へ進む（`promptTimeoutMs`）。頻度を減らす方針と実測は
-[確認で待たせない方針](docs/spec/agent-config-generation.md#permission-system-の設定stock)。YOLO を入れると確認は全部自動承認になる（強制 ask も効かない）。
+[確認で待たせない方針](docs/spec/agent-config-generation.md#permission-system-の設定)。YOLO を入れると確認は全部自動承認になる（強制 ask も効かない）。
 
-### Q. pi（stock）が作業ツリー外のデータセットを読むたびに確認される
+### Q. piが作業ツリー外のデータセットを読むたびに確認される
 
 A. プロジェクトごとに、読み取りだけを事前許可できる（`/tmp` はグローバルで許可済み）。`pib` で起動したときは、プロジェクトの `.pi/` の設定を読まない（`--no-approve`）ので、見せたい場所を `~/.config/pi-sandbox/runner.local.toml` の `[visible]` に足す。手順は
 [プロジェクト単位でデータセットを読み取り専用にする](docs/spec/agent-config-generation.md#プロジェクト単位でデータセットを読み取り専用にする)。

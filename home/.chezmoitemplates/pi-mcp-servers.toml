@@ -1,0 +1,42 @@
+# pi の MCP サーバの宣言 (~/.pi/agent/mcp.json と、is-work の機の mcp-adapter.json の元)。
+# chezmoi テンプレート。ユーザ・OS・機の出し分けはここに書く (生成側 scripts/agents/generate.py は展開後の表だけを見る)。
+# 仕組み・判断基準は docs/spec/mcp-servers.md が正本。
+
+# see docs/spec/mcp-servers.md 「MCP サーバ」
+# ★deepwiki は索引が古く、実ソースと食い違う説明を返すため 2026-09-25 に外した。
+
+# AgentCore Web Search。会社 PC の検索 (Bedrock でも Copilot でも)。全機に配り、使うかは実行時に決まる:
+# Gateway の URL (環境変数 AGENTCORE_GATEWAY_URL) が無い機 (家) では、
+# ラッパーが「ツールの無い空のサーバ」になる。認証が無ければ何も起きない。
+# see docs/spec/mcp-servers.md#agentcore-web-search
+[[mcp]]
+id = "agentcore-websearch"
+purpose = "AgentCore Web Search で web 検索する (Gateway の URL がある機だけ)"
+requires_env = "AGENTCORE_GATEWAY_URL"
+# direct にして mcp__agentcore_websearch__* でモデルに見せ、plan mode の許可リストに具体名を足せるようにする
+pi_exposure = "direct"
+transport = "stdio"
+command = "uv"
+args = [
+  "run", "--no-project", "--quiet",
+  '{{ .chezmoi.homeDir }}/.config/agents/agentcore_websearch_mcp.py',
+  "--service", "bedrock-agentcore", "--region", "us-east-1", "--disable-telemetry",
+]
+{{- if ne (includeTemplate "is-work" .) "true" }}
+
+# 家の機の検索 (web_search / fetch_page / search_papers)。自作の stdio サーバ (鍵は環境変数 → 鍵ファイル → Bitwarden の順で探す)。
+# 検索の送り先が限られる環境 (is-work) では宣言しない。その機の検索は上の agentcore-websearch だけ。
+# ~/.pi/agent/mcp.json (generate.py --target pi-mcp) へ出る。
+# see docs/spec/mcp-servers.md#websearch家の機の検索
+[[mcp]]
+id = "websearch"
+purpose = "家の機の web 検索・ページ取得・論文検索 (web_search / fetch_page / search_papers)"
+# 既定の codemode ではモデルに直接見えず、plan mode の許可リストに具体名を足せない。direct にして mcp__websearch__* で見せる
+pi_exposure = "direct"
+transport = "stdio"
+command = "uv"
+args = [
+  "run", "--no-project", "--quiet",
+  '{{ .chezmoi.homeDir }}/.config/agents/websearch/mcp_server.py',
+]
+{{- end }}

@@ -8,7 +8,6 @@ import sys
 from agents_common import ROOT
 
 SCRIPT = ROOT / "home/dot_agents/skills/env-check/scripts/env_check.py"
-BASHRULES = ROOT / "home/dot_claude/hooks/lib"
 
 
 def _load():
@@ -27,15 +26,6 @@ def _run(*args, **env):
         encoding="utf-8",
         env=full,
     )
-
-
-def test_sensitive_pattern_matches_the_hook():
-    sys.path.insert(0, str(BASHRULES))
-    try:
-        from bashrules._shared import _SENSITIVE_ENV_RE
-    finally:
-        sys.path.remove(str(BASHRULES))
-    assert _SENSITIVE_ENV_RE.pattern == _load().SENSITIVE_ENV_PATTERN
 
 
 def test_url_credentials_are_masked():
@@ -66,8 +56,8 @@ def test_other_variables_show_only_the_length():
 
 
 def test_whitelisted_values_are_shown():
-    proc = _run("get", "WEBSEARCH_BROKER_URL", WEBSEARCH_BROKER_URL="http://127.0.0.1:9")
-    assert "WEBSEARCH_BROKER_URL=http://127.0.0.1:9" in proc.stdout
+    proc = _run("get", "WSL_DISTRO_NAME", WSL_DISTRO_NAME="Ubuntu-24.04")
+    assert "WSL_DISTRO_NAME=Ubuntu-24.04" in proc.stdout
 
 
 def test_bad_arguments_exit_2():

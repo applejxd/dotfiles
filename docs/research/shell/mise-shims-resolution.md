@@ -156,6 +156,6 @@ shim は `~/.local/bin/mise` へのシンボリックリンクで、毎回 mise 
 ### 参照
 
 - 構成の正本: [構成](../../spec/structure.md)
-- 関連: [エージェントの git 入力待ち対策](../agents/noninteractive-git-env.md)
+- 関連: エージェントの git 入力待ち対策
 
 [調査記録一覧へ戻る](../../index.md)

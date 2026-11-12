@@ -7,7 +7,6 @@ allowed-tools: Read, Grep, Glob, Bash(git status:*), Bash(git diff:*), Bash(git 
 # Git コミットスキル
 
 > **fork しない（`context: fork` を付けない）。** 承認でユーザーとやり取りするため。
-> see docs/research/opencode/skill-frontmatter.md
 
 CLI 非依存。実行環境が hook / permission / rules による確認を持つかに関わらず、
 このスキル自身が commit 直前に承認を得る。環境判別による分岐はしない
@@ -197,15 +196,3 @@ feature の工程の `git add -A` は親が行う）。
 - コミット前に対象ファイルとメッセージを提示して承認を得る
   （手順 4 の冒頭に当たるときは、`git commit` の確認がこの承認になる）
 - 承認が得られない、または確認が拒否された場合はコミットせず停止する
-
-## 凍結した custom（`pis`）での違い
-
-自作ハーネス（`pis`）は 2026-11 に凍結した（このリポジトリの `docs/adr/0030-freeze-agent-stack-return-to-stock-pi.md`）。
-custom の pi では、コミットを `git commit` の bash ではなく、フルガードの `guarded_action` の `git_commit` で行う。
-
-- `git_commit` は、メッセージが **1200 文字**を超えると、確認の前に拒否する。拒否されたら、箇条書きに縮めて再実行する（書き直しは承認を要さない）
-- `guarded_action`（`git_commit` など）で承認を取る前に、対象のリポジトリ・ブランチ・メッセージ全文・対象ファイルをチャット本文へ書く。
-  確認画面（RPC。Orca など）は「上記の内容で実行しますか」だけで、同じ詳細はツールの途中経過としても出る。
-  「作業サマリー」を承認画面に詰める設計にしない
-- 任せ先へ承認済みの全文を渡すのは、確認画面ではメッセージが切れて読めないことがあるため
-- 環境側の確認機構はコマンド単位で働くので、`git add` と `&&` で連結すると、コミット単体の確認が効かないことがある

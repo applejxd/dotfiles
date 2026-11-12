@@ -16,37 +16,19 @@ ROOT = Path(__file__).resolve().parents[2]
 CHEZMOI = shutil.which("chezmoi")
 
 MODIFIERS = {
-    ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl": (
-        ".claude/settings.json",
-        "claude-settings",
+    ROOT / "home" / "dot_pi" / "agent" / "modify_mcp.json.py.tmpl": (
+        ".pi/agent/mcp.json",
+        "pi-mcp",
     ),
-    ROOT / "home" / "dot_copilot" / "modify_private_settings.json.py.tmpl": (
-        ".copilot/settings.json",
-        "copilot-settings",
-    ),
-    ROOT / "home" / "dot_copilot" / "modify_private_permissions-config.json.py.tmpl": (
-        ".copilot/permissions-config.json",
-        "copilot-perms",
-    ),
-    ROOT / "home" / "dot_copilot" / "modify_mcp-config.json.py.tmpl": (
-        ".copilot/mcp-config.json",
-        "copilot-mcp",
-    ),
-    ROOT / "home" / "dot_gemini" / "modify_settings.json.py.tmpl": (
-        ".gemini/settings.json",
-        "gemini-settings",
-    ),
-    ROOT / "home" / "dot_config" / "opencode" / "modify_opencode.json.py.tmpl": (
-        ".config/opencode/opencode.json",
-        "opencode-config",
-    ),
-    ROOT / "home" / "dot_config" / "opencode" / "modify_private_service.json.py.tmpl": (
-        ".config/opencode/service.json",
-        "opencode-service",
+    ROOT / "home" / "dot_pi" / "agent" / "modify_mcp-adapter.json.py.tmpl": (
+        ".pi/agent/mcp-adapter.json",
+        "pi-mcp-adapter",
     ),
 }
-# .chezmoiignore.tmpl が Windows 以外で外すもの
-WINDOWS_ONLY = {".config/opencode/service.json"}
+# .chezmoiignore.tmpl が個人の機 (is-work でない機) で外すもの
+WORK_ONLY = {".pi/agent/mcp-adapter.json"}
+# 代表の変換器 (ラッパーの共通の試験に使う)
+MCP_MODIFIER = ROOT / "home" / "dot_pi" / "agent" / "modify_mcp.json.py.tmpl"
 CHEZMOI_CONFIG = ROOT / "home" / ".chezmoi.toml.tmpl"
 
 
@@ -72,7 +54,7 @@ def render_shared_wrapper(working_tree: Path, target: str) -> bytes:
     template = (
         '{{ template "modify_json.py.tmpl" '
         f'(dict "workingTree" {json.dumps(str(working_tree))} '
-        '"common" (includeTemplate "dot_config/agents/common.toml.tmpl" .) '
+        '"common" (includeTemplate "pi-mcp-servers.toml" .) '
         f'"target" {json.dumps(target)})'
         " }}"
     )
@@ -80,7 +62,7 @@ def render_shared_wrapper(working_tree: Path, target: str) -> bytes:
 
 
 def run_wrapper(wrapper: bytes, data: bytes) -> subprocess.CompletedProcess[bytes]:
-    # -c で渡すと、common.toml を埋め込んだラッパーが Windows のコマンドラインの
+    # -c で渡すと、pi-mcp-servers.toml を埋め込んだラッパーが Windows のコマンドラインの
     # 上限 (32767 文字) を超える (WinError 206)。ファイルに書いてから起動する
     with tempfile.TemporaryDirectory() as work:
         script = Path(work) / "wrapper.py"
@@ -108,7 +90,7 @@ def test_modifier_targets_keep_json_names():
     assert result.returncode == 0, result.stderr
     managed = {line.replace("\\", "/") for line in result.stdout.splitlines()}
     for target, _ in MODIFIERS.values():
-        if target not in WINDOWS_ONLY or os.name == "nt":
+        if target not in WORK_ONLY:
             assert target in managed
         assert f"{target}.py" not in managed
 
@@ -117,20 +99,19 @@ def test_windows_templates_use_latest_python_3():
     config = CHEZMOI_CONFIG.read_text(encoding="utf-8")
 
     assert 'args = ["-3"]' in config
-    # hooks の生成も modify_ 経由になったので、Windows の Python 選択は
+    # 生成も modify_ 経由なので、Windows の Python 選択は
     # [interpreters.py] が受け持つ (テンプレート側に py -3 を書かない)
-    claude = ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl"
-    assert "modify_json.py.tmpl" in claude.read_text(encoding="utf-8")
+    assert "modify_json.py.tmpl" in MCP_MODIFIER.read_text(encoding="utf-8")
 
 
 def test_wrapper_accepts_common_checked_out_with_crlf():
-    """source が CRLF で checkout されていても common.toml を壊さない。
+    """source が CRLF で checkout されていても pi-mcp-servers.toml を壊さない。
 
-    Windows の core.autocrlf では埋め込まれる common.toml が \\r\\n になる。
+    Windows の core.autocrlf では埋め込まれる宣言が \\r\\n になる。
     既定の改行変換で書くと \\r\\r\\n になり TOML として読めない。
     Linux の write_text は変換しないので、ここで効くのは Windows だけ。
     """
-    wrapper = render_modifier(ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl")
+    wrapper = render_modifier(MCP_MODIFIER)
     lines = wrapper.decode("utf-8").splitlines(keepends=True)
     common_line = next(i for i, line in enumerate(lines) if line.startswith("COMMON = "))
     common = json.loads(lines[common_line].removeprefix("COMMON = "))
@@ -158,9 +139,7 @@ def test_modifiers_preserve_unicode_and_are_idempotent(
     first = run_wrapper(wrapper, data)
     assert first.returncode == 0, first.stderr.decode(errors="replace")
     parsed = json.loads(first.stdout)
-    # permissions-config.json は CLI 自身が承認を書き込むファイルなので、
-    # 生成側は locations を union するだけで他のキーには触らない
-    # (全置換すると chezmoi apply のたびに対話承認が消える)。
+    # mcp.json は利用者も書くファイルなので、生成側は宣言したサーバだけを更新して他のキーには触らない
     assert parsed["unmanaged"] == "日本語"
     assert first.stdout.endswith(b"\n")
     assert b"\r\n" not in first.stdout
@@ -179,7 +158,7 @@ def test_modifiers_accept_empty_input(source: Path):
 
 
 def test_missing_inputs_are_passed_through_byte_for_byte(tmp_path: Path):
-    wrapper = render_shared_wrapper(tmp_path, "claude-settings")
+    wrapper = render_shared_wrapper(tmp_path, "pi-mcp")
     data = b'{"value":"unchanged"}\r\n\xff'
 
     result = run_wrapper(wrapper, data)
@@ -190,7 +169,7 @@ def test_missing_inputs_are_passed_through_byte_for_byte(tmp_path: Path):
 
 
 def test_generator_failure_has_no_stdout(tmp_path: Path):
-    common = tmp_path / "home" / "dot_config" / "agents" / "common.toml"
+    common = tmp_path / "home" / ".chezmoitemplates" / "pi-mcp-servers.toml"
     generator = tmp_path / "scripts" / "agents" / "generate.py"
     common.parent.mkdir(parents=True)
     generator.parent.mkdir(parents=True)
@@ -202,7 +181,7 @@ def test_generator_failure_has_no_stdout(tmp_path: Path):
         "sys.exit(7)\n",
         encoding="utf-8",
     )
-    wrapper = render_shared_wrapper(tmp_path, "claude-settings")
+    wrapper = render_shared_wrapper(tmp_path, "pi-mcp")
 
     result = run_wrapper(wrapper, b"{}")
 
@@ -265,7 +244,7 @@ def run_wrapper_without_tomllib(
 
 def test_wrapper_finds_another_python_when_tomllib_is_missing(tmp_path: Path):
     """3.10 以下で動かされても、PATH に 3.11 以上があれば生成は成功する。"""
-    wrapper = render_modifier(ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl")
+    wrapper = render_modifier(MCP_MODIFIER)
 
     result = run_wrapper_without_tomllib(wrapper, b"{}", tmp_path=tmp_path)
 
@@ -283,7 +262,7 @@ def test_wrapper_falls_back_to_the_current_python_when_none_is_found(tmp_path: P
     empty_path.mkdir()
     empty_home = tmp_path / "empty-home"
     empty_home.mkdir()
-    wrapper = render_modifier(ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl")
+    wrapper = render_modifier(MCP_MODIFIER)
 
     result = run_wrapper_without_tomllib(
         wrapper,
@@ -318,7 +297,7 @@ def test_wrapper_finds_toolchain_python_outside_path(tmp_path: Path, layout: str
     installed.symlink_to(sys.executable)
     empty_path = tmp_path / "empty-bin"
     empty_path.mkdir()
-    wrapper = render_modifier(ROOT / "home" / "dot_claude" / "modify_settings.json.py.tmpl")
+    wrapper = render_modifier(MCP_MODIFIER)
 
     result = run_wrapper_without_tomllib(
         wrapper,

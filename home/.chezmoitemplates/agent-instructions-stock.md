@@ -1,7 +1,6 @@
 # 個人用カスタム指示（汎用版）
 
-<!-- pi の stock プロファイル用。ツールに依存しない好みだけを置く。
-     正本の全文は agent-instructions.md。see docs/spec/agent-config-generation.md -->
+<!-- pi 用。ツールに依存しない好みだけを置く。see docs/spec/agent-config-generation.md -->
 
 ## 応答
 

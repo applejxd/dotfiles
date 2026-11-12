@@ -4,7 +4,7 @@
 現在の運用ルールは [仕様・運用](../spec/index.md)、採用した設計判断は
 [ADR](../adr/index.md) を参照してください。
 
-読み手は利用者（エージェントが何を調べたかのレポート。[ADR-0032](../adr/0032-docs-by-audience.md)）。自作基盤（ハーネス・sandbox・opencode など）の調査は凍結した領域の記録で、継続の領域（stock の拡張の評価・検索・圧縮など）と分けた整理は今後の課題。
+読み手は利用者（エージェントが何を調べたかのレポート。[ADR-0032](../adr/0032-docs-by-audience.md)）。撤去した自作基盤（ハーネス・sandbox・opencode など。[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）の調査も、当時の記録として残している。
 
 ## 運用
 
@@ -23,16 +23,13 @@
 
 | 形 | 使う場面 | 例 |
 | --- | --- | --- |
-| 単発 | 1 回の調査で閉じる | [allow リスト監査](opencode/permission/allow-list-audit.md) |
-| 連番の記録（`## 記録 E1 — <日付>`） | 仮説と検証を何度も回す | [compaction 関連の hook 仕様](agents/compaction-hooks.md) |
-| 節の追記 | 1 つの調査を配備・再測で掘り下げる | [permission 適用範囲の穴](opencode/permission/gaps.md) |
 
 - 追記した節には、見出しか節の冒頭に**日付**を書く。日付が無ければ
   ファイル冒頭の日付の観測とみなす
 - **過去の観測・結論を書き換えない。** 訂正・撤回は新しい節か新しい記録として
   足し、元の節の冒頭に訂正先への案内を置く。誤字とリンク切れの修正は別
 - 追記で節が 10 を超えたら、冒頭に「読み方」（節の群・日付・覆った節）を置く
-  （例: [srt の適用可否](opencode/permission/sandbox-runtime.md)）
+  （例: srt の適用可否）
 - **追記で育った記録も割らない。見出しの文言も変えない。** 案件・仕様・コードの
   コメントが節番号と見出しで参照している（`調査記録 19 節` など）。
   短い記録を細かく分けることもしない
@@ -58,141 +55,24 @@
 
 ## 一覧
 
-### エージェント CLI 横断
+### pi・エージェント
 
 | 文書 | 内容 |
 | --- | --- |
-| [エージェントハーネス比較](agents/harness-comparison.md) | Claude Code / Copilot CLI / Codex CLIの機能・強制層・設定差分、OpenCodeへの乗り換え評価（2026-09-19 時点の見送り。後に OpenCode を配備） |
-| [sandbox機能の包括調査](agents/sandbox-capabilities.md) | Claude Code / Copilot CLIのsandbox全機能、採用状況、落とし穴 |
-| [pi のハーネスの試作](agents/pi-harness-spike.md) | 2026-10-08。E1: 組み込みと同じ名前のツールは `/reload` でハーネスが抜けると組み込みが戻り判定なしで実行（`-nbt` でも）、別名ならツール 0 個。`execute()` での再検査で入力の書き換えを拒否、判定器の異常 5 通りはすべて拒否。E2: 別名のツールを 4 モデルが迷わず使用、既定の圧縮は別名のファイル操作を拾わずハーネスで補う。E3: 並列の ask は codemode の中でだけ重なり先の確認が永久に止まる（順番待ちで解消）、bash の `details` に生の出力が残る（伏せて 0 件）、codemode・MCP もハーネスの判定を通る。E4: 子エージェントも同じハーネスで判定し子の ask を `blocked` で親へ返せる、Fence で包めるが pi は設定・認証の読み取りでも `.lock` を作るので agent 置き場は書ける必要がある |
-| [子エージェントが受け取る文脈の実測](agents/child-context-probe.md) | 2026-11-02。pi 1.4.0。`-nc` は作業先・祖先・agent 置き場の AGENTS.md / CLAUDE.md を全部止める（SYSTEM.md は止めない）。`before_agent_start` の `systemPromptOptions.contextFiles`（path・content）を書き換えると最終の prompt に反映される（hook で変換する (P) が可能）。append は文脈より前。今の子は両方の AGENTS.md を全文で受ける。pre-commit の gitleaks は未追跡を見ない |
-| [子の文脈を抜粋にしたときの規約遵守（S5 パイロット）](agents/child-context-eval.md) | 2026-11-02。pi 1.4.0。S5 パイロット 36 実行。抜粋にしても規約を落とした兆候なし・prompt 約 3〜4 割減。振る舞いが良くなる証拠は無い |
 | [長い文脈は要らない（論文）と圧縮の方針](agents/long-context-compaction-paper-2026-11.md) | 2026-11-09。arXiv:2611.05306 の要点（頻繁な圧縮でも精度はほぼ保たれる。良い圧縮は物語ではなく brief）と、自分の運用 104 セッションの集計（25 万超が 69%、圧縮の中央値は約 79 万、長さによる品質の低下は見えない。圧縮の直後に不満の手がかりが増える傾向）。確定した方針: 70 万で圧縮（本体の `reserveTokens`）、`pi-compaction` は要約の指示の恒久設定だけ、自作なし |
 | [圧縮の失敗の調査](agents/pi-compaction-failure-survey.md) | 2026-11-02。pi 1.4.0。セッション記録には成功した圧縮（11 回）しか残らず、失敗の文言が取れない（原因は未確定）。公式の既知の不具合は 1.4.0 で多くが修正済み。`session_compact_failed` で理由を残す観測を足す。要約の長さの実測（2026-11-03、8 回で 3.7 万〜5.9 万字）と、長さ・思考レベルの上限の対策 |
-| [pi のメッセージ・キューの挙動の実験（CHG-0061 S0）](agents/pi-message-queue-experiments.md) | 2026-11-03。pi 1.4.0、RPC + 偉のモデル。アイドルで `triggerTurn:true` だけが run を始める。実行中の `followUp` は最後の応答の後に届き `before_agent_start` が来ない。custom のキューは見えない・中断しても残る。`new_session` で `session_start` が 2 回来てタイマーが二重になりうる。`agent_settled` からの `triggerTurn` は連鎖する。TUI・Fence・Windows は未確認 |
-| [pi の継続（settle）・永続・書き込み境界の実験（`/goal`・作業台帳）](agents/goal-settle-experiments.md) | 2026-11-05。pi 1.5.0、faux。`agent_before_settle` のハンドラは登録順の連鎖で、返した `entries` は置換（todo 拡張が autocheckpoint の分を消す）。`session_start` は new / fork / resume で 2 回。`-c` は `startup`。`<git-common-dir>` は親の `pis` から書ける（hooks / config を除く）。最初の assistant 前の `appendEntry` は永続しない。TUI・settle 中の圧縮・print モードは未実測 |
-| [統合方式と実行環境の実験（CHG-0062 の段 0）](agents/pr-merge-spike.md) | 2026-11-03。git 2.43.0。merge commit は積み重ねの衝突を消し、squash は衝突する。`merge --ff-only` は競合の防止になるが、敗者が作業ツリーを汚すことがあり、ignored は黙って上書きされ、中断で `index.lock` が残る。Fence の内側から loopback は届かず、Fence 内の commit は pre-commit が失敗する。tailnet の名前・役割ごとの `pis -p`・Windows は未確認 |
-| [mvdan-sh の構文木の実型（Plan の fixture）](agents/mvdan-sh-ast-fixtures.md) | 2026-11-05。`Lit` はバックスラッシュを残した原文で、literal の判定は自前。`$'…'`・`$"…"` は `Dollar` 付きの引用。CR は空白扱い・NUL は落ちる。`BinaryCmd`・Redirect の演算子の番号表 |
-| [コマンド判定器の公開実装の調査](agents/command-judge-survey.md) | 2026-11-05。Codex・claude-bash-approve 系・opencode・gemini-cli・Claude Code の公開資料・Fig などを読み（動かしていない）、我々の穴の型 4 つへの示唆を束ねた。パーサを使う公開実装は複数あるが、型 1（引数の知識）はどれも閉じておらず、Codex は許可表を廃止し、公式も「境界ではない」と明言。展開は「静的に 1 語に決まる語だけ通す」が本命で Plan と同じ。採用候補 11 件（実行の入口の環境変数の名指し・公開の突破の回帰・誤 ask の計測など）。bypass 下の hook の効きは未確認 |
-| [全体設計の独立 review（2026-11）](agents/arch-review-2026-11.md) | 2026-11-05。別系統のモデルによる読み取りのみの review。3 層は説明として妥当だが権限の境界ではない。当面は親 pi → worker を標準にし、ジョブ・起票へは追加投資しない。自動統合は採らない。実行・実機は未確認 |
-| [`/goal`（目標を 1 回設定して自走する機能）の先行実装の調査](agents/goal-command-survey.md) | 2026-11-05。G1: Claude Code・Codex・Hermes・OpenCode 内蔵・Cursor・Kimi・Copilot autopilot と Ralph ループ、pi 向け拡張 8 件（README）を、面・完了判定・続行・保存・予算・介入・失敗談で比較（動かしていない）。完了判定は「別モデル」「自己申告＋証拠」「決定的ゲート・独立 auditor」の 3 方式。失敗は費用の暴走（Codex は目標のあるセッション 1.4% が入力の 49%）と、利用者の stop の無視（Claude Code）。pi の `agent_settled` で続行する設計が複数。取り入れ・見送り候補つき（決定はしない） |
-| [ローカル PR ビューアーの公開実装の調査](agents/local-pr-viewer-survey.md) | 2026-11-02。GitHub をリモートに持たない開発向け。ローカル・pi 系・forge 系・部品の約 40 件。差分・コメント・レビュー状態とマージ・pi 連携の 4 要件を全部満たすものは見つからず（ローカル系にマージが無く、forge 系に pi 連携が無い） |
-| [ハーネス付きの pi への拡張の追加](agents/pi-extension-under-harness.md) | 2026-10-11。E5: 明示の `-e` の拡張は `-ne` でも読まれ、ツールは判定（役割の `tools`・既定の確認）と結果の伏字化を通る。同名ツールの差し替えは pi が起動を止める。ただし拡張の読み込み時の処理は囲えない。E6: `pis` では `exposure` が既定の `codemode` の MCP のツールは呼べない（`-nbt` で `codemode` が宣言されない）（Windows で実施。Unix は未実施） |
-| [pi をどこで・どこまで守って動かすか](agents/pi-isolation-options.md) | 2026-10-24 に I2 を追記（OpenShell で PowerShell の `pis` の問題は解決しない見込み。Windows ネイティブは MXC が「Coming soon」で、docs の経路は WSL2 + Docker Desktop の Linux コンテナ）。2026-10-13。I1: pi 本体に承認機能は無く、公式は境界（隔離）を勧める。Windows の隔離手段の比較（Sandbox・Hyper-V・`wslc`・専用ユーザー）、`wsb` の CLI、Sandbox での導入検証の実測、ハーネスの Windows 移植を見送った理由。運用の判断: Windows ネイティブの `pi` は信頼できる環境でだけ、ガードなし。2026-10-31 に I5 を追記（Claude Code はネイティブ Windows でサンドボックスなし、Codex は 2 方式。WSL から `powershell.exe` を起動できることを観測） |
-| [承認の設計と封じ込め（公開資料の調査）](agents/approval-containment-survey.md) | 2026-10-31。AC1: 確認の約 93% が承認される（Anthropic）、境界が固ければ監督を緩めてよい、複数エージェントでは確認がスケールしない。このリポジトリの運用の観測（常に bypass、使い捨てコードの承認は素通し、観測を取ったセッションは Fence の外） |
-| [ホスト（Orca・Zed・Herdr）の調査と、pi との分担](agents/host-integration-survey.md) | 2026-10-31。HO1: どのホストも pi の判定と境界を強制できない。Orca の orchestration は強いが実験機能で、WSL の CLI は境界の外を通る。Zed の Parallel Agents は人が管理する UI。Herdr TUI と App は別製品。**pi 1.4.0 は OSC 7501 を内蔵**（自作パネルは対象外）。HO2: 境界の内側から、tmux・Herdr の既定の制御ソケットには届かない（実測） |
-| [pis（標準のサンドボックス）の実機の挙動](agents/pis-sandbox-field-test.md) | 2026-10-15。S1: 12 項目のうち 11 が期待どおり。Orca の資格情報の漏れ・共通指示の欠落・`fd` の毎回のダウンロードを見つけて直した。S2（2026-10-25）: 内側は DNS を引けないがプロキシ越しの CONNECT は通り、許可外は 403。ページ取得の失敗はツールの事前の名前解決が原因。クリップボードの失敗と回避策（`PI_CLIPBOARD_OSC52`） |
-| [Zed（pi-acp）・Orca から `pis` を使う方法](agents/zed-orca-pis-integration.md) | 2026-10-20。Z1: pi-acp は環境変数 `PI_ACP_PI_COMMAND` で起動コマンドを差し替えられ、`confirm`・`notify`・`setStatus` を扱える。`pis --no-sandbox` の RPC は手元で通った。Orca は起動コマンドの上書きを持つ。pi-acp 本体・Zed・Orca の実機は未確認。Z2（2026-10-21）: Orca のネイティブチャット（Pi Chat）は WSL・SSH では使えず、WSL のプロジェクトは「No chat in WSL」でターミナルのみ（Windows 側のプロジェクトなら使える） |
-| [pi-goal-x の深掘り（ソース・issue/PR と、自作で上回れるかの判断）](agents/pi-goal-x-deep-dive.md) | 2026-11-05。v0.34.1（TS 19,526 行・実行時の依存 0・保守者 1 人が commit の約 8 割）を、ソースと issue/PR 全件から読んだ（**コードは実行していない**）。弱点: 既定で無制限に自走（空回しの報告 1 時間 25〜45M トークン）、ターン内の変更をメモリに溜めて境界で 1 回だけ書く（kill・競合で最大 1 ターン分が消える。fsync 無し）、監査役の `bash` はフルガードの判定の外、予算が監査役の費用を数えない。保存の消え方は破損でなく設計（新しい会話は既定で目標にフォーカスしない等）。自作で上回れるのは安全面（予算必須・ガード下・fsync 付き追記・評価役の可視化）、上回れないのは UI・起案・試験の厚み。vendor は約 55〜65 時間＋追従、自作の MVP は約 30〜50 時間（いずれも推測） |
-| [pi のバックグラウンド処理の実機実験](agents/pi-bg-experiments.md) | 2026-10-20。B1: 実モデル 4 つ・13 シナリオで `bg_run` / `bg_kill` / `guarded_task` の background を試した。基本は動く。`&` の拒否は行末にしか効かず 2 モデルがすり抜け、`gpt-6-sol` は `guarded_task` が壊れ、並行ジョブは 1 件ごとに 1 ターン、ログのパスは読めず行き止まり |
 | [pi の公開拡張の調査と、使えないことの不利益](agents/pi-public-extensions-survey.md) | 2026-10-20。P1: 月間ダウンロード数の上位 150 件を分類し、今のハーネスと対比。主要な機能は自作で持っている。不足は、構造化した質問・永続する記憶・LSP の診断・worktree 隔離の 4 点。スキルは軽く試せるが拡張は重い。中継プロキシ型・観測の SaaS 送信・ Web UI は避ける。npm の検索 API は重複で網羅に使えない。P3: 自作拡張の採点（総合 B+ 78 点。安全 A・機能の幅 C+）。P4: ask-user 系拡張の方式と反例。P5（2026-10-21）: 人気の `pi-memory`・`pi-btw`・`pi-advisor-flow`・`pi-fff` を既存の仕組みと比べた。どれも導入しない（`review` を `explorer` 役に、`btw` を `explore` の子にした）。**P6（2026-10-22）: worktree 隔離の先行例（`@gotgenes/pi-subagents-worktrees` 0.3.3・`@tintinweb/pi-subagents` 0.22.0 の配布物を読んだ）と、P1〜P5 の訂正（質問は実装済み・通知・P2 の不満・`btw`・P3 の行数と点数は現行ではない）。上の「不足 4 点」「総合 B+ 78 点」は P1・P3 当時のもの**。**P7（2026-10-22）: worktree 隔離の先行例を Claude Code・Cursor（公式 docs）、Codex アプリ（二次情報）で比べた。`git worktree lock` で実行中を守る、自分が作ったものだけを掃除する、同時数の上限、filter driver の確認を CHG-0029 に取り入れた。実機では動かしていない** |
-| [公開拡張 `pi-tasks`（2 種）のソース調査と、自作 `todo` が上回れるかの判断](agents/pi-tasks-deep-dive.md) | 2026-11-05。T1: `@tintinweb/pi-tasks` 0.9.1（タスクボード・依存・共有ファイル）と npm の `pi-tasks` 0.3.1（証拠つき完了ゲート）を、ソースと issue / PR で読んだ（動かしていない）。共有ファイルのロックに、回収の競合・PID 再利用で永久に回収されない・破損の黙った上書きがある（読んだ範囲）。循環は 2 者だけ警告。バックグラウンド追跡は配線されていない。自作は枝への追従・子の結果を完了と見なさない点で上。依存と循環の拒否が最小の追加。vendor は勧めない |
-| [OpenShell と現行サンドボックスの比較](agents/openshell-comparison.md) | 2026-10-23。O1: OpenShell v0.1.5 を、公式の docs・issues・NVD と第三者の記事で調べた（動かしていない）。判定側を境界の外に置く・資格情報を渡さない設計が文書にある一方、コンテナか VM が要り、WSL2 は experimental で不具合の報告があり、重大な脆弱性が 2 件ある。独立した検証は見つからない |
-| [自作サンドボックスの代替候補の比較](agents/sandbox-alternatives-comparison.md) | 2026-10-24。C1: Docker Sandboxes・nono・srt・Claude Code ネイティブ・Fence を、WSL2・pi・資格情報・ホストの道具・子の隔離で比べた（動かしていない）。nono は pi を名指しで対応するが WSL2 では資格情報の代理が既定で使えない。Docker Sandboxes は Windows ネイティブで資格情報を注入するが WSL2 の中や pi の記述は無い。コマンド内容を解析する層を持つ既製品は見つからなかった |
-| [隔離方式の選び直し（microVM・Docker・nono）の調査と試作](agents/isolation-reselection-2026-11.md) | 2026-11-05。microVM の流行の調査（WSL2 では GPU と両立しない・主因は多テナントのサーバ側）と、実機の試作。nono v0.81.0 はホストの Docker・systemd・WSL interop のソケットに内側から接続でき、ホストへの実行経路で不合格。rootless Docker は GPU（PyTorch）・Web（sidecar）・画像（`:ro`）・ホストのソケット不在で合格。資格情報・外向き許可リストは未実施。GPT-6 Astra への相談の要点を含む |
 | [AI コーディングエージェントの利用者は、どれくらい隔離して使っているか（声と指標）](agents/sandbox-user-adoption-2026-11.md) | 2026-11-06。ADR-0028 の判断材料。利用者側の選択を、公開リポジトリの設定（Claude Code のプロジェクト設定 83,584 件のうち sandbox 有効と思われるものが約 1.4%、Codex は `sandbox_mode` を明示した中で全開放が約 18%、devcontainer で Claude Code 6,752 件）と HN のスレッドから見る。多数派はホストでの YOLO と Docker・devcontainer。数値つきの利用者調査は見つからず |
-| [開発単位の環境のバックエンド: ネイティブ Ubuntu の Incus（導入前調査）](agents/incus-dev-environment.md) | 2026-11-06。ADR-0027 の「開発単位の環境」をネイティブ Ubuntu で Incus が担えるか（動かしていない）。GPU の共有・非特権での入れ子 Docker・clone と snapshot の即時性は見込みがある。DDS のマルチキャストは macvlan か host bridge が要調整。入れ子 Docker の runc・AppArmor の回帰と、コンテナがホストのカーネルを共有する点がリスク |
 | [同種の OSS（coi・isx）の評価と、kcage との比較](agents/oss-sandbox-evaluations-2026-11.md) | 2026-11-08。静的調査。どちらも制御面の分離・GPU・WSL2 の要件を満たさず不採用。借りた点（coi の親ディレクトリの固定・isx の独立 clone＋fetch）。 |
-| [ツール隔離（pi はホストに残し、ツールの実行だけを隔離）の実現性](agents/tool-isolation-feasibility-2026-11.md) | 2026-11-08。pi の公式の型（`operations`。grep だけ自作）で実現可能。ハーネスのローカル前提と鏡写し cwd。プロトタイプは着手前に中止。 |
 | [pi の sandbox 拡張と GPU: 実機の比較（bubblewrap 系・Docker 系）](agents/pi-gpu-sandbox-2026-11.md) | 2026-11-11〜12。`pi-safe`・`@yuru7/pi-sandbox`・`pi-permission-modes`・`pi-less-yolo` のフラグを WSL2 で実測。どれも設定だけでは GPU が通らず、`--dev-bind /dev/dxg` を `--dev /dev` の後に足せば通る。`pi-safe` は docker 経由で HOME に書ける、`pi-less-yolo` は rootless で cwd に書けない、など |
 | [Fence を pi のシェルの先に置く実測（WSL2）と、起動の遅さの原因](agents/fence-latency-2026-11.md) | 2026-11-12。bash・`bg_run`・`!` 相当・子の bash が囲いを通り、GPU・秘密・`/tmp`・通信・キャッシュは設定で通る。遅さ（1 コマンド約 1.0 秒）の主因は、WSL の `/mnt` 配下の `PATH` 要素と cwd の走査で、ラッパーで `PATH` から `/mnt` を外すと約 0.25 秒（実測）。公式は全体を 1 回包む使い方を勧め、常駐の仕組みは無い |
-| [2026-11 エージェント基盤の凍結の原本（archive）](archive/2026-11-agent-stack/README.md) | 2026-11-08。kcage の clone モードの契約・API 契約書・設計と、OSS の評価・ツール隔離の調査の原文（再開用）。pi の package 追加分の評価の原文（`pi-eval/`）もある。 |
 | [stock の pi の package の評価（2026-11）](agents/pi-stock-packages-evaluation-2026-11.md) | 2026-11-08〜09。入れる 7 つ（permission-system・cc-safety-net・subagents・mcp-adapter・web-access・rpiv-todo・rpiv-ask-user-question）の評価・決定と、追加の 4 つ（pi-background・pi-plan-mode・pi-goal・pi-rewind）の評価・決定、検索の決定の経緯、見つけた他の候補（未評価）、btw（`@narumitw/pi-btw@0.63.5`。ツール登録なし・実依存 1 つを grep で確認、実機の `/btw` の確認が導入の条件）の評価・決定、tok/s 表示（`pi-show-token-rate@0.3.0`。ファイル・ネットワーク・子プロセスが 0 件なことを grep で確認、実機での数値の確認が導入の条件）の評価・決定。 |
 | [検索・モデルのデータの扱いの裏取り](agents/web-search-data-handling.md) | 2026-10-24。D1: 制約のある環境の Bedrock・AgentCore と、個人機の Copilot・検索 API の公式のデータの扱い。Bedrock は学習に使わずモデルプロバイダーと共有しないが、一部のモデル（Claude Fable 5 / 5.1 など）は最大 30 日保持され人の確認の対象になりうる。AgentCore の検索のクエリは AWS の外へ出ない。「opt-out 設定」の正体は公式文書から特定できない。Brave はクエリを最大 90 日保持、Copilot の学習への利用の既定値は不明 |
-| [サンドボックス内のエージェントへの認証の渡し方](agents/agent-auth-delegation.md) | 2026-10-24。D6 で GitHub（gh）の方式（世間は MITM ＋ CA。gh の http_unix_socket ＋ Envoy が単純で実測済み）を確認。D5 で世間の実践（主流は内側に置く。隔離は 2026 年に出始めた段階）と既製の署名プロキシの実用性（aws-sigv4-proxy は応答がバッファされる）を確認。D4 で LiteLLM を再評価（サプライチェーンの対策は取れるが、決め手は機能: Bedrock の忠実度・重さ・Copilot の DB なしの不確かさ。pi の Copilot の長期トークンは read:user だけ）。D3 で LiteLLM の MCP Gateway・AgentCore・GitHub の連携と、設計を真似る要点、共有ゲートウェイと個人の GitHub の制約を追記。D2: 制約のある環境の Bedrock・AgentCore と個人機の GitHub で、強い認証情報を内側に置かずに使う手段を網羅調査（動かしていない）。Bedrock の短期 API key（最大 12 時間）、ホスト側の署名プロキシ、AgentCore の JWT 認証、GitHub App の 1 時間のトークン。常駐のゲートウェイは必須でない。LiteLLM は 2026-03 と 2026-10 にサプライチェーン事件（2 回目は署名導入済みでも突破） |
-| [Bedrock ブローカーの実機確認（段 U7b）](agents/bedrock-broker-field-test.md) | 2026-10-26。B1: 実機で、スクリプトを 2 回実行して最後の 1 行（報告コード）を手で返す手順。署名・ストリーミング・鍵の更新・プロキシ越しなどを確かめる（偽の上流での確認は済み、実機は未取得）。Copilot ブローカーとの機能差のうち、Bedrock で未検証・未決・未実装のものの一覧 |
-| [他のコーディングエージェントの、ファイル操作・シェルツールの作りと、専用ツールへ寄せる仕掛け](agents/tool-design-survey.md) | 2026-10-24。OpenCode・Claude Code・Codex・Crush・Gemini CLI・Roo・Cline・Continue・Copilot・Zed・Amp・Goose・Aider・pi を比較。tail・一括読み・追記・stdin の専用引数はどこにも無い（一括読みは非推奨へ）、cat の拒否をする製品は無く説明文が主流、Claude はヒアドキュメントの書き込みに先験がある可能性 |
-| [全承認（bypass・yolo）モードでも確認を残す仕組みと、公開・送信系のガードの分類](agents/permission-bypass-survey.md) | 2026-10-25。Claude Code・Gemini・Codex・OpenCode・VS Code・Cursor・pi の公開拡張・コマンドガードの OSS（dcg など）を比較。Claude Code が `confirm`（bypass でも出す ask）に最も近い、外部送信を既定で止める製品は無い、`gh api` の暗黙の POST への手当てが OSS に無い、上位層が ask を自動回答する落とし穴 |
-| [外部送信・公開・破壊的操作を防ぐ設計の代替案（網羅調査）](agents/guard-design-alternatives.md) | 2026-10-25。ネットワーク層・資格情報・環境と承認方式・リポジトリ内の独立評価。3 層の骨格は現状維持が妥当。小さな改善は個人機の gh の権限（OAuth が広い）と、ブローカーへの REST の deny の「追加」（撤去は不可。GraphQL と git が残る） |
-| [プロキシ必須の環境で境界の通信を通すには](agents/corp-proxy-boundary.md) | 2026-10-15。Fence は許可済みの通信を直接つなぎ、上流プロキシはグレーゾーン用。`srt` の `parentProxy` は許可リストを保って通るが、`pis` の境界の形（R1・存在しない保護対象・`$HOME` 拒否）が載らない。許可リストを照合する中継を足して解決（制約のある環境の機械では未実測） |
-| [Claude の deny の展開数](agents/claude-deny-glob-expansion.md) | 名前マッチの deny が 3239 件の bind-mount に展開された測定、whitelist 化の根拠 |
-| [Copilot の開発ツール自動許可の実効権限](agents/copilot-dev-tool-access-grants.md) | dev-tool access ON 時の取りこぼし・RO 上書き、ヘッダが見えない粒度、PATH の bin が RO、mise の latest が消える |
-| [Copilot sandbox の既定の許可範囲](agents/copilot-sandbox-default-policy.md) | `/sandbox policy` の表示、$HOME は未許可、存在しないパスの deny 10 件中 3 件が効かない |
-| [compaction 関連の hook 仕様](agents/compaction-hooks.md) | 記録 E1–E7。圧縮の直前・直後に割り込める hook、Copilot の入力契約の実測（Claude / Copilot の hook は 2026-09-25 に撤去） |
-| [エージェントの git 入力待ちを防ぐ環境変数](agents/noninteractive-git-env.md) | 2026-10-03。OpenCode V2 の `ctx.shell.hook("create.before")` で子シェルの環境を `??=` で足せる実測、ocs は `inner_env` に足せる、`GIT_TERMINAL_PROMPT=0` は TTY があるときだけ効く、`GIT_EDITOR=false` で `rebase -i` が即失敗（`git commit` と分岐した merge は権限で測れず） |
-| [Claude / Copilot で git 入力待ち防止の環境変数を入れられるか](agents/noninteractive-git-env-claude-copilot.md) | 2026-10-04。Claude の `settings.json` の `env` はシェルの値を上書きするので「未設定時のみ」に不適（公式）、`CLAUDE_ENV_FILE` は実機未検証。Copilot は環境変数の設定が無く `preToolUse` の `modifiedArgs` は効くが狭い allow で実行が拒否された（実測）、起動ラッパーは未設定→既定・既設定→維持を実測。推奨は起動ラッパー |
-| [秘密ファイル一覧のずれと直下以外の `.env`](agents/secret-file-lists.md) | 2026-10-03。hook の `tables.toml` にあって `read_deny_globs` に無かった資格情報・履歴 15 件、`.env` が `**/` 無しで直下以外は ask 止まりだった実測と、`**/` 化後の deny |
-| [AI CLI 設定の生成に関する経緯・実測](agents/agent-config-generation-notes.md) | MCP の配布の経緯・常駐ポートの衝突・モデル階層の比較・hooks 撤去の経緯。2026-08〜10（`agent-config-generation.md` から移設。再測定していない） |
-| [Claude / Copilot の sandbox の許可範囲と経路の実測](agents/agent-sandbox-measurements.md) | 2026-09 の実測と未決の点（`agent-sandbox.md` から移設。再測定していない） |
-| [AI CLI の実行時の障害の観測（引数破損の頻度・pis のクリップボード）](agents/agents-runtime-observations.md) | 2026-10。頻度と上流 Issue の経緯（`troubleshooting-agents.md` から移設） |
-| [ブローカー仕様の実測と経緯](agents/broker-spec-notes.md) | 2026-10-24〜25 の実測（`broker.md` から移設） |
-| [checkpoint 仕様の経緯・実測](agents/checkpoint-notes.md) | 2026-09-24 に OpenCode 専用にした経緯、A1 と A2/B の分離、保存先の変遷（`checkpoint.md` から移設） |
-| [Claude Code permission リストの既知バグ](agents/claude-permission-known-bugs.md) | 2026-05 時点の issue の表。現在の状態は未確認（`agent-command-policy.md` から移設） |
-| [コマンド判定の設計の経緯メモ](agents/command-policy-design-notes.md) | 廃止した判定・以前の穴・採用理由（`agent-command-policy.md` から移設） |
 | [imozuru 仕様の経緯・実測・レビュー記録](agents/imozuru-spec-notes.md) | 2026-10-21〜25 の取り込み・調査・レビュー（`imozuru.md` から移設） |
-| [モデルの割り当ての見直しの日付つき経緯](agents/model-lineup-review-notes.md) | 2026-10-07 の `commit` の役割変更と採点の前提（`model-lineup-review.md` から移設） |
-| [agent-permissions の実測・根拠](agents/permissions-notes.md) | 2026-09-27 の Windows native での確認の範囲（`agent-permissions.md` から移設） |
 | [pi の圧縮の 400 エラー（thinking: disabled）の経緯](agents/pi-compaction-400-history.md) | 2026-10。`pi-guard.md` から移設 |
-| [長い sleep の誘導の由来と実モデルでの確認](agents/pi-decide-guide-sleep-origin.md) | 2026-10-20。`pi-decide.md` から移設 |
-| [自作の拡張（todo / plan / btw / activity / ask / notify / delegate-nudge）の実測と未確認](agents/pi-own-extensions-measurements.md) | 2026-10。`pi-guard.md` から移設 |
-| [子エージェント（guarded_task）の経緯・日付・試験結果](agents/pi-subagents-spec-history.md) | 2026-10-09〜22。`pi-guard.md` から移設 |
-| [pis のサンドボックスの実機発見談と拒否リスト型の実測・未確認](agents/pis-sandbox-spec-observations.md) | 2026-10-15〜26。`pi-guard.md` から移設 |
-| [ツール引数の JSON が壊れる問題の調査](agents/tool-arg-json-breakage.md) | 細粒度ツールストリーミング・strict・Bedrock。`pi-guard.md` から移設 |
-| [ガードツール（guarded_edit / ask）の失敗の集計と見送った案](agents/tool-extension-measurements.md) | 失敗 118 件・940 件などの集計。`pi-guard.md` から移設 |
-| [二つの task（guarded_task と Windows の task）を別物にしている理由](agents/two-task-tools-rationale.md) | 統合しなかった判断と採点の訂正。`pi-guard.md` から移設 |
+| [子エージェント（guarded_task。撤去済み）の経緯・日付・試験結果](agents/pi-subagents-spec-history.md) | 2026-10-09〜22。`pi-guard.md` から移設 |
 | [web 検索スキル仕様の実測・経緯](agents/web-search-spec-notes.md) | 2026-10-11〜26 の実測と CHG-0032 の経緯（`web-search.md` から移設） |
-| [commit の確認（素の pi）の仕様メモ](agents/commit-confirm-spec-notes.md) | 補助拡張 `commit-confirm` の表示例・一時 index・退避 ref の鎖の実装・実モデルでの確認。移設日 2026-10-26（`pi-guard.md` から） |
-| [pi の子エージェント job の結果の保持と通知の仕様メモ](agents/pi-subagent-jobs-notes.md) | `FINISHED_TTL_MS`・通知・保存ファイル・`audit.ts` の実装の細部と試験。移設日 2026-10-26（`pi-guard.md` から） |
-| [AI CLI 設定の生成に関する経緯・実測の記録（その 2）](agents/agent-config-generation-notes-2.md) | 子エージェント・コミットの確認・`/fleet`・bypass の子の、宣言しなかった不具合・採らなかった案・実測（N9〜N12）。2026-09〜10 |
-| [pi を AI オーケストレーターとして使う仕組みの調査](agents/pi-orchestrator-survey.md) | 2026-10-26。O1: 導入に値する公開拡張は無く（親を管理専用にするのは edxeth/pi-subagents と @saifymatteo/pi-orchestrator など少数で、どれもフルガードと合わない）、自作の `guarded_task` に orchestrator ロール・待ち合わせ・DAG を足す方針。借りる設計・RPC で複数の子を管理する落とし穴・他社（Claude Code・Codex・Cursor・Anthropic・Cognition）の知見。実機での試験は未実施。2026-10-31 に O2 を追記（よくあるオーケストレーターの運用: 依存つきのタスク表と ready の一覧、担当ファイルの予約、取り込みの直列化と fail-closed、調整の状態を作業ツリーの外に置く、並列は 3〜5 体、結合の強い部分は 1 人に（Co-Coder）） |
-| [公開拡張 `pi-dynamic-workflows`（2 種）のソース調査と、並列度を上げる設計の借用](agents/pi-dynamic-workflows-deep-dive.md) | 2026-11-05。(A) 3.15.0 と (B) 1.0.1 のソース読解。`vm` の抜けの実証（使い捨て領域で実行）、子は拡張を読まずフルガードの外、予算は既定で無制限・再開と予約の比較、並列度の借用（pipeline 型・予約・AIMD・書き込み宣言による直列化）。vendor は勧めない |
-| [親を「計画・判断・委譲」に絞る仕組みの設計（`plan` の子の案）](agents/orchestrator-role-plan.md) | 2026-10-30。許可リストの `orchestrator` と `setActiveTools`・判定の二重の防御、弱・中・強の 3 案、親専用の検査操作 `check_*`、環境別の変化。中案を選んだ。未確認: pi 1.4.0 の docs 上の保証 |
-| [コーディングエージェントのオーケストレーターの横断調査](agents/orchestrator-landscape.md) | 2026-10-22〜11-01。調整 UI・ワークフロー基盤・承認の中継を横断し、このリポジトリの構成と比較。全体の上位互換は確認できた範囲では無く、部品ごと（スマホの承認・並べて見る UI・取り込みキュー・依存つきの課題表）に上のものがある。未確認: 実機の試験なし、Agent HQ・HumanLayer・ruleset は材料に出典なし |
-| [オーケストレーションの役割別のモデル割り当ての調査](agents/subagent-model-assignment.md) | 2026-10-27（M5 は 2026-10-31）。M5: 親の既定を medium から xhigh へ上げた実測（軽い読み取りは medium 18 秒・$0.089、xhigh 19 秒・$0.095、max 324 秒・$0.686。各 1 回）。M1: 「計画は Claude、実装は GPT」の通説に、一次資料の実測は見つからなかった（体験談で向きも逆の記事がある）。一次資料が支える分担は、能力と費用の分担で、同じ系統の中（`opusplan`・Opus リード + Sonnet サブ）。別系統が効く場面はレビュー。公開評価は、Claude がターミナル作業・長期、GPT-6 Sol がマージ可能な差分と費用で優位。委譲の巧さの役割別評価は無し。見立て: 親は最も強いモデル、worker は Sonnet `#medium`（計測済み）に Sol を足して比較、explore は小型を比較、review は作った者と別の系統。実験の設計案つき |
-| [スキルの `context: fork` を pi のハーネスで強制できるかの実験](agents/skill-fork-enforcement.md) | 2026-10-27。F1: pi 本体は `context` / `agent` を解釈しない。`input` が展開の前に来るので、`/skill:` はモデルを介さず子へ回せる（強い）。モデルが読む経路は `tool_call` で本文の読み取りをブロックできるが、委任は誘導。シェルの `grep` などは塞げない。F2（2026-10-27）: Claude Code の公式の frontmatter。`context: fork` は本文を子の依頼文にする。F3（2026-10-28）: 全 20 スキルの `fork`・`allowed-tools` の調査。`fork` をそのまま付けてよいのは `fix` だけ。8 スキルが `Bash` を一括で許可していた |
-
-### OpenCode 全般
-
-| 文書 | 内容 |
-| --- | --- |
-| [OpenCode V2の仕様](opencode/v2-capabilities.md) | permission・plugin hook・skill・compaction・V1からの移行と未実装項目（2026-09-20 時点。乗り換え見送りの材料） |
-| [OpenCode V2の試験環境の隔離方法](opencode/test-isolation.md) | XDG_CONFIG_HOME が効かない実証、OPENCODE_CONFIG_DIR、Copilot モデルの引き方、過去記録への影響評価 |
-| [OpenCode V2のツール登録とコンテキストコスト](opencode/tool-context-cost.md) | ツール一覧の固定費、codemode true/false の差、ツール化の可否判断 |
-| [OpenCode V2のaskと並列バッチ](opencode/ask-and-parallel-batch.md) | 承認待ちは並列を壊さない実測、拒否が中断の起点、permission.reply のスキーマ、askの実効がモードで変わる |
-| [OpenCode V2のキーバインド](opencode/keybinds.md) | 未知の ID は黙って無視される実測、ID の実在確認法、ctrl+c を app.exit が握る件、キー送出検証が成立しない理由 |
-| [OpenCode V2のスキル frontmatter の解釈範囲](opencode/skill-frontmatter.md) | `context: fork` / `agent` / `allowed-tools` は読み捨てられる実証、スキルは常に会話へ展開される、Claude Code 側は未検証 |
-| [oracle のモデルを、親・worker と別系統にするか](agents/oracle-model-2026-11.md) | 2026-11-10。同じモデルの自己点検はほとんど効かず（Huang 2023・Stechly 2024）、評価役は同系統の出力を好む（Wataoka 2024）。別系統のレビューは非対称に効く（Xiang 2026-07: Claude が Codex を見ると 71.6→89.7%、Codex が Claude を見ると 91.4→82.8%）。決定: oracle を reviewer と同じ GPT 6.1 sol の high にする。reviewer の向き（Claude が書き GPT が見る）は、私たちの作業での実験で確かめる |
 | [子エージェントの権限（agent ファイルの `permission:`）の実測](agents/subagent-permission-frontmatter-2026-11.md) | 2026-11-10。`external_directory: deny`（単一の値）は、作業ツリーの外の `read`・bash のパス引数を確認なしで即座に拒否した（審査ログでも確認）。入れ子の書式は agent 定義が無効になる。許可リストより `deny` が強い。user 配下の写しでの実測は未確認 |
-| [OpenCode V2のエージェントごとのモデル指定](opencode/agent-models.md) | 子エージェントの model は効く、V1 の agent キーは #variant を黙って無視する、主エージェントは --agent で選んでもモデルが変わらない |
-| [OpenCode V2のcommit / reviewエージェントの実機確認](opencode/commit-review-agents.md) | 割り当てたモデルで起動する、--auto は子セッションの確認を自動承認せず止まる（推測）。外部コマンドを止めた git の allow と git commit の ask の実機（E2）、下ごしらえ 10 回の試行錯誤の計測（E3: opus は allow の形の外に出ない、haiku はコミットせずに返る）、接頭辞をやめ素の形を allow にした版（E4: haiku は上書きを手順 4 の冒頭に置いて 9/10 がコミット、書式はスキル任せだと崩れる）、Copilot の Sonnet で Bedrock の Sonnet を近似した計測（E5: 10/10 がコミット、書式は 14 件すべてそろう、`cd` の誘導と連結の確認は増える）、Copilot の Sonnet 5.5 の計測（E6: opus と同等の 10/10・書式で速く、承認済みの全文を一字も変えずに使う。Copilot の commit を切り替え）、子エージェントに確認画面が見えず「確認は出なかった」と推測で報告した件と、`git commit` と確かめを同じ応答に並べた件（E7: `system` を直して並べた回数 5 → 0、言い切りは減るが親が報告を求めると残る） |
-| [OpenCode V2でCopilot CLIの/fleet相当を組む](opencode/fleet.md) | コマンドと作業役の子エージェントだけで動く、並べて呼んだ子は同時に走る、background は使われなかった |
-| [OpenCode の階層に当てるモデルと effort](opencode/tier-models.md) | 2026-09-30。worker（`fleet-worker`）は opus / sonnet 5.5 の low〜high で合格率に差が無く sonnet が速い、haiku 4.5 は難しめの課題で 0/4・担当外の編集あり、routine（`commit`）は sonnet 5.5 の effort で差が無い。worker を Sonnet 5.5 に切り替えた |
-| [/fleet の作業役への指示を足した前後](opencode/fleet-worker-instructions.md) | 呼び出し元への影響を確かめさせると担当外の罠に触れた報告が 0/2 → 2/2（opus 1/1）、合格率は不変、誘導は 14 → 1 回、確認は `pytest` が大半で 19 → 18 回 |
-| [OpenCode の DB を srt の境界の内外で共有できるか](opencode/shared-db.md) | 同時書き込み・外での再開・外からの `/undo` が通った、書き込みの例外は `XDG_DATA_HOME/opencode` 全体、ignore が無いと snapshot が取れない、`TMPDIR` が見えないと通信が止まる |
-| [OpenCode V2 は LSP を使えるか](opencode/lsp-support.md) | 2026-10-01。v2.0.14〜v2.0.21 は `lsp` 設定を受理・保持するだけで言語サーバを起動せず診断も出さない（公式の移行ガイド・ソース・バイナリで確認）。実装は V1 にだけある。#50916 は未回答 |
-| [配置済みの opencode.json に残るキーと V1 / V2 の併用](opencode/agent-config-ownership.md) | 2026-10-08。宣言から外したキーや V1 の定義が残り、元に戻した後の判定を残った policy が支える。同じ ID を V1 と V2 に書くと V2 が丸ごと勝ち V1 のキーは捨てられる。生成器が持つ範囲を決める「所有の規則」を先に入れれば、段 4 を元に戻すだけで元の JSON に戻る（試作） |
-| [`ocs` 境界の仕様の補足記録（経緯・実測）](opencode/opencode-sandbox-spec-notes.md) | bypass を使えるようにした経緯・外したデバイス名の実測・以前の隔離用 DB の移行・起動の遅れの実測（`opencode-sandbox.md` から移設） |
-
-### OpenCode の permission
-
-| 文書 | 内容 |
-| --- | --- |
-| [permission適用範囲の穴](opencode/permission/gaps.md) | grep/globがread denyを迂回する実測、カスタムツールのバイパス、プロジェクト設定がグローバルに勝つ（policiesだけは勝てない・plugin/mcpは実行される）、read ツールは deny を守る、grep/glob を tools で無効化できる（採らなかった） |
-| [設計を縛る制約の総覧](opencode/permission/constraints.md) | CHG-0002の判断の根拠を1枚にまとめたもの。制約13項目、境界が無いこと、sandboxを採用しないとした当時の理由（CHG-0004 で覆った）、誘導対象の選定計測 |
-| [Anthropic Sandbox Runtime の適用可否](opencode/permission/sandbox-runtime.md) | 2026-09-22〜24 の 26 節。srtは汎用、denyReadは許可領域の内側にしか効かない、認証情報を落とすだけでgit push/ghが止まる、ドメイン制限とseccompの実測、opencode --standalone ごと包む構成の成立（19節）、境界の外に残る経路、隔離用DBと配備時の癖 |
-| [Fence は srt の代わりに OpenCode を包めるか](opencode/permission/fence.md) | 11 項目の実測で一部だけの `denyRead`・R1・snapshot の置き物・`TMPDIR` の問題が消えた、存在しないパスへの `denyWrite` は効かない、起動が約 0.8 秒遅い、`session.synthetic` でホストのエージェントが動いた事故。E2: 実装した `ocs` の組み立てで必須の項目が全部通った、`~/.local/state` を開けないと opencode が `EROFS` で止まる |
-| [shell allowの費用対効果とpluginゲート](opencode/permission/shell-allow-and-plugin-gate.md) | 実履歴1,247セグメントでのallow被覆率、静的パターンのクォート/変数回避、ask→allow引き上げの実測（allow 7 件の案は同日の監査で 5 件に） |
-| [allowリスト監査](opencode/permission/allow-list-audit.md) | git diff/statusの任意コード実行、sed -n の危険性、リダイレクトが resource に残る実証、allowとaskの等価性 |
-| [出力フィルタと子エージェント](opencode/permission/output-filter-and-subagents.md) | execute.afterでshell出力を伏字化できる実証、符号化ですり抜ける限界、continue_loop_on_deny、子エージェントも共通permissionに従う |
-| [カスタムエージェント(Bypass)とキーバインド](opencode/permission/bypass-agent.md) | opencode.jsonのkeybindsが除去される実証（cli.json では効く）、modeではなくagentで実装する、permission="allow"の展開、bypassが外す防御の範囲、bypass からだけ呼べる子と承認制の子の除外（deny した子は一覧から消える） |
-| [sandboxはあるか](opencode/permission/sandbox.md) | 組み込みsandboxが無いことの確認、shell差し替えでbwrapを被せる実測とその限界、プロセスごと隔離の実証、常駐サービス経由の脱出、snapが動かない、採用時の検討事項 |
-| [hookの呼ばれ方とactionの種類](opencode/permission/hook-order.md) | execute.beforeが評価より前に走る実測、external_directoryが別actionで立つ、誘導のdenyは確認を出さない、evaluateにagentが載る、差し替えが評価へ波及する、配備と計装の手順 |
-| [静的 deny の pip を execute.before で説明付きに止める](opencode/permission/early-guard.md) | execute.before が静的 deny より先に走り、例外のメッセージ（uv への誘導）がモデルへ届く。plugin 無し・rules.json 破損では静的 deny が止める。ocs 相当・`--auto` でも止まる（bypass は ADR-0014 前の記録では通していたが、現在は止める）。誤検知（`uv pip`・`echo`・`git commit -m`）なし、並列の他呼び出しは動く。追記で pip 以外の deny 全項目へ拡張（A・B・bypass・止めない例の実機確認） |
-| [bypass を ask→allow だけに再定義できるか](opencode/permission/bypass-ask-upgrade.md) | bypass から `"*" = "allow"` を外し evaluate で ask を allow に書き換える plugin 方式の実測。shell・外部ディレクトリ・`.env.*` の ask が通り、静的 deny（pip・秘密・.ssh）と子エージェントの起動制限は残り、ask を持つ子は化けず、plugin を外すと ask に戻る。V2 配列版も同結果。ADR-0014 で採用し、実際の生成物での実測を追記 |
-| [作業ツリーの外の読み取りとスキルのスクリプト](opencode/permission/external-read-and-skill-scripts.md) | スキルのスクリプトで出ていたのは shell の ask だけ、引数のパスから external_directory は立たない、開けた場所の edit と秘密の deny、コマンド置換は別 resource・引用符は残る、git が fsmonitor を起動、`uv run --no-project` が `.python-version` の実行ファイルを起動 |
-| [段階2配備後の被覆率](opencode/permission/stage2-coverage.md) | 実履歴1,031呼び出しでの実測、秘密へ触れた15件を3層が全件受け止める、誘導後も87%が確認、伏字化の誤爆0.3%、内容の形とパス判定は両方要る |
-| [組み込みエージェントの制限の上書き](opencode/permission/builtin-agent-override.md) | 全体の permissions が explore / plan などの組み込みの制限を上書きする（公式の仕様）。explore が shell で確認を出し `.env.example` を実際に書けた、`agents.explore` の deny でツールが一覧から消え確認ゼロ、API で取り出した実効規則の評価で plan の edit が漏れる。E2: 試験用の設定で別ポートのサーバを起動すれば実効規則をモデルに頼らず取り出せる（起動直後は 404）、`agents.plan` の宣言で組み込みの規則と plan モードの指示が保たれる、`git log --output` が `build` で確認なしに書けた。E3: `evaluate` に親の ID は無いが `ctx.session.get` で親の今のエージェントを辿れる、`execute.before` の ID と `source.id` が一致する、親が bypass の子の外部の読み取りを自動で許可できた |
-| [秘密ファイルの禁止を policies へ移せるか](opencode/permission/policies.md) | 2026-10-08。`experimental.policies` の deny はエージェントの allow・ask・保存した承認・plugin の有無に負けず通常起動で効く、例外の allow は権限を与えない、`plan` の edit の写し直しを置き換えられる、`explore` の 4 つの deny は全体の allow / ask を移さない限り外せない、正しくない statement は警告付きで捨てられ余分なキーは黙って通る。E2: 全体の allow / ask を役割ごとの規則の束へ移すと 14 エージェント中 9 つが今と全件一致し `explore` の補修も外せる、`title` / `summary` に全体の規則が流れ込んでいた、read の例外は policy とエージェント側の両方に要る、規則の束を当てない子は基底の全部許可になる |
-
-### OpenCode の plugin
-
-| 文書 | 内容 |
-| --- | --- |
-| [plugin生態系の棚卸し](opencode/plugin/ecosystem.md) | 主要プラグインのV1/V2世代判定、Claude Code hook互換3件、oh-my-opencodeの衝突点 |
-| [plugin APIの実測](opencode/plugin/api-probe.md) | permission hookの入力・deny実効性・ロード失敗時のfail-open、生コマンドとcwdの取得経路（cwd は後の相関調査で別経路に） |
-| [pluginの相関と承認要求の可否](opencode/plugin/correlation.md) | 並列実行時のcwd相関、plugin から ask を出せるかの実測、ctx.permission.rules の不在 |
-| [pluginのロード経路](opencode/plugin/loading.md) | 明示指定は絶対パスのディレクトリのみ、~が展開されない、失敗が無言、Orca overlayとの関係、Claude Codeとの仕組みの違い |
-| [ask画面へ説明を出す](opencode/plugin/ask-description.md) | 権限ダイアログがmessageを読まない実証、TUI pluginのtoastなら出せる、app_bottomスロットが2.0.12に無い、安価モデルでの説明生成。2.0.14で確認画面のすぐ上のスロット（session.composer.top）に出せる・opencode.jsonの登録でもtui.tsが読まれる（2026-09-30） |
 
 ### テスト
 
@@ -202,6 +82,7 @@
 | [Docker の cold start 検証で直した障害](testing/docker-cold-start-fixes.md) | tmpfs の noexec、modify_ の python3 解決、Pi 扱いの注入が init で消える、Codex の TOML 連結など解決済み 9 件の経緯 |
 | [開発ガイドの実測メモ](testing/development-timing-notes.md) | hook の所要時間・全件の時間・Windows Sandbox の実測・利用者の判断（`development.md` から移設） |
 | [testing 仕様の実測メモ](testing/testing-spec-notes.md) | 近似 runner の実測と日付つきの注記（`testing.md` から移設） |
+| [撤去後の試験を、これ以上減らす価値があるかの実測](testing/test-reduction-2026-11.md) | 2026-11-12。残った約 1,550 件の時間配分（0.1 秒未満が 1,413 件・遅い 1 ファイルが 3 割強）と、カバレッジで洗い出した重複を減らしたときの変異テストでの検出力の低下（5〜17%）。件数を減らさない判断 |
 
 ### シェル
 

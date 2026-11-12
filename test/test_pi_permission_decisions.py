@@ -7,7 +7,7 @@
   (規則の書き間違いと、誤判定 = 通常の作業を止める・危険な形を通す、を開発の段階で見つける)。
 
 pi の package が入っていない環境 (CI など) では skip する。skip は通過ではない。
-see docs/spec/agent-config-generation.md#permission-system-の設定stock
+see docs/spec/agent-config-generation.md#permission-system-の設定
 """
 
 from __future__ import annotations

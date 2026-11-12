@@ -48,7 +48,7 @@
 .local/bin/opencode-sandboxed
 .local/bin/opencode-boundary-check
 
-# 2026-09: explain skill を廃止した (see docs/research/opencode/skill-frontmatter.md)。
+# 2026-09: explain skill を廃止した。
 .claude/skills/explain
 
 # 2026-09: onboarding skill の check-agents.sh を廃止し、read ツールで読むようにした。
@@ -134,19 +134,32 @@
 .claude/skills/uv-migration
 .claude/skills/web-search
 
-{{ if eq (includeTemplate "pi-profile" .) "stock" }}
-# pi の stock プロファイル (CHEZMOI_PI_PROFILE=stock か ~/.config/chezmoi/pi-profile): 配備済みの自作の拡張・ハーネスを片付ける。
-# custom に戻すと chezmoi apply が再配備する。ディレクトリはディレクトリで書く (冒頭の注意)。
-# 拡張は自作のディレクトリだけを消す (一覧は pi-own-extensions)。.pi/agent/extensions を丸ごと消さない:
-# package の設定 (pi-permission-system/config.json) や利用者が置いた拡張まで消えるため。
-# see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
-{{ range (includeTemplate "pi-own-extensions" . | splitList "\n") -}}
-{{ $name := trim . -}}
-{{ if and $name (not (hasPrefix "#" $name)) -}}
-.pi/agent/extensions/{{ $name }}
-{{ end -}}
-{{ end -}}
-.pi/agent/prompts
-.pi/agent/models.json
+# 2026-11: 旧 custom プロファイルと、pi 以外のハーネスの実行ファイルを撤去した (ADR-0037)。配備済みの残りを片付ける。
+# ディレクトリはディレクトリで書く (冒頭の注意)。.pi/agent/extensions は丸ごと消さない:
+# package の設定 (pi-permission-system/config.json など) や利用者が置いた拡張まで消えるため。
+# Claude・Codex・Copilot・Gemini・OpenCode の設定ファイルと hook は、資格情報や履歴と同じ場所にあるので、
+# 消さずに残す (使わなければ利用者が手で消す)。
 .config/pi
-{{ end -}}
+.pi/agent/models.json
+.pi/agent/extensions/activity
+.pi/agent/extensions/ask
+.pi/agent/extensions/btw
+.pi/agent/extensions/delegate-nudge
+.pi/agent/extensions/notify
+.pi/agent/extensions/plan
+.pi/agent/extensions/speed
+.pi/agent/extensions/subagents
+.pi/agent/extensions/todo
+.local/bin/pis
+.local/bin/ocs
+.local/bin/ocs-boundary-check
+.local/bin/oc-utils
+.local/bin/kcage
+.local/share/ocs
+.config/agents/common.toml
+.config/agents/command_policy.py
+
+# 2026-11-12: 撤去した自作 skill と、残した skill の中の撤去したスクリプト (配備済みの残りだけを片付ける)。
+.agents/skills/agent-workflow
+.agents/skills/feature-orchestration
+.agents/skills/away-shift/scripts/preflight.py

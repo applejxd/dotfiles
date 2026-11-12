@@ -1,7 +1,7 @@
 # 現在地とドキュメント
 
 目的: Windows / Ubuntu / WSL / macOS の dotfiles を chezmoi で管理し、
-AI CLI の権限・hook・スキルを単一ソースから生成する。
+pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 
 導入手順はリポジトリ直下の [README](../README.md) を参照。
 文書で使う用語は [用語集](spec/glossary.md) にそろえてある。
@@ -18,14 +18,12 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | Raspberry Pi に入った GUI 一式を消す | [入ってしまった GUI 一式を消す](spec/platform-raspberry-pi.md#入ってしまった-gui-一式を消す) |
 | Herdr を mise で導入・更新する | [Herdr の管理](spec/cli-management.md#herdr-の管理) |
 | GitHub CLI を mise で導入・更新する | [mise による CLI 管理](spec/cli-management.md#mise-による-cli-管理) |
-| Claude Code / Copilot CLI / OpenCode を導入・更新する | [AI CLI の導入](spec/cli-management.md#ai-cli-の導入) |
+| pi を導入・更新する | [pi の導入](spec/cli-management.md#pi-の導入)・[Windows の pi](spec/cli-management.md#windows-の-pi) |
 | シェルの起動ファイルに何を置いてよいか知る | [シェルの起動契約](spec/shell.md#シェルの起動契約) |
 | マシンごとに違う設定（データセットの置き場など）を置く | [マシン固有の設定の置き場](spec/shell.md#マシン固有の設定の置き場) |
 | C++ の 1 ファイルを debug / release で実行する（`runcpp`） | [C++ の単一ファイル実行](spec/dev-environment.md#c-の単一ファイル実行runcpp) |
 | zsh プラグインの遅延読み込みの順序を変える | [zinit の遅延読み込みの順序](spec/shell.md#zinit-の遅延読み込みの順序) |
-| oh-my-pi（omp）を使う | [oh-my-pi の設定](spec/cli-management.md#oh-my-piompの設定) |
 | sops + age を導入・復旧する | [秘密情報の管理セットアップ（sops + age）](spec/sops-age.md) |
-| 圧縮を跨いで作業文脈を保つ仕組みを知る | [文脈の引き継ぎ](spec/checkpoint.md) |
 | エラーを切り分ける | [トラブルシューティング](spec/troubleshooting.md) |
 | 入れてある一時対処と、その撤去の条件を知る | [一時対処の一覧](spec/temporary-workarounds.md) |
 | WSL にリモートから SSH する（Tailscale） | [リモートから WSL へ SSH する](spec/platform-wsl.md#リモートから-wsl-へ-ssh-する) |
@@ -40,53 +38,29 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 | Windows 資産を実機で検証する | [Windows 実機での検証](spec/development.md#windows-実機での検証) |
 | まっさらな Windows への導入を Sandbox で検証する | [Windows Sandbox での検証](spec/development.md#windows-sandbox-でのクリーン導入の検証) |
 | 新しい機械での初回導入を Docker で検証する | [Docker での検証](spec/development.md#新しい機械での初回導入を-docker-で検証する) |
-| AI CLI の permission / hook を変更する | [エージェント権限仕様](spec/agent-permissions.md) |
-| gitflow-lite の運用（起票は親、AI は feature の worktree から `git_commit`、統合は利用者がビューアで押す）を知る | [開発ガイドのブランチモデル](spec/development.md#ブランチモデルgitflow-lite) |
-| `common.toml` の書き方と生成先の所有権を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
-| コマンド・ファイルの allow / ask / deny を変える | [コマンド・ファイルの判定](spec/guard/agent-command-policy.md) |
+| gitflow-lite の運用（起票は親、AI は feature の worktree でコミット、統合は利用者の指示で）を知る | [開発ガイドのブランチモデル](spec/development.md#ブランチモデルgitflow-lite) |
+| pi の設定の生成と所有権（宣言した項目と利用者の項目の分け方）を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/mcp-servers.md#mcp-サーバ) |
 | Bedrock の PC で web 検索を使えるようにする（AgentCore Web Search） | [AgentCore Web Search](spec/mcp-servers.md#agentcore-web-search) |
 | 調べものスキル（imozuru）を使う・変える・上流を更新する | [imozuru](spec/imozuru.md) |
-| OpenCode のモデル・プロバイダ（Copilot / Bedrock）を PC ごとに変える | [モデルの割り当て](spec/agent-model-assignment.md#モデルの割り当て) |
-| 新しいモデルが出たときに OpenCode のモデルの割り当てを見直す | [モデルの割り当ての見直し](spec/model-lineup-review.md) |
-| OpenCode で作業を並列に進める（`/fleet`） | [並列作業](spec/opencode-config-generation.md#並列作業fleet) |
-| OpenCode のプラグインを検討する | [プラグイン生態系の棚卸し](research/opencode/plugin/ecosystem.md) |
+| pi で作業を並列に進める（`/fleet`・`subagent`） | [プロンプトテンプレート](spec/agent-config-generation.md#プロンプトテンプレートfleetstepback)・[pi のコマンド早見](spec/pi-commands.md) |
+| pi のスラッシュコマンドを調べる（`/fleet`・`/subagents-fleet`・`/plan` など） | [pi のスラッシュコマンド（stock）の早見](spec/pi-commands.md) |
 
 ### 安全性
 
 | 目的 | 文書 |
 | --- | --- |
 | 何を守り、なぜ Bitwarden / sops なのかを知る | [セキュリティ](spec/security.md) |
-| Claude Code / Copilot CLI の sandbox で読めない・書けない | [sandbox (Claude Code / Copilot CLI)](spec/sandbox/agent-sandbox.md) |
-| OpenCode の権限がなぜ他と違うか知る | [OpenCode V2 の扱い](spec/agent-permissions.md#opencode-v2-の扱い) |
-| OpenCode の「常に許可」で保存した承認を確認・リセットする（`oc-utils`） | [保存した承認の確認とリセット](spec/agent-permissions.md#保存した承認の確認とリセット) |
-| OpenCode を境界の内側で起動する仕組み（隔離起動 `ocs`）を知る | [OpenCode 隔離起動のアーキテクチャ](spec/sandbox/opencode-sandbox.md) |
-| 隔離起動の境界内で読めない・書けない原因を調べる | [境界の組み立ての規則](spec/sandbox/fence-boundary.md#組み立ての規則) |
-| sandbox で何ができるか調べる | [sandbox機能の包括調査](research/agents/sandbox-capabilities.md) |
+| pi のコマンド実行を囲いの中だけで動かす（`pib`）・内側から見えない・書けない原因を調べる | [pi-sandbox-runner](spec/sandbox/pi-sandbox-runner.md) |
 
-### 凍結した自作基盤（保存のみ・開発しない）
+### 撤去した自作基盤
 
-[ADR-0030](adr/0030-freeze-agent-stack-return-to-stock-pi.md) で凍結した領域（フルガード・`pis`・kcage・PR ビューア・作業台帳）。再開の入口は [CHG-0065](change/closed/0065-agent-stack-freeze.md#再開の手引き)。
+旧 custom プロファイル（フルガード・`pis`）・kcage・PR ビューア・作業台帳・pi 以外のハーネス（Claude Code・Codex・Copilot CLI・Gemini CLI・OpenCode・oh-my-pi）は、
+2026-11-12 に撤去した（[ADR-0037](adr/0037-retire-custom-profile-and-other-harnesses.md)）。復元はタグ `archive/custom-harness-2026-11-12`。
 
 | 目的 | 文書 |
 | --- | --- |
-| （凍結）隔離 GPU サンドボックス（専用 WSL2 + Docker + Tailscale SSH）を作る | [隔離 GPU サンドボックス](spec/sandbox/wsl-sandbox.md) |
-| （凍結）判定器の TS 移植の進み具合と、次にやることを知る | [TS 版への移植](spec/guard/pi-decide.md#ts-版への移植)（決定は [ADR-0017](adr/0017-pi-only-and-ts-judge.md)） |
-| （凍結）pi のガードの判定器（`decide`）を変える | [判定 API](spec/guard/pi-decide.md) |
-| （凍結）pi / pis の機能・設定の変え方・独自コマンドを見直す（忘れたときの早見） | [pi / pis マニュアル](spec/pi-manual.md) |
-| （凍結）pi 単独と PR ビューア併用の、運用の違い・手順・旗の使い分けを知る | [運用モード](spec/operation-modes.md) |
-| （凍結）pi のガード（`pis`）を起動する・変える | [pi のガード](spec/guard/pi-guard.md) |
-| （凍結）リポジトリごとの Incus の箱（`kcage`）の仕組み・コマンド・許可表・信頼境界・限界を知る | [箱（Incus）](spec/sandbox/incus-box.md)、方針は [ADR-0028](adr/0028-per-repo-agent-container.md) |
-| （凍結）確認（承認）と封じ込めの設計方針を知る・変える（ask 層と bypass モードの廃止、非同期の承認、複数エージェントの束ね） | [ADR-0022](adr/0022-containment-first-minimal-approvals.md)、[CHG-0054](change/closed/0054-containment-and-async-approval.md)、[調査記録 AC1](research/agents/approval-containment-survey.md) |
-| （凍結）確認が取れない操作の保留と、利用者が後から承認して実行する仕組み（非同期の承認。**撤去済み**。統合は PR ビューアの押下へ）を知る | [ADR-0024](adr/0024-human-press-merges-in-app.md)、[ADR-0023](adr/0023-pending-approval.md)（Superseded）、[CHG-0055](change/closed/0055-async-approval.md) |
-| （凍結）dotfiles の開発でサンドボックス（pis の既定）を使うか・使わない理由を知る | [ADR-0025](adr/0025-dotfiles-dev-without-os-sandbox.md)、[ADR-0018](adr/0018-pis-sandbox-default-relax-only-when-proven.md)、[症状と対処](spec/troubleshooting-agents.md#pis-の内側で本体の-git-status-が-dirty-に見える) |
-| （凍結）並列実装の配車・関門・承認パケット・標的レビュー（利用者が本質的な承認に集中する自動化）を知る・変える | [CHG-0056](change/closed/0056-orchestrator.md) |
-| （凍結）保留の承認を、巡回・一括で少ない操作にする設計（見送り・撤去済み）を知る | [CHG-0058](change/closed/0058-batch-approval.md) |
-| （凍結）GitHub をリモートに持たない開発向けの、PR 風のローカルのレビュー画面（ref のスキーマ・レビューコメント送信の撤去・アプリの安全規則・統合）を知る・変える | [ローカル PR ビューアの設計](spec/pr-viewer.md)、[CHG-0060](change/closed/0060-local-pr-viewer.md) |
-| （凍結）PR ビューアと pi の非同期のメッセージ・キュー（受信箱。見送り・撤去済み）の経緯を知る | [CHG-0061](change/closed/0061-pr-inbox.md) |
-| （凍結）PR の管理・統合を、人が操作するアプリへ移す（保留・受信箱の撤去、merge commit、押下契機の `pis -p`、pi を通常のコーディングへ戻す）を知る・変える | [CHG-0062](change/closed/0062-pr-hub-simplify.md) |
-| （凍結）親と子で文脈（AGENTS.md）を分ける（子に必要な規則だけを渡す） | [CHG-0059](change/closed/0059-child-context.md) |
-| （凍結）フルガードの統合先・作業ブランチの接頭辞を、リポジトリ内の `pi.json` でプロジェクトごとに変える | [CHG-0057](change/closed/0057-per-project-integrate.md)、[利用者マニュアル 7.6](spec/pi-manual.md#76-プロジェクトごとの設定pijson) |
+| 隔離 GPU サンドボックス（専用 WSL2 + Docker + Tailscale SSH）を作る | [隔離 GPU サンドボックス](spec/sandbox/wsl-sandbox.md) |
 
 ### 案件と根拠
 
@@ -105,17 +79,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 
 ## 判断待ち・障害
 
-- **Claude Code が使えない**（2026-09-25〜）。OAuth が期限切れで、再開には
-  契約が要る。**棚上げと判断した。** 止まるのは Claude 実機の検証だけで、
-  `~/.agents/skills` などの資産は OpenCode / Copilot から使われ続ける
-  （`~/.copilot/skills` は symlink、OpenCode は監視対象に含む。自作 skill の置き場は 2026-11 に `~/.claude/skills` から `~/.agents/skills` へ移した）。
-  再開条件は「Claude Code を再契約したとき」
-  - 保留中の測定: [`context: fork` が Claude 側で効くか](research/opencode/skill-frontmatter.md)
-- **CHG-0005 を保留へ移した**（2026-09-25）。残りは A2 だけで、
-  第一サポートは既に pi に決まっており（2026-10-09）、待つのは CHG-0020 の段 6 での
-  OpenCode 節の撤去。
-  なお CHG-0002 は終了済み（段階 5 は CHG-0020 へ移管）
-  — [案件の索引](change/index.md)
+なし（2026-11-12 時点。撤去の後始末は [ADR-0037](adr/0037-retire-custom-profile-and-other-harnesses.md) の「後続」）。
 
 ## 運用ポリシー
 
@@ -146,8 +110,7 @@ AI CLI の権限・hook・スキルを単一ソースから生成する。
 - 後で理由を失うと困る重要な選択をした → `adr/`
 - 今の動き方・使い方が変わった → `spec/`
 - **このセッション限りの実行状態** → docs に書かない。
-  復帰記録は、圧縮を跨ぐ仕組み（[文脈の引き継ぎ](spec/checkpoint.md)）が扱う
-  （OpenCode の checkpoint プラグイン。pi では使わない）。固定パスを docs に書かない
+  復帰記録は、圧縮を跨ぐ仕組み（文脈の引き継ぎ）が扱う。固定パスを docs に書かない
 - 文書を増減したら、対応するカテゴリの `index.md` も更新する
 - **全ての作業が 4 種類を生産するわけではない。** 誤字修正や単純な設定変更に
   案件や比較表を要求しない

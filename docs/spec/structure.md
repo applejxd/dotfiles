@@ -14,9 +14,8 @@
 │   ├── .chezmoiscripts/       # `chezmoi apply` 時の自動実行
 │   ├── .chezmoitemplates/     # スクリプト・modify処理の共有テンプレート
 │   ├── dot_config/            # `~/.config/` 配下へ展開する設定
-│   └── dot_local/bin/         # `~/.local/bin/` へ展開する手元のコマンド（`ocs`、`oc-utils`）
+│   └── dot_local/bin/         # `~/.local/bin/` へ展開する手元のコマンド（`pk`、`pib`・`pib-shell`・`pi-sandbox-runner`）
 ├── scripts/                   # 個別用途の導入・生成・検証・保守用スクリプト
-│   └── model-eval/            # OpenCode の階層に当てるモデルの計測（model-lineup-review.md）
 ├── test/                      # pytest・コンテナ検証
 ├── mise.toml                  # 開発ツールとタスク
 └── pyproject.toml             # Python依存とlint設定
@@ -34,7 +33,7 @@ chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `confi
 - ローカルの上書きは `~/.config/git/config.local`、`[user]` は `~/.config/git/user`（Bitwarden 由来。[security.md](security.md)）。
 - 旧構成の `~/.gitconfig` は `000_unix/run_once_before_006_gitconfig_migrate.sh`（Windows は `300_windows/run_once_before_300_gitconfig_migrate.ps1`）が
   `.chezmoi-old` へ退避する。目印の行が無いファイルには触らない。
-- agent の書き込み禁止は `~/.gitconfig`・`~/.config/git/config`・`~/.config/git/config.local`（`common.toml.tmpl`）。
+- pi の書き込み禁止は `~/.gitconfig`・`~/.config/git/config`・`~/.config/git/config.local`（`pi-permission-policy.json` の `path_write`）。
 
 ## 自動実行スクリプト
 
@@ -43,10 +42,10 @@ chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `confi
 | 範囲 | 対象 | 主な役割 |
 | --- | --- | --- |
 | `000_unix/` | Linux / macOS | Python 3.11 以上の確保と旧 `~/.gitconfig` の退避（ファイル適用より前）、zinit補完の保守 |
-| `100_linux/` | Ubuntu / WSL | OSパッケージ、mise、shell、Herdr |
+| `100_linux/` | Ubuntu / WSL | OSパッケージ、mise、shell、pi の導入 |
 | `200_mac/` | macOS | sudo の Touch ID、Homebrew、mise、macOS defaults |
-| `300_windows/` | Windows native | 旧 `~/.gitconfig` の退避、Winget/Scoop/Chocolatey、レジストリ、Terminal、AI CLI統合、MCP登録 |
-| `400_unix/` | Linux / macOS | mise 導入後の Claude Code への MCP 登録 |
+| `300_windows/` | Windows native | 旧 `~/.gitconfig` の退避、Winget/Scoop/Chocolatey、レジストリ、Terminal、pi の確認 |
+| `400_unix/` | Linux / macOS | 鍵・認証の同期（authorized_keys・検索の鍵・Hugging Face） |
 
 スクリプト名は `run_once_XXX_name`、`run_onchange_XXX_name`、
 `run_after_XXX_name` などのchezmoi属性と3桁番号で順序を管理します。
@@ -61,7 +60,7 @@ chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `confi
 
 | 環境 | 主な導入経路 |
 | --- | --- |
-| Windows native | Winget、Scoop、Chocolatey、mise（gh / Herdr / node / uv / fzf / jq）、AI CLI の公式手段（[AI CLI の導入](cli-management.md#ai-cli-の導入)）、PowerShell |
+| Windows native | Winget、Scoop、Chocolatey、mise（gh / Herdr / node / uv / fzf / jq）、AI CLI の公式手段（[AI CLI の導入](cli-management.md#pi-の導入)）、PowerShell |
 | Ubuntu | apt、mise |
 | WSL | Windows連携設定、apt、mise |
 | Raspberry Pi（64bit / ヘッドレス） | apt、mise（GUI・VS Code・ソースビルドを除く） |
@@ -86,37 +85,9 @@ OSごとの差分は `.chezmoiignore.tmpl`、テンプレート条件、OS別ス
 
 ## 個人用カスタム指示
 
-全リポジトリで常時読み込まれる指示は、CLI ごとに読む先のファイル名が違います。
-本文はほぼ同じなので、共通部分を 1 ファイルに集約して埋め込みます。
+pi が全リポジトリで常時読む指示は `~/.pi/agent/AGENTS.md` です。本文は `home/.chezmoitemplates/agent-instructions-stock.md`
+（ツール非依存の短い指示。応答・検証・書式・委譲・確認）で、`home/dot_pi/agent/AGENTS.md.tmpl` が埋め込みます。
+自作 skill の置き場は `home/dot_agents/skills/`（`~/.agents/skills/` へ展開。pi が読む。旧い置き場 `~/.claude/skills` の配備は `.chezmoiremove` が消す）。
 
-| パス | 役割 |
-| --- | --- |
-| `home/.chezmoitemplates/agent-instructions.md` | 4 CLI 共通の本文（平らな 25 行: 原則 5 つ・応答・未知の不具合の調査・コマンドの示し方。印なし）。進め方・委譲・承認などの詳細はスキル `agent-workflow`（`home/dot_agents/skills/`。自作基盤が前提で凍結）へ移した。リポジトリ固有の約束は各リポジトリの `AGENTS.md`（このリポジトリは平らな 45 行以内。編集の規則は `.agents/skills/dotfiles-conventions/`、運用の規則は `.agents/skills/feature-orchestration/references/repo-rules.md`） |
-| `home/dot_agents/skills/` | `~/.agents/skills/`。自作 skill の置き場（pi・OpenCode・Copilot が読む。2026-11 に `home/dot_claude/skills/` から移した。旧い配備は `.chezmoiremove` が消す） |
-| `home/dot_claude/CLAUDE.md.tmpl` | `~/.claude/CLAUDE.md`。共通本文のみ |
-| `home/dot_codex/AGENTS.md.tmpl` | `~/.codex/AGENTS.md`。共通本文のみ |
-| `home/dot_config/opencode/AGENTS.md.tmpl` | `~/.config/opencode/AGENTS.md`。共通本文 + 自動リマインダー節（提供元が差し込む著作権などの注意への言及を止め、出力トークンを節約する。起きたのが OpenCode なのでここだけ） + 文脈の引き継ぎ節（`checkpoint` スキルが OpenCode 専用のため） |
-| `home/dot_copilot/copilot-instructions.md.tmpl` | `~/.copilot/copilot-instructions.md`。共通本文 + コミット節 |
-
-OpenCode V2 が global 指示として読むのは `~/.config/opencode/AGENTS.md` だけで、
-`CLAUDE.md` へのフォールバックはありません（公式 Instructions ガイド）。
-同じホームに `~/.claude/CLAUDE.md` があっても読まれないため、専用の
-埋め込み先を用意しています。
-
-この構成には次の理由があります。
-
-- **手で複製するとズレる**: 3 ファイルを個別に保守していたところ、「停止と報告」
-  の機構名（hook / rules / 承認プロンプト）と「検証」のサンドボックス言及が
-  実際にズレていました。共通本文を 1 ファイルにして埋め込み先を増やすだけに
-  します。
-- **CLI 固有の節だけを足す**: Copilot のコミット節は
-  [github/copilot-cli#3590](https://github.com/github/copilot-cli/issues/3590)
-  という Copilot 固有の事実を理由に書いているため、機械的強制がある
-  Claude Code / Codex CLI には置きません（`docs/spec/guard/agent-command-policy.md` の
-  CLI 別の表を参照）。
-- **テンプレート内で分岐しない**: 固有の節は該当ファイルへ直接書き足します。
-  `{{ if }}` を使わないので、テストは `includeTemplate` を展開するだけで
-  出力内容を再現できます（`test_personal_instructions_share_one_source`）。
-- **リポジトリ直下の `AGENTS.md` は対象外**: 適用範囲（このリポジトリのみ）も
-  内容（リポジトリ固有の約束）も別系統です。判断の経緯は
-  [ADR-0006](../adr/0006-instructions-to-mechanisms.md) にあります。
+**リポジトリ直下の `AGENTS.md` は対象外**: 適用範囲（このリポジトリのみ）も内容（リポジトリ固有の約束）も別系統です。
+Claude Code・Codex・Copilot CLI・OpenCode 向けの指示ファイルは、撤去しました（[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）。

@@ -20,7 +20,6 @@ import os
 import posixpath
 import re
 import shlex
-import shutil
 import subprocess
 import sys
 import time
@@ -87,221 +86,10 @@ class Rule:
     windows: bool = False
 
 
-@dataclass(frozen=True)
-class ClosedModule:
-    """依存が閉じたモジュール。変更がこの範囲だけなら、全件の T2 (残りの全件) を省く。
-
-    paths は変更パスの glob、tests は試験の stem の glob (その規則の試験)。
-    shared_reads は、モジュールの試験が読んでよい範囲外の読み取り専用のパス (glob)。
-    see docs/spec/development.md#閉じたモジュールの規則
-    """
-
-    name: str
-    rule_name: str
-    paths: tuple[str, ...]
-    tests: tuple[str, ...]
-    shared_reads: tuple[str, ...] = ()
-    # モジュール外の試験で、範囲のパスを文字列として名指すだけのもの (読まない。偽陽性だけを足す)。
-    # 実際に開いていないことは verify_audit.py (監査) で確かめる
-    ignored_readers: tuple[str, ...] = ()
-    # リポジトリ全体を走査してモジュールのファイルも読む試験 (stem の glob)。監査 (verify_audit.py) で実際に開いたもの。
-    # モジュールの変更では必ず T1 で回す (範囲外を読む試験としては扱わない)
-    scanners: tuple[str, ...] = ()
-    # モジュールの文書。変更の範囲には入るが、試験の選択 (Rule) には使わない (文書の変更で全試験を回さない)。lint は T0 が全件で回す
-    docs: tuple[str, ...] = ()
-
-    @property
-    def scope_paths(self) -> tuple[str, ...]:
-        """変更がこの範囲だけなら T2 を省く、パスの glob (コード + 文書)。"""
-        return (*self.paths, *self.docs)
-
-
-CLOSED_MODULES = (
-    ClosedModule(
-        "kcage",
-        "Incus の箱 (kcage)",
-        ("scripts/kcage/**", "test/kcage/**", "home/dot_local/bin/executable_kcage"),
-        (
-            "test_model",
-            "test_policy",
-            "test_config",
-            "test_commondir",
-            "test_plan",
-            "test_root_helper",
-            "test_resolver",
-            "test_net",
-            "test_fake_proxy",
-            "test_broker_common",
-            "test_broker_aws",
-            "test_broker_gh_copilot",
-            "test_cli",
-            "test_setup",
-            "test_template",
-            "test_uninstall",
-            "test_dist",
-            "test_integration",
-        ),
-        # 保護対象のパス home/dot_local/bin を文字列で名指すだけ (中身は読まない)
-        ignored_readers=("test/agents/test_opencode_launcher.py",),
-        scanners=(
-            "test_bootstrap_scripts",
-            "test_windows_assets",
-            "test_pi_boundary",
-            "test_imozuru",
-        ),
-        docs=(
-            "docs/spec/sandbox/incus-box.md",
-            "docs/research/agents/incus-dev-environment.md",
-            "docs/adr/0028-per-repo-agent-container.md",
-            "docs/change/0064-dev-environment-isolation.md",
-        ),
-    ),
-)
-
-
-_HOOK_TESTS = (
-    "test_check_bash_*",
-    "test_command_policy",
-    "test_decide*",
-    "test_shellparse",
-    "test_bashrules_tables",
-    "test_preflight",
-    "test_check_file_read",
-    "test_redirect_tmp",
-    "test_secret_lists_in_sync",
-    "test_generate_hooks",
-    "test_markdownlint_hook",
-    "test_env_check",
-)
-_ORCH = "home/dot_agents/skills/feature-orchestration/scripts"
-_PI_TESTS = (
-    "test_pi_public_bypasses",
-    "test_pi_harness",
-    "test_pi_harness_extensions",
-    "test_pi_compact_defer",
-    "test_pi_actions_harness",
-    "test_pi_child_wording",
-    "test_pi_action_view",
-    "test_pi_confirm_present",
-    "test_pi_actions",
-    "test_pi_plan_ready",
-    "test_pi_boundary",
-    "test_pi_workspace_hide",
-    "test_broker",
-    "test_broker_search",
-    "test_pi_broker_generate",
-    "test_pi_network",
-    "test_bedrock_probe",
-    "test_pi_github_boundary",
-    "test_pi_commit_confirm",
-    "test_pi_autocheckpoint",
-    "test_pi_quiet_notices",
-    "test_pi_goal_core",
-    "test_pi_goal_eval",
-    "test_pi_board",
-    "test_pi_board_collect",
-    "test_pi_board_command",
-    "test_pi_audit",
-    "test_pi_confirm",
-    "test_pi_integration_judge",
-    "test_pi_integration_gate",
-    "test_pi_integrate_config",
-    "test_pi_freezone",
-    "test_pi_json_risk_path",
-    "test_pi_integrate_profile",
-    "test_pi_integrate_profile_load",
-    "test_pi_integrate_index",
-    "test_pi_free_zone_commit",
-    "test_pi_freezone_profile",
-    "test_pi_landlock_exec",
-    "test_pi_tools_ext",
-    "test_pi_model_choice",
-    "test_pi_plan_role",
-    "test_pi_pending_store",
-    "test_pi_review_log",
-    "test_pi_review_git",
-    "test_pi_pr_review",
-    "test_pi_harness_removal",
-    "test_pi_git_destructive",
-    "test_pi_worktree_remove",
-    "test_pi_git_restore_staged",
-    "test_pi_orchestrate",
-    "test_pi_allow_output_quoting",
-    "test_pi_deny_default_ask",
-    "test_deny_kcage",
-    "test_pi_model_catalog",
-    "test_pi_scratch_protected",
-    "test_pi_session_tmp",
-    "test_tmp_hygiene",
-    "test_pi_confirm_view",
-    "test_pi_explain",
-    "test_pi_syntax_runtime",
-    "test_pi_speed",
-    "test_pi_ask_normalize",
-    "test_pi_worktree",
-    "test_pi_isolation",
-    "test_pi_child_cwd",
-    "test_pi_skill_exclude",
-    "test_pi_worktrees_command",
-    "test_pi_subagents",
-    "test_pi_child_context",
-    "test_child_context_sources",
-    "test_pi_child_prompt",
-    "test_pi_child_persist",
-    "test_pi_child_context_wire",
-    "test_pi_shared",
-    "test_pi_settings_launch",
-    "test_pi_unguarded",
-    "test_pi_control_files_bash",
-    "test_pi_ledger_root",
-    "test_pi_platform",
-    "test_pi_judge_windows_paths",
-    "test_pi_pending_command",
-    "test_btw_view",
-    "test_pi_todo_view",
-    "test_work_*",
-    "test_pi_plan_*",
-    "test_pi_stage_table",
-    "test_pi_shadow",
-    "test_pi_subagents_config",
-    "test_pi_compaction_config",
-)
-# 凍結した自作スタック (ADR-0030: フルガード・境界・PR ビューア・作業台帳) の試験。もう変えないコードの試験で、
-# 全件 (--all) の CPU 時間の大半を占める (2026-11-10 の実測: 1 秒以上のテストの CPU 時間の 97%)。
-# 全件の T2 からだけ外す。変更パス・試験が読むファイルに当たるものは T1 で回る。省略なしは mise run verify:full。
-# see docs/spec/development.md#凍結したスタックの試験の省略
-STOCK_PI_TESTS = (  # test_pi_* のうち、今も使っている stock の試験 (T2 から外さない)
-    "test_pi_profile",
-    "test_pi_theme",
-    "test_pi_permission_decisions",
-    "test_pi_subagents_config",
-    "test_pi_compaction_config",
-    "test_pi_sandbox_runner",
-)
-FROZEN_TESTS = (
-    *(t for t in _PI_TESTS if t not in STOCK_PI_TESTS),
-    "test_pi_judge_ts",
-    "test_pi_judge_baseline",
-    "test_pi_commit_parse",
-    "test_pr_viewer_*",
-)
-
-_OC_TESTS = (
-    "test_generate_opencode*",
-    "test_opencode_*",
-    "test_guide_*",
-    "test_checkpoint*",
-    "test_oc_utils",
-    "test_relay",
-)
-
 RULES: tuple[Rule, ...] = (
     Rule(
         "全件に回す領域 (全試験の入力・横断設定)",
         (
-            "home/dot_config/agents/common.toml.tmpl",
-            "scripts/agents/generate.py",
-            "scripts/agents/hooks.py",
             "pyproject.toml",
             ".pre-commit-config.yaml",
             "mise.toml",
@@ -320,47 +108,19 @@ RULES: tuple[Rule, ...] = (
         ("test_skill_frontmatter",),
     ),
     Rule(
-        "skill 本文を直接読む試験",
-        ("home/dot_agents/skills/*/SKILL.md",),
-        ("test_check_bash_config", "test_opencode_commit_rules", "test_check_bash_http_github"),
-    ),
-    Rule(
-        "agent 指示の共有本文 (pi の描画と Claude の描画を比べる)",
-        ("home/.chezmoitemplates/agent-instructions.md",),
+        "pi の MCP の生成",
         (
-            "test_pi_harness",
-            "test_generate_opencode*",
-            "test_check_bash_config",
-            "test_child_context_sources",
+            "scripts/agents/generate.py",
+            "home/dot_pi/agent/modify_mcp*",
+            "home/dot_config/agents/agentcore_websearch_mcp.py",
         ),
-    ),
-    Rule(
-        "commit-message.js (opencode 側の写しと pi 側の本体は双方向)",
-        (
-            "home/dot_config/opencode/guide-plugin/commit-message.js",
-            "home/dot_config/pi/harness/commit-message.js",
-        ),
-        ("test_pi_commit_confirm",),
-    ),
-    Rule(
-        "文書を直接 assert する試験",
-        ("docs/spec/guard/agent-command-policy.md",),
-        ("test_check_bash_config",),
+        ("test_mcp_servers", "test_modifier_wrappers", "test_pi_stock_config"),
     ),
     Rule("modify ラッパー", ("home/*/modify_*",), ("test_modifier_wrappers",)),
     Rule(
         "pk (補助スクリプトの短い入口)",
         ("home/dot_local/bin/executable_pk", "home/dot_local/share/zsh/site-functions/_pk"),
         ("test_pk",),
-    ),
-    Rule(
-        "導入スクリプトを読む試験",
-        (
-            "home/.chezmoiscripts/*_mise.*",
-            "home/.chezmoiscripts/*_agent_cli.*",
-            "home/.chezmoiscripts/*_herdr_integration.*",
-        ),
-        ("test_herdr_integration",),
     ),
     Rule(
         "websearch の核と MCP サーバ",
@@ -372,99 +132,32 @@ RULES: tuple[Rule, ...] = (
         ("home/.chezmoiscripts/*_websearch_keys.*",),
         ("test_websearch",),
     ),
-    Rule("共通設定の検証", ("scripts/agents/validate_common.py",), ("test_mcp_servers",)),
+    Rule("共通設定の検証", ("scripts/agents/validate_mcp.py",), ("test_mcp_servers",)),
     Rule(
         "不満・摩擦の集計",
         (".agents/skills/friction-review/scripts/*.py", ".agents/skills/friction-review/SKILL.md"),
         ("test_friction_scan",),
     ),
     Rule(
-        "golden",
-        ("scripts/agents/export_*_golden.py", "test/agents/golden/**"),
+        "pi の設定 (stock)",
         (
-            "test_decide_golden",
-            "test_pi_judge_ts",
-            "test_pi_judge_baseline",
-            "test_decide",
-            "test_command_policy",
-            "test_check_bash_*",
-        ),
-    ),
-    Rule(
-        "hook・コマンド方針",
-        (
-            "home/dot_claude/hooks/**",
-            "home/dot_config/agents/command_policy.py",
-            "test/agents/check_bash_hook.py",
-        ),
-        _HOOK_TESTS,
-    ),
-    Rule(
-        "pi 判定器",
-        ("home/dot_config/pi/harness/judge/**",),
-        (
-            "test_pi_judge_ts",
-            "test_pi_judge_baseline",
-            "test_bashrules_tables",
-            "test_secret_lists_in_sync",
-            "test_pi_harness",
-            "test_pi_boundary",
-        ),
-    ),
-    Rule(
-        "pi ハーネス・拡張",
-        (
-            "home/dot_config/pi/harness/**",
-            "home/dot_pi/agent/extensions/**",
-            "home/dot_local/bin/executable_pis",
-            "test/agents/pi/**",
-        ),
-        _PI_TESTS,
-    ),
-    Rule(
-        "pi commit-confirm",
-        ("home/dot_config/pi/commit-confirm/**",),
-        ("test_pi_commit_parse", "test_pi_commit_confirm"),
-    ),
-    Rule(
-        "opencode",
-        (
-            "home/dot_config/opencode/**",
-            "home/dot_local/share/ocs/**",
-            "home/dot_local/bin/executable_oc*",
-        ),
-        _OC_TESTS,
-    ),
-    Rule(
-        "agents 設定 (common 以外)",
-        ("home/dot_config/agents/**", "home/.chezmoiscripts/400_unix/*claude_mcp*"),
-        ("test_generate_*", "test_pi_shared", "test_mcp_servers", "test_claude_mcp_registration"),
-    ),
-    Rule(
-        "pi プロファイル (custom / stock)",
-        (
-            "home/.chezmoitemplates/pi-profile",
             "home/.chezmoitemplates/pi-stock-packages",
-            "home/.chezmoitemplates/pi-own-extensions",
+            "home/.chezmoitemplates/pi-mcp-servers.toml",
             "home/.chezmoitemplates/pi-permission-policy.json",
             "home/.chezmoitemplates/modify_pi_permission_config.py.tmpl",
             "home/dot_pi/agent/extensions/pi-permission-system/*",
             "home/.chezmoitemplates/modify_pi_stock_settings.py.tmpl",
             "home/.chezmoitemplates/agent-instructions-stock.md",
             "home/.chezmoiremove",
-            "home/dot_pi/agent/AGENTS.md.tmpl",
-            "home/dot_pi/agent/modify_settings.json.py.tmpl",
-            "home/dot_pi/agent/modify_pi-plan-mode.json.py.tmpl",
-            "home/dot_pi/agent/modify_compaction.json.py.tmpl",
-            "home/dot_pi/agent/extensions/subagent/*",
-            "home/dot_pi/agent/agents/*",
-            "home/dot_pi/agent/themes/**",
+            "home/dot_pi/agent/**",
+            "docs/spec/pi-commands.md",
             "home/dot_cc-safety-net/**",
             "test/agents/pi_stock/permission_check.mjs",
             "test/agents/pi_stock/permission_cases.json",
         ),
         (
-            "test_pi_profile",
+            "test_pi_stock_config",
+            "test_pi_commands_doc",
             "test_pi_compaction_config",
             "test_pi_subagents_config",
             "test_pi_permission_decisions",
@@ -481,10 +174,9 @@ RULES: tuple[Rule, ...] = (
         ),
         (
             "test_chezmoi_templates",
-            "test_pi_profile",
+            "test_pi_stock_config",
             "test_raspi_detection",
             "test_python_requirement",
-            "test_herdr_integration",
         ),
         ("templates",),
     ),
@@ -492,10 +184,9 @@ RULES: tuple[Rule, ...] = (
         "共有テンプレート",
         ("home/.chezmoitemplates/**",),
         (
-            "test_check_bash_config",
-            "test_generate_opencode*",
             "test_modifier_wrappers",
             "test_mcp_servers",
+            "test_pi_stock_config",
             "test_windows_assets",
             "test_raspi_detection",
         ),
@@ -518,14 +209,9 @@ RULES: tuple[Rule, ...] = (
         ("test_github_operations_resolve",),
     ),
     Rule(
-        "checkpoint skill",
-        ("home/dot_agents/skills/checkpoint/**", "scripts/checkpoint.py"),
-        ("test_checkpoint*",),
-    ),
-    Rule(
         "sdd-docs",
         ("home/dot_agents/skills/sdd-docs/**",),
-        ("test_check_refs", "test_docs_state", "test_lint_docs", "test_opencode_external_read"),
+        ("test_check_refs", "test_docs_state", "test_lint_docs"),
         ("docs",),
     ),
     Rule("away-shift", ("home/dot_agents/skills/away-shift/**",), ("test_away_guard",)),
@@ -538,28 +224,16 @@ RULES: tuple[Rule, ...] = (
         ("test_review_converge",),
     ),
     Rule(
-        "models の道具",
-        ("scripts/models.py",),
-        ("test_models_tool", "test_pi_model_catalog"),
-    ),
-    Rule("tmp-clean", ("home/dot_config/pi/harness/tmp_clean.py",), ("test_tmp_clean",)),
-    Rule(
         "pi-sandbox-runner",
         (
             "home/dot_local/bin/executable_pi-sandbox-runner",
             "home/dot_local/bin/executable_pib",
             "home/dot_local/bin/executable_pib-shell",
             "home/dot_config/pi-sandbox/**",
-            "scripts/pi_sandbox_selftest.py",
         ),
         ("test_pi_sandbox_runner",),
     ),
     Rule("env-check", ("home/dot_agents/skills/env-check/**",), ("test_env_check",)),
-    Rule(
-        "PR ビューア (apps/pr-viewer)",
-        ("apps/pr-viewer/**", "test/agents/pr_viewer_fixtures/**"),
-        ("test_pr_viewer_*",),
-    ),
     Rule(
         "テンプレート検査器",
         ("scripts/lint_templates.py",),
@@ -568,53 +242,15 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "検証の入口",
-        ("scripts/verify.py", "scripts/verify_audit.py"),
-        ("test_verify", "test_verify_stamp", "test_verify_audit"),
+        ("scripts/verify.py",),
+        ("test_verify", "test_verify_stamp"),
     ),
     Rule("検証の印", ("scripts/verify_stamp.py",), ("test_verify_stamp",)),
     Rule("push 前の秘密検出", ("scripts/gitleaks_prepush.py",), ("test_gitleaks_prepush",)),
     Rule(
-        "並列実装の混線の検査",
-        ("scripts/parallel_check.py", f"{_ORCH}/parallel_check.py"),
-        ("test_parallel_check", "test_script_forwarders"),
-    ),
-    Rule(
-        "並列実装の関門",
-        ("scripts/feature_gate.py", f"{_ORCH}/feature_gate.py"),
-        ("test_feature_gate", "test_parallel_check", "test_script_forwarders"),
-    ),
-    Rule(
-        "worktree の所有表明",
-        ("scripts/wt_owner.py", f"{_ORCH}/wt_owner.py"),
-        ("test_wt_owner", "test_wt_clean"),
-    ),
-    Rule("PR ビューアの起動・常駐", ("scripts/pr_app.py",), ("test_pr_app",)),
-    *(Rule(m.rule_name, m.paths, (*m.tests, *m.scanners)) for m in CLOSED_MODULES),
-    Rule(
-        "統合用の枝 (bundle)",
-        ("scripts/bundle.py", f"{_ORCH}/bundle.py"),
-        ("test_bundle", "test_script_forwarders"),
-    ),
-    Rule(
-        "worktree の掃除",
-        ("scripts/wt_clean.py", f"{_ORCH}/wt_clean.py"),
-        ("test_wt_clean", "test_script_forwarders"),
-    ),
-    Rule(
-        "マージ待ちの一覧",
-        ("scripts/prs.py", f"{_ORCH}/prs.py"),
-        ("test_prs", "test_script_forwarders"),
-    ),
-    Rule(
-        "オーケストレーションのプロファイル検出",
-        ("home/dot_agents/skills/feature-orchestration/scripts/*.py", "test/orch_fixtures.py"),
-        ("test_orch_profile",),
-    ),
-    Rule(
         "ステージの空ファイル検査", ("scripts/check_staged_drop.py",), ("test_check_staged_drop",)
     ),
     Rule("skill-lab のスキル同期", ("scripts/sync_skill_lab.py",), ("test_sync_skill_lab",)),
-    Rule("model-eval", ("scripts/model-eval/**",), ("test_model_eval",)),
     Rule(
         "shell 設定",
         ("home/dot_config/shell/**", "home/dot_zshenv"),
@@ -651,11 +287,7 @@ RULES: tuple[Rule, ...] = (
     ),
     # test_lint_docs は同じ lint の直接実行 (lints=docs) で代替する
     Rule("docs", ("docs/**",), lints=("docs",)),
-    Rule(
-        "ルートの文書",
-        ("README.md", "AGENTS.md", "CLAUDE.md", "test/README.md"),
-        ("test_child_context_sources",),
-    ),
+    Rule("ルートの文書", ("README.md", "AGENTS.md", "CLAUDE.md", "test/README.md"), lints=("docs",)),
     # 以下は lint を足すだけ。未知のパス扱いは変えない
     Rule("*.tmpl の検査", ("*.tmpl",), lints=("templates",), covers=False),
 )
@@ -856,14 +488,10 @@ def full_stages(
     t1_files: Sequence[str] = (),
     shell_files: Sequence[str] = (),
     test_files: Sequence[str] | None = None,
-    *,
-    skip_t2: bool = False,
-    skip_tests: Sequence[str] = (),
 ) -> list[list[list[str]]]:
     """全件を段に分ける: T0 (数秒〜数十秒の安い検査) → T1 (変更に当たる試験) → T2 (残りの全件)。
 
     T2 は T1 と T0 の試験を --ignore する補集合なので、取りこぼしも二重実行も出ない。
-    skip_tests (凍結したスタックの試験など) は、T1 に入っていなければ T2 からも外す (意図して省く試験)。
     test_files (全試験ファイル) を渡すと、補集合が空のときは T2 を省く (空のまま pytest を走らせると「試験なし」で失敗する)。
     lint_docs を直接呼ばないのは、pre-commit の hook (lint-docs-local) が --all-files で同じ検査をするため。
     """
@@ -880,9 +508,8 @@ def full_stages(
     t1 = selected_commands([f for f in t1_files if f not in T0_PYTEST_FILES])
     if t1:
         stages.append(t1)
-    ignored = [*done, *(f for f in skip_tests if f not in done)]
-    if not skip_t2 and (test_files is None or set(test_files) - set(ignored)):
-        stages.append([pytest_command(["test/"], ignore=ignored)])
+    if test_files is None or set(test_files) - set(done):
+        stages.append([pytest_command(["test/"], ignore=done)])
     return stages
 
 
@@ -981,55 +608,6 @@ def plan(
     return result
 
 
-def module_test_files(module: ClosedModule, test_files: Sequence[str]) -> set[str]:
-    """閉じたモジュールの試験ファイル (規則が選ぶもの + モジュールの範囲にあるもの)。"""
-    inside = {f for f in test_files if any(_match(p, f) for p in module.paths)}
-    return set(resolve_tests((*module.tests, *module.scanners), test_files)) | inside
-
-
-def closed_scope(
-    paths: Sequence[str],
-    test_files: Sequence[str],
-    *,
-    exists: Callable[[str], bool] | None = None,
-    refs: dict[str, frozenset[str]] | None = None,
-) -> list[ClosedModule] | None:
-    """変更パスがすべて閉じたモジュールの範囲に収まるとき、そのモジュールを返す。そうでなければ None (全件)。
-
-    削除・範囲外・他の規則や全件領域に当たるパス・モジュール外の試験が読むパスがあれば None。
-    """
-    paths = list(dict.fromkeys(p for p in map(normalize_path, paths) if p))
-    if not paths:
-        return None
-    exists = exists or (lambda p: (ROOT / p).exists())
-    refs = test_references(test_files) if refs is None else refs
-    hit: dict[str, ClosedModule] = {}
-    for path in paths:
-        if not exists(path):
-            return None
-        owners = [m for m in CLOSED_MODULES if any(_match(p, path) for p in m.scope_paths)]
-        if not owners:
-            return None
-        # 文書の規則 (docs) は lint を足すだけ。モジュールの文書は範囲に宣言済みで、読む試験が無いことは別の試験が見る
-        allowed_rules = {m.rule_name for m in owners} | {"docs"}
-        if any(r.full or r.name not in allowed_rules for r in matching_rules(path)):
-            return None
-        allowed_tests: set[str] = set()
-        for m in owners:
-            hit[m.name] = m
-            allowed_tests |= module_test_files(m, test_files)
-            allowed_tests.update(m.ignored_readers)
-        allowed_tests.update(T0_PYTEST_FILES, [REGISTRATION_TEST])  # 常に回る
-        readers = {
-            t
-            for t in test_files
-            if any(path == r or path.startswith(r + "/") for r in refs.get(t, ()))
-        }
-        if readers - allowed_tests:
-            return None
-    return list(hit.values())
-
-
 def discover_test_files(root: Path = ROOT) -> list[str]:
     return sorted(p.relative_to(root).as_posix() for p in (root / "test").rglob("test_*.py"))
 
@@ -1085,38 +663,6 @@ def resolve_base(run: Callable[[list[str]], str | None]) -> tuple[str, str, str]
         if oid:
             return name, oid, head
     return None
-
-
-NODE_MIN = (
-    22,
-    18,
-)  # pr-viewer の試験が使う型除去 (test/agents/test_pi_judge_ts.py の _node と同じ)
-
-
-def node_usable() -> bool:
-    node = shutil.which("node")
-    if not node:
-        return False
-    try:
-        out = subprocess.run(
-            [node, "--version"], capture_output=True, text=True, encoding="utf-8", check=False
-        ).stdout
-    except OSError:
-        return False
-    m = re.match(r"v(\d+)\.(\d+)", out.strip())
-    return bool(m) and (int(m.group(1)), int(m.group(2))) >= NODE_MIN
-
-
-def missing_prerequisites(
-    selected: Sequence[str], node_ok: Callable[[], bool] = node_usable
-) -> list[str]:
-    """選んだ試験に必要な前提のうち、足りないものの説明 (空なら足りている)。
-
-    node が無いと pr-viewer の試験はモジュールごと skip され、通ったように見えるため、未検証として扱う。
-    """
-    if any(Path(t).name.startswith("test_pr_viewer_") for t in selected) and not node_ok():
-        return ["PR ビューアの試験 (test_pr_viewer_*)"]
-    return []
 
 
 def tracked_shell_files(
@@ -1306,11 +852,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--changed", action="store_true", help="変更したパスから選ぶ (既定)")
     mode.add_argument("--all", action="store_true", help="全件を実行する")
-    parser.add_argument(
-        "--full",
-        action="store_true",
-        help="--all と併用: 閉じたモジュールの省略を行わず、必ず全件を実行する",
-    )
     parser.add_argument("--dry-run", action="store_true", help="実行せずコマンドを列挙する")
     parser.add_argument(
         "--list", action="store_true", help="変更パスごとの当たった規則を出す (実行しない)"
@@ -1323,64 +864,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="pytest の並列数 (既定: コア数の半分。VERIFY_JOBS でも指定できる)",
     )
     args = parser.parse_args(argv)
-    if args.full and not args.all:
-        parser.error("--full は --all と併用する")
     if args.jobs > 0:
         os.environ["VERIFY_JOBS"] = str(args.jobs)
 
     test_files = discover_test_files()
     shell_files = tracked_shell_files(_git)
-    stamp_scope: str | None = None
-    closed: list[ClosedModule] | None = None
-    changed: list[str] | None = None  # 統合先との merge-base からの変更 (決められなければ None)
-    if args.all and not args.full:
-        # 基準を決められない・git でないときは全件 (取りこぼしより過剰な実行を選ぶ)
-        with contextlib.suppress(Exception):
-            base_info = resolve_base(_git_try)
-            if base_info is not None:
-                changed = collect_changed(_git, base_info[1])
-                closed = closed_scope(changed, test_files)
-                if closed is not None and plan(changed, test_files).full:
-                    closed = None
-    if args.all and closed:
-        names = "・".join(m.name for m in closed)
-        print(
-            f"閉じたモジュール ({names}) だけの変更のため T2 (残りの全件) を省略します "
-            "(全件が要るときは mise run verify:full)",
-            flush=True,
-        )
-        selection = plan(changed, test_files, shell_files=shell_files)
-        commands, gates = flatten_stages(
-            full_stages(selection.selected, shell_files, test_files, skip_t2=True)
-        )
-        result = Plan(
-            commands=commands,
-            gates=gates,
-            full=True,
-            windows=True,
-            hits=selection.hits,
-            selected=selection.selected,
-        )
-        stamp_scope = "closed:" + ",".join(m.name for m in closed)
-    elif args.all:
+    if args.all:
         # 全件でも、変更に当たる試験を T1 として先に回す (変更が無ければ T1 は空)
-        skipped: list[str] = []
-        if changed is not None:
-            selection = plan(changed, test_files, shell_files=shell_files)
-            if not selection.full:  # 削除・未一致・全件に回す領域があるときは、何も省かない
-                skipped = resolve_tests(FROZEN_TESTS, test_files)
-        else:
-            selection = plan(collect_changed(_git), test_files, shell_files=shell_files)
-        omitted = [f for f in skipped if f not in selection.selected]
-        if omitted:
-            print(
-                f"凍結した自作スタックの試験 ({len(omitted)} ファイル) を T2 (残りの全件) から省略します。"
-                "変更に当たるものは T1 で回ります (省略なしは mise run verify:full)",
-                flush=True,
-            )
-            stamp_scope = "no-frozen"
+        selection = plan(collect_changed(_git), test_files, shell_files=shell_files)
         commands, gates = flatten_stages(
-            full_stages(selection.selected, shell_files, test_files, skip_tests=omitted)
+            full_stages(selection.selected, shell_files, test_files)
         )
         result = Plan(
             commands=commands,
@@ -1416,16 +909,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if result.full:
         print("全件を実行します")
-    unverified = missing_prerequisites(result.selected)
-    allow_skip = os.environ.get("VERIFY_ALLOW_SKIP") == "1"
-    for what in unverified:
-        level = "警告" if allow_skip else "未検証"
-        print(
-            f"{level} (前提不足: node 22.18 以上): {what} は skip されるため検証できません",
-            file=sys.stderr,
-        )
-    blocked = bool(unverified) and not allow_skip
-
     if args.dry_run:
         for i, cmd in enumerate(result.commands):
             print(shlex.join(cmd))
@@ -1450,15 +933,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("失敗したコマンド:")
         for cmd in failed:
             print(f"  {shlex.join(cmd)}")
-    if blocked:
-        print("未検証: 前提不足 (node)。警告として続けるなら VERIFY_ALLOW_SKIP=1")
-    if failed or blocked:
+    if failed:
         return 1
     if result.full:
-        if stamp_scope is None:
-            _write_stamp(started)
-        else:
-            _write_stamp(started, stamp_scope)
+        _write_stamp(started)
     print("すべて成功")
     return 0
 

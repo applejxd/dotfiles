@@ -335,48 +335,6 @@ def test_pbcopy_forwards_pipeline_input():
     assert "function pbcopy { $input | clip.exe }" in profile
 
 
-def test_copilot_function_sets_agent_env_and_restores_it():
-    """git が入力待ちにならない既定値を、未設定のときだけ入れて終了後に戻す。"""
-    import shutil
-    import subprocess
-
-    import pytest
-
-    chezmoi = shutil.which("chezmoi")
-    if chezmoi is None:
-        pytest.skip("chezmoi が無い")
-    source = ROOT / "home/dot_config/powershell/profile.ps1.tmpl"
-    raw = source.read_bytes()
-    assert raw.startswith(b"\xef\xbb\xbf"), "UTF-8 BOM が無い"
-
-    rendered = subprocess.run(
-        [chezmoi, "--source", str(ROOT / "home"), "execute-template"],
-        input=raw.decode("utf-8-sig"),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=True,
-    ).stdout
-
-    # [agent_env] は値が単純な文字列なので、テンプレート記法を含まない先頭付近から読む
-    common = (ROOT / "home/dot_config/agents/common.toml.tmpl").read_text(encoding="utf-8")
-    section = common.split("[agent_env]\n", 1)[1].split("\n[", 1)[0]
-    agent_env = dict(re.findall(r'^(\w+) = "([^"]*)"$', section, re.MULTILINE))
-    assert agent_env, "[agent_env] が読めない"
-
-    head, tail = rendered.split(INTERACTIVE_GUARD, 1)
-    assert "function copilot" not in head, "対話判定より前に置かない"
-    function = tail.split("function copilot {", 1)[1].split("\n}\n", 1)[0]
-    for name, value in agent_env.items():
-        assert f"'{name}' = '{value}'" in function
-    assert "Get-Command copilot -CommandType Application" in function
-    # 未設定のものだけを入れ、入れたものだけを finally で消す
-    assert "$null -eq [Environment]::GetEnvironmentVariable($name)" in function
-    finally_body = function.split("} finally {", 1)[1]
-    assert "SetEnvironmentVariable($name, [NullString]::Value)" in finally_body
-    assert "$MyInvocation.ExpectingInput" in function
-
-
 def test_powershell_init_cache_is_keyed_on_the_executable():
     """ツールを更新したらキャッシュを作り直す。"""
     cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
@@ -457,7 +415,7 @@ def test_standalone_windows_installers_use_supported_winget_detection():
     assert "Nvidia.GeForceNow" not in cuda
 
 
-def test_agent_cli_installer_uses_official_windows_channels():
+def test_agent_cli_installer_only_checks_pi():
     script = (
         ROOT
         / "home"
@@ -467,23 +425,18 @@ def test_agent_cli_installer_uses_official_windows_channels():
         / "run_onchange_after_314_agent_cli.ps1.tmpl"
     ).read_text(encoding="utf-8-sig")
 
-    # Windows では公式が手段を分ける: install.ps1 / winget / npm
-    assert "https://claude.ai/install.ps1" in script
-    assert "winget install --id GitHub.Copilot --exact" in script
-    assert "--allow-scripts='@opencode/cli' '@opencode/cli'" in script
     # pi は mise (aqua のバイナリ版。node 不要) が入れる。ここでは npm 版を外して起動を確かめる
     assert "npm install -g --ignore-scripts '@earendil-works/pi-coding-agent'" not in script
     assert "npm uninstall -g '@earendil-works/pi-coding-agent'" in script
     assert "exec -- pi --version" in script
     assert "pi.dev/install.ps1" not in script
-    # install.sh は Windows を拒否するので使わない
-    assert "claude.ai/install.sh" not in script
-    # 既に入っている CLI は触らない
-    assert script.count("Test-CliInstalled '") == 3
-    # winget / npm の失敗を握り潰さない
-    assert script.count("$LASTEXITCODE -ne 0") == 5
+    # pi 以外の AI CLI (Claude Code・Copilot CLI・OpenCode) は入れない (ADR-0037)
+    for retired in ("claude.ai/install", "GitHub.Copilot", "@opencode/cli"):
+        assert retired not in script, retired
+    # npm の失敗を握り潰さない
+    assert script.count("$LASTEXITCODE -ne 0") == 3
     # npm は mise の node で動かす (PATH 上の古い winget 版 node を避ける)
-    assert script.count("  Use-MiseNode") == 2
+    assert script.count("  Use-MiseNode") == 1
 
 
 def test_chocolatey_setup_supports_v1_and_v2_listing():
@@ -931,9 +884,6 @@ def test_windows_scripts_share_the_env_path_helpers():
     users = [
         "310_packages/run_once_before_309_admin.ps1.tmpl",
         "310_packages/run_onchange_after_313_mise.ps1.tmpl",
-        "310_packages/run_onchange_after_314_agent_cli.ps1.tmpl",
-        "run_after_343_herdr_integration.ps1.tmpl",
-        "run_onchange_after_346_claude_mcp.ps1.tmpl",
     ]
     for name in users:
         source = (WINDOWS_SCRIPTS / name).read_text(encoding="utf-8-sig")
