@@ -124,6 +124,92 @@ def test_shipped_config_is_valid_and_hides_credentials():
     assert {"GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK"} <= set(cfg.env_unset)
 
 
+@pytest.fixture(autouse=True)
+def _pib_system_locations(monkeypatch, tmp_path):
+    """pib の検査は、システムの Python と bwrap の場所 (/usr/bin/...) を見る。
+
+    Linux 以外・bwrap の無い試験機でも他の検査を確かめられるよう、実在する Python と、make_setup が置く偽の bwrap に差し替える。
+    """
+    monkeypatch.setattr(pib, "SYSTEM_PYTHON", sys.executable)
+    monkeypatch.setattr(pib, "BWRAP_PATHS", (str(tmp_path / "fakebin" / "bwrap"),))
+
+
+POLICY = ROOT / "home" / ".chezmoitemplates" / "pi-permission-policy.json"
+
+
+def _policy_permission() -> dict:
+    return json.loads(POLICY.read_text(encoding="utf-8"))["permission"]
+
+
+def _action(rule) -> str:
+    return rule if isinstance(rule, str) else rule["action"]
+
+
+def test_hide_and_the_path_deny_of_the_file_tools_are_the_same_set():
+    """囲いの hide と、ファイルの道具 (read など。囲いの外で動く) の path 拒否は、同じ集合に保つ。
+
+    囲いの中で隠しても、read ツールで読めれば意味がない (YOLO は ask を自動で許可するので、確認にも頼れない)。
+    ~/ の固定パスの拒否のうち、``X`` と ``X/*`` の対はディレクトリ、``X`` だけはファイルとして、hide と照合する。
+    食い違ったら、pi-permission-policy.json の path か runner.toml の hide のどちらかが漏れている。
+    """
+    cfg = runner.parse_config(SHIPPED_CONFIG.read_text(encoding="utf-8"))
+    rules = _policy_permission()["path"]
+    denied = {
+        k for k, v in rules.items() if _action(v) == "deny" and k.startswith("~/") and "*" not in k
+    }
+    dirs = {k for k in denied if rules.get(f"{k}/*") and _action(rules[f"{k}/*"]) == "deny"}
+    assert set(cfg.hide_dirs) == dirs, set(cfg.hide_dirs) ^ dirs
+    assert set(cfg.hide_files) == denied - dirs, set(cfg.hide_files) ^ (denied - dirs)
+
+
+def _chezmoi_pi_targets():
+    """chezmoi が ~/.pi/agent へ配るものの名前 (ソースの home/dot_pi/agent の項目を、配備先の名前へ直す)。(名前, ディレクトリか)"""
+    found = []
+    for item in sorted((ROOT / "home" / "dot_pi" / "agent").iterdir()):
+        name = item.name.removeprefix("modify_").removeprefix("create_")
+        for suffix in (".py.tmpl", ".tmpl"):
+            name = name.removesuffix(suffix)
+        found.append(
+            (name.replace("dot_", ".", 1) if name.startswith("dot_") else name, item.is_dir())
+        )
+    return found
+
+
+def test_path_write_denies_what_the_box_keeps_read_only_and_the_control_files():
+    """囲いの中で読み取り専用に見せるもの (visible.read) と、囲い・pi の制御ファイルは、ファイルの道具でも書かせない。
+
+    ファイルの道具は囲いの外で動く。これらはホストで後から実行・読み込まれる (runner 自身の実行環境、pi の拡張・
+    ランチャー・設定、シェルの設定を含む)。囲いの中で読み取り専用にしているのは、書き換えられると囲いが外れるからである。
+    読み取りは許す (調べるために読める)。許可リスト型 (~/.pi/agent/* を deny し、sessions だけ allow) にはしない:
+    方向別の規則は共通の path の後に足されるので、後ろの allow が *.env の deny やリンク先の保護を上書きしてしまう。
+    """
+    cfg = runner.parse_config(SHIPPED_CONFIG.read_text(encoding="utf-8"))
+    permission = _policy_permission()
+    rules = permission["path_write"]
+    assert all(_action(v) == "deny" and v.get("reason") for v in rules.values())  # allow を置かない
+    deny = set(rules)
+    for entry in cfg.visible_read:  # X と X/* の両方 (ファイルだと X/* は何にも当たらないだけ)
+        assert entry in deny and f"{entry}/*" in deny, entry
+    assert {"~/.config/pi-sandbox", "~/.config/pi-sandbox/*"} <= deny
+    # pi の実行ファイル・拡張・package・設定: chezmoi が配るものと、pi が自分で作る場所 (bin・git・install・npm)
+    # tmp は、-e で指定した一時 package (拡張のコード) の置き場
+    for name in ("bin", "git", "install", "npm", "extensions", "agents", "prompts", "tmp"):
+        assert f"~/.pi/agent/{name}" in deny and f"~/.pi/agent/{name}/*" in deny, name
+    assert "~/.pi/agent/settings.json" in deny  # shellPath
+    assert "~/.pi/agent/sessions/*" not in deny  # 子エージェントの成果物の置き場は書ける
+    read_denied = set(
+        permission["path"]
+    )  # 読み取りも拒否のもの (models.json など) は path 側で守る
+    for name, is_dir in _chezmoi_pi_targets():
+        key = f"~/.pi/agent/{name}"
+        if key in read_denied:
+            continue
+        assert key in deny, name
+        if is_dir:
+            assert f"{key}/*" in deny, name
+    assert not (deny & read_denied)  # 読み取りの拒否 (path) とは別の面
+
+
 def test_shipped_config_shows_only_the_wsl_resolv_conf_under_mnt():
     """WSL2 の /etc/resolv.conf は /mnt/wsl/resolv.conf へのリンク。/mnt を覆うと名前解決が壊れる。
     そのファイル 1 つだけを、読み取り専用で見せる。"""
@@ -897,7 +983,7 @@ def test_status_main_prints_and_never_starts_bwrap(tmp_path, capsys, monkeypatch
         raise AssertionError("--status は bwrap を起動しない")
 
     monkeypatch.setattr(runner.os, "execv", boom)
-    monkeypatch.setattr(runner.shutil, "which", boom)
+    monkeypatch.setattr(runner, "find_bwrap", boom)
     monkeypatch.chdir(tmp_path)
     code = runner.main(args, {**env, "HOME": str(tmp_path.parent)})
     out = capsys.readouterr().out
@@ -957,6 +1043,52 @@ def test_build_command_puts_extras_after_the_dev_mount_and_before_the_separator(
     assert command[0] == "bwrap"
     assert command.index("--dev") < command.index("--dev-bind") < command.index("--")
     assert command[-4:] == ["--", "/bin/bash", "-c", "python3 job.py"]
+
+
+def test_build_command_passes_the_original_path_into_the_box_and_hides_the_carrier(tmp_path):
+    """pib は、pi 自身 (囲いの外) の PATH から作業ツリーの中を除き、元の PATH を PIB_ORIG_PATH に入れる。
+    中のコマンドには元の PATH を渡し、運び役の変数は渡さない。"""
+    conf = tmp_path / "runner.toml"
+    conf.write_text(MINIMAL, encoding="utf-8")
+    base = {"PI_SANDBOX_RUNNER_CONFIG": str(conf)}
+    with_orig, _ = runner.build_command(
+        ["-c", "true"],
+        {**base, "PIB_ORIG_PATH": "/w/.venv/bin:/usr/bin"},
+        shell_fake().host(),
+        "/w/ws",
+    )
+    i = with_orig.index("PATH")
+    assert with_orig[i - 1 : i + 2] == ["--setenv", "PATH", "/w/.venv/bin:/usr/bin"]
+    assert (
+        with_orig[with_orig.index("PIB_ORIG_PATH") - 1] == "--unsetenv"
+    )  # 運び役の変数は、中へは渡さない
+    without, _ = runner.build_command(["-c", "true"], base, shell_fake().host(), "/w/ws")
+    assert "PATH" not in without and "PIB_ORIG_PATH" not in without
+
+
+def test_build_command_lets_env_unset_path_win_over_the_original_path(tmp_path):
+    """設定で PATH を消す指定があるなら、元の PATH の復元で上書きしない (運び役の変数は、どちらでも渡さない)。"""
+    conf = tmp_path / "runner.toml"
+    conf.write_text('version = 1\n[env]\nunset = ["PATH"]\n', encoding="utf-8")
+    env = {"PI_SANDBOX_RUNNER_CONFIG": str(conf), "PIB_ORIG_PATH": "/usr/bin"}
+    command, _ = runner.build_command(["-c", "true"], env, shell_fake().host(), "/w/ws")
+    setenv_names = [command[i + 1] for i, a in enumerate(command) if a == "--setenv"]
+    assert "PATH" not in setenv_names and "MISE_STATE_DIR" in setenv_names  # 他の固定の変数は渡る
+    assert command[command.index("--unsetenv") : command.index("--unsetenv") + 2] == [
+        "--unsetenv",
+        "PATH",
+    ]
+    assert "PIB_ORIG_PATH" in command  # 運び役は、どちらでも消す
+
+
+def test_build_command_removes_an_empty_carrier_variable_too(tmp_path):
+    conf = tmp_path / "runner.toml"
+    conf.write_text(MINIMAL, encoding="utf-8")
+    env = {"PI_SANDBOX_RUNNER_CONFIG": str(conf), "PIB_ORIG_PATH": ""}
+    command, _ = runner.build_command(["-c", "true"], env, shell_fake().host(), "/w/ws")
+    assert "PIB_ORIG_PATH" in command and "PATH" not in [
+        command[i + 1] for i, x in enumerate(command) if x == "--setenv"
+    ]
 
 
 def test_build_command_orders_visible_before_hide_so_hide_wins(tmp_path):
@@ -1417,6 +1549,34 @@ def test_real_sandbox_keeps_etc_resolv_conf_readable_on_wsl(tmp_path):
 
 
 @needs_bwrap
+def test_real_sandbox_gives_the_commands_the_original_path(tmp_path):
+    env = {"PATH": os.environ["PATH"], "PIB_ORIG_PATH": "/opt/venv/bin:/usr/bin:/bin"}
+    result = run_in_sandbox(
+        tmp_path, MINIMAL, 'echo "$PATH"; echo "${PIB_ORIG_PATH-unset}"', extra_env=env
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == ["/opt/venv/bin:/usr/bin:/bin", "unset"]
+
+
+@needs_bwrap
+def test_real_runner_does_not_run_a_bwrap_planted_on_path(tmp_path):
+    """PATH の先頭 (作業ツリーの venv の bin など) に置かれた bwrap は、囲いの起動役として、囲いなしで実行されない。"""
+    marker = tmp_path / "planted-bwrap-ran"
+    planted = tmp_path / "planted"
+    planted.mkdir()
+    fake = planted / "bwrap"
+    fake.write_text(
+        f"#!/bin/sh\necho ran >> {marker}\nexec /bin/sh -c 'echo ESCAPED'\n", encoding="utf-8"
+    )
+    fake.chmod(0o755)
+    env = {"PATH": f"{planted}{os.pathsep}{os.environ['PATH']}"}
+    result = run_in_sandbox(tmp_path, MINIMAL, "echo inside", extra_env=env)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "inside"
+    assert not marker.exists()
+
+
+@needs_bwrap
 def test_real_sandbox_follows_a_chain_of_symlinks_through_masked_places(tmp_path):
     """~/a -> /tmp/…/a (覆われる)、/tmp/…/a/b -> 覆われない場所の b。設定に書いた ~/a/b から、中身が読める。"""
     home = tmp_path / "home"
@@ -1661,7 +1821,11 @@ def run_shell(bin_dir, args, env_extra=None):
     )
 
 
-RECORDING_RUNNER = '#!/bin/sh\nprintf "%s\\n" "$@" > "$RECORD"\n'
+# pib-shell は runner を python3 -I -S で起動する (shebang は使わない)。引数を記録するだけの偽の runner
+RECORDING_RUNNER = (
+    "import os, sys\n"
+    "open(os.environ['RECORD'], 'w').write(''.join(a + '\\n' for a in sys.argv[1:]))\n"
+)
 
 
 @linux_only
@@ -1703,6 +1867,50 @@ def test_pib_shell_finds_the_runner_through_a_symlink_to_itself(tmp_path):
     result = run_shell(link_dir, ["-c", "x"], {"PIB_SANDBOX": "1", "RECORD": str(tmp_path / "rec")})
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "rec").exists()
+
+
+@linux_only
+def test_pib_shell_starts_the_runner_with_the_isolated_system_python(tmp_path):
+    """runner の Python の起動時のコード (.pth・sitecustomize・PATH 上の python3) が、bwrap を作る前にホストで動かない。
+
+    作業ツリーの venv や mise の Python は、ファイルの道具やコマンドで書き換えられる。次のコマンドの前に実行されると、囲いを素通りされる。
+    """
+    bin_dir = install_bin(tmp_path, runner_body=RECORDING_RUNNER)
+    marker = tmp_path / "executed-before-the-box"
+    evil = tmp_path / "evil"
+    evil.mkdir()
+    (evil / "sitecustomize.py").write_text(
+        f"open({str(marker)!r}, 'a').write('sitecustomize')\n", encoding="utf-8"
+    )
+    fake_path = tmp_path / "fakepath"
+    fake_path.mkdir()
+    for name in ("python3", "dirname", "readlink"):  # PATH の先頭に置かれた偽の実行ファイル
+        fake_exe = fake_path / name
+        fake_exe.write_text(
+            f"#!/bin/sh\necho {name}-on-PATH >> {marker}\nexit 1\n", encoding="utf-8"
+        )
+        fake_exe.chmod(0o755)
+    bash_env = (
+        tmp_path / "bash_env.sh"
+    )  # 利用者が起動時に BASH_ENV に指定した、書き換えられるファイル
+    bash_env.write_text(f"echo bash_env >> {marker}\n", encoding="utf-8")
+    result = run_shell(
+        bin_dir,
+        ["-c", "x"],
+        {
+            "PIB_SANDBOX": "1",
+            "RECORD": str(tmp_path / "rec"),
+            "PYTHONPATH": str(evil),
+            "PYTHONSTARTUP": str(evil / "sitecustomize.py"),
+            "BASH_ENV": str(bash_env),
+            "PATH": f"{fake_path}{os.pathsep}{os.environ['PATH']}",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "rec").exists()  # runner は動いた
+    assert not marker.exists(), marker.read_text(encoding="utf-8")
+    text = PIB_SHELL.read_text(encoding="utf-8")  # 起動の形そのものも固定する
+    assert "PYTHON=/usr/bin/python3" in text and '"$PYTHON" -I -S "$here/pi-sandbox-runner"' in text
 
 
 @needs_bwrap
@@ -1794,6 +2002,7 @@ def test_pib_help_works_even_when_the_setup_is_broken(tmp_path):
 
 
 @linux_only
+@needs_bwrap  # pib の検査は、システムの bwrap (runner が探す場所) を見る
 def test_pib_passes_help_to_pi_when_it_is_not_the_first_argument(tmp_path):
     """先頭でない --help は、pi の引数 (pib のヘルプにしない)。"""
     home, _ = make_setup(tmp_path)
@@ -1810,6 +2019,7 @@ def test_pib_passes_help_to_pi_when_it_is_not_the_first_argument(tmp_path):
 
 
 @linux_only
+@needs_bwrap  # pib の検査は、システムの bwrap (runner が探す場所) を見る
 @pytest.mark.parametrize(
     ("args", "expect"),
     [(["--status"], "--status"), (["--offline", "--status"], "--offline --status")],
@@ -1859,6 +2069,201 @@ def test_pib_status_takes_no_other_arguments(tmp_path):
     result = run_pib(home, fake_pi(tmp_path), ["--status", "-p", "x"], cwd=tmp_path)
     assert result.returncode == 2
     assert "--status に他の引数は付けられない" in result.stderr
+
+
+def test_pib_refuses_when_the_system_python_for_the_runner_is_missing(tmp_path, monkeypatch):
+    """runner は、書き換えられないシステムの Python で動かす (pib-shell と同じ)。
+    無ければ、囲いの前に実行されうる Python へは落とさず、起動しない。"""
+    home, env = make_setup(tmp_path)
+    monkeypatch.setattr(pib, "SYSTEM_PYTHON", str(tmp_path / "no-such-python"))
+    found = pib.problems(env, home, tmp_path / "work")
+    assert any("no-such-python" in line and "システムの Python" in line for line in found), found
+
+
+@linux_only
+@pytest.mark.parametrize(
+    "rel",
+    [
+        ".config/pi-sandbox/runner.toml",
+        ".config/pi-sandbox/runner.local.toml",
+        ".local/bin/pib-shell",
+        ".local/bin/pi-sandbox-runner",
+        ".pi/agent/settings.json",
+    ],
+)
+def test_pib_refuses_control_files_that_are_links_leaving_the_protected_place(tmp_path, rel):
+    """既定のパス自身が、作業ツリーなど別の場所へのリンクだと、既定のパスへの拒否では実体を守れない。"""
+    home, env = make_setup(tmp_path)
+    target = home / rel
+    real = tmp_path / "work" / "real-file"
+    real.parent.mkdir(exist_ok=True)
+    if target.exists() or target.is_symlink():
+        real.write_bytes(target.read_bytes())
+        target.unlink()
+    else:
+        real.write_text("version = 1\n", encoding="utf-8")
+    target.symlink_to(real)
+    found = pib.problems(env, home, tmp_path / "work")
+    assert any(str(target) in line and "既定の位置の外" in line for line in found), found
+
+
+@linux_only
+def test_pib_refuses_a_home_that_is_itself_a_link(tmp_path):
+    """~/ の拒否は HOME の文字列への展開だけ (実体を解決しない)。HOME がリンクだと、実体のパスを直接指す書き込みが拒否に当たらない。"""
+    home, env = make_setup(tmp_path)
+    link = tmp_path / "home-link"
+    link.symlink_to(home)
+    found = pib.problems(env, link, tmp_path / "work")
+    assert any(line.startswith(f"HOME ({link}) がリンク") for line in found), found
+    assert not any(line.startswith("HOME (") for line in pib.problems(env, home, tmp_path / "work"))
+
+
+@linux_only
+def test_pib_safe_path_drops_entries_the_agent_can_write_in_the_workspace(tmp_path):
+    """作業ディレクトリの中 (venv の bin など)・相対・空の要素は、pi 自身 (囲いの外) の PATH から除く。
+    そこに置かれた実行ファイルが、囲いの外で動くため。"""
+    work = tmp_path / "work"
+    (work / ".venv" / "bin").mkdir(parents=True)
+    system = tmp_path / "system"
+    system.mkdir()
+    link = tmp_path / "link-into-work"
+    link.symlink_to(work / ".venv" / "bin")
+    entries = [
+        str(work / ".venv" / "bin"),
+        "",
+        ".",
+        "bin",
+        str(link),
+        str(system),
+        str(work),
+        "/usr/bin",
+    ]
+    kept = pib.safe_path(os.pathsep.join(entries), work)
+    assert kept.split(os.pathsep) == [str(system), "/usr/bin"]
+
+
+@linux_only
+@linux_only
+def test_pib_safe_path_pins_the_kept_entries_to_their_real_paths(tmp_path):
+    """残す要素は実体に直す。作業ディレクトリの中のリンクが、表記の違い (// や .. の途中) で残り、起動後に差し替えられるのを防ぐ。"""
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "path-bin").symlink_to("/usr/bin")
+    (work / "link").symlink_to("/usr/lib")
+    entries = [
+        str(work / "path-bin"),  # 中のリンク。外を指していても、実体に直すので差し替えは効かない
+        "/" + str(work / "path-bin"),  # 先頭が // の表記 (normpath は // を保つ)
+        f"{work}/link/../../bin",  # リンクの途中を通る ..
+        f"{work}/x/..",  # 作業ディレクトリそのもの
+        "/usr/bin/",
+        "/usr/bin",
+    ]
+    kept = pib.safe_path(os.pathsep.join(entries), work)
+    assert kept == os.path.realpath("/usr/bin")  # すべて同じ実体に固定され、重複もない
+    assert str(work) not in kept
+
+
+@linux_only
+@pytest.mark.parametrize("target_name", ["missing:", ":work-tools", "a::b", "x:/w/tools"])
+def test_pib_safe_path_drops_a_link_whose_target_contains_the_path_separator(tmp_path, target_name):
+    """realpath の結果に : があると、PATH に連結したとき、除いたはずの空・相対・作業ディレクトリの要素が再び現れる。"""
+    work = tmp_path / "work"
+    (work / ".venv").mkdir(parents=True)
+    (work / ".venv" / "bin").symlink_to(
+        f"{tmp_path}/{target_name}"
+    )  # 存在しないリンク先 (realpath は存在を要求しない)
+    kept = pib.safe_path(os.pathsep.join([str(work / ".venv" / "bin"), "/usr/bin"]), work)
+    assert kept == os.path.realpath("/usr/bin")
+    assert "" not in kept.split(os.pathsep)
+
+
+@linux_only
+def test_pib_safe_path_keeps_the_order_and_drops_workspace_entries(tmp_path):
+    work = tmp_path / "work"
+    (work / "inside").mkdir(parents=True)
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    entries = [str(b), str(work / "inside"), str(a), str(b)]
+    assert pib.safe_path(os.pathsep.join(entries), work) == os.pathsep.join(
+        [os.path.realpath(b), os.path.realpath(a)]
+    )
+
+
+@linux_only
+@needs_bwrap  # pib の検査は、システムの bwrap (runner が探す場所) を見る
+@pytest.mark.parametrize("where", ["empty", "only_workspace", "colon_link"])
+def test_pib_does_not_start_pi_from_the_workspace_when_no_safe_path_is_left(tmp_path, where):
+    """整えた PATH が空だと、execvpe は作業ディレクトリの pi を実行してしまう。pi は絶対パスで起動し、見つからなければ起動しない。"""
+    home, _ = make_setup(tmp_path)
+    work = tmp_path / "work"
+    (work / ".venv" / "bin").mkdir(parents=True)
+    marker = tmp_path / "workspace-pi-ran"
+    for planted in (work / "pi", work / ".venv" / "bin" / "pi"):
+        planted.write_text(f"#!/bin/sh\necho ran >> {marker}\n", encoding="utf-8")
+        planted.chmod(0o755)
+    if where == "colon_link":  # リンク先の名前の : が、空の PATH 要素 (= cwd) に化ける
+        shutil.rmtree(work / ".venv" / "bin")
+        (work / ".venv" / "bin").symlink_to(f"{tmp_path}/missing:")
+    path = "" if where == "empty" else str(work / ".venv" / "bin")
+    result = run_pib(home, fake_pi(tmp_path), ["-p", "x"], cwd=work, env_extra={"PATH": path})
+    assert result.returncode == 2, result.stderr
+    assert "pi を、作業ディレクトリの外の PATH から見つけられない" in result.stderr
+    assert not marker.exists()
+
+
+@linux_only
+@needs_bwrap  # pib の検査は、システムの bwrap (runner が探す場所) を見る
+def test_pib_gives_pi_a_path_without_the_workspace_and_keeps_the_original_for_the_box(tmp_path):
+    home, _ = make_setup(tmp_path)
+    work = tmp_path / "work"
+    venv_bin = work / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    fake = fake_pi(tmp_path)
+    path = os.pathsep.join([str(fake), str(venv_bin), os.environ["PATH"]])
+    result = run_pib(home, fake, ["-p", "x"], cwd=work, env_extra={"PATH": path})
+    assert result.returncode == 0, result.stderr
+    seen_path, orig_path = (tmp_path / "pi-env").read_text(encoding="utf-8").split("\n")[:2]
+    assert str(venv_bin) not in seen_path.split(
+        os.pathsep
+    )  # pi 自身には、書き換えられる場所を渡さない
+    assert orig_path == path  # 囲いの中のコマンドには、元の PATH を渡す
+
+
+@linux_only
+@pytest.mark.parametrize("rel", [".local/bin", ".config/pi-sandbox", ".pi/agent", ".pi/agent/bin"])
+def test_pib_refuses_a_control_directory_that_is_a_link(tmp_path, rel):
+    """置き場のディレクトリがリンクだと、中の実体が既定の位置の拒否の外へ移る。"""
+    home, env = make_setup(tmp_path)
+    (home / ".pi" / "agent" / "bin").mkdir(exist_ok=True)
+    target = home / rel
+    moved = tmp_path / "moved" / rel.replace("/", "_")
+    moved.parent.mkdir(exist_ok=True)
+    target.rename(moved)
+    target.symlink_to(moved)
+    found = pib.problems(env, home, tmp_path / "work")
+    assert any(str(target) in line and "既定の位置の外" in line for line in found), found
+
+
+@linux_only
+@pytest.mark.parametrize("name", ["fd", "rg", "pi"])
+def test_pib_refuses_a_managed_tool_that_is_a_link_leaving_the_protected_place(tmp_path, name):
+    """pi が直接実行する管理済みの fd・rg・ランチャー。リンク先を直接書かれると、bin の拒否に当たらない。"""
+    home, env = make_setup(tmp_path)
+    bin_dir = home / ".pi" / "agent" / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    real = tmp_path / "work" / "tools" / name
+    real.parent.mkdir(parents=True)
+    real.write_text("#!/bin/sh\n", encoding="utf-8")
+    (bin_dir / name).symlink_to(real)
+    found = pib.problems(env, home, tmp_path / "work")
+    assert any(str(bin_dir / name) in line and "既定の位置の外" in line for line in found), found
+
+
+def test_pib_accepts_control_files_in_place(tmp_path):
+    home, env = make_setup(tmp_path)
+    (home / ".config" / "pi-sandbox" / "runner.local.toml").write_text(MINIMAL, encoding="utf-8")
+    assert pib.problems(env, home, tmp_path / "work") == []
 
 
 def test_pib_accepts_a_complete_setup(tmp_path):
@@ -2061,17 +2466,31 @@ def test_pib_refuses_an_agent_dir_it_cannot_resolve_the_way_pi_does(tmp_path, va
     assert any("PI_CODING_AGENT_DIR" in line for line in found), found
 
 
-def test_pib_honours_the_agent_dir_and_config_overrides(tmp_path):
-    home, env = make_setup(tmp_path, settings=False, config=False)
-    agent = tmp_path / "agent"
-    agent.mkdir()
-    (agent / "settings.json").write_text(
-        json.dumps({"shellPath": str(home / ".local" / "bin" / "pib-shell")}), encoding="utf-8"
-    )
-    conf = tmp_path / "elsewhere.toml"
-    conf.write_text(MINIMAL, encoding="utf-8")
-    env = {**env, "PI_CODING_AGENT_DIR": str(agent), "PI_SANDBOX_RUNNER_CONFIG": str(conf)}
+@pytest.mark.parametrize(
+    "name",
+    ["PI_CODING_AGENT_DIR", "PI_SANDBOX_RUNNER_CONFIG", "XDG_CONFIG_HOME"],
+)
+def test_pib_refuses_locations_the_file_tool_guard_does_not_cover(tmp_path, name):
+    """ファイルの道具 (囲いの外) の保護は、既定の場所に固定した path の拒否。別の場所へ移した設定・拡張・runner の設定は守れない。"""
+    home, env = make_setup(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    found = pib.problems({**env, name: str(elsewhere)}, home, tmp_path / "work")
+    assert any(line.startswith(f"{name} は既定の場所") for line in found), found
+
+
+def test_pib_accepts_the_default_locations_when_they_are_spelled_out(tmp_path):
+    home, env = make_setup(tmp_path)
+    env = {
+        **env,
+        "PI_CODING_AGENT_DIR": str(home / ".pi" / "agent"),
+        "PI_SANDBOX_RUNNER_CONFIG": str(home / ".config" / "pi-sandbox" / "runner.toml"),
+        "XDG_CONFIG_HOME": str(home / ".config"),
+    }
     assert pib.problems(env, home, tmp_path / "work") == []
+    assert (
+        pib.problems({**env, "PI_CODING_AGENT_DIR": "~/.pi/agent"}, home, tmp_path / "work") == []
+    )
 
 
 def test_pib_parses_the_offline_flag_only_at_the_front():
@@ -2094,7 +2513,9 @@ def fake_pi(tmp_path):
     bin_dir.mkdir(exist_ok=True)
     pi = bin_dir / "pi"
     pi.write_text(
-        f'#!/bin/sh\nprintf "%s\\n" "$PIB_SANDBOX" "$@" > "{tmp_path}/pi-args"\n', encoding="utf-8"
+        f'#!/bin/sh\nprintf "%s\\n" "$PIB_SANDBOX" "$@" > "{tmp_path}/pi-args"\n'
+        f'printf "%s\\n" "$PATH" "$PIB_ORIG_PATH" > "{tmp_path}/pi-env"\n',
+        encoding="utf-8",
     )
     pi.chmod(0o755)
     return bin_dir
@@ -2116,6 +2537,7 @@ def run_pib(home, fake_dir, args=(), cwd=None, env_extra=None):
 
 
 @linux_only
+@needs_bwrap  # pib の検査は、システムの bwrap (runner が探す場所) を見る
 @pytest.mark.parametrize(
     ("args", "mode", "passed"),
     [
@@ -2156,6 +2578,6 @@ def test_spec_documents_the_entry_point_and_the_environment_variable():
 
 def test_the_shell_script_has_a_shebang_and_no_fallback_to_the_unsandboxed_shell_inside_the_branch():
     text = PIB_SHELL.read_text(encoding="utf-8")
-    assert text.startswith("#!/bin/bash\n")
+    assert text.startswith("#!/bin/bash -p\n")  # -p: BASH_ENV などの起動ファイルを読まない
     branch = text.split('if [ -n "${PIB_SANDBOX:-}" ]; then', 1)[1].split("\nfi\n", 1)[0]
     assert "/bin/bash" not in branch  # 囲いを通す枝の中で、素の bash を呼ばない

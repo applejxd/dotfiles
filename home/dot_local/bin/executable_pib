@@ -31,8 +31,30 @@ from pathlib import Path
 
 PREFIX = "pib:"
 SANDBOX_ENV = "PIB_SANDBOX"
+ORIG_PATH_ENV = "PIB_ORIG_PATH"
 SHELL_NAME = "pib-shell"
 RUNNER_NAME = "pi-sandbox-runner"
+# runner を動かすシステムの Python (pib-shell と同じ。書き換えられない場所)
+SYSTEM_PYTHON = "/usr/bin/python3"
+# runner が bwrap を探す場所 (runner の BWRAP_PATHS と同じ。PATH は使わない)
+BWRAP_PATHS = ("/usr/bin/bwrap", "/bin/bwrap", "/usr/local/bin/bwrap")
+# 保護 (ファイルの道具の path 拒否) が既定の位置に固定されている制御ファイル。home からの相対
+CONTROL_FILES = (
+    # 置き場のディレクトリ (リンクだと、中の実体が既定の位置の拒否の外へ移る)
+    ".local/bin",
+    ".config/pi-sandbox",
+    ".pi/agent",
+    ".pi/agent/bin",
+    ".local/bin/pi-sandbox-runner",
+    ".local/bin/pib-shell",
+    ".config/pi-sandbox/runner.toml",
+    ".config/pi-sandbox/runner.local.toml",
+    ".pi/agent/settings.json",
+    # pi が直接実行する、管理済みの fd・rg と、ランチャー (リンク先を直接書かれると、bin の deny に当たらない)
+    ".pi/agent/bin/fd",
+    ".pi/agent/bin/rg",
+    ".pi/agent/bin/pi",
+)
 
 
 HELP = """\
@@ -134,13 +156,30 @@ def problems(env: Mapping[str, str], home: Path, cwd: Path) -> list[str]:
     """囲いが効かない理由 (空なら起動してよい)。"""
     bin_dir = home / ".local" / "bin"
     runner, shell = bin_dir / RUNNER_NAME, bin_dir / SHELL_NAME
-    config = Path(
-        env.get("PI_SANDBOX_RUNNER_CONFIG")
-        or Path(env.get("XDG_CONFIG_HOME") or home / ".config") / "pi-sandbox" / "runner.toml"
-    )
+    config = home / ".config" / "pi-sandbox" / "runner.toml"
     agent_dir, agent_problem = _agent_dir(env, home)
 
     found: list[str] = []
+    # ファイルの道具 (囲いの外で動く) の保護は、既定の場所に固定した path の拒否で行う (pi-permission-policy.json)。
+    # 設定・拡張・runner の設定を別の場所へ移すと、その場所は守れない。守れない構成では起動しない。
+    for name, wanted in (
+        ("PI_CODING_AGENT_DIR", home / ".pi" / "agent"),
+        ("PI_SANDBOX_RUNNER_CONFIG", config),
+        ("XDG_CONFIG_HOME", home / ".config"),
+    ):
+        value = env.get(name)
+        if not value:
+            continue
+        if name == "PI_CODING_AGENT_DIR":
+            resolved, _ = _agent_dir(env, home)
+            same = resolved == wanted
+        else:
+            same = value == str(wanted)
+        if not same:
+            found.append(
+                f"{name} は既定の場所 ({wanted}) だけを受け付ける"
+                " (ファイルの道具の保護は既定の場所に固定で、別の場所は守れない)"
+            )
     home_text = env.get("HOME") or str(home)
     # pi は HOME から設定の場所を決める。.. を含むなどの表記は、pib と pi で別の場所になりうる
     if not _canonical(home_text):
@@ -148,14 +187,35 @@ def problems(env: Mapping[str, str], home: Path, cwd: Path) -> list[str]:
             f"HOME は、正規の絶対パス (. や .. や連続する / を含まない) に限る: {home_text!r}"
         )
         agent_dir, agent_problem = None, "HOME が正規でないので、設定の場所を決められない"
+    if not os.access(SYSTEM_PYTHON, os.X_OK):
+        found.append(
+            f"{SYSTEM_PYTHON} が無い (runner は、書き換えられないシステムの Python で動かす。"
+            "作業ツリーの venv や mise の Python だと、囲いの前に実行されうる)"
+        )
+    real_home = os.path.realpath(home)
+    if real_home != str(home):
+        # 権限の拒否 (~/ のパターン) は、HOME の文字列に展開されるだけで、実体を解決しない。
+        # HOME 自体がリンクだと、実体のパスを直接指す書き込みは、拒否に一致しない
+        found.append(
+            f"HOME ({home}) がリンクで、実体は {real_home}。ファイルの道具の保護 (~/ の拒否) は、"
+            "実体のパスで指された書き込みを止められない"
+        )
+    for rel in CONTROL_FILES:  # リンクで別の場所へ移した制御ファイルは、既定の位置の拒否で守れない
+        target = home / rel
+        expected = os.path.join(real_home, *rel.split("/"))
+        if os.path.lexists(target) and os.path.realpath(target) != expected:
+            found.append(
+                f"{target} が、リンクなどで既定の位置の外を指している"
+                f" ({os.path.realpath(target)}。ファイルの道具の保護は既定の位置に固定で、そこは守れない)"
+            )
     if not os.access(runner, os.X_OK):
         found.append(f"runner が無い、または実行できない: {runner}")
     if not os.access(shell, os.X_OK):
         found.append(f"シェルが無い、または実行できない: {shell}")
     if not config.is_file():
         found.append(f"runner の設定が無い: {config}")
-    if shutil.which("bwrap", path=env.get("PATH")) is None:
-        found.append("bwrap が見つからない")
+    if not any(os.access(p, os.X_OK) for p in BWRAP_PATHS):
+        found.append(f"bwrap が見つからない (runner が探す場所: {', '.join(BWRAP_PATHS)})")
 
     if agent_dir is None:
         found.append(agent_problem or "pi の設定ディレクトリを解決できない")
@@ -229,6 +289,29 @@ def status(env: Mapping[str, str], home: Path, offline: bool) -> int:
     return 2 if found else 0
 
 
+def safe_path(path: str, cwd: Path) -> str:
+    """作業ディレクトリの中・相対・空の PATH の要素を除き、残りを実体のパスに固定した PATH。
+
+    作業ディレクトリは、エージェントが書ける場所 (venv の bin など)。PATH にあると、そこに置かれた実行ファイルが、
+    pi 自身 (grep・find の fd・rg、git など) から、囲いの外で実行される。囲いの中のコマンドには、元の PATH を渡す (PIB_ORIG_PATH)。
+    残す要素は、リンクを解決した実体 (realpath) に直す。書いた位置のままだと、途中にある作業ディレクトリ内のリンク
+    (``//w/link``・``/w/link/../x`` など、表記の違いも含む) を、起動後に差し替えられて、探索先を作業ディレクトリの中へ向けられる。
+    """
+    base = os.path.realpath(cwd)
+    keep: list[str] = []
+    for entry in path.split(os.pathsep):
+        if not entry or not os.path.isabs(entry):  # 空・相対は、作業ディレクトリを指す
+            continue
+        real = os.path.realpath(entry)
+        # リンク先の名前に : があると、PATH に連結したとき、空・相対・作業ディレクトリの要素に化ける
+        if os.pathsep in real:
+            continue
+        if (real == base or real.startswith(base + os.sep)) or real in keep:
+            continue
+        keep.append(real)
+    return os.pathsep.join(keep)
+
+
 def main(argv: Sequence[str], env: Mapping[str, str] | None = None) -> int:
     env = dict(os.environ if env is None else env)
     offline, rest, refused = parse_args(argv)
@@ -248,7 +331,20 @@ def main(argv: Sequence[str], env: Mapping[str, str] | None = None) -> int:
         print(f"{PREFIX} chezmoi apply で配備してから起動する", file=sys.stderr)
         return 2
     env[SANDBOX_ENV] = "offline" if offline else "1"
-    os.execvpe("pi", ["pi", "--no-approve", *rest], env)  # 戻らない
+    # 囲いの中のコマンドには、元の PATH (venv の bin を含む) を渡す。pi 自身 (囲いの外) には、書き換えられる場所を除いた PATH を渡す
+    env[ORIG_PATH_ENV] = env.get("PATH", "")
+    env["PATH"] = safe_path(env.get("PATH", ""), Path.cwd())
+    # 空の PATH は「探さない」ではなく、作業ディレクトリを探す指定になる (execvpe が cwd の pi を実行してしまう)。
+    # そのため pi は、整えた PATH から自分で探し、絶対パスで起動する。見つからなければ起動しない
+    pi = shutil.which("pi", path=env["PATH"]) if env["PATH"] else None
+    if pi is None:
+        print(
+            f"{PREFIX} pi を、作業ディレクトリの外の PATH から見つけられない"
+            " (作業ディレクトリの中・相対・空の PATH の要素は、pi 自身には渡さない)",
+            file=sys.stderr,
+        )
+        return 2
+    os.execve(pi, ["pi", "--no-approve", *rest], env)  # 戻らない
 
 
 if __name__ == "__main__":
