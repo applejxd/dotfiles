@@ -56,8 +56,8 @@ def test_other_variables_show_only_the_length():
 
 
 def test_whitelisted_values_are_shown():
-    proc = _run("get", "WEBSEARCH_BROKER_URL", WEBSEARCH_BROKER_URL="http://127.0.0.1:9")
-    assert "WEBSEARCH_BROKER_URL=http://127.0.0.1:9" in proc.stdout
+    proc = _run("get", "WSL_DISTRO_NAME", WSL_DISTRO_NAME="Ubuntu-24.04")
+    assert "WSL_DISTRO_NAME=Ubuntu-24.04" in proc.stdout
 
 
 def test_bad_arguments_exit_2():

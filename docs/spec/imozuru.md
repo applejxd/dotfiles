@@ -63,8 +63,6 @@
 - **プロキシ宛ての要求（HTTP のプロキシ・HTTPS の CONNECT）は固定しない**: プロキシが名前を引くので、stdlib の接続のまま。`no_proxy` などで**直接つなぐ宛先は、環境変数の有無に関わらず固定する**（要求ごとに `req.has_proxy()` / `_tunnel_host` で判定）
 - 上流の宛先の検査（`url_problem`）は残る。VPN などで外の名前まで内側に引ける環境は、`IMOZURU_ALLOW_PRIVATE=1` で外せる（上流の仕様）
 - **残る限界**: プロキシ経由の通信では、プロキシが後で別の IP に解決するのを、こちらでは固定できない。囲いの内側のプロキシが内側の宛先を拒むかは**未確認**。この限界は、下の「許可規則」にも関わる
-- **（撤去した）`pis` の内側のプロキシ越しの取得**: `PIS_FETCH_VIA_PROXY=1` と、ループバックの `HTTPS_PROXY` が揃うときだけ、`url_problem` が名前を引かずにホスト名の形だけ見るコードが
-  `imozuru_net.py`（`via_fetch_proxy` / `proxy_url_problem`）に残っている。`pis` は撤去したので、フラグを付ける者はおらず、動かない（消すのは後続。[web-search](web-search.md)）。
 
 ## 外へ送る文字列の秘匿チェック
 
@@ -100,7 +98,7 @@
 
 ## 上流との差分
 
-上流への変更は最小にした（`chain.py` +6 行、`fetch.py` +21、`report.py` +6、`watch.py` +17。`fetch.py` と `watch.py` の +4 行はプロキシ越しの取得）。置換は `scripts/vendor/imozuru_patch.py` で、上流の原本に何度でも当て直せる（置換元が 1 つでなければ止まる）。編集ツールの後処理の整形が差分を膨らますので、置換は編集ツールでなくこのスクリプトで行う。**`fetch.py` / `watch.py` を編集ツールで直接直すと、整形が走って差分が 300 行規模になり、上流の文字列を壊す**（失敗談は [記録](../research/agents/imozuru-spec-notes.md)）。このファイルを直すときは、編集ツールを通さない置換スクリプトを `python3` で実行する。`pyproject.toml` の `extend-exclude` に、上流の 4 本を載せてある（整形・lint の対象外）。
+上流への変更は最小にした（`chain.py` +6 行、`fetch.py` +21、`report.py` +6、`watch.py` +17 の見積もり。2026-11-12 に、`pis` 専用のプロキシ越しの取得の差分を外したので、実際の行数は上流の原本との差分で確かめる）。置換は `scripts/vendor/imozuru_patch.py` で、上流の原本に何度でも当て直せる（置換元が 1 つでなければ止まる）。編集ツールの後処理の整形が差分を膨らますので、置換は編集ツールでなくこのスクリプトで行う。**`fetch.py` / `watch.py` を編集ツールで直接直すと、整形が走って差分が 300 行規模になり、上流の文字列を壊す**（失敗談は [記録](../research/agents/imozuru-spec-notes.md)）。このファイルを直すときは、編集ツールを通さない置換スクリプトを `python3` で実行する。`pyproject.toml` の `extend-exclude` に、上流の 4 本を載せてある（整形・lint の対象外）。
 
 **上流を更新する手順**: 新しい版を取得して原本と比べ（`references/upstream.md` の sha256）、差分を取り込んでから `imozuru_patch.py` を当て直し、`test/test_imozuru.py` と `review` で確かめる。
 

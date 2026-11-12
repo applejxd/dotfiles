@@ -176,8 +176,6 @@ def tool_fetch_page(args: dict[str, Any], deps: dict[str, Any]) -> ToolResult:
             url,
             resolver=deps["resolver"],
             transport=deps["transport"],
-            proxy=deps["fetch_proxy"](),
-            proxy_transport=deps["proxy_transport"],
             max_chars=max_chars,
         )
     except core.Blocked as error:
@@ -199,13 +197,13 @@ HANDLERS: dict[str, Callable[[dict[str, Any], dict[str, Any]], ToolResult]] = {
 
 
 def call_tool(name: str, args: Any, get_deps: Callable[[], dict[str, Any]]) -> ToolResult:
-    """ツールを実行する。入力の誤り・設定の誤り・想定外の失敗は、isError のテキストにする。"""
+    """ツールを実行する。入力の誤り・想定外の失敗は、isError のテキストにする。"""
     if not isinstance(args, dict):
         return "arguments はオブジェクトで指定する", True
     try:
         return HANDLERS[name](args, get_deps())
-    except ValueError as error:  # 入力の型の誤り・ブローカー設定の誤り
-        return f"入力または設定が不正: {error}", True
+    except ValueError as error:  # 入力の型の誤り
+        return f"入力が不正: {error}", True
     except Exception as error:
         return f"内部エラー: {type(error).__name__}", True
 

@@ -82,6 +82,7 @@
 | [Docker の cold start 検証で直した障害](testing/docker-cold-start-fixes.md) | tmpfs の noexec、modify_ の python3 解決、Pi 扱いの注入が init で消える、Codex の TOML 連結など解決済み 9 件の経緯 |
 | [開発ガイドの実測メモ](testing/development-timing-notes.md) | hook の所要時間・全件の時間・Windows Sandbox の実測・利用者の判断（`development.md` から移設） |
 | [testing 仕様の実測メモ](testing/testing-spec-notes.md) | 近似 runner の実測と日付つきの注記（`testing.md` から移設） |
+| [撤去後の試験を、これ以上減らす価値があるかの実測](testing/test-reduction-2026-11.md) | 2026-11-12。残った約 1,550 件の時間配分（0.1 秒未満が 1,413 件・遅い 1 ファイルが 3 割強）と、カバレッジで洗い出した重複を減らしたときの変異テストでの検出力の低下（5〜17%）。件数を減らさない判断 |
 
 ### シェル
 
