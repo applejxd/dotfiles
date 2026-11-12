@@ -6,8 +6,8 @@ pi の `shellPath`（pi のシェル）に差す囲い。pi が実行するコ�
 ## 位置づけ
 
 - **コマンドの実行だけを包む。** pi 本体・LLM の認証・拡張・MCP は外側で動く（信頼するコード）。ファイルの道具（`read`・`write`・`edit`）は囲いの外で、権限の層（`pi-permission-system`）がパスで判定する。
-- 守る対象は、外部の文章に指示された、敵対的でないモデルの危険な操作（うっかりを含む）。悪意のあるコードやモデルは範囲外（環境ごとの隔離の領分。[ADR-0027](../../adr/0027-isolation-unit-is-environment.md)）。
-- `pis`（pi 全体を Fence で包む。凍結。[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)）とは別物。docker・compose を内側で使う開発は扱わない（docker を塞ぐ）。
+- 守る対象は、外部の文章に指示された、敵対的でないモデルの危険な操作（うっかりを含む）。悪意のあるコードやモデルは範囲外（環境ごとの隔離の領分。ADR-0027）。
+- 旧来の `pis`（pi 全体を Fence で包む）は撤去した（ADR-0037）。docker・compose を内側で使う開発は扱わない（docker を塞ぐ）。
 
 ### 隔離の層（どこに境界を引くか）
 
@@ -15,10 +15,10 @@ pi の `shellPath`（pi のシェル）に差す囲い。pi が実行するコ�
 
 | 層 | 何を包むか | LLM の認証 | 例 |
 | --- | --- | --- | --- |
-| a. pi ごと | pi のプロセス全体 | 内側 | Docker（`pi-less-yolo`）、`pis`（凍結） |
+| a. pi ごと | pi のプロセス全体 | 内側 | Docker（`pi-less-yolo`）、旧 `pis`（撤去） |
 | **b. コマンドの実行だけ（同じホスト）** | pi が起動するシェル。パスはホストのまま | 外側 | **この囲い（`pib`）** |
 | c. ツールを別環境へ | ツールの実行先（別の OS・ファイルシステム） | 外側 | `ssh.ts`（公式の例）、Gondolin |
-| d. 環境ごと | エージェントも docker も環境の中 | 環境ごと | 専用 WSL・Incus・devcontainer（[ADR-0027](../../adr/0027-isolation-unit-is-environment.md) の P3） |
+| d. 環境ごと | エージェントも docker も環境の中 | 環境ごと | 専用 WSL・Incus・devcontainer（ADR-0027 の P3） |
 
 ```text
 pi 本体・LLM 認証・拡張・MCP（外側）
@@ -168,7 +168,7 @@ protect = true
 | 環境変数のトークン（`GH_TOKEN`・`GITHUB_TOKEN`・`AWS_*`・`ANTHROPIC_API_KEY` など） | `env.unset` の一覧の名前は消える。**一覧に無い名前は渡る**（拒否リスト） | 自己確認（`GH_TOKEN`） |
 | シェル履歴・Windows のドライブ | 見えない | 自己確認 |
 
-- **見えないのは、コマンドの内側だけ。** pi の `read` ツール（プロセス内）は囲いの外。秘密のパスを読ませない役は、`pi-permission-system` の path ルールが担う。**ファイルの道具が囲いの外にあることの帰結**（2026-11-12、YOLO を入れた `pib` で実測。無害なプローブファイルを使った）: ① `read` ツールが、囲いの `hide` にあるディレクトリのファイルを確認なしで読めた。② `write` ツールが、囲い自身の設定ディレクトリ `~/.config/pi-sandbox/` に確認なしで書けた（runner はコマンドごとに設定を読むので、緩められると次のコマンドから効く）。YOLO は `ask` をすべて `allow` に書き換える（`deny` は残る）ので、`external_directory` の確認には頼れない。**対策**: `path` の deny を `hide` と同じ集合に保ち（食い違いは試験で検出）、囲いと pi の制御ファイルを `path_write` で書き込み拒否にした（[設定](../agent-config-generation.md#permission-system-の設定stock)）。**残る限界**: ① このマシンの追記（`runner.local.toml`）の `hide` は、path の deny に入らない（権限の設定は apply で配る共有のもので、マシンごとの追記の仕組みが無い）。② シェルの起動ファイル（`~/.bashrc` など）への書き込みは、まだ拒否していない。ホストで後から実行されるため、囲いの外への持ち込み（永続化）になりうる（`~/.gitconfig`・`~/.local/bin/`・mise・uv の実行環境・`~/.pi/agent/` は、拒否済み。囲いが読み取り専用に見せるものと同じ集合）。③ 保護は既定の場所に固定。`pib` は、`PI_CODING_AGENT_DIR`・`PI_SANDBOX_RUNNER_CONFIG`・`XDG_CONFIG_HOME` が既定と違うと起動しない。④ YOLO を切ると、`external_directory` の確認が出るが、その確認は利用者の承認に依存する。ファイルの道具が作業ツリーの外を触るときの判定は、ソースで確認した: 外かどうかの判定は、**シンボリックリンクを解決した実体のパス**で行う（`external-directory` のゲート）。
+- **見えないのは、コマンドの内側だけ。** pi の `read` ツール（プロセス内）は囲いの外。秘密のパスを読ませない役は、`pi-permission-system` の path ルールが担う。**ファイルの道具が囲いの外にあることの帰結**（2026-11-12、YOLO を入れた `pib` で実測。無害なプローブファイルを使った）: ① `read` ツールが、囲いの `hide` にあるディレクトリのファイルを確認なしで読めた。② `write` ツールが、囲い自身の設定ディレクトリ `~/.config/pi-sandbox/` に確認なしで書けた（runner はコマンドごとに設定を読むので、緩められると次のコマンドから効く）。YOLO は `ask` をすべて `allow` に書き換える（`deny` は残る）ので、`external_directory` の確認には頼れない。**対策**: `path` の deny を `hide` と同じ集合に保ち（食い違いは試験で検出）、囲いと pi の制御ファイルを `path_write` で書き込み拒否にした（[設定](../agent-config-generation.md#permission-system-の設定)）。**残る限界**: ① このマシンの追記（`runner.local.toml`）の `hide` は、path の deny に入らない（権限の設定は apply で配る共有のもので、マシンごとの追記の仕組みが無い）。② シェルの起動ファイル（`~/.bashrc` など）への書き込みは、まだ拒否していない。ホストで後から実行されるため、囲いの外への持ち込み（永続化）になりうる（`~/.gitconfig`・`~/.local/bin/`・mise・uv の実行環境・`~/.pi/agent/` は、拒否済み。囲いが読み取り専用に見せるものと同じ集合）。③ 保護は既定の場所に固定。`pib` は、`PI_CODING_AGENT_DIR`・`PI_SANDBOX_RUNNER_CONFIG`・`XDG_CONFIG_HOME` が既定と違うと起動しない。④ YOLO を切ると、`external_directory` の確認が出るが、その確認は利用者の承認に依存する。ファイルの道具が作業ツリーの外を触るときの判定は、ソースで確認した: 外かどうかの判定は、**シンボリックリンクを解決した実体のパス**で行う（`external-directory` のゲート）。
 - **通信は開いている**ので、内側から見えるものは外へ出せる。見える範囲を絞ることで、持ち出せるものを減らす。通信を使わない作業は `pib --offline`。
 - **gh・git push・issue / PR の投稿は、内側では認証がなく失敗する。** 利用者が打つ `!gh ...` も囲いの内側なので失敗する。外側が要るときは、`pi` か別のターミナルで行う。権限の方針（`git push` は deny、`gh` の変更系は強制 ask）が第一の層で、囲いは第二の層。
 

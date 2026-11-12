@@ -3,12 +3,12 @@
 - **ステータス**: Proposed（試作を利用者が見て決める。縮小版を先に作り、追い続けられるかを確かめる）
 - **日付**: 2026-11-09
 - **決定者**: applejxd
-- **関係**: [ADR-0010](0010-exploratory-spec-driven-docs.md)（情報の役割で 4 種類に分ける）・[ADR-0011](0011-close-change-records-into-subdirectory.md)（終了案件は `closed/` へ）を**置き換えない。補う**。凍結の定義は [ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)。
+- **関係**: [ADR-0010](0010-exploratory-spec-driven-docs.md)（情報の役割で 4 種類に分ける）・[ADR-0011](0011-close-change-records-into-subdirectory.md)（終了案件は `closed/` へ）を**置き換えない。補う**。凍結の定義は ADR-0030。
 
 ## コンテキスト
 
 - docs は役割で 4 種類（ADR・案件・調査・仕様）に分けてきたが、**誰が読むか**は決めていなかった。
-- 凍結した自作基盤（[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)。フルガード・`pis`・kcage・PR ビューア・作業台帳）の docs が、仕様の入口や案件の「活動中」に、継続している領域と同じ列で並んでいる。
+- 凍結した自作基盤（ADR-0030。フルガード・`pis`・kcage・PR ビューア・作業台帳）の docs が、仕様の入口や案件の「活動中」に、継続している領域と同じ列で並んでいる。
 - エージェントには「どの ADR が現行か」が見えない。廃止・置き換え・凍結された判断が積み上がり、古い判断に埋もれる。
 - 利用者が「今の作業計画」を 1 か所で追えない。案件の「活動中」が長く、凍結・停滞した案件が混ざる。
 
@@ -67,4 +67,4 @@ B・C は、利用者が読む change と spec の入口を改善できない（
 
 ## 関連
 
-[ADR-0010](0010-exploratory-spec-driven-docs.md)・[ADR-0011](0011-close-change-records-into-subdirectory.md)・[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)・[ADR-0031](0031-evaluate-existing-extensions-first.md)・[CHG-0065](../change/closed/0065-agent-stack-freeze.md)
+[ADR-0010](0010-exploratory-spec-driven-docs.md)・[ADR-0011](0011-close-change-records-into-subdirectory.md)・ADR-0030・[ADR-0031](0031-evaluate-existing-extensions-first.md)・[CHG-0065](../change/closed/0065-agent-stack-freeze.md)

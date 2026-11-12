@@ -5,8 +5,7 @@ Raspberry Pi（ARM の Linux）へ dotfiles を導入するときの仕様と、
 ## Raspberry Pi
 
 64bit の Raspberry Pi OS（ヘッドレス）を対象にします。**32bit（armhf）は対象外**です。
-Claude Code / Copilot CLI / OpenCode V2 / oh-my-pi の公式インストーラーはいずれも
-x64 と arm64 しか受け付けず、`armv7l` を検出すると明示的に終了します。
+pi の公式インストーラーも、x64 と arm64 しか受け付けません（32bit は対象外）。
 
 判定は `home/.chezmoitemplates/is-raspi` が単一ソースです。次の 3 つの OR で
 判定し、`"true"` か空文字を返します。単独ではどれも取りこぼします。
@@ -99,18 +98,14 @@ clang（`clang-tidy` も）は、C++ の標準ヘッダを探すときに最も�
 観測の記録は [記録](../research/chezmoi/structure-raspi-notes.md)。
 版を決め打ちしないのは、Ubuntu の版ごとに gcc の版が違うためです。
 
-`clang-tidy` は OpenCode の編集直後の lint で C/C++ に使います。
+`clang-tidy` は C/C++ の lint に使います。
 
 ## ツール 1 個の失敗で apply を止めない
 
 `125_mise` は `mise install` が失敗しても**警告に留めます**。非ゼロで抜けると、
-ツール 1 個の失敗で後続の `126_agent_cli` / `140_herdr_integration` / `400_unix` が
+ツール 1 個の失敗で後続の `126_agent_cli` / `400_unix` が
 丸ごと走らなくなるためです（実機で ruby が落ちたときに起きました）。
 未導入のものは `mise ls --missing` で確認できます。
-
-`140_herdr_integration` も同じ方針で、herdr や AI CLI が無いときは警告して飛ばします（`exit 0`）。
-毎回走る `run_after_` なので、導入できた後の `apply` で設定されます。herdr が動いたうえでの異常
-（不正な skill を返したなど）は、失敗のままにします。
 
 ## メモリが尽きても SSH できるようにする
 

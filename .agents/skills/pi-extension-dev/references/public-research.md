@@ -10,7 +10,7 @@
 2. **すでに入れている package の設定・機能**: 一覧は `home/.chezmoitemplates/pi-stock-packages`。各 package の README と設定の項目を読む
    （設定で足りることが多い）。評価の記録は [stock の package の評価](../../../../docs/research/agents/pi-stock-packages-evaluation-2026-11.md)。
 3. **公開の package（拡張・スキル）を探して、評価して導入する**（下の「調査先」「評価の観点」）。
-4. **skill + CLI、または MCP**（既製のサーバを含む）で足りるか。比較は [入口の選び方](../../../../docs/spec/guard/pi-extensions.md#入口の選び方)。
+4. **skill + CLI、または MCP**（既製のサーバを含む）で足りるか。比較は 入口の選び方。
 
 ## 調査の作法
 

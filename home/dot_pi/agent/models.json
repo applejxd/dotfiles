@@ -1,9 +1,0 @@
-{
-  "providers": {
-    "github-copilot": {
-      "compat": {
-        "supportsEagerToolInputStreaming": false
-      }
-    }
-  }
-}

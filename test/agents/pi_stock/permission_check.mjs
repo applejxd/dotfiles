@@ -10,7 +10,7 @@
 // bash は、実際のゲートと同じく複合コマンドを分解し、ラッパーの床 (opaque / indirection / unparsed) も含めて判定する。
 // access: [cmd...] は、bash のトークンの投影 (作業ツリーの外のパスと、commandEffects を含む向き) を返す。
 // surface の照合は規則の評価だけ (向きに応じた ask の判定は、access の向きと surface の判定を合わせて読む)。
-// see docs/spec/agent-config-generation.md#permission-system-の設定stock
+// see docs/spec/agent-config-generation.md#permission-system-の設定
 import { createRequire } from "node:module";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

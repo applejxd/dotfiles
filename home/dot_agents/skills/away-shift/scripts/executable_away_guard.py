@@ -588,43 +588,113 @@ def cmd_sleep(args: argparse.Namespace) -> int:
 
 # ─── snapshot ──────────────────────────────────────────────────────────────
 
-# 秘密になりうるものは、作業コピーへ持ち込まない。持ち込むと read の deny を迂回して読めてしまうので、
-# 正本は ``[file] read_deny_globs``（判定器と同じ command_policy 経由。ここに複製を持たない）。読めないときは拒否する
+# 秘密になりうるものは、作業コピーへ持ち込まない。持ち込むと read の deny を迂回して読めてしまう。
+# 判定は glob (``**/`` は 0 個以上のディレクトリ、``*`` は ``/`` を跨がない) の最初の一致。
+# ★``**/*key*`` のような部分一致の glob は使わない (keyhac.bat・tokenizer.py のような正当なファイルを巻き込む)。
 SNAPSHOT_DEFAULT_MAX_MB = 200
 SNAPSHOT_DEFAULT_MAX_FILES = 20000
+SECRET_GLOBS = (
+    "**/.ssh/**",
+    "**/.gnupg/**",
+    "**/sops/age/**",
+    "**/.aws/credentials",
+    "**/.netrc",
+    "**/.npmrc",
+    "**/.pypirc",
+    "**/id_rsa*",
+    "**/id_ed25519*",
+    "**/id_ecdsa*",
+    "**/id_dsa*",
+    "**/*.pem",
+    "**/*.key",
+    "**/*.p12",
+    "**/*.pfx",
+    "**/*.jks",
+    "**/*.keystore",
+    "**/key.txt",
+    "**/keys.txt",
+    "**/*_key",
+    "**/*.token",
+    "**/*_token",
+    "**/token.json",
+    "**/service-account*.json",
+    "**/secrets/**",
+    "**/*secret*",
+    "**/*credential*",
+    "**/*password*",
+    "**/.env",
+    "**/.env.*",
+    "**/.config/gh/hosts.yml",
+    "**/.docker/config.json",
+    "**/.git-credentials",
+    "**/.kube/config",
+    "**/.config/gcloud/credentials.db",
+    "**/.azure/msal_token_cache.json",
+    "**/.terraform.d/credentials.tfrc.json",
+    "**/.bash_history",
+    "**/.mysql_history",
+    "**/.node_repl_history",
+    "**/.psql_history",
+    "**/.python_history",
+    "**/.sh_history",
+    "**/.zsh_history",
+    "~/.claude.json",
+    "~/.copilot/settings.json",
+    "~/.copilot/config.json",
+)
+# 例外は、対になる deny の glob にだけ効く (``.env.*`` の例外 ``.env.example`` が ``.ssh/**`` の中の同名を許さない)
+SECRET_EXCEPTIONS = {"**/.env.*": ("**/.env.example", "**/.env.sample", "**/.env.template")}
 
 
-def _agents_config_dir() -> Path:
-    override = os.environ.get("AGENTS_CONFIG_DIR")
-    if override:
-        return Path(override)
-    config_home = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-    return Path(config_home) / "agents"
+def _glob_to_regex(glob: str, ignore_case: bool = False) -> re.Pattern[str]:
+    out: list[str] = []
+    i = 0
+    while i < len(glob):
+        if glob.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif glob.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif glob[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        else:
+            out.append(re.escape(glob[i]))
+            i += 1
+    return re.compile("^" + "".join(out) + "$", re.IGNORECASE if ignore_case else 0)
+
+
+def _matches_glob(path: str, glob: str) -> bool:
+    """パス (区切りは ``/`` に揃える。``~`` は展開前の形も試す) が glob に当たるか。Windows は大小文字を区別しない。"""
+    if not path:
+        return False
+    ignore_case = os.name == "nt"
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    candidates = [normalized]
+    home = os.path.expanduser("~").replace("\\", "/")
+    fold = (lambda s: s.lower()) if ignore_case else (lambda s: s)
+    if home and fold(normalized).startswith(fold(home) + "/"):
+        candidates.append("~/" + normalized[len(home) + 1 :])
+    pattern = _glob_to_regex(glob, ignore_case)
+    return any(pattern.match(c) for c in candidates)
 
 
 def _load_read_deny():
-    """(判定関数, ) を返す: パスを渡すと当たった read_deny の glob を返し、無ければ None。
+    """パスを渡すと当たった秘密の glob を返し、無ければ None を返す判定関数を返す。"""
 
-    一覧が読めない・空のときは Refused (fail closed)。
-    """
-    import importlib.util
+    def protected(candidate: str) -> str | None:
+        for glob in SECRET_GLOBS:
+            if not _matches_glob(candidate, glob):
+                continue
+            if any(_matches_glob(candidate, e) for e in SECRET_EXCEPTIONS.get(glob, ())):
+                continue
+            return glob
+        return None
 
-    agents = _agents_config_dir()
-    module_path = agents / "command_policy.py"
-    common = agents / "common.toml"
-    if not module_path.is_file() or not common.is_file():
-        raise Refused(f"保護対象の一覧が読めません: {agents} (command_policy.py / common.toml)")
-    try:
-        spec = importlib.util.spec_from_file_location("_away_command_policy", module_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        globs = module.load_file_globs("read_deny_globs", str(common))
-        exceptions = module.load_read_deny_exceptions(str(common))
-    except Exception as exc:
-        raise Refused(f"保護対象の一覧を読めません: {type(exc).__name__}: {exc}") from None
-    if not globs:
-        raise Refused("read_deny_globs が空です (保護対象を確かめられない)")
-    return lambda candidate: module.matches_read_deny(candidate, globs, exceptions)
+    return protected
 
 
 def _git(args: list[str]) -> bytes:

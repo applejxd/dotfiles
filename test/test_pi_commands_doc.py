@@ -146,18 +146,5 @@ def test_the_package_prompt_templates_in_the_doc_match_pi_subagents():
 
 
 def test_the_repo_prompt_templates_in_the_doc_match_what_the_repository_ships():
-    actual = {p.name.removesuffix(".md.tmpl") for p in REPO_PROMPTS.glob("*.md.tmpl")}
+    actual = {p.stem for p in REPO_PROMPTS.glob("*.md")}
     assert _section("このリポジトリが配る prompt template") == actual
-
-
-def test_commands_listed_as_missing_in_stock_do_not_exist_there():
-    """「stock には無いコマンド」の表のものが、stock のどこにも登録されていない (早見の主張の誤りを防ぐ)。"""
-    missing = _section("stock には無いコマンド")
-    present = (
-        _section("pi 本体の組み込み")
-        | _section("pi 本体に同梱の拡張")
-        | _section("package のコマンド")
-        | _section("package が同梱する prompt template")
-        | _section("このリポジトリが配る prompt template")
-    )
-    assert not (missing & present), missing & present

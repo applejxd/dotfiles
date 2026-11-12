@@ -3,8 +3,8 @@
 症状から対応する項目を探す索引。本体は 2 つに分けている。
 
 - [導入と適用](troubleshooting-bootstrap.md): `chezmoi apply` / `chezmoi update`、
-  スクリプトの再実行、Python、Bitwarden、mise、APT、AI CLI の導入
-- [AI CLI の実行時](troubleshooting-agents.md): sandbox、skills、ツール呼び出しの引数、クリップボード
+  スクリプトの再実行、Python、Bitwarden、mise、APT、pi の導入
+- pi の実行時の問題は、[pi の設定の生成と所有権](agent-config-generation.md)・[pi-sandbox-runner](sandbox/pi-sandbox-runner.md)・各 package の Issue から探す
 
 ## まず見るもの
 
@@ -13,7 +13,7 @@ chezmoi apply --verbose            # 実行するスクリプトの中身も表�
 chezmoi status --include=scripts   # 次の apply で走るスクリプト（R）
 ```
 
-`chezmoi diff` / `chezmoi status` は AI CLI の sandbox の外で実行する。
+`chezmoi diff` / `chezmoi status` は、囲い（`pib`）の外で実行する。
 
 ## 症状から探す
 
@@ -34,17 +34,7 @@ chezmoi status --include=scripts   # 次の apply で走るスクリプト（R�
 | VS Code の拡張が入っていない | 全環境（Settings Sync で同期） | [VS Code の拡張が入っていない](troubleshooting-bootstrap.md#vs-code-の拡張が入っていない) |
 | `apt update` が GitHub CLI の `NO_PUBKEY` を警告する | Ubuntu | [apt update が GitHub CLI の NO_PUBKEY を警告する](troubleshooting-bootstrap.md#apt-update-が-github-cli-の-no_pubkey-を警告する) |
 | `apt update` が VS Code のソース二重登録を警告する | ネイティブ Linux | [apt update が VS Code のソース二重登録を警告する](troubleshooting-bootstrap.md#apt-update-が-vs-code-のソース二重登録を警告する) |
-| `No version is set for shim`、`configuration invalid` | Linux / WSL / macOS の AI CLI | [AI CLI が mise に global default version を指定しろと言う](troubleshooting-bootstrap.md#ai-cli-が-mise-に-global-default-version-を指定しろと言う) |
-| `403`、「導入できなかった CLI」 | Linux / WSL / macOS の AI CLI | [AI CLI の導入が 403 で失敗する](troubleshooting-bootstrap.md#ai-cli-の導入が-403-で失敗する) |
-| sandbox の中で全ツールが即失敗する（`requires 'slirp4netns' on PATH` など） | Linux / WSL の Copilot CLI | [Linux で sandbox がコマンドを 1 つも実行できない](troubleshooting-agents.md#copilot-cli) |
-| `/sandbox` に Dependencies タブが出る | Linux / WSL の Claude Code | [Linux で sandbox がコマンドを 1 つも実行できない](troubleshooting-agents.md#claude-code) |
-| sandbox の中で読めない・書けない | Claude Code / Copilot CLI | [sandbox](sandbox/agent-sandbox.md) |
+| `No version is set for shim`、`configuration invalid` | Linux / WSL / macOS の旧 AI CLI | [AI CLI が mise に global default version を指定しろと言う](troubleshooting-bootstrap.md#ai-cli-が-mise-に-global-default-version-を指定しろと言う) |
 | `pi --version` が `SyntaxError` などで落ちる、pi の導入（npm）が失敗する | Windows の pi | [Windows で pi が起動しない（古い node が先に見つかる）](troubleshooting-bootstrap.md#windows-で-pi-が起動しない古い-node-が先に見つかる) |
-| `Failed to load 1 skill.` | Claude Code / Copilot CLI | [CLI 起動時に Failed to load 1 skill と出る](troubleshooting-agents.md#cli-起動時に-failed-to-load-1-skill-と出る) |
-| `Invalid arguments for tool ...`、引数が空のツール呼び出し | pi | [ツール呼び出しの引数が壊れる](troubleshooting-agents.md#ツール呼び出しの引数が壊れるinvalid-arguments引数が空) |
-| `~/.copilot/skills` が作られない | Windows の Copilot CLI | [Windows で .copilot/skills のリンクが作られない](troubleshooting-agents.md#windows-で-copilotskills-のリンクが作られない) |
-| `/copy` で `Clipboard unavailable: install wl-clipboard` と出る | `pis`（WSL2） | [pis の内側でクリップボードへコピーできない](troubleshooting-agents.md#pis-の内側でクリップボードへコピーできない) |
-| 何も編集していないのに本体の `git status` が dirty。統合が `stash failed` で落ちる | `pis`（dotfiles を起動ディレクトリにしたとき） | [pis の内側で本体の git status が dirty に見える](troubleshooting-agents.md#pis-の内側で本体の-git-status-が-dirty-に見える) |
-| `ask` のはずの操作を確認なしで実行する（OpenCode 専用。撤去予定） | OpenCode | [保存した承認の確認とリセット](agent-permissions.md#保存した承認の確認とリセット) |
 
 [仕様・運用一覧へ戻る](index.md)

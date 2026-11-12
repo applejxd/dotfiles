@@ -1,7 +1,6 @@
-# pi のスラッシュコマンド（stock）の早見
+# pi のスラッシュコマンドの早見
 
-stock の pi（既定。[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md)）で、**いま実在する**スラッシュコマンドの早見。
-凍結した自作ハーネス（custom）の早見は [pi / pis マニュアル](pi-manual.md)（凍結）。外部 CLI（Claude Code・Copilot CLI・OpenCode）のコマンドは、各公式の文書を見る。
+pi で、**いま実在する**スラッシュコマンドの早見。撤去した自作ハーネス（`pis`）だけにあったコマンド（`/agents`・`/bypass`・`/orchestrate`・`/pending`・`/board`・`/worktrees`・`/work`・`/delegate-stats`）は、無い。
 
 - 確認の日と版: 2026-11-12。pi 1.5.0、package の版は `home/.chezmoitemplates/pi-stock-packages`。
 - 実機で見るには、pi の入力欄で `/` を打つ（補完に出る）。
@@ -50,7 +49,7 @@ pi 本体が組み込みで読み込む拡張（`dist/extensions/`）が登録�
 
 どれも `home/.chezmoitemplates/pi-stock-packages` の package が登録する（仕事用の機だけが入れる `pi-mcp-adapter` は対象外）。設定とツールの扱いは
 [agent-config-generation.md](agent-config-generation.md#追加の-4-つの-packagebackgroundplan-modegoalrewind)・
-[permission-system の設定](agent-config-generation.md#permission-system-の設定stock)。
+[permission-system の設定](agent-config-generation.md#permission-system-の設定)。
 
 | package | コマンド | 内容 |
 | --- | --- | --- |
@@ -88,25 +87,10 @@ pi 本体が組み込みで読み込む拡張（`dist/extensions/`）が登録�
 
 ## このリポジトリが配る prompt template
 
-`home/dot_pi/agent/prompts/`（元データは `home/dot_config/agents/common.toml.tmpl` の `[pi.stock_commands.*]`・`[pi.commands.*]`。仕組みは
+`home/dot_pi/agent/prompts/`（静的なファイル。仕組みは
 [プロンプトテンプレート](agent-config-generation.md#プロンプトテンプレートfleetstepback)）。Windows には配らない。
 
 | コマンド | 内容 |
 | --- | --- |
 | `/fleet <依頼>` | 依頼を並列に動かせる作業に分け、`subagent` ツールで worker を同時に起動して進める。書き手ごとに専用の枝と worktree を作り、完了した順に統合用の枝へ取り込む。作業間の境界は契約で先に決めて見込みで進め、検査は 3 段（全体は最後に 1 回）で背景へ出す。目的は利用者の待ち時間の短縮 |
 | `/stepback [質問]` | 質問（省略時は直前の質問と回答）を一段抽象化した問いに先に答えてから、答え直す |
-
-## stock には無いコマンド
-
-凍結した自作ハーネス（`pis`・フルガード）だけが登録するコマンド。stock の pi には**存在しない**（これを前提にした古い説明は、凍結の注記を付けて残してある）。
-
-| コマンド | 凍結した基盤での内容 | stock での代わり |
-| --- | --- | --- |
-| `/agents`・`/agent` | 子の一覧と、子の直接の起動 | `/subagents-fleet`、`subagent` ツール |
-| `/bypass` | ask を確認なしで通す | `/permission-system` の YOLO |
-| `/orchestrate` | 親を計画・判断・委譲に絞る | 無し（`/fleet`・`/plan`） |
-| `/pending` | 承認が取れず退避したコミットの一覧・表示・破棄（承認の経路は撤去済み） | 無し |
-| `/board`・`/worktrees`・`/work` | 盤面・隔離 worktree の掃除・作業台帳 | 無し |
-| `/delegate-stats` | 直近の発言ごとの、読み取り量と委譲の件数（記録のみ） | 無し（費用は `/subagent-cost`） |
-
-`/goal`・`/plan`・`/btw`・`/todos` は、凍結した自作版（`/goal` と作業台帳・自作の `plan` など）と**同名で別物**。stock は上の package 版。

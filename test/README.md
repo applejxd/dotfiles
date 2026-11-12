@@ -27,15 +27,6 @@ bash test/test.sh [service] [mode]
 mise run e2e -- [service] [mode]    # 同じもの
 ```
 
-## hook の配備と判定
-
-```bash
-docker compose -f test/compose.yaml run --rm ubuntu2404 bash /repo/test/verify_hooks.sh
-```
-
-配備されたファイル、`settings.json` に登録された hook の数、代表的なコマンドに
-対する判定を検査し、期待と違えば非ゼロで終了する。
-
 ## クリーンアップ
 
 `docker compose run --rm` でコンテナは都度破棄される。残るのはイメージのみ。

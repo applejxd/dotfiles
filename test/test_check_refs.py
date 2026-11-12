@@ -142,9 +142,8 @@ def test_docs_inside_another_path_is_not_a_reference(tmp_path, text):
 def test_git_does_not_run_the_repository_fsmonitor(tmp_path):
     """.git/config の core.fsmonitor を起動しない。
 
-    OpenCode はこのスクリプトを確認なしに実行させる。リポジトリの設定から
+    このスクリプトは確認なしに実行されうる。リポジトリの設定から
     任意コマンドを起動できると、確認を経ない実行の入口になる。
-    see docs/spec/agent-config-generation.md#スキルのスクリプト
     """
     repo = make_repo(tmp_path, GOOD)
     mark = tmp_path / "fsmonitor-ran"

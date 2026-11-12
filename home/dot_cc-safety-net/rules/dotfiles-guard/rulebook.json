@@ -2,7 +2,7 @@
   "rulebook_version": 1,
   "name": "dotfiles-guard",
   "version": "1.0.0",
-  "description": "git push は利用者が行う。block_args に push を入れるのは、サブコマンド自身を必ず現れる引数にして、全ての push を止めるため。git -C / -c / --git-dir などの前置きは cc-safety-net が読み飛ばす。see docs/spec/agent-config-generation.md#cc-safety-net-の規則stock",
+  "description": "git push は利用者が行う。block_args に push を入れるのは、サブコマンド自身を必ず現れる引数にして、全ての push を止めるため。git -C / -c / --git-dir などの前置きは cc-safety-net が読み飛ばす。see docs/spec/agent-config-generation.md#cc-safety-net-の規則",
   "allowed_commands": ["git"],
   "rules": [
     {

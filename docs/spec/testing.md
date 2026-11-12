@@ -36,10 +36,6 @@ Python の Windows 環境変数復元処理は空文字列を削除してしま�
 空の `core.fsmonitor` だけを同じ無効状態の `false` に置き換える。
 その他の有効な Git 設定は保持する。
 
-Windows の Copilot コマンド hook は `powershell` ツール名も照合・正規化する。
-agent テストでは生成された matcher と実 hook の判定を両方確認し、
-パスの `\` 区切りや大文字小文字によって既存の保護対象が見落とされないことも検証する。
-
 ## Linux の GitHub Actions
 
 `.github/workflows/linux.yml` が `ubuntu-24.04` の素の runner で pytest の全件を回す
@@ -56,13 +52,12 @@ agent テストでは生成された matcher と実 hook の判定を両方確�
 ## Windows の GitHub Actions
 
 `.github/workflows/windows.yml` が `windows-2025` の runner で `test/agents/` と
-`test/test_windows_assets.py` を回す。Windows 関連のパス（`*.ps1`、PowerShell と
-OpenCode の設定、`300_windows/`、共有テンプレート、agent 設定・hook、`scripts/agents/`、
-対象のテスト）への push と、手動実行で起動する。
+`test/test_windows_assets.py` を回す。Windows 関連のパス（`*.ps1`、PowerShell の設定、`300_windows/`、
+共有テンプレート、pi の設定、`scripts/agents/`、対象のテスト）への push と、手動実行で起動する。
 
-pytest は `PYTHONUTF8=1` で回す。本番の hook は `py -3 -B -X utf8` で起動するので
-（`scripts/agents/generate.py`）、テストが起動する hook もそれに揃えるため。
-揃えないと hook が日本語の理由を cp1252 で書けずに落ち、JSON が途中で切れる。
+pytest は `PYTHONUTF8=1` で回す。生成器（`scripts/agents/generate.py`）を起動する modify_ のラッパーと、
+テスト自身の `read_text` を同じ UTF-8 モードに揃えるため。
+揃えないと日本語を cp1252 で書けずに落ち、JSON が途中で切れる。
 
 **実機（Windows 11）の検証の代わりにはならない。** 見ていないもの:
 
@@ -79,7 +74,7 @@ runner は英語版で、Python の既定の文字コードは cp1252 になる�
 `test_windows_assets.py` が構文木で検査している。
 
 runner は checkout 時に改行を CRLF にする（`core.autocrlf`）。modify script の共通ラッパー
-（`home/.chezmoitemplates/modify_json.py.tmpl`）は、埋め込んだ common.toml を
+（`home/.chezmoitemplates/modify_json.py.tmpl`）は、埋め込んだ pi-mcp-servers.toml を
 `newline=""` で書き出す。既定の改行変換だと `\r\r\n` になり、TOML として読めずに
 すべての modify script が落ちる（Windows の runner で発覚。autocrlf を有効にした
 Windows の機械でも同じことが起きる）。
@@ -166,7 +161,7 @@ IS_RASPI=1 bash test/test.sh ubuntu2204 place  # 22.04 を Pi 扱いで
 
 - Bitwarden を使うファイルは個人用でしか展開しないので、コンテナのユーザを
   `applejxd` にする（`CONTAINER_USER=applejxd`。`bootstrap` モードが自動で設定する）。
-  そのため個人用の分岐（Copilot との herdr 連携、MCP の除外など）も通る
+  そのため個人用の分岐（MCP の除外など）も通る
 - スタブは `bw status` / `unlock` / `lock` / `sync` / `get item <名前>` だけに答え、
   知らない呼び方は失敗させる。呼ばれた引数はログに残す
 - 値はすべてダミー。age の鍵も `AGE-SECRET-KEY-` の形にしない（gitleaks の誤検知を避ける）。
@@ -317,17 +312,6 @@ OVERALL STATUS: FAILED
   `e2e.yml`（毎月 2 日の schedule と手動。cold start）だけ
 - リポジトリは public
 
-#### 全件の試験が環境のせいで落ちるとき（`inotify`）
-
-`test_bedrock_probe.py` の envoy の検証が、abort（終了コード -6）で落ちたら、**`inotify` の枠の枯渇**を疑う。
-envoy は起動時に `inotify` のインスタンスを作るので、利用者の `fs.inotify.max_user_instances`（既定 128）が使い切られていると、設定の検証ごと落ちる。
-2026-10-28 には、`tmux` の中で本物の `pi` を起動する試験（`test_pi_commit_confirm.py` の TUI の試験）が、終了時に `tmux kill-session` だけを呼んでいたため、
-`pi` が SIGHUP では終わらず、1 回の実行ごとに 1 つ残り、110 個が溜まって枠をほぼ使い切っていた。試験は、ペインのプロセスを控えて SIGTERM → SIGKILL で終わらせる形に直した。
-
-- 確認: `ps -eo pid,etimes,tty,comm | grep ' pi$'` で、作業ディレクトリが削除済みの古い `pi` が溜まっていないか。`ls -l /proc/<pid>/fd | grep -c inotify` で、持っている数を見る
-- 対処: 古い `pi`（親が `tmux` のサーバ・作業ディレクトリが削除済み）だけを終了する。利用者の実際の作業の `pi` は終了させない
-- 子プロセスを起こす試験は、**終了時に確実にプロセスを終わらせる**（`finally` で、終了の確認まで）
-
 ## 既知の未達
 
 `ubuntu2204` の `apply` と `update`（2 回の apply と残差分 0 件）は通る
@@ -342,11 +326,6 @@ envoy は起動時に `inotify` のインスタンスを作るので、利用者
 
 ### 未検証のまま残っているもの
 
-- Windows の `346`（Claude の MCP 登録）が `claude` を公式の導入先から探す修正は、
-  静的テストのみで実機では未確認
-- Codex の `modify_config.toml`: ユーザのトップレベルのキーが 1 つも無い状態で
-  Codex 自身が新しいトップレベルのキーを書き込むと、最後のトップレベルのキー
-  （管理側）の直後、つまり管理ブロックの内側に入るおそれがある。
-  その場合は次の apply で消える（従来と同じ）
+- Windows 実機での `chezmoi apply`（撤去後の `.chezmoiignore.tmpl`・`.chezmoiremove` の組み合わせ）。静的な試験と描画の試験のみ
 
 [仕様一覧へ戻る](index.md)

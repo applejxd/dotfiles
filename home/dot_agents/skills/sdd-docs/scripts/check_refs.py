@@ -33,8 +33,7 @@ import unicodedata
 from functools import cache
 from pathlib import Path
 
-# OpenCode が確認なしに実行するので、リポジトリの設定からコマンドを起動させない。
-# see docs/spec/agent-config-generation.md#スキルのスクリプト
+# 利用者の確認なしに実行されうるので、リポジトリの設定からコマンドを起動させない。
 GIT = ["git", "-c", "core.fsmonitor=false"]
 # --save / --baseline のパスを省いたときの控え (リポジトリのルートから)
 DEFAULT_BASELINE = Path(".tmp") / "refs-before.txt"
@@ -155,8 +154,7 @@ def git_root(start: Path) -> Path | None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="docs への参照の切れを検査する")
     parser.add_argument("--root", help="リポジトリのルート (既定: 現在地の git のルート)")
-    # パスを省く形は OpenCode が確認なしに通す (書き込み先を引数で決められない)。
-    # see docs/spec/agent-config-generation.md#スキルのスクリプト
+    # パスを省く形は確認なしで通せる (書き込み先を引数で決められない)。
     parser.add_argument(
         "--save", nargs="?", const="", help="今の結果をこのファイルへ保存する"
     )

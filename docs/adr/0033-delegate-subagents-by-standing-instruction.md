@@ -3,7 +3,7 @@
 - **ステータス**: Proposed
 - **日付**: 2026-11-11
 - **決定者**: applejxd
-- **関係**: [ADR-0031](0031-evaluate-existing-extensions-first.md)（既存の拡張・設定を先に使う）に従い、`pi-subagents` の標準の設定と、利用者の常設の指示だけで実現する。[ADR-0006](0006-instructions-to-mechanisms.md)（強制は機構へ）に従い、安全は指示でなく権限の機構で担保する。
+- **関係**: [ADR-0031](0031-evaluate-existing-extensions-first.md)（既存の拡張・設定を先に使う）に従い、`pi-subagents` の標準の設定と、利用者の常設の指示だけで実現する。ADR-0006（強制は機構へ）に従い、安全は指示でなく権限の機構で担保する。
 
 ## コンテキスト
 
@@ -68,13 +68,13 @@
 ### 3. 安全は外側で担保する
 
 - 作業ツリーの外は、子でも**確認ではなく即拒否**（agent 定義の写しの `external_directory: deny`）。
-- 危険な操作は、確認（ask）ではなく、理由つきの deny にする（[ADR-0006](0006-instructions-to-mechanisms.md)）。全 deny に理由がある。
+- 危険な操作は、確認（ask）ではなく、理由つきの deny にする（ADR-0006）。全 deny に理由がある。
 - グローバルな環境変更は deny し、理由で `uv`・`mise` へ案内する。worktree の中のローカルな変更は自由。
 - 子のコマンドには、必ず外側の `timeout` を付ける（`subagent stop` は子のサブプロセスを止めない）。
 
 ### 4. 役ごとのモデル
 
-`reviewer`・`oracle`・`evidence-auditor` は、親・`worker` の Claude と**別系統**の GPT 6.1 sol（high）にする（同系統の自己点検は効きにくく、評価役は同系統の出力を好むため。[根拠](../research/agents/oracle-model-2026-11.md)）。`worker`・`researcher` は Sonnet 5.5（medium）、`scout` は Sonnet 5.5（low）。自律的に起動する子には、高価な Opus を使わない。
+`reviewer`・`oracle`・`evidence-auditor` は、親・`worker` の Claude と**別系統**の GPT 6.1 sol（high）にする（同系統の自己点検は効きにくく、評価役は同系統の出力を好むため。根拠）。`worker`・`researcher` は Sonnet 5.5（medium）、`scout` は Sonnet 5.5（low）。自律的に起動する子には、高価な Opus を使わない。
 
 ## 結果
 
@@ -99,5 +99,5 @@
 
 - [仕様: pi-subagents の設定（stock）](../spec/agent-config-generation.md)
 - [実測: 子エージェントの権限](../research/agents/subagent-permission-frontmatter-2026-11.md)
-- [調査: oracle のモデル（別系統）](../research/agents/oracle-model-2026-11.md)
+- 調査: oracle のモデル（別系統）
 - `pi-subagents` の docs（`configuration.md`・`agents.md`。導入先の `~/.pi/agent/npm/node_modules/pi-subagents/docs/`）

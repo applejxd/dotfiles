@@ -3,13 +3,13 @@
 - **ステータス**: Superseded by ADR-0036（2026-11-12。決定当時は Accepted。利用者の統合の指示による）
 - **日付**: 2026-11-12
 - **決定者**: applejxd（実装は利用者の依頼。[ADR-0031](0031-evaluate-existing-extensions-first.md) の 3(d)「自作の承認」は、利用者が統合を指示した 2026-11-12 に得た）
-- **関係**: [ADR-0027](0027-isolation-unit-is-environment.md)（隔離の単位は環境）を**置き換えない**。docker・compose を使う開発は従来どおり環境の側で扱い、ここは「ホストで GPU を使う作業」の守りを足す。[ADR-0030](0030-freeze-agent-stack-return-to-stock-pi.md)（stock の pi。隔離は自分の判断）と [ADR-0031](0031-evaluate-existing-extensions-first.md)（自作の条件）に従う。
+- **関係**: ADR-0027（隔離の単位は環境）を**置き換えない**。docker・compose を使う開発は従来どおり環境の側で扱い、ここは「ホストで GPU を使う作業」の守りを足す。ADR-0030（stock の pi。隔離は自分の判断）と [ADR-0031](0031-evaluate-existing-extensions-first.md)（自作の条件）に従う。
 
 > **置き換え（2026-11-12）**: 拡張 `@yuru7/pi-sandbox` の `runnerCommand` に runner を差す方式は、[ADR-0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) の実装（pi の `shellPath` に差す囲い。拡張は使わない）で置き換えた。runner は、拡張の引数を受ける形から、`bash -c` を包む形に変わった（GPU・秘密の隠蔽・docker の遮断・git の保護は引き継いだ）。以下の本文は決定当時のまま残している。
 
 ## コンテキスト
 
-- **要件**: GPU の利用が最優先。そのうえで、LLM の認証などの秘密をエージェントから隠し、手間を増やさない。worktree での開発（feature ごとの worktree）を妨げない。守る水準は「うっかり防止」（[ADR-0012](0012-ocs-boundary-for-accidents.md)）。
+- **要件**: GPU の利用が最優先。そのうえで、LLM の認証などの秘密をエージェントから隠し、手間を増やさない。worktree での開発（feature ごとの worktree）を妨げない。守る水準は「うっかり防止」（ADR-0012）。
 - **実機の比較**（[調査記録](../research/agents/pi-gpu-sandbox-2026-11.md)。WSL2・Ubuntu 24.04・rootless Docker・RTX 3070）:
   - `pi-safe`: GPU が通らず、docker 経由で HOME に書け、worktree で commit できない。
   - `@yuru7/pi-sandbox`: 書き込みは cwd・git・`/tmp` に絞れ、worktree で commit できる。GPU は通らず、秘密は読め、通信は無制限。
@@ -34,7 +34,7 @@
 ### 案 C: ツール委譲型（pi はホスト、read / write / edit / bash を専用環境へ送る。公式の例 `examples/extensions/ssh.ts`）
 
 - GPU・compose・apt を専用環境が持ち、認証は pi（ホスト）に残る。bwrap の細工が要らない。
-- **欠点**: 環境の作成・同期・運用が要る（ADR-0027 の P3 の領分）。`ssh.ts` は read・write・edit・bash の 4 つだけを差し替える（grep・find・ls はホスト）。未試験。**将来の評価**（[ツール隔離の実現性](../research/agents/tool-isolation-feasibility-2026-11.md)）。
+- **欠点**: 環境の作成・同期・運用が要る（ADR-0027 の P3 の領分）。`ssh.ts` は read・write・edit・bash の 4 つだけを差し替える（grep・find・ls はホスト）。未試験。**将来の評価**（ツール隔離の実現性）。
 
 ### 案 D（採用）: `@yuru7/pi-sandbox` の `runnerCommand` に、設定つきの小さな runner を差す
 
@@ -86,4 +86,4 @@
 
 ## 関連
 
-[仕様: pi-sandbox-runner](../spec/sandbox/pi-sandbox-runner.md)・[調査記録](../research/agents/pi-gpu-sandbox-2026-11.md)・[ツール隔離の実現性](../research/agents/tool-isolation-feasibility-2026-11.md)・[同種の OSS の評価](../research/agents/oss-sandbox-evaluations-2026-11.md)
+[仕様: pi-sandbox-runner](../spec/sandbox/pi-sandbox-runner.md)・[調査記録](../research/agents/pi-gpu-sandbox-2026-11.md)・ツール隔離の実現性・[同種の OSS の評価](../research/agents/oss-sandbox-evaluations-2026-11.md)

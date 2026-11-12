@@ -89,7 +89,6 @@ fi
 
 # sandbox tools
 # 1 つでも欠けると AI CLI の sandbox が起動を拒否する
-# (docs/research/agents/sandbox-capabilities.md#35-linux-の依存)
 sudo apt-get -y install bubblewrap slirp4netns util-linux iptables socat
 
 {{- if not $raspi }}

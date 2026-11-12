@@ -1,5 +1,1 @@
-{{ if eq (includeTemplate "pi-profile" .) "stock" -}}
 {{ template "modify_pi_stock_settings.py.tmpl" (dict "packages" (includeTemplate "pi-stock-packages" .) "isWork" (includeTemplate "is-work" .) "shellPath" (ternary (printf "%s/.local/bin/pib-shell" .chezmoi.homeDir) "" (eq .chezmoi.os "linux"))) -}}
-{{ else -}}
-{{ template "modify_json.py.tmpl" (dict "workingTree" .chezmoi.workingTree "common" (includeTemplate "dot_config/agents/common.toml.tmpl" .) "target" "pi-settings") -}}
-{{ end -}}

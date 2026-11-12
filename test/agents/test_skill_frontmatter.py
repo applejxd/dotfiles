@@ -28,7 +28,7 @@ SKILL_PATHS = vs.discover()
 # 収集ロジックと独立に書いた既知のパス。glob を使い回すと自己確認になる。
 KNOWN_SKILLS = [
     "home/dot_agents/skills/commit/SKILL.md",
-    "home/dot_config/opencode/skills/checkpoint/SKILL.md",
+    ".agents/skills/dotfiles-conventions/SKILL.md",
 ]
 
 
@@ -167,7 +167,6 @@ def test_fork_with_conversation_dependent_body_is_rejected(tmp_path):
     explain / learn に残っていた。OpenCode は context を読み捨てるので
     無害だが、Claude Code 側で効くと会話が見えないまま要約を書く。
 
-    see docs/research/opencode/skill-frontmatter.md
     """
     path = write_skill_with_body(
         tmp_path,

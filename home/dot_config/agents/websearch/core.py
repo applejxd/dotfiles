@@ -274,7 +274,6 @@ def is_slug(segment: str) -> bool:
     4 部分以上なら英字だけの語が 3 つ以上、あるいは 3 部分以下なら混在なし・30 文字以下。
     実際のトークン (大文字・小文字・数字の混在、長い 16 進) は除く。語をつないだパスフレーズを通すので、
     `check_query` は URL の中のトークンにだけ適用する。
-    see docs/change/closed/0032-guard-url-false-positive.md
     """
     parts = [p for p in re.split(r"[-_]", segment) if p]
     if not parts:
@@ -936,7 +935,7 @@ Transport = Callable[[urllib.parse.SplitResult, str, float], "tuple[int, dict[st
 # ─── プロキシ越しの取得 (pis の内側だけ) ──────────────────────────────────
 # 内側は DNS が引けず、検査してから IP に固定する経路が必ず落ちる。pis が PIS_FETCH_VIA_PROXY=1 を
 # 付けたときだけ、ループバックのプロキシへ CONNECT して取る (許可ドメインはプロキシが強制する)。
-# see docs/spec/web-search.md#pis-の内側のプロキシ越しの取得
+# see docs/spec/web-search.md#撤去したpis-の内側のプロキシ越しの取得
 FETCH_PROXY_ENV = "PIS_FETCH_VIA_PROXY"
 _PROXY_RE = re.compile(r"http://127\.0\.0\.1:([0-9]{1,5})/?")
 # ASCII のホスト名だけ。最後の部分は英字で始める (10進・16進・省略形の IPv4 を名前として通さない)

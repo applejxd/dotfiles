@@ -1,9 +1,9 @@
 """pi-subagents (stock の pi) の設定の描画を検証する。
 
 ~/.pi/agent/extensions/subagent/config.json の modify_ スクリプト・settings の subagents.agentOverrides・
-permission の方針・custom で配らないことを、chezmoi execute-template で描画して確かめる。
+permission の方針を、chezmoi execute-template で描画して確かめる。
 実機の chezmoi apply は行わない。
-see docs/spec/agent-config-generation.md#pi-subagents-の設定stock
+see docs/spec/agent-config-generation.md#pi-subagents-の設定
 """
 
 from __future__ import annotations
@@ -30,10 +30,7 @@ READ_ONLY = {"read", "grep", "find", "ls", "contact_supervisor"}
 WRITE_TOOLS = {"bash", "write", "edit"}
 
 
-def render(
-    template: str, home: Path, *, profile_env: str | None = "custom", username: str = "tester"
-) -> str:
-    # 引数なしは custom (custom の試験の意味を保つ)。リポジトリの既定は stock (2026-11-10)
+def render(template: str, home: Path, *, username: str = "tester") -> str:
     chezmoi = shutil.which("chezmoi")
     if chezmoi is None:
         pytest.skip("chezmoi is not installed")
@@ -50,9 +47,6 @@ def render(
         "{{ with " + json.dumps(json.dumps(context)) + " | fromJson }}" + template + "{{ end }}"
     )
     env = dict(os.environ)
-    env.pop("CHEZMOI_PI_PROFILE", None)
-    if profile_env is not None:
-        env["CHEZMOI_PI_PROFILE"] = profile_env
     result = subprocess.run(
         [chezmoi, "--source", str(ROOT), "execute-template"],
         input=wrapped,
@@ -70,7 +64,7 @@ def script(src: Path, tmp_path: Path, name: str, username: str = "tester") -> Pa
     # tester は会社 PC (is-work)、applejxd は家の機
     out = tmp_path / name
     out.write_text(
-        render(src.read_text(encoding="utf-8"), tmp_path, profile_env="stock", username=username),
+        render(src.read_text(encoding="utf-8"), tmp_path, username=username),
         encoding="utf-8",
     )
     return out
@@ -177,17 +171,6 @@ def lines(text: str) -> set[str]:
     return {x.strip() for x in text.splitlines() if x.strip() and not x.startswith("#")}
 
 
-def test_custom_ignores_subagent_config(tmp_path):
-    rendered = lines(
-        render((HOME_SRC / ".chezmoiignore.tmpl").read_text(encoding="utf-8"), tmp_path)
-    )
-    assert SUBAGENT_DIR in rendered
-    assert f"{SUBAGENT_DIR}/**" in rendered
-    # 凍結した自作拡張 (複数形) は別物。この設定で除外しない
-    assert (
-        ".pi/agent/extensions/subagents" not in rendered
-        or SUBAGENT_DIR != ".pi/agent/extensions/subagents"
-    )
 
 
 def test_stock_ignore_keeps_subagent_config(tmp_path):
@@ -195,7 +178,6 @@ def test_stock_ignore_keeps_subagent_config(tmp_path):
         render(
             (HOME_SRC / ".chezmoiignore.tmpl").read_text(encoding="utf-8"),
             tmp_path,
-            profile_env="stock",
         )
     )
     assert SUBAGENT_DIR not in rendered
@@ -203,11 +185,6 @@ def test_stock_ignore_keeps_subagent_config(tmp_path):
     assert not any(e.startswith(f"{SUBAGENT_DIR}/") for e in rendered)
 
 
-def test_custom_settings_modify_has_no_agent_overrides(tmp_path):
-    """custom の settings.json は生成器が作る。agentOverrides は stock の変換にだけある。"""
-    custom = render(SETTINGS_MODIFY.read_text(encoding="utf-8"), tmp_path)
-    assert "agentOverrides" not in custom
-    assert "AGENT_TOOL_OVERRIDES" not in custom
 
 
 # --- settings の subagents.agentOverrides -------------------------------
@@ -336,16 +313,13 @@ def test_settings_keeps_a_users_model_and_other_providers(settings_script):
     assert by_provider(out)["openrouter"] == {"worker": {"model": "z/w"}}  # 知らないプロバイダの層は触らない
 
 
-def test_assigned_models_exist_in_the_catalog_and_never_use_haiku():
-    """割り当てるモデルが、以前のカタログ (common.toml.tmpl の [pi.model.catalog.*]) にある ID で、Haiku は使わない。"""
+def test_assigned_models_never_use_haiku():
+    """割り当てるモデル (PROVIDER_AGENT_MODELS) は、Haiku を使わない。"""
     source = (HOME_SRC / ".chezmoitemplates" / "modify_pi_stock_settings.py.tmpl").read_text(encoding="utf-8")
-    catalog = (HOME_SRC / "dot_config" / "agents" / "common.toml.tmpl").read_text(encoding="utf-8")
     models = re.findall(r'"((?:github-copilot|amazon-bedrock)/[^"]+)"', source[source.index("PROVIDER_AGENT_MODELS") :])
     assert len(models) >= 12
     for model in models:
         assert "haiku" not in model
-        model_id = model.split("/", 1)[1].split(":", 1)[0]
-        assert f'id = "{model_id}"' in catalog, model
 
 
 def test_settings_is_idempotent(settings_script):
@@ -419,12 +393,6 @@ def test_agent_files_match_the_builtin_except_permission(name):
     assert ours_body == builtin_body
 
 
-def test_custom_ignores_the_agent_files_and_stock_keeps_them(tmp_path):
-    template = (HOME_SRC / ".chezmoiignore.tmpl").read_text(encoding="utf-8")
-    assert ".pi/agent/agents" in lines(render(template, tmp_path))
-    assert ".pi/agent/agents/**" in lines(render(template, tmp_path))
-    stock = lines(render(template, tmp_path, profile_env="stock"))
-    assert ".pi/agent/agents" not in stock and ".pi/agent/agents/**" not in stock
 
 
 # --- 常設の委譲の指示 ---------------------------------------------------------

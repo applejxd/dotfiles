@@ -111,11 +111,10 @@ skill-name/
 
 - **置き場所**
   - 全プロジェクトで使う: `home/dot_agents/skills/<名前>/SKILL.md`（`chezmoi apply` で配る）
-  - このリポジトリでだけ使う: `.agents/skills/<名前>/SKILL.md`（`pis` が作業先の分を `--skill` で足す。
-    `docs/spec/guard/pi-guard.md` の「起動」）
+  - このリポジトリでだけ使う: `.agents/skills/<名前>/SKILL.md`（pi が作業先の `.agents/skills` を読む）
 - **frontmatter の検証**: `uv run pre-commit run --files <SKILL.md>`（`name` とディレクトリ名の一致、`description` の長さ、
-  引用符を確かめる。`.agents/skills` も対象。`scripts/agents/validate_skills.py` の `SKILL_ROOTS`）。読み込めるかは `pis` の `/reload` でも確かめる
-- **`pis` の下で呼ぶ**: フルガードがスキルの一覧をシステムプロンプトへ足すので、description で自動に発動する。
+  引用符を確かめる。`.agents/skills` も対象。`scripts/agents/validate_skills.py` の `SKILL_ROOTS`）。読み込めるかは pi の `/reload` でも確かめる
+- **pi の下で呼ぶ**: pi がスキルの一覧をシステムプロンプトへ足すので、description で自動に発動する。
   明示して呼ぶなら `/skill:<名前>`、編集したら `/reload` で再読み込みする
 - **コメントと docs**: 仕組み・判断・経緯は `docs/` を正本にし、スキルからは参照先を示す。同じ説明を両方に書かない
   （リポジトリの `AGENTS.md`）

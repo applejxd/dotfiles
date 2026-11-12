@@ -8,7 +8,6 @@ import sys
 from agents_common import ROOT
 
 SCRIPT = ROOT / "home/dot_agents/skills/env-check/scripts/env_check.py"
-BASHRULES = ROOT / "home/dot_claude/hooks/lib"
 
 
 def _load():
@@ -27,15 +26,6 @@ def _run(*args, **env):
         encoding="utf-8",
         env=full,
     )
-
-
-def test_sensitive_pattern_matches_the_hook():
-    sys.path.insert(0, str(BASHRULES))
-    try:
-        from bashrules._shared import _SENSITIVE_ENV_RE
-    finally:
-        sys.path.remove(str(BASHRULES))
-    assert _SENSITIVE_ENV_RE.pattern == _load().SENSITIVE_ENV_PATTERN
 
 
 def test_url_credentials_are_masked():

@@ -1,6 +1,6 @@
-# pi-subagents（stock の pi）で委譲する: 既定は F（feature worktree を親が作る）。N（拡張ネイティブ）は代案
+# pi-subagents で委譲する: 既定は F（feature worktree を親が作る）。N（拡張ネイティブ）は代案
 
-> 凍結した自作基盤の運用（`guarded_task`・`bundle.py`・PR ビューア）の代わりに、stock の pi で、拡張 `pi-subagents`（nicobailon 版。`home/.chezmoitemplates/pi-stock-packages` で版固定）を使うときの手順。
+> 拡張 `pi-subagents`（nicobailon 版。`home/.chezmoitemplates/pi-stock-packages` で版固定）を使うときの手順。
 > 方針は [ADR-0031](../../../../docs/adr/0031-evaluate-existing-extensions-first.md)（拡張の意図に沿って使う）。評価と根拠は [orchestration の評価](../../../../docs/research/agents/pi-stock-packages-evaluation-2026-11.md)。**既定は F（親が feature worktree を作り、`cwd` で渡す。下の「F（既定）」と [SKILL.md](../SKILL.md) の工程）。** 当初は「まず N で体感し、合わなければ F」としたが、実際の運用は F になった。N（拡張ネイティブの workflow と `worktree: true`）は、F が合わないときの代案として下に残す。
 
 ## N（代案）の基本
@@ -28,7 +28,7 @@ return { api: api.artifactPaths, ui: ui.artifactPaths };
 - **`gate`・`acceptance.verify`（子の後にシェルで検査するコマンド）は使わない。** permission-system の bash の方針が、その検査には及ばない（`subagent_launch` の呼び出しに `commands` として出るだけ）。検査は、親が `bash` で実行する（方針の許可・確認が効く）。
 - 読み取り専用の調査・レビューは、`scout`・`reviewer`・`oracle`（組み込み）に任せる。計画の下書きも読み取りだけにする。
 
-## 運用の規則（凍結した運用から引き継ぐもの）
+## 運用の規則
 
 1. **検査は、feature ごとに親が 1 本ずつ。** 子には全件検査（`mise run verify:all`）を回させない。回す前に、`pi-background` の `bg_run` で背景に出す（12 分）。
 2. **verify が通るまで review に進まない。** review の修正で、通った verify を無効にしたら、verify からやり直す（`pi-gauntlet` の考え方。package は入れない）。

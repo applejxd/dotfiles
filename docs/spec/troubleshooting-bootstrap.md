@@ -29,8 +29,7 @@ chezmoi status --include=scripts
   走らない**。外部の一時的な不調で apply を止めないため、次は 0 で終わる
   - `100_linux/125_mise`（`mise install` の一部が失敗したとき。
     [ツール 1 個の失敗で apply を止めない](platform-raspberry-pi.md#ツール-1-個の失敗で-apply-を止めない)）
-- AI CLI の導入（`126_agent_cli` / `226_agent_cli`）と omp の設定の取得（`420_omp_skills` /
-  `430_omp_claude_assets`）、macOS の `210_osx`（Rosetta・cask の導入の失敗）は、失敗した回に**再実行の印**を書き直して次の apply で走り直す。
+- pi の導入（`126_agent_cli` / `226_agent_cli`）、macOS の `210_osx`（Rosetta・cask の導入の失敗）は、失敗した回に**再実行の印**を書き直して次の apply で走り直す。
   成功した回は印に触れないので、その後は走り直さない
   （[再実行の印の仕組み](script-artifacts.md#再実行の印の仕組み)）
 
@@ -366,10 +365,9 @@ find ~/.local/share/mise/installs -path '*/node_modules/.mise/*' \
 - **B. 導入物の一部が欠けた**: 古い世代の導入物は `bin/<tool>` が
   `../lib/node_modules/...` を指す。`bin/` が残って `lib/` だけが無いことがある
 
-**対処**: ディレクトリごと消してから入れ直す。Copilot CLI の sandbox の中では
-`~/.local/share/mise` が read-only なので（Claude Code の sandbox は書き込みを許している）、
-`rm` も `mise install --force` も `Read-only file system` で失敗する。sandbox の外の
-シェルで実行する（[sandbox](sandbox/agent-sandbox.md)）。
+**対処**: ディレクトリごと消してから入れ直す。囲い（`pib`）の中では、囲いの設定によって
+`~/.local/share/mise` が書けないことがあり、`rm` も `mise install --force` も `Read-only file system` で失敗する。囲いの外の
+シェルで実行する。
 
 ```bash
 rm -rf ~/.local/share/mise/installs/npm-bitwarden-cli
@@ -490,12 +488,10 @@ node --version
 - `chezmoi apply` を実行すれば、旧 npm 版が外れて直る
 - cmd.exe などプロファイルを通らない起動では、古い node が先に使われる。pwsh から使うか、
   管理者権限で古い node を外す（`winget uninstall OpenJS.NodeJS`）
-- opencode（npm 版）は node に依存する。同じ症状なら、上の `node --version` を確認する
 
 ## AI CLI が mise に global default version を指定しろと言う
 
-**対象**: Linux / WSL / macOS の `opencode` / `omp` / `claude` / `copilot`。
-Windows は未確認（下記）。
+**対象**: Linux / WSL / macOS で、以前 mise 管理だった CLI（`claude` / `copilot` / `opencode` / `omp`）の shim が残っているとき。pi は公式のインストーラーで入れるので、通常は出ない。
 
 **症状**: CLI を起動すると次が出る。
 
@@ -504,98 +500,25 @@ mise ERROR No version is set for shim: opencode
 Set a global default version with: mise use -g opencode@<version>
 ```
 
-言われたとおり `mise use -g` すると、今度は `configuration invalid at ...` になる。
-`omp` はそもそも mise のレジストリに無く（`tool not found in registry: omp`）、
-`mise use -g omp` は成功しない。
-
 **確認**: CLI の解決先を見る。
 
 ```bash
 command -v opencode      # ~/.local/share/mise/shims/opencode なら該当
 ```
 
-**原因**: CLI が公式の導入先ではなく **mise の残骸 shim** に解決されている。
+**原因**: CLI が公式の導入先ではなく **mise の残骸 shim** に解決されている。PATH 上では mise の shims が公式の導入先
+（`~/.local/bin` など）より前に来る。`mise use -g` で宣言を足しても、次の `chezmoi apply` が `~/.config/mise/config.toml`
+（chezmoi 管理）を上書きして消える。
 
-AI CLI は mise 管理から各社の公式インストーラーへ移したが、切り替え前の
-shim と installs は残る。PATH 上では mise の shims が公式の導入先（`~/.local/bin` など）
-より前に来る。ここで抜けられない輪ができる。
-
-1. 残骸の shim が版を解決できず、上のエラーになる
-2. `mise use -g opencode@latest` すると宣言が足されて動く
-3. 次の `chezmoi apply` が `~/.config/mise/config.toml`（chezmoi 管理。正本は
-   `home/dot_config/mise/config.toml.tmpl`）を上書きし、宣言が消えて 1 へ戻る
-
-`configuration invalid` は別物が入るために起きる。`mise registry opencode` は
-`aqua:anomalyco/opencode`（V1 系）で、生成する `~/.config/opencode/opencode.json` は
-V2 スキーマなので V1 のバイナリが弾く。世代の違いは
-[V2 の仕様](../research/opencode/v2-capabilities.md)を参照。
-
-**対処**: `126_agent_cli` / `226_agent_cli`（中身は
-`home/.chezmoitemplates/agent-cli-install.sh.tmpl`）が残骸を消し、shim を「導入済み」と
-数えない（[mise 版からの移行](cli-management.md#mise-版からの移行)）。掃除を入れた版に
-更新された最初の apply で 1 回走る。**その後に再発した場合は `chezmoi apply` では
-走らない**ので、手で消す。
+**対処**: 残骸を手で消す。pi の導入スクリプト（`126_agent_cli` / `226_agent_cli`）は、shim を「導入済み」と数えない
+（[pi の導入](cli-management.md#pi-の導入)）。
 
 ```bash
 rm -f ~/.local/share/mise/shims/{claude,copilot,opencode,omp}
 rm -rf ~/.local/share/mise/installs/{claude,claude-code,copilot,opencode,omp}
-chezmoi apply            # mise use -g で足した宣言を戻す
 exec zsh                 # PATH を張り直す
 ```
 
-公式版が入っていない CLI があれば、手で入れるか `126` を走らせ直す
-（[スクリプトを走らせ直す](#スクリプトを走らせ直す)）。
-
-Windows の `314_agent_cli` は `Get-Command` で判定し、同じ掃除は入れていない
-（実機で確認できていないため）。Windows で同じ症状が出たら `%LOCALAPPDATA%\mise\shims` を
-確認する。
-
-**成功の確認**:
-
-```bash
-command -v opencode      # ~/.opencode/bin/opencode であること
-opencode --version       # v2.x であること
-```
-
-## AI CLI の導入が 403 で失敗する
-
-**対象**: Linux / WSL / macOS の `126_agent_cli` / `226_agent_cli`。主に oh-my-pi（`omp`）。
-
-**症状**: apply の出力に次が出る。
-
-```text
-curl: (22) The requested URL returned error: 403
-⚠️  導入できなかった CLI: omp
-⚠️  完了：一部の AI CLI が入っていません
-```
-
-**確認**: GitHub API のレート制限の残量を見る。
-
-```bash
-curl -s https://api.github.com/rate_limit
-```
-
-**原因**: oh-my-pi のインストーラーは最新リリースを GitHub API
-（`api.github.com/repos/.../releases/latest`）から引く。未認証の GitHub API は
-60 リクエスト/時で、超えると 403 を返す。
-
-`agent-cli-install.sh.tmpl` は CLI ごとに失敗を受け止めるので、1 つ 403 でも残りは入り、
-**`chezmoi apply` 自体は成功する**。失敗した回は再実行の印を書き直すので、
-**次の `chezmoi apply` で、入っていない CLI だけを導入し直す**
-（[スクリプトを走らせ直す](#スクリプトを走らせ直す)）。レート制限が戻る前に apply すると
-また失敗するが、そのたびに印が書き直されるので、戻った後の apply で入る。
-
-**対処**: `remaining` が 0 なら 1 時間ほどで戻る。戻ってから `chezmoi apply` するか、
-失敗した CLI だけを手で入れる。
-
-```bash
-curl -fsSL https://omp.sh/install | sh
-```
-
-他の CLI が失敗した場合の導入コマンドは、スクリプトの警告に出ている
-（`home/.chezmoitemplates/agent-cli-install.sh.tmpl`）。スクリプトごと走らせ直すなら
-「スクリプトを走らせ直す」の `execute-template` を使う。既に入っている CLI には触らない。
-
-**成功の確認**: `command -v omp` が導入先を表示する。
+Windows では `%LOCALAPPDATA%\mise\shims` を確認する。
 
 [トラブルシューティングへ戻る](troubleshooting.md)

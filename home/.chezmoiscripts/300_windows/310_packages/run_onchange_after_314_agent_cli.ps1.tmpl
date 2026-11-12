@@ -1,12 +1,10 @@
 ﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# AI CLI (Claude Code / Copilot CLI / OpenCode V2 / pi) を公式手段で導入する。
-# mise では管理しない。理由と更新手順は docs/spec/structure.md を参照。
-
-$homeDir = {{ .chezmoi.homeDir | toJson }}
-
-{{ includeTemplate "powershell/env-path.ps1" }}
+# pi を確かめる。pi 本体は mise (aqua のバイナリ版。node 不要) が 313_mise で導入する。
+# 公式の install.ps1 は Read-Host で確認を聞くので apply では使えず、npm 版は node の解決順に左右される。
+# ここでは PATH で競合する npm 版を外し、起動できることを確かめる。
+# see docs/spec/cli-management.md#windows-の-pi
 
 function Use-MiseNode {
   # npm は mise の node を使う。PATH 上の古い node (winget 版など) を避ける。
@@ -21,64 +19,6 @@ function Use-MiseNode {
   $env:NPM_CONFIG_PREFIX = $npmPrefix
 }
 
-function Add-NpmGlobalToUserPath {
-  # npm の global bin (pi / opencode)。Node.js の winget 版を外すと PATH から消えるので自前で保証する。
-  [void](Add-UserPathEntry (Join-Path $env:APPDATA 'npm'))
-}
-
-function Test-CliInstalled {
-  param([Parameter(Mandatory)][string]$Name)
-
-  if (Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue) { return $true }
-  Update-PathFromEnvironment
-  return [bool] (Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue)
-}
-
-{{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
-# Claude Code: 公式ネイティブインストーラー (install.sh は Windows を拒否する)。
-if (Test-CliInstalled 'claude') {
-  Write-Host 'Claude Code is already installed.'
-} else {
-  Write-Host 'Installing Claude Code...'
-  & ([scriptblock]::Create((Invoke-RestMethod https://claude.ai/install.ps1)))
-  Update-PathFromEnvironment
-}
-{{- end }}
-
-# Copilot CLI: 公式インストールスクリプトが Windows で委譲する先と同じ winget。
-if (Test-CliInstalled 'copilot') {
-  Write-Host 'Copilot CLI is already installed.'
-} else {
-  if (-not (Get-Command winget -CommandType Application -ErrorAction SilentlyContinue)) {
-    throw 'winget (App Installer) not found'
-  }
-  Write-Host 'Installing Copilot CLI...'
-  & winget install --id GitHub.Copilot --exact --silent --disable-interactivity `
-      --accept-package-agreements --accept-source-agreements
-  if ($LASTEXITCODE -ne 0) { throw "winget install failed: $LASTEXITCODE" }
-  Update-PathFromEnvironment
-}
-
-Add-NpmGlobalToUserPath
-
-# OpenCode V2: 公式が示す Windows 向けの唯一のパッケージ手段が npm。
-# (curl / PowerShell のインストーラーと Windows パッケージマネージャは未提供)
-if (Test-CliInstalled 'opencode') {
-  Write-Host 'OpenCode V2 is already installed.'
-} else {
-  Use-MiseNode
-  Write-Host 'Installing OpenCode V2...'
-  # postinstall が bin/opencode.exe を配置する。npm 11.x は未許可の install script を
-  # 警告だけで飛ばすので、このパッケージ 1 つだけ許可する (全体設定は変えない)。
-  & npm install -g --allow-scripts='@opencode/cli' '@opencode/cli'
-  if ($LASTEXITCODE -ne 0) { throw "npm install -g @opencode/cli failed: $LASTEXITCODE" }
-  Update-PathFromEnvironment
-}
-
-# pi: mise (aqua のバイナリ版。node 不要) が 313_mise で導入する。公式の install.ps1 は
-# Read-Host で確認を聞くので apply では使えず、npm 版は node の解決順に左右される。
-# ここでは PATH で競合する npm 版を外し、起動できることを確かめる。
-# see docs/spec/cli-management.md#windows-の-pi
 $npmPi = Join-Path $env:APPDATA 'npm\node_modules\@earendil-works\pi-coding-agent'
 if (Test-Path $npmPi) {
   Use-MiseNode

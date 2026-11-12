@@ -48,26 +48,25 @@ repos:
         language: system
         files: \.(md|markdown)$
 
-      # SKILL.md の frontmatter が壊れても CLI は起動時に
-      # "Failed to load 1 skill." としか言わないので、ここで先に弾く。
+      # SKILL.md の frontmatter が壊れても pi は黙って読み飛ばすので、ここで先に弾く。
       - id: skill-frontmatter-local
         name: Skill frontmatter check
         entry: >-
           mise exec -- uv run --with pyyaml --no-project
           python scripts/agents/validate_skills.py
         language: system
-        files: ^(home/(dot_agents|dot_claude|dot_config/opencode)|\.agents)/skills/[^/]+/SKILL\.md$
+        files: ^(home/dot_agents|\.agents)/skills/[^/]+/SKILL\.md$
 
-      # common.toml は chezmoi テンプレートなので check-toml が使えない。
-      # hook が fail-closed で読む正本なので、描画結果を検査して代替する。
+      # pi-mcp-servers.toml は chezmoi テンプレートなので check-toml が使えない。
+      # 壊れると pi の MCP 設定が生成できないので、描画結果を検査して代替する。
       # (TOML として読めるかは lint-templates-local でも見る。こちらは
-      #  ポリシー固有のスキーマが主目的)
-      - id: common-toml-local
-        name: Rendered common.toml check
-        entry: mise exec -- python3 scripts/agents/validate_common.py
+      #  [[mcp]] の形が主目的)
+      - id: pi-mcp-servers-local
+        name: Rendered pi-mcp-servers.toml check
+        entry: mise exec -- python3 scripts/agents/validate_mcp.py
         language: system
         pass_filenames: false
-        files: ^(home/dot_config/agents/common\.toml\.tmpl|scripts/agents/(generate|hooks|validate_common)\.py)$
+        files: ^(home/\.chezmoitemplates/pi-mcp-servers\.toml|scripts/agents/(generate|validate_mcp)\.py)$
 
       # identify は *.tmpl に何のタグも付けないため、check-toml / ruff /
       # shellcheck がテンプレートを素通りする。描画してから振り分ける。
@@ -137,13 +136,11 @@ repos:
         name: Check YAML syntax
       - id: check-toml
         name: Check TOML syntax
-        exclude: ^home/dot_codex/modify_config\.toml$
+        # chezmoi テンプレート（{{ }} を含む）。描画後の検査は pi-mcp-servers-local
+        exclude: ^home/\.chezmoitemplates/pi-mcp-servers\.toml$
       - id: end-of-file-fixer
         name: Fix end of files
         stages: [pre-commit]
-        # 模範解答のパッチは空の文脈行が要る。同梱の vendor は書き換えると sha256 が変わる
-        exclude: ^(scripts/model-eval/worker/solutions/.*\.patch|home/dot_config/pi/harness/vendor/.*)$
       - id: trailing-whitespace
         name: Trim trailing whitespace
         stages: [pre-commit]
-        exclude: ^(scripts/model-eval/worker/solutions/.*\.patch|home/dot_config/pi/harness/vendor/.*)$

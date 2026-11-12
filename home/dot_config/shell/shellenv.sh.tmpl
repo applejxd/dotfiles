@@ -66,8 +66,7 @@ fi
 export GHQ_ROOT="${HOME}/src"
 
 {{- if not (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) }}
-# see https://docs.claude.com/ja/docs/claude-code/amazon-bedrock
-export CLAUDE_CODE_USE_BEDROCK=1
+# Bedrock のリージョン (pi の amazon-bedrock プロバイダ・AWS SDK が読む)
 export AWS_REGION=us-east-1
 {{- end }}
 
@@ -82,26 +81,6 @@ export AWS_REGION=us-east-1
 
 # for original binaries
 export PATH="${HOME}/bin:${PATH}"
-
-# OpenCode V2
-# 公式インストーラーは --no-modify-path で走らせている (.zshrc を書き換えさせない)。
-# 代わりに導入先をここで通す。
-[[ -d "${HOME}/.opencode/bin" ]] && export PATH="${HOME}/.opencode/bin:${PATH}"
-
-# Orca が OPENCODE_CONFIG_DIR を設定すると、v2 では global config が読まれなくなる。
-# OPENCODE_CONFIG を併用して戻す。無条件に設定すると二重 merge になるので条件付き。
-# see docs/research/opencode/test-isolation.md
-if [[ -n "${OPENCODE_CONFIG_DIR:-}" && -f "${HOME}/.config/opencode/opencode.json" ]]; then
-  export OPENCODE_CONFIG="${HOME}/.config/opencode/opencode.json"
-fi
-
-# cli.json (キーバインドと TUI plugin) も同じ理由で読まれなくなる。
-# ★パスを渡す変数が無い。CLI 側は CONTENT しか受け取らない。
-# see docs/research/opencode/plugin/loading.md
-if [[ -n "${OPENCODE_CONFIG_DIR:-}" && -f "${HOME}/.config/opencode/cli.json" ]]; then
-  OPENCODE_CLI_CONFIG_CONTENT="$(<"${HOME}/.config/opencode/cli.json")"
-  export OPENCODE_CLI_CONFIG_CONTENT
-fi
 
 # for CUDA
 if [[ -e "/usr/local/cuda" ]]; then

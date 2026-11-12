@@ -60,7 +60,7 @@
 
 ## 調査の結果（stock の pi の圧縮。2026-11-09）
 
-出典は、pi 1.5.0 本体の文書（`compaction.md`・`settings.md`・`extensions.md`）と、候補 package の tarball（`npm pack` を展開して読んだだけで、実行なし）。13 件を評価し、原文は [archive の pi-eval](../archive/2026-11-agent-stack/pi-eval/)。
+出典は、pi 1.5.0 本体の文書（`compaction.md`・`settings.md`・`extensions.md`）と、候補 package の tarball（`npm pack` を展開して読んだだけで、実行なし）。13 件を評価し、原文は archive の pi-eval。
 
 - **既定のままだと遅すぎる**: pi の自動圧縮は「窓の残りが `reserveTokens`（既定 16,384）を切ったとき」に始まる。既定のモデル（Claude Sonnet 5.5。窓 1,000,000 トークン）では、**約 98 万トークンまで圧縮されない**。窓の上限に近すぎる。
 - **本体の設定で足りるもの**: しきい値（`compaction.reserveTokens`・`compaction.modelOverrides`。窓の残りで指定）、手動の `/compact [指示]`、要約の構造（Goal / Progress / Next Steps / 読んだ・変えたファイル）。

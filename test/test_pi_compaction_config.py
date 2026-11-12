@@ -1,10 +1,10 @@
-"""pi の stock プロファイルの圧縮の設定を検証する。
+"""pi の圧縮の設定を検証する。
 
 - ~/.pi/agent/compaction.json (modify_compaction.json.py.tmpl): 指示の強制・onError の補い・利用者のキーの保持
 - ~/.pi/agent/settings.json の compaction.modelOverrides (modify_pi_stock_settings.py.tmpl) の補い方
-- pi-stock-packages に pi-compaction が入ること・custom では compaction.json を配らないこと
+- pi-stock-packages に pi-compaction が入ること・compaction.json を除外しないこと
 実機の chezmoi apply は行わない。
-see docs/spec/agent-config-generation.md#圧縮の設定stock
+see docs/spec/agent-config-generation.md#圧縮の設定
 """
 
 from __future__ import annotations
@@ -52,8 +52,7 @@ def chezmoi_bin() -> str:
     return found
 
 
-def render(template: str, home: Path, *, profile_env: str | None = "custom") -> str:
-    # 引数なしは custom (custom の試験の意味を保つ)。リポジトリの既定は stock (2026-11-10)
+def render(template: str, home: Path) -> str:
     context = {
         "chezmoi": {
             "os": "linux",
@@ -67,9 +66,6 @@ def render(template: str, home: Path, *, profile_env: str | None = "custom") -> 
         "{{ with " + json.dumps(json.dumps(context)) + " | fromJson }}" + template + "{{ end }}"
     )
     env = dict(os.environ)
-    env.pop("CHEZMOI_PI_PROFILE", None)
-    if profile_env is not None:
-        env["CHEZMOI_PI_PROFILE"] = profile_env
     result = subprocess.run(
         [chezmoi_bin(), "--source", str(ROOT), "execute-template"],
         input=wrapped,
@@ -87,9 +83,9 @@ def render_file(name: str, home: Path, **kw) -> str:
     return render((HOME_SRC / name).read_text(encoding="utf-8"), home, **kw)
 
 
-def make_script(tmp_path: Path, name: str, profile_env: str = "stock") -> Path:
+def make_script(tmp_path: Path, name: str) -> Path:
     script = tmp_path / (Path(name).name + ".py")
-    script.write_text(render_file(name, tmp_path, profile_env=profile_env), encoding="utf-8")
+    script.write_text(render_file(name, tmp_path), encoding="utf-8")
     return script
 
 
@@ -267,14 +263,9 @@ def test_stock_packages_include_pi_compaction_pinned(tmp_path):
     assert "npm:@thgilciffart/pi-compaction@0.3.1" in {line.strip() for line in text.splitlines()}
 
 
-def test_custom_does_not_deploy_compaction_config(tmp_path):
-    ignore = {line.strip() for line in render_file(".chezmoiignore.tmpl", tmp_path).splitlines()}
-    assert COMPACTION_CONFIG in ignore
-
-
-def test_stock_deploys_compaction_config(tmp_path):
+def test_deploys_compaction_config(tmp_path):
     ignore = {
         line.strip()
-        for line in render_file(".chezmoiignore.tmpl", tmp_path, profile_env="stock").splitlines()
+        for line in render_file(".chezmoiignore.tmpl", tmp_path).splitlines()
     }
     assert COMPACTION_CONFIG not in ignore
