@@ -42,9 +42,14 @@
 
 ### 復元
 
-- 撤去の直前の状態: 注釈つきタグ `archive/custom-harness-2026-11-12`（`3447682d`。ローカルだけ。`git push origin archive/custom-harness-2026-11-12` で残す）。
-- 自作基盤が全部入った最後の状態: 注釈つきタグ `archive/agent-stack-2026-11-08`（`86de89dd`。これもローカルだけ）。
-- 未完の枝（`feature/kcage-clone-*`・`feature/pisd`・`feature/dev-env-front`）は、ローカルに残っている。
+- 撤去の直前の状態: 注釈つきタグ `archive/custom-harness-2026-11-12`（`3447682d`。origin に push 済み）。
+- 自作基盤が全部入った最後の状態: 注釈つきタグ `archive/agent-stack-2026-11-08`（`86de89dd`。origin に push 済み）。
+- 未完の枝 13 本（`feature/pisd`・`feature/dev-env-front`・`feature/kcage-clone-*` 11 本。いずれも未統合・ローカルだけ）は、2026-11-12 に**削除した**。
+  - 退避: `.tmp/keep/archive/frozen-branches-2026-11-12.bundle`（全 13 本。`.tmp/` は git の管理外で、**この PC のローカルだけ**。他のクローンには無い）。
+  - 復元: `git fetch .tmp/keep/archive/frozen-branches-2026-11-12.bundle 'refs/heads/*:refs/heads/*'`。
+  - 先端のコミット（バンドルを失っても、git の掃除（gc）までは `git cat-file -t <OID>` で読める）:
+    `feature/pisd` 46e8adfc、`feature/dev-env-front` 7e60d318、`feature/kcage-clone-base` f4c01f8c、`-boxtool` 2f147829、`-docs` d2627f1d、`-gitrun`・`-repos` 5af2571d、`-inbox` 32afc1f8、`-plan` 9abee00e、`-policy` 7c7b19a3、`-view` 60ed4cf0、`-view2` 7886bc58、`-wip` d664e632。
+  - 古い退避 `.tmp/keep/archive/frozen-branches-2026-11-08.bundle` は、このうち 11 本を含む（`-repos` は `-gitrun` と同じコミット、`-view` は `-view2` の祖先）。
 
 ## 設計の原則として残すもの
 

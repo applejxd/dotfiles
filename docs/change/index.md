@@ -10,7 +10,7 @@
 
 | 作業 | 何を | 今どこ | 次の一手 | あなたが決めること | 関連 |
 | --- | --- | --- | --- | --- | --- |
-| 旧ハーネスの撤去 | 旧 custom プロファイルと pi 以外のハーネス（PR ビューア・kcage・台帳を含む）を撤去し、試験を 1.4 万件から約 1,600 件へ | **実装済み・検証中**（feature `retire-custom-harness`。未統合） | 検証と監査の後、利用者の指示で統合する | タグ `archive/custom-harness-2026-11-12` の push の可否 | [ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md) |
+| 旧ハーネスの撤去 | 旧 custom プロファイルと pi 以外のハーネス（PR ビューア・kcage・台帳を含む）を撤去し、試験を 1.4 万件から約 1,600 件へ | **完了**（`develop` に統合済み。2026-11-12。タグは origin に push 済み。凍結した未統合の枝 13 本は削除し、ローカルのバンドルへ退避） | `main` への統合と、各機での `chezmoi apply`。後続: 死んだコード（`PIS_FETCH_VIA_PROXY`）の撤去・残った試験の重複の洗い出し | `main` へ統合する時期 | [ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md) |
 | stock の pi への移行 | 自作基盤を凍結し、公式の pi＋人気の拡張へ | **完了**。stock が既定のプロファイル（2026-11-10）で、実機で使用中。権限の方針は「YOLO を切る前提の deny と強制 ask」で、全 deny に理由がある（ask には理由の仕組みが無い） | 1〜2 週間使い、足りない所を `friction-review` スキルでセッションのログから洗い出す | なし | [CHG-0065](closed/0065-agent-stack-freeze.md)・ADR-0030・[拡張の評価](../research/agents/pi-stock-packages-evaluation-2026-11.md) |
 | 検索 MCP（家の機向けの自作 1 件） | 検索を MCP サーバで提供する | 統合済み（本体・stock への登録・plan mode でも使える・スキル `web-search` の廃止と imozuru の書き換え）。実機での確認の記録は無い | 使いながら確認 | なし | [web-search 仕様](../spec/web-search.md) |
 | 圧縮（コンパクト化）の方針 | 圧縮の要約を「続きの作業のための brief」にする | 決定・統合済み。70 万トークン（`reserveTokens` 30 万）で圧縮し、`pi-compaction` は要約の指示（brief）だけに使う。根拠: 過去セッションの集計で、長い文脈の劣化の兆候は見つからなかった。自作は足さない | 実機で確認（`/compaction-settings show`・1 回目の圧縮が brief になっているか） | なし | [圧縮の研究ノート](../research/agents/long-context-compaction-paper-2026-11.md) |
