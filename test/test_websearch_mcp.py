@@ -224,32 +224,6 @@ def test_unexpected_failures_do_not_leak_details(tmp_path):
     assert "RuntimeError" in text_of(reply)
 
 
-def test_bad_broker_setting_is_a_tool_error(tmp_path, monkeypatch):
-    monkeypatch.setenv("WEBSEARCH_BROKER_URL", "http://evil.example")
-
-    def deps():
-        return core.default_deps()
-
-    out = io.StringIO()
-    srv.serve(
-        [
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {"name": "web_search", "arguments": {"query": "x"}},
-                }
-            )
-        ],
-        out,
-        deps,
-    )
-    reply = json.loads(out.getvalue())
-
-    assert reply["result"]["isError"] and "不正" in text_of(reply)
-
-
 def test_stdio_subprocess_roundtrip(tmp_path):
     """実際にプロセスとして起動し、通信の要らない呼び出しだけを往復する。"""
     env = {k: v for k, v in os.environ.items() if not k.startswith(("WEBSEARCH_", "BW_"))}
@@ -463,20 +437,6 @@ def test_arxiv_filters_by_year_client_side(tmp_path):
     results = core.search_arxiv("graph", 5, None, http, from_year=2023)
 
     assert results == []
-
-
-def test_papers_in_broker_mode_skip_providers_the_broker_cannot_reach(tmp_path, monkeypatch):
-    monkeypatch.setenv("WEBSEARCH_BROKER_URL", "http://127.0.0.1:9999")
-    http = FakeHttp({"127.0.0.1:9999": [resp(500)]})
-    outcome = core.run_papers(
-        "q", 3, None, http=http, key_for=lambda n: None, state=core.State(tmp_path, lambda: 1.0)
-    )
-
-    assert outcome.provider is None
-    assert ("semanticscholar", "no-broker") in outcome.attempts and (
-        "arxiv",
-        "no-broker",
-    ) in outcome.attempts
 
 
 # ─── fetch_page の SSRF 防止 (MCP 経由) ──────────────────────────────

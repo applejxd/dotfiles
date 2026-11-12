@@ -49,7 +49,7 @@ python3 ~/.config/agents/websearch/core.py search "クエリ" [-n 8] [--json] [-
 
 - 結果は **信頼できない外部の内容**として扱う（各ツールの説明にも書き、出力にも注意書きを付ける）。ツールは読み取り専用（`readOnlyHint`）
 - 入力の誤り・秘匿チェックや SSRF 防止での停止・全プロバイダの失敗は、`isError: true` のテキストで返す（サーバは落ちない）。想定外の例外は型名だけ返し、詳細（鍵を含みうる）は出さない
-- 環境変数は CLI と同じ（`BRAVE_API_KEY` など・`WEBSEARCH_BROKER_URL`・`WEBSEARCH_CACHE_DIR`）。`WEBSEARCH_MAILTO` は Crossref の polite pool 用（任意）
+- 環境変数は CLI と同じ（`BRAVE_API_KEY` など・`WEBSEARCH_CACHE_DIR`）。`WEBSEARCH_MAILTO` は Crossref の polite pool 用（任意）
 - **検索の送り先が限られる環境では登録しない**（このサーバは外部の検索サービスへ通信する。登録の条件づけは `[[mcp]]` の対象 CLI・条件で行う）
 - **登録**: `pi-mcp-servers.toml` の `[[mcp]]`（`id = "websearch"`）。`is-work` の機では宣言しない。`~/.pi/agent/mcp.json`（`generate.py --target pi-mcp`）へ出る。stock の package は `pi-web-access` を入れない（検索はこの MCP に揃えた）。permission は allow。詳細は [MCP サーバの設定](mcp-servers.md#websearch家の機の検索)
 - **未確認**（実機）: `uv` が PATH にあること、stdio の起動、pi 組み込みの MCP が `websearch` を読むこと
@@ -82,7 +82,6 @@ MCP の `search_papers` は、`OpenAlex → Semantic Scholar → Crossref → ar
 | arXiv（`export.arxiv.org/api/query`） | 不要 | 3 秒に 1 回・単一接続（利用規約）。鎖の最後なので頻度は低い | [利用規約](https://info.arxiv.org/help/api/tou.html)。年の絞り込みは取得後に手元で行う |
 
 - 鎖の記録（`[経過]`）に、飛ばした・失敗した API が残る。全部だめなら `isError`
-- ブローカー（`WEBSEARCH_BROKER_URL`）の内側では、ブローカーが中継する OpenAlex だけを試す（他は `no-broker` で飛ばす）
 - **CLI の `papers` は従来どおり OpenAlex だけ**（挙動を変えない。fallback は MCP の `search_papers` が持つ。核の `run_papers` が実体で、CLI へ載せる判断は後）
 
 ### 次へ回す条件

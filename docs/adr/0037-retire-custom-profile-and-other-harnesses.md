@@ -78,6 +78,6 @@
 ## 後続（撤去では片づけていないもの）
 
 - （済み 2026-11-12）検索の核（`websearch/core.py`）と `imozuru_net.py` にあった、`pis` の内側のプロキシ越しの取得（`PIS_FETCH_VIA_PROXY`）の死んだコードと、その試験・docs を消した。
-- 検索の核（`websearch/core.py`）に、`pis` の検索ブローカー（`WEBSEARCH_BROKER_URL`・応答 `pis-broker: no key for …`）の死んだ経路が残っている。消すときは、`test_websearch.py`・`test_websearch_mcp.py`・`env_check.py` の許可リスト・[web-search](../spec/web-search.md) を同時に直す。
+- （済み 2026-11-12）検索の核（`websearch/core.py`）にあった、`pis` の検索ブローカー（`WEBSEARCH_BROKER_URL`・応答 `pis-broker: no key for …`）の死んだ経路と、その試験・`env-check` の許可リストを消した。
 - （済み 2026-11-12）残った試験の重複の洗い出し。カバレッジで重複らしい試験を除くと、変異テストでの検出力が 5〜17% 落ちたので、件数を減らさない（[実測](../research/testing/test-reduction-2026-11.md)）。
 - 配備済みの他ハーネスの設定（`~/.claude` など）は、利用者が手で消す。

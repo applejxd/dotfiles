@@ -6,8 +6,8 @@
     python3 ~/.agents/skills/env-check/scripts/env_check.py get NAME
 
   names  変数名だけを並べる (値は出さない)
-  show   許可リストの値と、プロキシ・ブローカー系の値を出す (URL の認証情報は伏せる)
-  get    1 つの変数の設定の有無。値は許可リストかプロキシ・ブローカー系だけ。それ以外は長さだけ
+  show   許可リストの値と、プロキシ系の値を出す (URL の認証情報は伏せる)
+  get    1 つの変数の設定の有無。値は許可リストかプロキシ系だけ。それ以外は長さだけ
 
 秘密らしい名前 (TOKEN / KEY / SECRET など) は、どの形でも値を出さない。
 許可リストは READABLE_NAMES (このファイルの定数)。
@@ -27,14 +27,14 @@ SENSITIVE_ENV_PATTERN = (
 )
 SENSITIVE = re.compile(SENSITIVE_ENV_PATTERN, re.IGNORECASE)
 # 値を (認証情報を伏せて) 見せる、通信まわりの変数
-NETWORK = re.compile(r"proxy|broker|_CA_BUNDLE|SSL_CERT|BASE_URL", re.IGNORECASE)
+NETWORK = re.compile(r"proxy|_CA_BUNDLE|SSL_CERT|BASE_URL", re.IGNORECASE)
 USERINFO = re.compile(r"(?<=://)[^/@\s,]*@")
 
 
-# 名前で値を出してよい変数 (プロキシ・ブローカー系は NETWORK の規則で別に出す)。認証情報が入りうるものは載せない。
+# 名前で値を出してよい変数 (プロキシ系は NETWORK の規則で別に出す)。認証情報が入りうるものは載せない。
 READABLE_NAMES = [
     "HOME", "USER", "LOGNAME", "SHELL", "PWD", "TERM", "TZ", "EDITOR", "VISUAL", "PAGER",
-    "LANG", "LANGUAGE", "LC_ALL", "VIRTUAL_ENV", "WSL_DISTRO_NAME", "WEBSEARCH_BROKER_URL",
+    "LANG", "LANGUAGE", "LC_ALL", "VIRTUAL_ENV", "WSL_DISTRO_NAME",
 ]  # fmt: skip
 
 
