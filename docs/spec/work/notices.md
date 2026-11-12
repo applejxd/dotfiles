@@ -1,5 +1,7 @@
 # 通知の選別・Digest・パネル（work/）
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 チャットに自動で出る内部メッセージを、**会話・判断の要求・進捗の 1 画面だけ**に絞るための純関数群。pi の API・fs は使わない（配線は別の feature）。
 実装: `home/dot_config/pi/harness/work/`（`text-width.ts`・`digest.ts`・`notices.ts`・`panel.ts`）。試験: `test/agents/test_work_digest.py`。
 

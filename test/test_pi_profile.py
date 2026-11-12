@@ -21,12 +21,11 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 HOME_SRC = ROOT / "home"
 STOCK_ONLY_IGNORES = (
-    ".pi/agent/prompts",
     ".pi/agent/models.json",
     ".config/pi",
     ".config/pi/**",
 )
-STOCK_REMOVES = (".pi/agent/prompts", ".pi/agent/models.json", ".config/pi")
+STOCK_REMOVES = (".pi/agent/models.json", ".config/pi")
 PERMISSION_DIR = ".pi/agent/extensions/pi-permission-system"
 PLAN_MODE_CONFIG = ".pi/agent/pi-plan-mode.json"
 PLAN_MODE_MODIFY = HOME_SRC / "dot_pi" / "agent" / "modify_pi-plan-mode.json.py.tmpl"
@@ -834,3 +833,98 @@ def test_permission_policy_validates_against_bundled_schema(tmp_path):
     schema = json.loads(Path(schema_path).read_text(encoding="utf-8"))
     out = json.loads(run_script(permission_script(tmp_path), ""))
     jsonschema.validate(out, schema)
+
+
+# --- プロンプトテンプレート (/fleet・/stepback) --------------------------------
+
+PROMPTS_DIR = ".pi/agent/prompts"
+# stock の pi に無いもの (自作ハーネスのツール・役割・起動)。stock の /fleet が指示してはならない
+HARNESS_ONLY = ("guarded_task", "guarded_", "pis ", "--role", "フルガード", "kcage", "bypass")
+
+
+def test_stock_deploys_the_prompts_and_does_not_remove_them(tmp_path):
+    """stock にも /fleet・/stepback を配る (stock の文面で)。除外にも、撤去にも入れない。"""
+    ignore = lines(render_file(".chezmoiignore.tmpl", tmp_path, profile_env="stock"))
+    remove = lines(render_file(".chezmoiremove", tmp_path, profile_env="stock"))
+    for entry in (PROMPTS_DIR, f"{PROMPTS_DIR}/", f"{PROMPTS_DIR}/**"):
+        assert entry not in ignore, entry
+        assert entry not in remove, entry
+
+
+def test_stock_fleet_prompt_instructs_the_subagent_tool_not_the_harness(tmp_path):
+    """stock の pi の道具は subagent (pi-subagents)。自作ハーネスの guarded_task・pis の指示が残ると、存在しない道具を呼ばせる。"""
+    text = render_file("dot_pi/agent/prompts/fleet.md.tmpl", tmp_path, profile_env="stock")
+    assert "$ARGUMENTS" in text and text.startswith("---\n")
+    assert "subagent" in text and "worktree" in text  # 書き手ごとの作業ディレクトリ (git worktree) の隔離
+    for word in HARNESS_ONLY:
+        assert word not in text, word
+
+
+# stock の /fleet が、利用者の待ち時間の 3 つの原因 (書き手の衝突・前の作業の完了待ち・長い検査の待ち) への
+# 手順を持つこと。(節の番号, 手順を担う句)。方針の説明や frontmatter に同じ語があっても通らないよう、節ごとに探す
+FLEET_STRATEGY = {
+    "分けない判断": ("1", "分けずに自分で進める"),
+    "共有ファイルの担当": ("2", "共有されやすいファイル"),
+    "境界の契約を先に決める": ("2", "契約に対して同時に実装"),
+    "todo に登録する": ("2", "todo に登録"),
+    "書き手ごとの専用の枝と worktree": ("3", "書き手 1 人につき、専用の枝と worktree"),
+    "統合用の枝を先に切る": ("3", "統合用の枝を先に"),
+    "完了した順に取り込む": ("3", "完了した順に 1 件ずつ"),
+    "取り込む前に clean を確かめる": ("3", "統合用の worktree が clean"),
+    "衝突は merge --abort で戻す": ("3", "git merge --abort"),
+    "履歴を書き換えない": ("3", "rebase など履歴を書き換える操作"),
+    "見込み実装 (前の完了を待たない)": ("3", "前の完了を待たずに始める"),
+    "管理 worktree の成果の採用": ("3", "handoff と patch を確認"),
+    "完了ごとに次を起動 (上限 4)": ("4", "進行中は 4 件まで"),
+    "子に全体の検査を回させない": ("5", "子には全体の検査を回させない"),
+    "全体の検査は 1 回だけ": ("5", "1 回だけ回す"),
+    "長い検査は背景へ": ("5", "bg_run"),
+    "失敗で途中でも起きる": ("5", "wake_on"),
+}
+
+
+def fleet_sections(text: str) -> dict[str, str]:
+    """描画した /fleet を、「## <番号>. 」の見出しごとの本文に分ける (番号の無い節は含めない)。"""
+    sections: dict[str, str] = {}
+    current = None
+    for line in text.splitlines():
+        match = re.match(r"## (\d+)\. ", line)
+        if match:
+            current = match.group(1)
+            sections[current] = ""
+        elif line.startswith("## "):
+            current = None
+        elif current is not None:
+            sections[current] += line + "\n"
+    return sections
+
+
+@pytest.mark.parametrize(("what", "where"), FLEET_STRATEGY.items())
+def test_stock_fleet_prompt_has_the_isolation_merge_and_verification_strategy(
+    tmp_path, what, where
+):
+    number, phrase = where
+    text = render_file("dot_pi/agent/prompts/fleet.md.tmpl", tmp_path, profile_env="stock")
+    sections = fleet_sections(text)
+    assert number in sections, f"節 {number} が無い"
+    assert phrase in sections[number], what
+
+
+def test_fleet_sections_ignores_text_outside_the_numbered_sections():
+    text = "---\nx: 1\n---\n## 方針\n衝突\n## 1. 分ける\nあ\n## 2. 契約\nい\n"
+    assert fleet_sections(text) == {"1": "あ\n", "2": "い\n"}
+
+
+def test_custom_fleet_prompt_keeps_the_frozen_harness_text(tmp_path):
+    """custom (凍結したハーネス) の文面は、そのまま (guarded_task を使う)。"""
+    text = render_file("dot_pi/agent/prompts/fleet.md.tmpl", tmp_path, profile_env="custom")
+    assert "guarded_task" in text
+
+
+@pytest.mark.parametrize("profile_env", ["stock", "custom"])
+def test_stepback_prompt_is_the_same_for_both_profiles(tmp_path, profile_env):
+    text = render_file("dot_pi/agent/prompts/stepback.md.tmpl", tmp_path, profile_env=profile_env)
+    assert "$ARGUMENTS" in text and "ステップバック" in text
+    for word in HARNESS_ONLY:
+        assert word not in text, word
+    assert "尽ねて" not in text  # 誤字 (尋ねて)

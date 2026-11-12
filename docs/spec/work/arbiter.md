@@ -1,5 +1,7 @@
 # 継続の調停 (settle arbiter)
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 `agent_before_settle` の継続判断を 1 か所 (`work/arbiter.ts`。純関数) にまとめる。提案者はハンドラも副作用も持たず、
 事実 (`Facts`) から `Proposal` を返すだけ。`arbitrate(facts, proposals)` が表で 1 つに決める。
 背景と決定の経緯: [ADR-0026](../../adr/0026-work-ledger-integrated-architecture.md)。配線 (`index.ts`・`wake()` の実呼び出し) は別の feature。

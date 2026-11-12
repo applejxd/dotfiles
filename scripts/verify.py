@@ -272,6 +272,7 @@ _PI_TESTS = (
 # see docs/spec/development.md#凍結したスタックの試験の省略
 STOCK_PI_TESTS = (  # test_pi_* のうち、今も使っている stock の試験 (T2 から外さない)
     "test_pi_profile",
+    "test_pi_commands_doc",
     "test_pi_theme",
     "test_pi_permission_decisions",
     "test_pi_subagents_config",
@@ -459,12 +460,15 @@ RULES: tuple[Rule, ...] = (
             "home/dot_pi/agent/extensions/subagent/*",
             "home/dot_pi/agent/agents/*",
             "home/dot_pi/agent/themes/**",
+            "home/dot_pi/agent/prompts/*",
+            "docs/spec/pi-commands.md",
             "home/dot_cc-safety-net/**",
             "test/agents/pi_stock/permission_check.mjs",
             "test/agents/pi_stock/permission_cases.json",
         ),
         (
             "test_pi_profile",
+            "test_pi_commands_doc",
             "test_pi_compaction_config",
             "test_pi_subagents_config",
             "test_pi_permission_decisions",

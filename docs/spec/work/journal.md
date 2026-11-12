@@ -1,5 +1,7 @@
 # 作業の観測ログ（journal）
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 作業台帳（`home/dot_config/pi/harness/work/types.ts`）のイベント形式 `LedgerEvent` の `aux: true`（観測用）の最初の実装。**観測だけで、振る舞いは変えない。**
 並列度の律速を実測するための基準値を取る。
 

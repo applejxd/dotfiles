@@ -284,7 +284,7 @@ orca/**
 .claude/skills/herdr
 .claude/skills/herdr/**
 {{ if eq (includeTemplate "pi-profile" .) "stock" }}
-# pi の stock プロファイル: 自作の拡張・ハーネス・prompts・broker 用の設定を配らない
+# pi の stock プロファイル: 自作の拡張・ハーネス・broker 用の設定を配らない (prompts は stock の文面で配る)
 # (settings.json と AGENTS.md は中身をプロファイルで切り替える)。
 # 拡張は自作のディレクトリだけ (一覧は pi-own-extensions)。pi-permission-system の設定は配る。
 # see docs/spec/agent-config-generation.md#pi-のプロファイルcustom-と-stock
@@ -295,8 +295,6 @@ orca/**
 .pi/agent/extensions/{{ $name }}/**
 {{ end -}}
 {{ end -}}
-.pi/agent/prompts
-.pi/agent/prompts/**
 .pi/agent/models.json
 .config/pi
 .config/pi/**

@@ -1,5 +1,7 @@
 # 保留（非同期承認）【撤去済み・履歴】
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 確認が取れないとき操作を保留し、利用者があとで `/pending approve` で実行する仕組み（`git_integrate`）は、**撤去済み**。
 統合は PR ビューアの「統合する」ボタンへ移った（[CHG-0062](../../change/closed/0062-pr-hub-simplify.md) 段 A5）。経緯は [CHG-0055](../../change/closed/0055-async-approval.md)・[ADR-0023](../../adr/0023-pending-approval.md)。
 撤去は 1 つの feature・1 回の保存で行った。PR ビューアが作る、この feature の統合 merge commit を `git revert -m 1` すれば旧経路が復活する（履歴には撤去本体・develop の取り込み・後続修正があり、本体 commit だけの revert は後続修正と競合しうる）。

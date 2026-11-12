@@ -1,5 +1,7 @@
 # モデル向けツール `work` の純関数 (work-tool-core)
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 既存ツール `todo` の置換。実装は `home/dot_config/pi/harness/work/tool.ts`（純関数。pi の API・fs・`index.ts` への登録は含まない。登録は別 feature・旗 `work_tool` 既定偽）。
 `handleWork(state, args, {now, holder}) → {ok, events, text, details}`。入力の state は変えず、events は reducer を通った有効なものだけ（操作は全部成功か全部なし）。試験は `test/agents/test_work_tool.py`。
 

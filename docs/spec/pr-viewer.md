@@ -1,5 +1,7 @@
 # ローカル PR ビューアの設計
 
+> **凍結した自作基盤の文書**（[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](pi-commands.md)。
+
 GitHub をリモートに持たない開発で、PR 風のレビュー画面（Web）と pi を往復させる仕組みの設計。
 案件と経緯は [CHG-0060](../change/closed/0060-local-pr-viewer.md)。**設計は 2026-11-03 に確定。実装は段階的で、未実装の段は各節に「未実装」と書く。**
 

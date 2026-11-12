@@ -1,5 +1,7 @@
 # 並列実行基盤のドライバ
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 スケジューラの `next()`（[仕様](scheduler.md)）は「何をするか」を返すだけ。ドライバ（`home/dot_config/pi/harness/work/driver.ts`）はそれを台帳のイベントと子の起動・停止の**効果**に変換し、子の完了・失敗・429 を台帳へ戻す。純関数（pi・fs・時計・乱数なし。時刻と乱数は引数）。入力は変更しない・決定的。配線は別の feature（旗 `PI_WORK_SCHEDULER=1`、既定は無効）。
 
 ## 入出力

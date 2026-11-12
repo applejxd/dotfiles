@@ -1,5 +1,7 @@
 # pi / pis ハーネス利用者マニュアル
 
+> **凍結した自作基盤の文書**（[ADR-0030](../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](pi-commands.md)。
+
 - **目的**: `pi`（このリポジトリが配るフルガード付きの pi）と `pis`（サンドボックス付きの起動）の、**今ある機能・設定の変え方・独自コマンド**を、忘れたときに見直す
 - **詳しい仕様**: 各節と末尾の正本の文書。機能の地図は [pi の機能](pi-features.md)
 - **運用モード**: pi 単独 / PR ビューア併用の使い分けは [運用モード](operation-modes.md)

@@ -8,7 +8,7 @@
 
 ### glob の記法差
 
-> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。pi の仕様は [pi のガード](guard/pi-guard.md)。
+> OpenCode 専用（撤去予定。CHG-0020 段 6 は保留中）。stock の pi の `/fleet` は別の文面で、[プロンプトテンプレート](agent-config-generation.md#プロンプトテンプレートfleetstepback)・[pi のコマンド早見](pi-commands.md)。凍結したハーネスの `/fleet` は [pi のガード](guard/pi-guard.md)。
 
 OpenCode のワイルドカードは `*` (**`/` を含む** 0 文字以上) と `?` だけで、
 `**` という記法が無い。`[file]` の glob をそのまま渡すと `**/x` が「`*` 2 つ」

@@ -1,5 +1,7 @@
 # pi の拡張と補助機能
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 pi のフルガードが持つ拡張と補助機能の仕様: 拡張の入れ方の方針（入口の選び方・外部の拡張・自作の拡張）、`guarded_action`、ツールの拡張、圧縮、`git commit` の確認、整形、`/fleet`、stepback、キーバインド、Orca・Zed。起動・設定・MCP は [pi のガード](pi-guard.md)、子エージェントは [pi の子エージェント](pi-subagents.md)、サンドボックスは [pis のサンドボックス](pi-sandbox.md)。
 
 ## 拡張の方針

@@ -1,5 +1,7 @@
 # 作業台帳の pi への登録 (register)
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 `work/register.ts` の `registerWork(pi, opts)` が、台帳のツール `work`・コマンド `/work`・パネルを pi に登録する最小の配線。
 `index.ts` は `registerJournal` の次で 1 回呼ぶだけ。判定の経路・権限・他の登録には触れない。
 

@@ -1,5 +1,7 @@
 # `/goal` と作業台帳
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 `/goal` の状態の唯一の出所は台帳の `goal.*` イベントの fold。`goal-core.ts` の `GoalState` はそこから**導出**する（写しを 2 つにしない）。
 実装は `home/dot_config/pi/harness/work/goal.ts`（純関数。pi の API・fs・index.ts なし。配線は別の feature）。試験は `test/agents/test_work_goal.py`。
 関連: [台帳](ledger.md)・[調停](arbiter.md)。

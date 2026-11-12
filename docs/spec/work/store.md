@@ -1,5 +1,7 @@
 # 作業台帳の永続 (work-store)
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 台帳 (work ledger) は追記専用のイベントログ。永続の実装は `home/dot_config/pi/harness/work/store.ts`（node 標準の `node:fs` のみ・Unix 前提）、
 置き場の決定は `work/root.ts`。型の契約は `work/types.ts`。試験は `test/agents/test_work_store.py`（障害注入つき）。
 

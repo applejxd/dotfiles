@@ -1,5 +1,7 @@
 # 作業台帳の実行時 (runtime)
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 1 つの会話が台帳を開いて持ち続ける接着層（`harness/work/runtime.ts`）。pi の API には依存しない（登録は別の feature）。
 部品は [store](store.md)（永続・lease）・[ledger](ledger.md)（reduce・不変条件）。
 

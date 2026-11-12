@@ -1,5 +1,7 @@
 # 作業台帳 (work ledger) の核
 
+> **凍結した自作基盤の文書**（[ADR-0030](../../adr/0030-freeze-agent-stack-return-to-stock-pi.md)。保存のみ・開発しない）。ここに出てくるコマンド・ツール（`guarded_task`・`/bypass`・`/pending`・`/orchestrate` など）は、stock の pi には**存在しない**。いまの stock の pi のコマンドは [早見](../pi-commands.md)。
+
 追記専用のイベントログと、その畳み込み (reducer) で、ゴール・task・run の状態を導く純関数の群。pi の API にも fs にも依存しない。
 なぜ作ったか・検討した案・位置づけ: [ADR-0026](../../adr/0026-work-ledger-integrated-architecture.md)。
 配線（store・digest・sched・journal・index.ts）は別の feature。実装は `home/dot_config/pi/harness/work/`、試験は `test/agents/test_work_core.py`。
