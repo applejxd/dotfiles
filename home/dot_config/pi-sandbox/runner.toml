@@ -43,6 +43,8 @@ write = [
 
 [hide]
 # visible の中や、見せた場所の下にある秘密を、さらに見えなくする (hide が visible に勝つ)。
+# ここの ~/ の固定パスは、ファイルの道具 (read など) の path 拒否 (pi-permission-policy.json の path) と同じ集合に保つ
+# (囲いの外で動くファイルの道具が、囲いが隠すものを読めてしまうため。食い違うと test_pi_sandbox_runner が落ちる)。
 # ディレクトリは空の tmpfs、ファイルは /dev/null で覆う。無ければ何もしない。
 dirs = [
   "~/.ssh",
@@ -54,6 +56,7 @@ dirs = [
   "~/.kube",
   "~/.azure",
   "~/.password-store",
+  "~/.pi/agent/ayu",
 ]
 files = [
   "~/.netrc",
@@ -67,6 +70,9 @@ files = [
   "~/.pi/agent/oauth.json",
   "~/.pi/agent/models.json",
   "~/.pi/agent/models-store.json",
+  "~/.pi/agent/trust.json",
+  "~/.pi/agent/mcp.json",
+  "~/.config/agents/websearch-keys.json",
 ]
 
 [env]

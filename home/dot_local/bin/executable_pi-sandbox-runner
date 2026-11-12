@@ -14,7 +14,6 @@ import json
 import os
 import posixpath
 import re
-import shutil
 import stat
 import sys
 import tomllib
@@ -46,6 +45,12 @@ DOCKER_SOCKETS = ("/run/docker.sock", "/var/run/docker.sock")
 MASK_ROOTS = ("/tmp", "/var/tmp", "/mnt", "/media", "/run/user")
 # 内側で固定する環境変数。mise の状態 (信頼の記録) は、ホームの外の使い捨ての場所へ向ける (ホームの状態を書き換えさせない)
 COMPAT_ENV = (("MISE_STATE_DIR", "/tmp/pib-mise-state"),)
+# pib が、囲いの外 (pi 自身) の PATH から作業ツリーの中の要素を除くときに、元の PATH を入れる変数。
+# 囲いの中のコマンドには、これを PATH として渡す
+ORIG_PATH_ENV = "PIB_ORIG_PATH"
+# bwrap は、システムの場所だけから探す (PATH は使わない)。PATH には、作業ツリーの venv の bin など、書き換えられる場所が入りうる。
+# そこに置かれた bwrap が、囲いの起動役として、囲いなしで実行されるのを避ける
+BWRAP_PATHS = ("/usr/bin/bwrap", "/bin/bwrap", "/usr/local/bin/bwrap")
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 _ALLOWED_KEYS: dict[str, set[str]] = {
@@ -91,6 +96,10 @@ class Additions:
     visible_read: tuple[str, ...] = ()
     visible_write: tuple[str, ...] = ()
     env_unset: tuple[str, ...] = ()
+
+
+def find_bwrap() -> str | None:
+    return next((p for p in BWRAP_PATHS if os.access(p, os.X_OK)), None)
 
 
 def _read_text(path: str) -> str:
@@ -612,6 +621,13 @@ def build_command(
         flags += ["--unsetenv", name]
     for name, value in COMPAT_ENV:
         flags += ["--setenv", name, value]
+    # pib が、囲いの外の PATH から作業ツリーの中を除いた (元の PATH はここ)。中のコマンドには元の PATH を渡す
+    if ORIG_PATH_ENV in env:  # 運び役の変数は、空でも中へ渡さない
+        if (
+            env[ORIG_PATH_ENV] and "PATH" not in cfg.env_unset
+        ):  # 設定で PATH を消す指定があるなら、そちらが勝つ
+            flags += ["--setenv", "PATH", env[ORIG_PATH_ENV]]
+        flags += ["--unsetenv", ORIG_PATH_ENV]
     return [bwrap, *pre, *extra, *flags, "--", "/bin/bash", "-c", command], notes
 
 
@@ -638,9 +654,11 @@ def main(argv: Sequence[str], env: Mapping[str, str] | None = None) -> int:
     if env.get(DRYRUN_ENV):
         print(json.dumps(command, ensure_ascii=False))
         return 0
-    bwrap = shutil.which("bwrap")
+    bwrap = find_bwrap()
     if bwrap is None:
-        print(f"{PREFIX} bwrap が見つからない", file=sys.stderr)
+        print(
+            f"{PREFIX} bwrap が見つからない (探す場所: {', '.join(BWRAP_PATHS)})", file=sys.stderr
+        )
         return 127
     command[0] = bwrap
     os.execv(bwrap, command)  # 戻らない

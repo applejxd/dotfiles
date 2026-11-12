@@ -56,7 +56,7 @@
 | B1 | 見せ方が拒否リスト型で、隠す一覧に無いものは読める。`~/.bash_history`・`~/.zsh_history` が読めた。`/mnt/c`・`/mnt/d`・`/mnt/e`（Windows のドライブ）が見える（`/mnt/c/Users` の一覧が読めた） | 実測 |
 | B2 | 環境変数に入った鍵は隠れない（runner は環境を引き継ぐ）。この機では `GH_TOKEN`・`AWS_*` は未設定 | ソース／実測（未設定） |
 | B3 | 通信は無制限。内側から見えるものは外へ出せる | 実測 |
-| B4 | 「読ませない場所」の一覧が複数ある: 権限ポリシー（`home/.chezmoitemplates/pi-permission-policy.json` の `path` 表）、共通設定（`home/dot_config/agents/common.toml.tmpl` の deny 一覧）、runner の `hide`（`runner.toml`）。1 か所の変更が他へ伝わらない | 実測（リポジトリの読み取り） |
+| B4 | 「読ませない場所」の一覧が複数ある: 権限ポリシー（`home/.chezmoitemplates/pi-permission-policy.json` の `path` 表）、共通設定（`home/dot_config/agents/common.toml.tmpl` の deny 一覧）、runner の `hide`（`runner.toml`）。1 か所の変更が他へ伝わらない。**解決（2026-11-12）**: `hide` と `path` の deny を同じ集合にそろえ、食い違いを試験で落とす。実機で、YOLO の `pib` の `read` ツールが `hide` のディレクトリを読めた（`hide` 20 件のうち 12 件が `path` の deny に無かった） | 実測（リポジトリの読み取り、実機） |
 
 #### C. 書き込み・git
 
@@ -282,6 +282,7 @@ ADR-0036 の決定（コマンドの実行は `shellPath` の囲い 1 つ、方�
 
 | 日付 | 更新 | 理由・証拠 |
 | --- | --- | --- |
+| 2026-11-12 | ファイルの道具が囲いを素通りできる問題を直した。`path` の deny を `hide` と同じ集合にそろえ（試験で固定）、`path_write`（書き込みだけの deny）で、囲いが読み取り専用に見せるもの（`visible.read`）と、囲い・pi の制御ファイル（`~/.pi/agent/` の、pi が読み込む・実行するもの。`PATH` の先頭の `bin/` と、`-e` の一時 package の `tmp/` を含む。書けるのは成果物の `sessions/` など列挙しないもの）を拒否し、既定外の設定場所・リンクで移した制御ファイルでは `pib` を起動させず、runner は `pib-shell` がシステムの `/usr/bin/python3 -I -S` で起動し、囲いを作る前の実行（`bash -p`・`dirname`/`readlink`・`bwrap`）を書き換えられない場所に固定し、pi に渡す `PATH` から作業ツリーの中を除き（残す要素は実体のパスに固定する。空になったら、cwd の `pi` を実行しないよう起動しない）、`HOME` 自体のリンク・`tmp/`・管理済みの `fd`・`rg`・`bin/` のリンク移設を拒否する（再監査の指摘: `bin/` の `fd`・`pi` の置き換え、mise・venv の Python の置き換えが囲いの前に実行される、設定場所の変更・リンクで保護が外れる、許可リストの allow が `*.env` の deny を上書きする） | YOLO（ask → allow）の `pib` で、`read` ツールが `hide` のディレクトリのファイルを読み、`write` ツールが `~/.config/pi-sandbox/` に書けた（無害なプローブ。削除済み）。判定エンジンの表を 69 件足し、旧方針で落ち、新方針で通ることを確かめた |
 | 2026-11-12 | 配備後の確認で、WSL2 の内側の名前解決が壊れていると分かった。共有設定の `visible.read` に `/mnt/wsl/resolv.conf` を足し、自己確認に名前解決を足した | `/etc/resolv.conf` が `/mnt/wsl/resolv.conf` へのリンクで、`/mnt` を覆うと消える。内側の `npm view` が `EAI_AGAIN`。ホストは成功。見せたあとは内側でも 1.3.0 を返した |
 | 2026-11-12 | 起票。問題の洗い出し（段 1）を完了し、キャッシュ領域の変更（段 5）を保留にした | `pib` を実機で使い、`bg_run` が sandbox の外で動くこと、キャッシュに書けないことを確認した。利用者が、継ぎ足しを避け、境界を決めることを求めた |
 | 2026-11-12 | 「自前だけで sandbox するのか」への整理を反映。自作は引数の組み立てだけで、隔離の実体は既存の bubblewrap。既存の CLI を `shellPath` の先にできるかの評価（案 X′）を、次の調査の 1 行目に足した | 既存の評価が先（[ADR-0031](../adr/0031-evaluate-existing-extensions-first.md)）。これまでの比較は動かしておらず、GPU の記述がない |

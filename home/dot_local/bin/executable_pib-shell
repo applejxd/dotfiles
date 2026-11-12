@@ -1,13 +1,20 @@
-#!/bin/bash
+#!/bin/bash -p
+# -p (privileged): 非対話の bash が起動時に読む BASH_ENV・ENV と、環境由来の関数 (BASH_FUNC_*)・SHELLOPTS を無視する。
+# BASH_ENV が書き換えられるファイルを指していると、囲いを作る前にホストで実行されるため。
 # pi の shellPath に差すシェル。`pib` が PIB_SANDBOX を立てたときだけ、pi-sandbox-runner (bwrap の囲い) を通す。
 # 立っていなければ素の bash (普段の `pi` は何も変わらない)。囲いを通すと決まったのに runner が無いときは、
 # exec が失敗して終わる (素の bash へ落とさない = fail-closed)。pi は `<このスクリプト> -c <コマンド>` で呼ぶ。
+# runner は、システムの Python (絶対パス) を隔離モード (-I: 環境変数・ユーザーの site・cwd を無視。-S: site を読まない = .pth や
+# sitecustomize が動かない) で起動する。`#!/usr/bin/env python3` だと、作業ツリーの venv や mise の Python (書き換えられる場所)
+# の起動時のコードが、bwrap を作る前にホストで実行されてしまう。
 # see docs/spec/sandbox/pi-sandbox-runner.md
 set -u
+PYTHON=/usr/bin/python3
 if [ -n "${PIB_SANDBOX:-}" ]; then
-  here=$(dirname "$(readlink -f "$0")")
+  # PATH は引かない (dirname・readlink を絶対パスで呼ぶ): PATH には、作業ツリーの venv の bin など、書き換えられる場所が入りうる
+  here=$(/usr/bin/dirname "$(/usr/bin/readlink -f "$0")")
   opts=()
   [ "$PIB_SANDBOX" = "offline" ] && opts=(--offline)
-  exec "$here/pi-sandbox-runner" ${opts[@]+"${opts[@]}"} "$@"
+  exec "$PYTHON" -I -S "$here/pi-sandbox-runner" ${opts[@]+"${opts[@]}"} "$@"
 fi
 exec /bin/bash "$@"
