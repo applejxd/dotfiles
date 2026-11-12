@@ -176,8 +176,6 @@ def tool_fetch_page(args: dict[str, Any], deps: dict[str, Any]) -> ToolResult:
             url,
             resolver=deps["resolver"],
             transport=deps["transport"],
-            proxy=deps["fetch_proxy"](),
-            proxy_transport=deps["proxy_transport"],
             max_chars=max_chars,
         )
     except core.Blocked as error:

@@ -77,8 +77,6 @@ def make_deps(tmp_path, http, keys=None, **extra):
         "transport": lambda *a: resp(
             200, b"<title>T</title><p>hello</p>", {"content-type": "text/html"}
         ),
-        "fetch_proxy": lambda: None,
-        "proxy_transport": lambda *a: pytest.fail("使わない"),
     }
     deps.update(extra)
     return deps
