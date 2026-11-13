@@ -163,3 +163,6 @@
 .agents/skills/agent-workflow
 .agents/skills/feature-orchestration
 .agents/skills/away-shift/scripts/preflight.py
+
+# 2026-11-12: 旧ブローカー用の Envoy (.chezmoiexternal で取得していた。外部の定義を消したので、実体だけが残る)。
+.local/bin/envoy
