@@ -36,7 +36,7 @@
 
 ### 配備済みの残り（各機）
 
-- `chezmoi apply` が消す（`.chezmoiremove`）: 旧 custom の `~/.config/pi`・自作の拡張・`models.json`、`~/.local/bin/{pis,ocs,ocs-boundary-check,oc-utils,kcage}`、`~/.local/share/ocs`、`~/.config/agents/{common.toml,command_policy.py}`。
+- `chezmoi apply` が消す（`.chezmoiremove`）: 旧 custom の `~/.config/pi`・自作の拡張・`models.json`、`~/.local/bin/{pis,ocs,ocs-boundary-check,oc-utils,kcage,envoy}`、`~/.local/share/ocs`、`~/.config/agents/{common.toml,command_policy.py}`。
 - **消さない**: `~/.claude`・`~/.codex`・`~/.copilot`・`~/.gemini`・`~/.config/opencode` の設定と hook。資格情報・履歴と同じ場所にあるため。使わなければ利用者が手で消す。以後は更新されない。
 - kcage を導入済みの機は、`kcage uninstall`（配備コピー・sudoers・許可表）を先に実行する。実行ファイルを消したあとでは使えない。
 
