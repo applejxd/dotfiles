@@ -72,6 +72,14 @@ pi 本体が組み込みで読み込む拡張（`dist/extensions/`）が登録�
 | `@juicesharp/rpiv-todo` | `/todos` | 今のブランチの todo を、状態ごとに見る |
 | `cc-safety-net` | `/cc-safety-net` | CC Safety Net の操作（ブロックの説明・規則・統合・診断） |
 
+## このリポジトリが配るローカル package のコマンド
+
+`home/dot_pi/agent/local-packages/`（`pi-stock-packages` の `./local-packages/...`）が登録する。
+
+| コマンド | 内容 |
+| --- | --- |
+| `/sandbox` | コマンド実行の囲い（`pib`）と YOLO を、セッションの途中で切り替える（`/sandbox [on\|offline\|off\|status]`。引数なしは `on` と `off` のトグル。Linux だけ。[仕様](sandbox/pi-sandbox-runner.md#実行中の切り替え)） |
+
 ## package が同梱する prompt template
 
 `pi-subagents` の `prompts/`。子エージェントを使う定型の進め方で、呼ぶと取りまとめ役の指示になる。

@@ -122,6 +122,27 @@ def test_surface_decisions_match_the_table(engine_result):
 
 
 @needs_engine
+def test_sandbox_toggle_protected_paths_are_denied_by_an_explicit_rule(tmp_path):
+    """/sandbox (pi-sandbox-toggle) が YOLO を入れる前に問い合わせる保護パスは、**明示の規則**で deny でなければならない。
+    規則が無く、既定の規則 (``*``) が答えたものは、write・edit の path ゲートが何もせず通す (上流 describePathGate)。
+    拡張の PROTECTED_PATHS を読み、本物の判定エンジンで、配布する方針に対して確かめる。"""
+    import re
+
+    src = (ROOT / "home" / "dot_pi" / "agent" / "local-packages" / "pi-sandbox-toggle" / "src" / "index.ts").read_text(
+        encoding="utf-8"
+    )
+    paths = re.findall(r'"([^"]+)"', re.search(r"const PROTECTED_PATHS = \[(.*?)\];", src, re.S).group(1))
+    assert paths
+    result = run_engine(tmp_path, surface=[("path_write", p.replace("~", "$HOME", 1)) for p in paths])
+    bad = [
+        f"{p}: {got['action']} ({got['pattern']})"
+        for p, got in zip(paths, result["surface"], strict=True)
+        if got["action"] != "deny" or got["pattern"] in (None, "*")
+    ]
+    assert not bad, "\n".join(bad)
+
+
+@needs_engine
 def test_alias_decisions_match_the_table(engine_result):
     """symlink の別名と解決後の実体を合わせた判定 (値のどれかに一致した、設定上で最後の規則が勝つ)。
 

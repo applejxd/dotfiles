@@ -54,6 +54,7 @@ pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 | --- | --- |
 | 何を守り、なぜ Bitwarden / sops なのかを知る | [セキュリティ](spec/security.md) |
 | pi のコマンド実行を囲いの中だけで動かす（`pib`）・内側から見えない・書けない原因を調べる | [pi-sandbox-runner](spec/sandbox/pi-sandbox-runner.md) |
+| セッションの途中で、囲いと YOLO を切り替える（`/sandbox`） | [実行中の切り替え](spec/sandbox/pi-sandbox-runner.md#実行中の切り替え) |
 
 ### 撤去した自作基盤
 

@@ -68,6 +68,8 @@
       "~/.pi/agent/npm/*": { "action": "deny", "reason": "pi の設定・拡張・agent 定義・package・本体・ツール（bin・git）・プロンプトは書き換えない。囲いの外で、次のコマンド・次の起動から実行・読み込みされる（囲いの起動も、権限の設定も含む）。変えるのは利用者（chezmoi）" },
       "~/.pi/agent/extensions": { "action": "deny", "reason": "pi の設定・拡張・agent 定義・package・本体・ツール（bin・git）・プロンプトは書き換えない。囲いの外で、次のコマンド・次の起動から実行・読み込みされる（囲いの起動も、権限の設定も含む）。変えるのは利用者（chezmoi）" },
       "~/.pi/agent/extensions/*": { "action": "deny", "reason": "pi の設定・拡張・agent 定義・package・本体・ツール（bin・git）・プロンプトは書き換えない。囲いの外で、次のコマンド・次の起動から実行・読み込みされる（囲いの起動も、権限の設定も含む）。変えるのは利用者（chezmoi）" },
+      "~/.pi/agent/local-packages": { "action": "deny", "reason": "pi の設定・拡張・agent 定義・package・本体・ツール（bin・git）・プロンプトは書き換えない。囲いの外で、次のコマンド・次の起動から実行・読み込みされる（囲いの起動も、権限の設定も含む）。変えるのは利用者（chezmoi）" },
+      "~/.pi/agent/local-packages/*": { "action": "deny", "reason": "pi の設定・拡張・agent 定義・package・本体・ツール（bin・git）・プロンプトは書き換えない。囲いの外で、次のコマンド・次の起動から実行・読み込みされる（囲いの起動も、権限の設定も含む）。変えるのは利用者（chezmoi）" },
       "~/.pi/agent/agents": { "action": "deny", "reason": "pi の設定・拡張・agent 定義・package・本体・ツール（bin・git）・プロンプトは書き換えない。囲いの外で、次のコマンド・次の起動から実行・読み込みされる（囲いの起動も、権限の設定も含む）。変えるのは利用者（chezmoi）" },
       "~/.pi/agent/agents/*": { "action": "deny", "reason": "pi の設定・拡張・agent 定義・package・本体・ツール（bin・git）・プロンプトは書き換えない。囲いの外で、次のコマンド・次の起動から実行・読み込みされる（囲いの起動も、権限の設定も含む）。変えるのは利用者（chezmoi）" },
       "~/.pi/agent/prompts": { "action": "deny", "reason": "pi の設定・拡張・agent 定義・package・本体・ツール（bin・git）・プロンプトは書き換えない。囲いの外で、次のコマンド・次の起動から実行・読み込みされる（囲いの起動も、権限の設定も含む）。変えるのは利用者（chezmoi）" },

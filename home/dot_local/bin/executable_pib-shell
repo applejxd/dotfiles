@@ -17,4 +17,8 @@ if [ -n "${PIB_SANDBOX:-}" ]; then
   [ "$PIB_SANDBOX" = "offline" ] && opts=(--offline)
   exec "$PYTHON" -I -S "$here/pi-sandbox-runner" ${opts[@]+"${opts[@]}"} "$@"
 fi
+# 囲いなし。pib で起動して /sandbox で外したときは、pi 自身の PATH (作業ツリーの中を除いたもの) ではなく、元の PATH を渡す
+# (囲いの中と同じ。pib でない普通の pi は PIB_ORIG_PATH を持たないので何も変わらない)
+if [ -n "${PIB_ORIG_PATH:-}" ]; then export PATH="$PIB_ORIG_PATH"; fi
+unset PIB_ORIG_PATH
 exec /bin/bash "$@"
