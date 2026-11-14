@@ -71,7 +71,7 @@ spec・索引・README で使う用語をそろえる。1 つのものを 1 つ�
 - **Fence**・**隔離起動（`ocs`）**・**通常起動（`opencode`）**: OpenCode を Fence の境界の内側で起動する仕組み。撤去
 - **kcage**（箱）: Incus による隔離環境。撤去
 - **PR ビューア**・**ジョブ**・**作業台帳**: 撤去
-- **bundle**（旧称: train）・**自由区**・**claim / release**: 並列運用の自作の仕組み。撤去。bundle は、標準の `git flow` と `git rebase` による手順として復活した（[feature-orchestration の「束ねる」](../../.agents/skills/feature-orchestration/SKILL.md)。自作のコードは無い）
+- **bundle**（旧称: train）・**自由区**・**claim / release**: 並列運用の自作の仕組み。撤去。bundle は、標準の `git flow` と `git merge` による手順として復活した（[feature-orchestration の「束ねる」](../../.agents/skills/feature-orchestration/SKILL.md)。自作のコードは無い）
 - **`guarded_task`・`guarded_action`**: 自作の子エージェント・コミットの道具。今は `pi-subagents` の `subagent` と、bash の `git commit`
 
 [仕様一覧へ戻る](index.md)

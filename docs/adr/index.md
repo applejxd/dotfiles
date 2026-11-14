@@ -20,7 +20,7 @@
 | [0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) | pi の sandbox は、コマンドの実行を `shellPath` の囲い 1 つに、ファイルの道具をパスの判定に分ける | コマンドの実行（bash・`bg_run`・`!`・子の bash）は `shellPath` の 1 つの囲いに通し、ファイルの道具（`read`・`write`・`edit`）は権限の層がパスで判定する。見える範囲は許可リスト型（ホーム・`/mnt`・`/tmp` を覆い、必要な所だけ重ねる）で、通信は既定で開ける。方針は 1 か所、自作は 1 部品、既存の囲いの穴は自作で埋めない。実装は素の `bwrap`（約 16 ミリ秒。`pib`・`pib-shell`・`pi-sandbox-runner`）。`/mnt` は既定で覆い、見せる所だけユーザー設定で足す。通信は既定で開け、`pib --offline` で遮断する。ADR-0035 を置き換えた |
 | [0037](0037-retire-custom-profile-and-other-harnesses.md) | 旧 custom プロファイルと pi 以外のハーネスの撤去 | 自作の基盤・pi 以外の CLI の設定生成を持たない。pi は公式の既定＋人気の拡張で使い、保護は `pib` の囲いと権限の package に任せる。復元はタグ（`archive/custom-harness-2026-11-12`） |
 | [0038](0038-allow-chezmoi-init-dependency.md) | `chezmoi init` を前提にした設計を禁止から許容へ | 設定でしか実現できないもの（`hooks` など）は `init` を前提にしてよい。更新手順に `init` を含め、省いても壊れない形にする |
-| [0039](0039-merge-to-develop-rebase-between-features.md) | `develop` への統合は merge、rebase は feature 同士だけ | `develop`・`main` は書き換えず merge。feature は積み重ねて 1 回で統合（rebase は feature の枝だけ）。統合後の反映は `chezmoi apply` |
+| [0039](0039-merge-to-develop.md) | `develop` への統合は merge、rebase は feature の追従だけ | `develop`・`main` は書き換えず merge。複数の feature は束ねて 1 回で統合。rebase は `git flow feature update --rebase` だけ。統合後の反映は `chezmoi apply` |
 
 撤去した決定（0001・0002・0004〜0009・0012〜0019・0021〜0028・0030・0034）は、[ADR-0037](0037-retire-custom-profile-and-other-harnesses.md) の「置き換えた決定と記録」にまとめた（本文はタグから読める）。
 

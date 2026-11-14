@@ -75,4 +75,4 @@
 
 - **症状**: 未 push の merge commit がある `develop` で `chezmoi update` を実行すると、merge commit が平らに作り直される（内容は同じ）。
 - **原因**: `chezmoi update` は `git pull --autostash --rebase` を実行する（`chezmoi update --help`。`pull.rebase` の設定では変わらない。2026-11-14 に実測）。
-- **対処**: 未 push のコミットがあるうちは `chezmoi apply`（pull しない）を使う。`update` は、`git rev-list --count @{u}..HEAD` が 0 のときだけ。このリポジトリの方針は [ADR-0039](../../../../docs/adr/0039-merge-to-develop-rebase-between-features.md)。
+- **対処**: 未 push のコミットがあるうちは `chezmoi apply`（pull しない）を使う。`update` は、`git rev-list --count @{u}..HEAD` が 0 のときだけ。このリポジトリの方針は [ADR-0039](../../../../docs/adr/0039-merge-to-develop.md)。
