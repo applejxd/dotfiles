@@ -198,10 +198,11 @@ def test_directory_suffixes_are_not_stripped(repo: Path) -> None:
 @pytest.mark.parametrize("name", ["run_pi", "executable_pi", "symlink_pi", "create_pi", "dot_literal_pi"])
 def test_file_only_prefixes_are_not_stripped_from_directories(repo: Path, name: str) -> None:
     """ファイル用の属性は、ディレクトリでは名前の一部 (chezmoi managed で確認済み)。別の target を消さない。"""
-    _write(repo / "home" / name / "__pycache__" / "m.pyc")
+    target = repo / "home" / "dot_config" / name
+    _write(target / "__pycache__" / "m.pyc")
     proc = _run(repo)
     assert proc.returncode == 0
-    assert (repo / "home" / name).exists()
+    assert target.exists()
 
 
 def test_multiline_template_in_chezmoiremove_disables_cleanup(repo: Path) -> None:
