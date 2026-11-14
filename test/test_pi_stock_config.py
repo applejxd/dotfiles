@@ -455,6 +455,18 @@ def test_stock_agents_md_has_no_harness_words(tmp_path):
         assert word not in text, word
 
 
+def test_stock_agents_md_asks_for_absolute_cd_until_upstream_fix(tmp_path):
+    """TEMP-REMOVE: pi-permission-system が cd 先の ~・変数を解決しない間の一時対処。上流が直ったら削除する。
+
+    理由・撤去の条件は docs/spec/temporary-workarounds.md#pi-permission-system-の-cd-先の誤判定
+    """
+    text = render_file("dot_pi/agent/AGENTS.md.tmpl", tmp_path)
+    assert "`cd` は絶対パスで書く" in text
+    assert "TEMP-REMOVE" in text
+    doc = (ROOT / "docs" / "spec" / "temporary-workarounds.md").read_text(encoding="utf-8")
+    assert "## pi-permission-system の cd 先の誤判定" in doc
+
+
 
 
 # --- permission-system の設定 ------------------------------------------
