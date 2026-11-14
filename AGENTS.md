@@ -25,5 +25,6 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 ## スキル（編集・運用の場面で読む）
 
 - `dotfiles-conventions`: このリポジトリのファイルを編集・検証するときの規則（検証の限界・Windows 実機・chezmoi の作法・docs・試験の登録・`pk`）。
+- `chezmoi-usage`: chezmoi 本体の知識と落とし穴（属性・特殊ファイル・scripts の実行条件と適用順序・テンプレート・`update` / `diff` の限界・`inconsistent state`）。
 - `feature-orchestration`: feature 起票・worker への委譲・並列実装・取り込み・統合。
 - `pi-extension-dev`: pi の機能を足す・直すときの進め方（既存の拡張・設定の評価が先。自作は最後の手段）。

@@ -29,6 +29,7 @@ SKILL_PATHS = vs.discover()
 KNOWN_SKILLS = [
     "home/dot_agents/skills/commit/SKILL.md",
     ".agents/skills/dotfiles-conventions/SKILL.md",
+    ".agents/skills/chezmoi-usage/SKILL.md",
 ]
 
 

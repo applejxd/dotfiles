@@ -44,6 +44,8 @@ description: "chezmoi の dotfiles リポジトリのファイルを編集する
 
 ## chezmoi の作法
 
+chezmoi 本体の挙動・落とし穴（属性・特殊ファイル・scripts の実行条件・テンプレート・`diff` の限界）は [chezmoi-usage](../chezmoi-usage/SKILL.md)。以下はこのリポジトリの作法。
+
 - 実ファイルを直接編集したら `chezmoi add` / `chezmoi re-add` で source state へ戻す。
 - `home/.chezmoiscripts/` は `run_once_` / `run_onchange_` / `run_after_` と 3 桁番号で実行順を管理する。既存の番号体系を崩さない。
 - シェルスクリプトは先頭に `set -eu` を置く。

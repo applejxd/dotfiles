@@ -34,6 +34,7 @@ pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 | 目的 | 文書 |
 | --- | --- |
 | 開発環境を準備して検証する | [開発ガイド](spec/development.md) |
+| chezmoi 本体の挙動・落とし穴（属性・scripts の実行条件・`.chezmoiignore`・`inconsistent state` など）を調べる | [chezmoi-usage スキル](../.agents/skills/chezmoi-usage/SKILL.md) |
 | テストの種類と Docker ハーネスの契約を知る | [テストと検証の仕組み](spec/testing.md) |
 | Windows 資産を実機で検証する | [Windows 実機での検証](spec/development.md#windows-実機での検証) |
 | まっさらな Windows への導入を Sandbox で検証する | [Windows Sandbox での検証](spec/development.md#windows-sandbox-でのクリーン導入の検証) |
