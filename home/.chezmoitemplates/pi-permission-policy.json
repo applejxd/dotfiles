@@ -297,6 +297,7 @@
       "*": "allow"
     },
     "todo": "allow",
+    "watchdog_diff": { "*": { "action": "deny", "reason": "差分を返す際に外部コマンド (textconv) が動き得て、path 無しだと path の deny も効かない。差分はファイルに書き出して、そのパスを渡す"  } },
     "ask_user_question": "allow",
     "subagent": "allow",
     "subagents_enable": "allow",

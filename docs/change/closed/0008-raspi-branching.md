@@ -126,6 +126,7 @@ chezmoi: warning: config file template has changed, run chezmoi init to regenera
 `apply` は警告を出すが、大量の出力に埋もれて見逃す（実際に見逃した）。
 「README に手順を書く」で守らせる設計が弱かった。
 **運用が `chezmoi update` 中心なら、`init` を前提にした設計を選んではいけない。**
+（2026-11-14 追記: この禁止は撤回した。[ADR-0038](../../adr/0038-allow-chezmoi-init-dependency.md)）
 
 `home/.chezmoitemplates/is-raspi` へ移し、参照側は毎回評価する形にした。
 
@@ -371,7 +372,7 @@ true
 
 ### 学び（`AGENTS.md` へ一般化した）
 
-- **`chezmoi init` を前提にした設計にしない。** 運用は `chezmoi update` 中心で
+- **`chezmoi init` を前提にした設計にしない。**（2026-11-14 撤回: [ADR-0038](../../adr/0038-allow-chezmoi-init-dependency.md)）運用は `chezmoi update` 中心で
   `init` を呼ばない。マシン判定は `.chezmoitemplates/` に置き、`apply` の
   たびに評価させる
 - **裏を取らずに原因を断定しない。** 「mise の ruby は常にソースビルド」と

@@ -8,7 +8,7 @@
 - **原因**: `.chezmoiremove` のパターンは**宛先を glob して**一致した実在の項目ごとに「削除」の項目を作る。同じターゲットの source の項目（`dot_foo` など）があると、1 つのターゲットに 2 つの項目が競合する。[src] `sourcestate.go`（`SourceStateAbsent` を足し、複数なら `InconsistentStateError`）
 - **条件**: 宛先に**実在するときだけ**起きる。宛先に無ければ失敗せず、source の内容が普通に作られる [実測]。そのため「復活させた後、一部の機械だけ止まる」形になる。
 - **対処**: source に同名を復活させる前に、`.chezmoiremove` から外す。`.chezmoiignore` に載せたターゲットは削除の対象にならない（競合もしない）。
-- **このリポジトリでの対策**: `hooks.read-source-state.pre`（feature stale-source-cleanup。統合後に有効）。ただし hooks は既存の設定ファイルから読まれるので、設定の再生成（`init`）を通すまでその機械では効かない（[下](#update-は-init-を呼ばない)）。
+- **このリポジトリでの対策**: `hooks.read-source-state.pre`（`scripts/clean_stale_source.py`）。hooks は既存の設定ファイルから読まれるので、設定の再生成（`chezmoi update --init` か `chezmoi init`）を通すまでその機械では効かない。`init` を前提にしてよいことは [ADR-0038](../../../../docs/adr/0038-allow-chezmoi-init-dependency.md)（[下](#update-は-init-を呼ばない)）。
 - `.chezmoiremove` はソースから消えたものを宛先から片付けるための仕組みで、移行が行き渡ったら消す。ディレクトリを消すなら中身を並べずディレクトリ自体を書く。
 
 ## update は init を呼ばない

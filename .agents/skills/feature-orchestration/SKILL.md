@@ -47,11 +47,26 @@ description: "feature を起票して worker に実装を切り出し、成果�
    - docs を触ったら `lint_docs.py` と `check_refs.py`（`home/dot_agents/skills/sdd-docs/scripts/`）。docs に日付を書くときは `date '+%F %H:%M'` で確かめる。
 6. **全件検査**: `bg_run` で `mise run verify:all` を **1 本ずつ**（完了通知を待つ。`sleep` や `bg_log` の連打はしない）。worker の試験が走っている間も重ねない。
 7. **コミット**: bash の `git commit`（`cd <worktree の絶対パス> && git commit …`。件名＋本文 1〜3 行の Conventional Commits）。
-8. **統合**: **利用者が自分から「統合して」と言ったときだけ**（AI が「統合してよいですか」と聞いて得た返事は数えない。許可を求める質問はしない）、`git flow feature finish <名前> --no-ff --no-squash -M "<メッセージ>" --keepremote --no-fetch --no-push --notag` を実行する（push はしない）。
+8. **統合**: 2 件以上は、下の「束ねる」で 1 回のマージにする。**利用者が自分から「統合して」と言ったときだけ**（AI が「統合してよいですか」と聞いて得た返事は数えない。許可を求める質問はしない）、`git flow feature finish <名前> --no-ff --no-squash -M "<メッセージ>" --keepremote --no-fetch --no-push --notag` を実行する（push はしない）。
    指示が無いときは、コミットと要約（統合メッセージの案・確かめた内容・未確認）までで止める。要約は「準備ができた」という報告で、「統合しましょうか」と問う形にしない。`finish` で確認が出るかは未確認（出たら利用者の承認を待つ）。
    docs の更新表や `Rule` の同じ位置の衝突は、両方の行を残す。
 9. **後始末の確認**: `git log --oneline -3`・`git worktree list`・`git status --short`。残った worktree は `git worktree remove .tmp/worktrees/<名前>`（`--force` なし）で消す。枝は残るので、統合済みなら統合先の worktree から `git -C <その worktree> branch -d <枝>` で消す（`-D` は拒否される。統合前の枝は消さない）。
 10. **止まらずに次へ**: コミットと要約を出したら、統合の指示を待たずに、他の feature・docs・検査へ進む。止まるのは、利用者の方針決定がないと進められる作業が無いときだけ。
+
+## 束ねる (複数の feature を 1 回のマージで統合する)
+
+**利用者が 2 件以上の feature の統合を指示したときは、feature ごとに `finish` せず、束ねて 1 回で統合する**（`develop` の履歴に merge commit が 1 つだけ残る）。
+旧 `bundle.py`（自作）は撤去した（ADR-0037）ので、標準の `git flow` と `git merge` だけで行う。自作は増やさない（ADR-0031）。
+
+1. **前提を確かめる**: 束ねる feature がすべてコミット済みで、それぞれ単体で検査が通っている（工程 4〜7）。担当ファイルが重なるものは、衝突しうるので順序を決める。
+2. **束ね用の feature を切る**: `git flow feature start bundle-<日付か話題> --worktree --no-fetch`（worktree は `.tmp/worktrees/bundle-…/`）。
+3. **各 feature を束ね用へ取り込む**: `cd <束ねの worktree の絶対パス> && git merge feature/<名前> -m "merge: feature/<名前> を取り込む"` を feature ごとに。
+   **衝突したら止めて利用者に報告する**（子に直させない。docs の索引・`scripts/verify.py` の同じ位置は、両方の行を残す）。
+4. **束ねた先で全件検査**: `bg_run` で `mise run verify:all`（1 本だけ。積み重ねの検査を兼ねる）。落ちたら、どの feature が原因かを切り分ける。
+5. **利用者の指示で 1 回だけ統合**: `git flow feature finish bundle-<…> --no-ff --no-squash -M "merge: <feature の一覧> を統合する" --keepremote --no-fetch --no-push --notag`（メッセージに取り込んだ feature の名前を並べる）。
+6. **後始末**: 取り込んだ各 feature の worktree を `git worktree remove .tmp/worktrees/<名前>`（`--force` なし）で消す。枝は `develop` から到達できるので、`git -C <develop の worktree> branch -d feature/<名前>` で消せる（`-D` は拒否される）。
+
+1 件だけの統合は、これまでどおり工程 8 の `finish` を直接使う（束ねない）。
 
 ## 積み重ね (依存する feature)
 

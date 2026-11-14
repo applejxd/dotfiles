@@ -269,7 +269,7 @@
   ["external_directory_write", "/home/u/data/x.csv", "ask"],
   ["subagent_launch", "*", "allow"],
   ["subagent", "*", "allow"],
-  ["watchdog_diff", "*", "ask"],
+  ["watchdog_diff", "*", "deny"],
   ["external_directory_read", "$HOME/.pi/agent/pi-permissions.jsonc", "deny"],
   ["external_directory_read", "$HOME/.pi/agent/skills/x/SKILL.md", "allow"],
   ["external_directory_read", "$HOME/.pi/agent/mcp.json", "ask"],

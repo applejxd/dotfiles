@@ -56,7 +56,7 @@ chezmoi 本体の挙動・落とし穴（属性・特殊ファイル・scripts �
 - **設定ファイル・スクリプトのコメントは「その行を編集するときに要る注記」だけにする。** 仕組み・判断基準・既知の不具合・実測値・経緯は `docs/` が正本で、コメントからは参照先だけを示す（`# see docs/spec/structure.md#見出し`）。同じ説明をコメントと `docs/` の両方に書かない。正本の対応は [コメントの書き分け](../../../docs/spec/agent-config-generation.md#コメントの書き分け)。
 - 秘密情報はソースに書かず Bitwarden / sops + age を使う。sudo のパスワードは保存せず、スクリプトが実行時に端末で尋ねる（[sudo パスワード](../../../docs/spec/development.md#sudo-パスワード)）。
 - 対話入力が必須なスクリプトや長時間実行スクリプトは追加しない。
-- **`chezmoi init` を前提にした設計にしない。** 普段の運用は `chezmoi update`（`git pull` + `apply`）で `init` を呼ばない。マシン判定などは `.chezmoitemplates/` の共有テンプレートへ置き、`apply` のたびに評価させる。`chezmoi.toml` の `[data]` は `init` 時にしか更新されない（[CHG-0008](../../../docs/change/closed/0008-raspi-branching.md)）。
+- **`chezmoi init` を前提にしてよい（[ADR-0038](../../../docs/adr/0038-allow-chezmoi-init-dependency.md)。CHG-0008 の禁止を撤回）。** 設定（`chezmoi.toml`）でしか実現できないもの（`hooks` など）は `init` 前提でよい。更新手順は `chezmoi update --init`。省いても壊れない形にし、前提にしたことを `docs/spec/` に書く。マシン判定は引き続き `.chezmoitemplates/` の共有テンプレートへ置き、`apply` のたびに評価させる（`[data]` は `init` 時にしか更新されない）。
 
 ## docs・README・試験
 

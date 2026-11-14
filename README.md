@@ -83,11 +83,11 @@ chezmoi execute-template '{{ includeTemplate "is-raspi" . }}'   # true なら分
 ### 更新
 
 ```bash
-# 最新版に更新
-chezmoi update
+# 最新版に更新 (--init で設定ファイル chezmoi.toml も作り直す。hooks などの設定の変更を反映するため)
+chezmoi update --init
 
 # または段階的に
-chezmoi pull && chezmoi diff && chezmoi apply
+chezmoi git -- pull && chezmoi init && chezmoi diff && chezmoi apply
 ```
 
 zinit 管理のプラグイン (zeno.zsh など) も最新化したい場合は次のタスクを実行する
