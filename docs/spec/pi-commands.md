@@ -2,7 +2,7 @@
 
 pi で、**いま実在する**スラッシュコマンドの早見。撤去した自作ハーネス（`pis`）だけにあったコマンド（`/agents`・`/bypass`・`/orchestrate`・`/pending`・`/board`・`/worktrees`・`/work`・`/delegate-stats`）は、無い。
 
-- 確認の日と版: 2026-11-12。pi 1.5.0、package の版は `home/.chezmoitemplates/pi-stock-packages`。
+- 確認の日と版: 2026-11-15。pi 1.5.2（`test/test_pi_commands_doc.py` の 6 件が、この版で全て通った。skip なし）、package の版は `home/.chezmoitemplates/pi-stock-packages`。
 - 実機で見るには、pi の入力欄で `/` を打つ（補完に出る）。
 - **この表は試験で実物と突き合わせる**（`test/test_pi_commands_doc.py`。pi と package が入った機でだけ回る）。pi か package を更新して
   コマンドが増減すると試験が落ちるので、この表を直す。

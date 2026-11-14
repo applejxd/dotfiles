@@ -104,7 +104,7 @@ OSごとの差分は `.chezmoiignore.tmpl`、テンプレート条件、OS別ス
 | WSL の時刻同期・リモートからの SSH（Tailscale） | [WSL](platform-wsl.md) |
 | Windows の管理者権限を 1 回の UAC に集約する仕組み | [Windows の管理者権限](windows-admin.md) |
 | Windows の設定（電源・Tailscale・7-Zip・広告・既定値・Windows Terminal） | [Windows の設定](windows-settings.md) |
-| mise・AI CLI・Herdr・Envoy の導入と更新 | [CLI の導入と管理](cli-management.md) |
+| mise・pi・Herdr の導入と更新 | [CLI の導入と管理](cli-management.md) |
 | シェルの起動契約・マシン固有の設定・zsh・PowerShell プロファイル | [シェル](shell.md) |
 | C++ の単一ファイル実行・VS Code・code-exam | [開発環境](dev-environment.md) |
 
