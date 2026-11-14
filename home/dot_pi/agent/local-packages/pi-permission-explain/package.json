@@ -1,0 +1,54 @@
+{
+  "name": "pi-permission-explain-local",
+  "version": "0.1.1-local.1",
+  "description": "ローカル版 pi-permission-explain 0.1.1 (rkshrksh, MIT)。Ctrl+E をダイアログへ通し、説明を日本語にする。",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "pi-coding-agent",
+    "permissions",
+    "pi-permission-system",
+    "explain"
+  ],
+  "license": "MIT",
+  "author": "rkshrksh",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rkshrksh/pi-permission-explain.git"
+  },
+  "homepage": "https://github.com/rkshrksh/pi-permission-explain#readme",
+  "bugs": {
+    "url": "https://github.com/rkshrksh/pi-permission-explain/issues"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.87.1",
+    "@earendil-works/pi-tui": "0.87.1",
+    "@types/node": "^22",
+    "typescript": "^5"
+  },
+  "files": [
+    "src",
+    "config.example.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
