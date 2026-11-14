@@ -47,32 +47,45 @@ description: "feature を起票して worker に実装を切り出し、成果�
    - docs を触ったら `lint_docs.py` と `check_refs.py`（`home/dot_agents/skills/sdd-docs/scripts/`）。docs に日付を書くときは `date '+%F %H:%M'` で確かめる。
 6. **全件検査**: `bg_run` で `mise run verify:all` を **1 本ずつ**（完了通知を待つ。`sleep` や `bg_log` の連打はしない）。worker の試験が走っている間も重ねない。
 7. **コミット**: bash の `git commit`（`cd <worktree の絶対パス> && git commit …`。件名＋本文 1〜3 行の Conventional Commits）。
-8. **統合**（rebase + fast-forward。merge commit を作らない。[ADR-0039](../../../docs/adr/0039-integrate-by-rebase.md)）: **利用者が自分から「統合して」と言ったときだけ**（AI が「統合してよいですか」と聞いて得た返事は数えない。許可を求める質問はしない）行う。
-   1. `git flow feature update <名前> --rebase`（feature を `develop` の先頭へ rebase する。確認なしで通る）。`develop` が進んでいなければ何も変わらない。
-   2. rebase で変わったなら、**検査をやり直す**（`develop` へ入るのは、検査した先頭そのものでなければならない）。
-   3. `git flow feature finish <名前> --ff-only --keepremote --no-fetch --no-push --notag`（push はしない。**ここだけ確認が出る**。規則 `git flow * finish*` が ask）。`develop` が進んでいると `--ff-only` が失敗するので、手順 1 からやり直す。
-   2 件以上は、**1 件ずつ順に**この手順を行う（A を統合したら、B を `update --rebase` → 検査 → `finish`）。複数を 1 つの merge commit にまとめる `bundle` は使わない。
-   指示が無いときは、コミットと要約（確かめた内容・未確認）までで止める。要約は「準備ができた」という報告で、「統合しましょうか」と問う形にしない。
+8. **統合**（[ADR-0039](../../../docs/adr/0039-merge-to-develop-rebase-between-features.md)）: **利用者が自分から「統合して」と言ったときだけ**（AI が「統合してよいですか」と聞いて得た返事は数えない。許可を求める質問はしない）行う。`develop` へは **merge** で入れる（`develop` は他のホストも取り込むので、書き換えない）。
+   - **1 件**: `git flow feature finish <名前> --no-ff --no-squash -M "<メッセージ>" --keepremote --no-fetch --no-push --notag`（push はしない。**ここだけ確認が出る**。規則 `git flow * finish*` が ask）。
+   - **2 件以上は、束ねて 1 回の merge にする**（下の「束ねる」）。
+   指示が無いときは、コミットと要約（統合メッセージの案・確かめた内容・未確認）までで止める。要約は「準備ができた」という報告で、「統合しましょうか」と問う形にしない。
    docs の更新表や `Rule` の同じ位置の衝突は、両方の行を残す。
 9. **後始末の確認**: `git log --oneline -3`・`git worktree list`・`git status --short`。残った worktree は `git worktree remove .tmp/worktrees/<名前>`（`--force` なし）で消す。枝は残るので、統合済みなら統合先の worktree から `git -C <その worktree> branch -d <枝>` で消す（`-D` は拒否される。統合前の枝は消さない）。
 10. **止まらずに次へ**: コミットと要約を出したら、統合の指示を待たずに、他の feature・docs・検査へ進む。止まるのは、利用者の方針決定がないと進められる作業が無いときだけ。
+
+## 束ねる (複数の feature を 1 回の merge で統合する)
+
+feature 同士は、**rebase で 1 本の線に積み重ねて**から、一番上だけを `finish` する。`develop` の履歴には merge commit が 1 つだけ残り、確認（ask）も検査も 1 回で済む。
+**rebase してよいのは feature の枝だけ**（まだ誰も持っていない。push・`publish` した feature は、rebase しない）。`develop` と `main` は書き換えない。
+
+1. **前提**: 束ねる feature がすべてコミット済みで、単体で検査が通っている（工程 4〜7）。順序を決める（A → B → C。担当ファイルが重なるものは、衝突しうるので前後に置く）。
+2. **積み重ねる**: `git -C <B の worktree の絶対パス> rebase feature/<A>`、続けて `git -C <C の worktree の絶対パス> rebase feature/<B>`。
+   `.tmp/worktrees/` の下の worktree で、`feature/*` へ載せるだけの形は確認なしで通る（判定表で確認済み。`--exec`・`-x`・`-i` を付けると確認が出る）。`cd … && git rebase …` の連結は使わない。
+   **衝突したら止めて利用者に報告する**（子に直させない。docs の索引・`scripts/verify.py` の同じ位置は、両方の行を残す）。
+3. **検査は一番上で 1 回**: C の worktree で `bg_run` の `mise run verify:all`（A・B の変更を含む）。落ちたら、どの feature が原因かを切り分ける。
+4. **1 回だけ統合**（利用者の指示で）: `git flow feature finish <C> --no-ff --no-squash -M "merge: <A>・<B>・<C> を統合する" --keepremote --no-fetch --no-push --notag`（ここだけ確認が出る）。A・B・C のコミットが、1 つの merge commit でまとめて入る。
+5. **後始末**: A・B の worktree を `git worktree remove .tmp/worktrees/<名前>`（`--force` なし）で消す。枝は C の祖先なので `develop` から到達でき、`git -C <develop の worktree> branch -d feature/<名前>` で消せる（`-D` は拒否される）。
+
+`develop` が進んだときの追従は、feature ごとに `git flow feature update <名前> --rebase`（確認なしで通る）。積み重ねの最下段（A）だけに行えば、B・C は A の続きとして載り直す（`git -C <worktree> rebase feature/<前の段>` をもう一度）。
 
 ## 積み重ね (依存する feature)
 
 B が、まだ develop に入っていない A の変更を要るとき、A の統合を待たずに B を進められる。**依存は宣言しない**（git の祖先関係から導く。宣言は古くなる）。
 
 1. **起票**: A をコミットしたあと、`git flow feature start <B> feature/<A> --worktree --no-fetch`（B は A の先頭から始まる）。
-2. **A がさらに進んだら**: B は、A の新しいコミットを取り込むために、**A を先に統合してから** `git flow feature update <B> --rebase` で `develop` へ載せ替える（確認なしで通る）。A がまだ統合前なら、B の作業を続け、載せ替えは A の統合後にまとめて行う。B の worker が動いていないときに、**親が行う**。**衝突したら、止めて利用者に報告する**（子に直させない）。
-3. **統合は、利用者の指示で A → B の順**。A を先に統合し（`--ff-only`）、B を `git flow feature update <B> --rebase` で `develop` の先頭へ載せ替える。A の変更は `develop` に入っているので、B の履歴から重複が消える。B を先に統合すると A の変更も一緒に入る。
+2. **A がさらに進んだら**: `git -C <B の worktree の絶対パス> rebase feature/<A>`（B の worker が動いていないときに、**親が行う**。衝突したら、止めて利用者に報告する）。
+3. **統合は、利用者の指示で**。A だけ先に統合してもよいし、上の「束ねる」で B をまとめて統合してもよい（B を `finish` すると A の変更も一緒に入る）。
 4. **全件検査**は B の worktree でも回せる（A の変更を含む。A が壊れていれば B も落ちる）。
 
 ## 落とし穴
 
 - **整形 hook が書き込み直後にファイルを書き換える**。すぐ `git add` すると空のファイルをステージする。`git add -A` のあと `git diff --cached --numstat` で見る（必要なら少し待ってから）。
 - **全件検査は 1 本ずつ回す**。重なると負荷が上がり、時間に依存する試験が落ちる。落ちたら、負荷が下がってから**単独で再実行して確かめる**（再実行で通るなら負荷が原因）。
-- **feature への `develop` の取り込み**は、`git flow feature update <名前> --rebase`（確認なしで通る）で行う。`git rebase` を直接使うと確認が出る（`git rebase*` が ask）。rebase のあとは、履歴が書き換わるので、検査をやり直す。
-- **`chezmoi update` は `git pull --autostash --rebase` を実行する**（chezmoi の固定の挙動）。`develop` に未 push の merge commit があると、rebase で平らに作り直される（2026-11-14 に実際に起きた）。だから統合は rebase + fast-forward で、merge commit を作らない。
+- **統合したあとの実機への反映は、`chezmoi apply`**（この PC の chezmoi のソースは `develop`。pull しない）。`chezmoi update` は `git pull --autostash --rebase` を固定で実行するので、**未 push の merge commit がある `develop` では、merge commit が平らに作り直される**（2026-11-14 に実際に起きた）。`chezmoi update` は、未 push のコミットが無いとき（`git rev-list --count @{u}..HEAD` が 0）に限る。他のホストの更新は、利用者が push したあとに `chezmoi update --init`。
+- **feature への `develop` の取り込み**は `git flow feature update <名前> --rebase`（確認なしで通る）。feature の枝は未公開なので、rebase してよい。
 - **子の自己申告は当てにならない**。親が、同じコマンドを自分で再実行して確かめる。子の報告が「確認していない」と書いたことは、親が確かめるまで未確認として扱う。
 - **子の `stop` は、子のサブプロセスを止めない**。子に長く動くコマンドを実行させるときは、契約で `timeout` を付けさせる。
 - **確認が出たかどうかは、子の自己申告でなく審査ログが正**: `~/.pi/agent/extensions/pi-permission-system/logs/pi-permission-system-permission-review.jsonl`。子の確認は、親の画面へ転送される。
-- **AI は、利用者の指示が無いのに保護ブランチへ統合しない**（`develop`・`main` に直接コミットもしない）。`finish`・`merge`・`rebase` は、利用者が明示的に指示したときだけ。
+- **AI は、利用者の指示が無いのに保護ブランチへ統合しない**（`develop`・`main` に直接コミットもしない）。`finish`・`merge` は、利用者が明示的に指示したときだけ。

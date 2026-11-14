@@ -70,3 +70,9 @@
 
 - v2.67.0 → 最新で、`.ps1` の既定 interpreter（Windows は `pwsh` 優先）・`chezmoi remove` の撤去・`unmanaged --include` 等が変わった。[sources.md](sources.md#版ごとの差分v2670-以降)。
 - このリポジトリの挙動は v2.67.0 で確かめる。新機能を使うなら `.chezmoiversion` と、各機械の版を確かめる。
+
+## update は pull --rebase を固定で実行する
+
+- **症状**: 未 push の merge commit がある `develop` で `chezmoi update` を実行すると、merge commit が平らに作り直される（内容は同じ）。
+- **原因**: `chezmoi update` は `git pull --autostash --rebase` を実行する（`chezmoi update --help`。`pull.rebase` の設定では変わらない。2026-11-14 に実測）。
+- **対処**: 未 push のコミットがあるうちは `chezmoi apply`（pull しない）を使う。`update` は、`git rev-list --count @{u}..HEAD` が 0 のときだけ。このリポジトリの方針は [ADR-0039](../../../../docs/adr/0039-merge-to-develop-rebase-between-features.md)。
