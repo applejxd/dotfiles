@@ -297,6 +297,7 @@
       "*": "allow"
     },
     "todo": "allow",
+    "watchdog_diff": "allow",
     "ask_user_question": "allow",
     "subagent": "allow",
     "subagents_enable": "allow",
@@ -316,6 +317,8 @@
     "goal_wait": "allow",
     "external_directory": { "*": "ask", "/tmp/*": "allow" },
     "external_directory_read": {
+      "~/.pi/agent": { "action": "deny", "reason": "丸ごとは読まない。許可済みの子パスだけを読む" },
+      "~/.pi/agent/pi-permissions.jsonc": { "action": "deny", "reason": "権限の設定そのもの。元データはリポジトリの pi-permission-policy.json" },
       "~/.pi/agent/npm/*": "allow",
       "~/.pi/agent/install/*": "allow",
       "~/.pi/agent/extensions/*": "allow",
