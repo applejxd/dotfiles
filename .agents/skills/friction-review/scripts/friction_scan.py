@@ -71,7 +71,28 @@ def error_head(text: str) -> str:
 
 CAT_APPROVED, CAT_DENIED, CAT_TIMEOUT = "承認", "拒否", "時間切れ"
 CAT_SAVED, CAT_FREE, CAT_UNKNOWN = "保留に保存", "確認なしで実行", "不明"
-CATEGORIES = (CAT_APPROVED, CAT_DENIED, CAT_TIMEOUT, CAT_SAVED, CAT_FREE, CAT_UNKNOWN)
+CAT_RULE_DENY, CAT_SESSION = "規則で拒否", "セッション承認で省略"
+CATEGORIES = (
+    CAT_APPROVED,
+    CAT_DENIED,
+    CAT_TIMEOUT,
+    CAT_SAVED,
+    CAT_FREE,
+    CAT_RULE_DENY,
+    CAT_SESSION,
+    CAT_UNKNOWN,
+)
+# pi-permission-system の審査ログの場所。確認の有無の正本 (権限の方針では logs は ask だが、
+# このスクリプトの中の読み取りは権限の判定の対象外なので、確認なしで読める)
+REVIEW_LOG = "~/.pi/agent/extensions/pi-permission-system/logs/pi-permission-system-permission-review.jsonl"
+_REVIEW_RESOLUTION = {
+    "approved": CAT_APPROVED,
+    "approved_for_session": CAT_APPROVED,
+    "session_approved": CAT_SESSION,
+    "denied_with_reason": CAT_DENIED,
+    "confirmation_unavailable": CAT_TIMEOUT,
+    "policy_denied": CAT_RULE_DENY,
+}
 MIN_PER_RULE = 20  # 規則あたりの件数の下限。未満は判断に使えない (CHG-0054 段 1)
 
 
@@ -147,6 +168,38 @@ def scan_approvals(path: Path, since: str) -> dict[str, dict[str, int]]:
     return {rule: dict(counts) for rule, counts in table.items()}
 
 
+def scan_review_log(path: Path, since: str) -> dict[str, dict[str, int]]:
+    """pi-permission-system の審査ログから、規則ごとの区分の件数を返す。
+
+    規則の単位は `<surface>:<matchedPattern>`。matchedPattern が `*` は、許可リストに
+    無く既定の ask に落ちたもの (許可・拒否の候補)。コマンドの文面などの値は読まない。
+    """
+    table: dict[str, Counter] = {}
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return {}
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict) or not str(event.get("event", "")).startswith(
+            "permission_request."
+        ):
+            continue
+        category = _REVIEW_RESOLUTION.get(str(event.get("resolution") or ""))
+        if category is None:
+            continue
+        stamp = str(event.get("timestamp") or "")
+        if since and stamp and stamp[:10] < since:
+            continue
+        surface = str(event.get("surface") or event.get("toolName") or "?")
+        pattern = str(event.get("matchedPattern") or "?")
+        table.setdefault(f"{surface}:{pattern}", Counter())[category] += 1
+    return {rule: dict(counts) for rule, counts in table.items()}
+
+
 def merge_approvals(tables: list[dict]) -> dict:
     merged: dict[str, Counter] = {}
     for table in tables:
@@ -162,7 +215,10 @@ def merge_approvals(tables: list[dict]) -> dict:
         }
     return {
         "min_per_rule": MIN_PER_RULE,
-        "rule_basis": "ログに規則名は無いので、guarded_action は action 名、それ以外はツール名で代替した",
+        "rule_basis": (
+            "審査ログは surface:matchedPattern (`*` は既定の ask)。"
+            "旧形式のセッションログは、guarded_action は action 名、それ以外はツール名で代替した"
+        ),
         "rules": rules,
     }
 
@@ -325,6 +381,11 @@ def main(argv: list[str] | None = None) -> int:
         help="確認の結果の表だけを標準出力へ出す (ファイルは書かない)",
     )
     parser.add_argument("--json", action="store_true", help="--approvals の出力を JSON にする")
+    parser.add_argument(
+        "--review-log",
+        default=REVIEW_LOG,
+        help="--approvals が読む審査ログ。none で読まない",
+    )
     args = parser.parse_args(argv)
     root = Path(args.root).expanduser()
     if args.session == "latest":
@@ -334,7 +395,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         files = sorted(root.glob("*/*.jsonl"))
     if args.approvals:
-        approvals = merge_approvals([scan_approvals(p, args.since) for p in files])
+        tables = [scan_approvals(p, args.since) for p in files]
+        if args.review_log != "none":
+            tables.append(scan_review_log(Path(args.review_log).expanduser(), args.since))
+        approvals = merge_approvals(tables)
         if args.json:
             print(json.dumps(approvals, ensure_ascii=False, indent=1))
         else:
