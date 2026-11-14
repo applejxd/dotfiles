@@ -20,7 +20,8 @@ import sys
 from pathlib import Path
 
 # ディレクトリの source 名に付く属性接頭辞 (chezmoi v2.67.0 の managed で確認済み。
-# executable_・symlink_・create_・modify_・run_ などはファイル用で、ディレクトリでは名前の一部)。順不同・重複して付くので、付かなくなるまで外す
+# executable_・symlink_・create_・modify_・run_ などはファイル用で、ディレクトリでは名前の一部)。
+# 順不同・重複して付くので、付かなくなるまで外す
 _PREFIXES = (
     "exact_",
     "private_",
@@ -59,7 +60,7 @@ def read_entries(chezmoiremove: Path) -> list[tuple[str, ...]]:
         return entries
     for raw in text.splitlines():
         line = raw.strip()
-        if not line or line.startswith("#") or line.startswith("!"):
+        if not line or line.startswith(("#", "!")):
             continue
         if "{{" in line or "}}" in line or _GLOB_CHARS & set(line):
             continue
@@ -135,10 +136,10 @@ def inside_nested_repo(root: Path, directory: Path) -> bool:
         if (path / ".git").exists():
             return True
     # 削除候補の子孫にある別のリポジトリ (ignored な __pycache__ の中など) も守る
-    for current, dirnames, filenames in os.walk(directory, followlinks=False):
-        if ".git" in dirnames or ".git" in filenames:
-            return True
-    return False
+    return any(
+        ".git" in dirnames or ".git" in filenames
+        for _current, dirnames, filenames in os.walk(directory, followlinks=False)
+    )
 
 
 def clean(root: Path, dry_run: bool) -> int:
