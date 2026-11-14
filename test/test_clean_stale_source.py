@@ -205,3 +205,13 @@ def test_file_only_prefixes_are_not_stripped_from_directories(repo: Path, name: 
     proc = _run(repo)
     assert proc.returncode == 0
     assert (repo / "home" / name).exists()
+
+
+def test_multiline_template_in_chezmoiremove_disables_cleanup(repo: Path) -> None:
+    """条件つきの複数行は行単位で解釈できないので、テンプレートがあれば何も消さない。"""
+    _write(repo / "home" / ".chezmoiremove", "{{ if false }}\n.config/pi\n{{ end }}\n")
+    _write(repo / "home" / "dot_config" / "pi" / "__pycache__" / "m.pyc")
+    proc = _run(repo)
+    assert proc.returncode == 0
+    assert (repo / "home" / "dot_config" / "pi").exists()
+    assert "テンプレート" in proc.stderr

@@ -52,7 +52,12 @@ def target_name(source_name: str) -> str:
 def read_entries(chezmoiremove: Path) -> list[tuple[str, ...]]:
     """`.chezmoiremove` のエントリを要素の列にして返す。解釈できない行は読み飛ばす。"""
     entries: list[tuple[str, ...]] = []
-    for raw in chezmoiremove.read_text(encoding="utf-8").splitlines():
+    text = chezmoiremove.read_text(encoding="utf-8")
+    if "{{" in text or "}}" in text:
+        # 複数行の条件 ({{ if }} ... {{ end }}) は行単位では解釈できない。全体を読まない
+        print("警告: .chezmoiremove にテンプレートがあるため、何も消しません", file=sys.stderr)
+        return entries
+    for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or line.startswith("!"):
             continue
