@@ -257,6 +257,8 @@
   {"cmd": "git merge feature/other", "perm": "allow", "csn": "allowed", "note": "feature 同士のマージは確認なし"},
   {"cmd": "git -C /x merge develop", "perm": "allow", "csn": "allowed"},
   {"cmd": "git flow update", "perm": "allow", "csn": "allowed", "note": "develop から feature への取り込み（git flow）は確認なし"},
+  {"cmd": "git flow feature update foo --rebase", "perm": "allow", "csn": "allowed", "note": "feature を最新の develop へ追従させる (ADR-0039)。git-flow が親への rebase だけを行う"},
+  {"cmd": "git -C /x/.tmp/worktrees/b rebase feature/a main", "perm": "ask", "csn": "allowed", "note": "git rebase の直接の実行は ask のまま (後続引数で main を書き換えうる。ADR-0039)"},
   {"cmd": "git flow feature rebase foo", "perm": "allow", "csn": "allowed", "note": "git flow の rebase は、生の git rebase とは別の規則（確認にならない）"},
   {"cmd": "git flow feature publish foo", "perm": "allow", "csn": "allowed"}
  ],
