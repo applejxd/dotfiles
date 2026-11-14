@@ -158,3 +158,19 @@ def test_literal_prefix_is_not_interpreted(repo: Path) -> None:
     proc = _run(repo)
     assert proc.returncode == 0
     assert (repo / "home" / "literal_dot_config" / "pi").exists()
+
+
+def test_submodule_contents_are_kept(repo: Path, tmp_path: Path) -> None:
+    """外側の ls-files が空でも、サブモジュールの内側の追跡ファイルは消さない。"""
+    inner = tmp_path / "inner"
+    inner.mkdir()
+    _git(inner, "init", "-q")
+    _write(inner / "guard" / "notes.txt")
+    _git(inner, "add", "-A")
+    _git(inner, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "i")
+    _write(repo / "home" / ".chezmoiremove", ".config/pi/guard\n")
+    _git(repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(inner), "home/dot_config/pi")
+    proc = _run(repo)
+    assert proc.returncode == 0
+    assert (repo / "home" / "dot_config" / "pi" / "guard" / "notes.txt").exists()
+    assert "警告" in proc.stderr

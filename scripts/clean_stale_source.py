@@ -132,6 +132,20 @@ def has_tracked_files(root: Path, directory: Path) -> bool | None:
     return bool(proc.stdout.strip())
 
 
+def inside_nested_repo(root: Path, directory: Path) -> bool:
+    """directory か、root までの祖先に別の git リポジトリ (サブモジュールなど) があるか。
+
+    外側の index にはサブモジュールの gitlink しか無く、内側の追跡ファイルを外側の
+    ls-files は空と答えるので、別のリポジトリの中は触らない。
+    """
+    for path in (directory, *directory.parents):
+        if path == root:
+            break
+        if (path / ".git").exists():
+            return True
+    return False
+
+
 def clean(root: Path, dry_run: bool) -> int:
     """残骸を消す。消した (dry-run なら消す予定の) 数を返す。"""
     home = root / "home"
@@ -151,6 +165,9 @@ def clean(root: Path, dry_run: bool) -> int:
             if directory in seen:
                 continue
             seen.add(directory)
+            if inside_nested_repo(root, directory):
+                print(f"警告: 別の git リポジトリの中のため残します: {directory}", file=sys.stderr)
+                continue
             tracked = has_tracked_files(root, directory)
             if tracked is None:
                 print(f"警告: git で確かめられないため残します: {directory}", file=sys.stderr)
