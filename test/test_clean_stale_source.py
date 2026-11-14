@@ -174,3 +174,25 @@ def test_submodule_contents_are_kept(repo: Path, tmp_path: Path) -> None:
     assert proc.returncode == 0
     assert (repo / "home" / "dot_config" / "pi" / "guard" / "notes.txt").exists()
     assert "警告" in proc.stderr
+
+
+def test_nested_repo_below_candidate_is_kept(repo: Path) -> None:
+    """候補の子孫にある ignored な別リポジトリ (内側の commit 済みファイル付き) は消さない。"""
+    inner = repo / "home" / "dot_config" / "pi" / "__pycache__"
+    inner.mkdir(parents=True)
+    _git(inner, "init", "-q")
+    _write(inner / "notes.txt")
+    _git(inner, "add", "-A")
+    _git(inner, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "i")
+    proc = _run(repo)
+    assert proc.returncode == 0
+    assert (inner / "notes.txt").exists()
+    assert "警告" in proc.stderr
+
+
+def test_directory_suffixes_are_not_stripped(repo: Path) -> None:
+    """ディレクトリの .tmpl / .literal は target 名から除かれない (chezmoi managed で確認済み)。"""
+    _write(repo / "home" / "dot_config" / "pi.tmpl" / "__pycache__" / "m.pyc")
+    proc = _run(repo)
+    assert proc.returncode == 0
+    assert (repo / "home" / "dot_config" / "pi.tmpl").exists()

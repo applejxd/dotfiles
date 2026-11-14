@@ -38,12 +38,11 @@ _PREFIXES = (
     "after_",
     "run_",
 )
-_SUFFIXES = (".tmpl", ".literal")
 _GLOB_CHARS = set("*?[")
 
 
 def target_name(source_name: str) -> str:
-    """source の名前から、属性接頭辞・接尾辞を外した target 名を返す。"""
+    """source の名前から、属性接頭辞を外した target 名を返す。"""
     name = source_name
     stripped = True
     while stripped:
@@ -57,9 +56,6 @@ def target_name(source_name: str) -> str:
                     return name
     if name.startswith("dot_"):
         name = "." + name[len("dot_") :]
-    for suffix in _SUFFIXES:
-        if name.endswith(suffix):
-            name = name[: -len(suffix)]
     return name
 
 
@@ -142,6 +138,10 @@ def inside_nested_repo(root: Path, directory: Path) -> bool:
         if path == root:
             break
         if (path / ".git").exists():
+            return True
+    # 削除候補の子孫にある別のリポジトリ (ignored な __pycache__ の中など) も守る
+    for current, dirnames, filenames in os.walk(directory, followlinks=False):
+        if ".git" in dirnames or ".git" in filenames:
             return True
     return False
 
