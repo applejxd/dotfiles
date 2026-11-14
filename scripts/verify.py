@@ -246,6 +246,11 @@ RULES: tuple[Rule, ...] = (
         ("test_verify", "test_verify_stamp"),
     ),
     Rule("検証の印", ("scripts/verify_stamp.py",), ("test_verify_stamp",)),
+    Rule(
+        "source 残骸の掃除",
+        ("scripts/clean_stale_source.py",),
+        ("test_clean_stale_source",),
+    ),
     Rule("push 前の秘密検出", ("scripts/gitleaks_prepush.py",), ("test_gitleaks_prepush",)),
     Rule(
         "ステージの空ファイル検査", ("scripts/check_staged_drop.py",), ("test_check_staged_drop",)

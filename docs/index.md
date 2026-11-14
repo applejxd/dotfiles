@@ -13,6 +13,7 @@ pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 | 目的 | 文書 |
 | --- | --- |
 | リポジトリ全体の構成を知る | [プロジェクト構造](spec/structure.md) |
+| `chezmoi apply` が `inconsistent state (…, remove)` で止まる（source 側の残骸） | [source 側の残骸の掃除](spec/structure.md#source-側の残骸の掃除) |
 | chezmoi スクリプトが作るキャッシュ・状態ファイルを知る | [スクリプトが作るキャッシュ・状態](spec/script-artifacts.md) |
 | Raspberry Pi へ導入する | [Raspberry Pi](spec/platform-raspberry-pi.md#raspberry-pi) |
 | Raspberry Pi に入った GUI 一式を消す | [入ってしまった GUI 一式を消す](spec/platform-raspberry-pi.md#入ってしまった-gui-一式を消す) |

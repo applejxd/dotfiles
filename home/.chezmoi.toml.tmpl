@@ -69,6 +69,15 @@ see docs/adr/0003-require-python-311-for-agent-configuration.md
     command = {{ $python | toJson }}
 {{- end }}
 
+# source に残った Git 管理外の残骸が chezmoi を止めるのを防ぐ (失敗しても apply は続ける)。
+# 既存ホストは 1 回 `chezmoi init` が要る。Windows は未検証のため呼ばない。
+# see docs/spec/structure.md#source-側の残骸の掃除
+{{- if ne .chezmoi.os "windows" }}
+[hooks.read-source-state.pre]
+    command = "sh"
+    args = ["-c", "\"$0\" \"$1\" || true", {{ $python | toJson }}, {{ joinPath .chezmoi.sourceDir ".." "scripts" "clean_stale_source.py" | toJson }}]
+{{- end }}
+
 [data]
 {{- if $http_proxy }}
     http_proxy = {{ $http_proxy | toJson }}

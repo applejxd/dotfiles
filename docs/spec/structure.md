@@ -56,6 +56,31 @@ chezmoiの管理対象は `home/` 配下です。リポジトリ直下の `confi
 - `run_after_`: ファイル展開後、applyのたびに実行する
 - `.tmpl`: OS分岐、chezmoiデータ、秘密情報が必要な場合のみ使用する
 
+## source 側の残骸の掃除
+
+`home/.chezmoiremove` に載った対象（例 `.config/pi`）と同名の source ディレクトリ（`home/dot_config/pi/`）が、
+Git 管理外の残骸（`__pycache__` など。`.gitignore` 済みで git が消さない）として残ると、
+`chezmoi apply` / `update` は `inconsistent state (…, remove)` で全体が止まる（配備先に対象があるとき）。
+`run_before_` のスクリプトでは、chezmoi の事前チェックが先に止まるため防げない。
+
+`chezmoi.toml` の `[hooks.read-source-state.pre]` が、source を読む前に `scripts/clean_stale_source.py` を呼ぶ
+（`home/.chezmoi.toml.tmpl` が生成する。スクリプトは source ルートの `scripts/` にあり、絶対パスで呼ぶ）。
+
+- 対象は `.chezmoiremove` の全エントリ。`dot_`・`private_`・`exact_` などの接頭辞は無視して source を探す。
+  テンプレート記法（`{{ }}`）・`!` 否定・glob の行は解釈できないので読み飛ばす（消さない側に倒す）
+- 追跡ファイルも、未追跡で ignored でないファイルも無いディレクトリ (ignored な残骸だけ) を消す。残すべきファイルがあれば消さず、標準エラーへ警告する（exit 0）。`literal_` 以降の名前は解釈しない。git の呼び出しでは `GIT_*` 環境変数を除く。
+  git で確かめられない・source が git 管理外のときも消さず警告だけ
+- 消すのは `home/` 配下のディレクトリだけで、シンボリックリンクは辿らない。`--dry-run` で消さずに対象を表示できる
+- フックが失敗しても apply は止めない（`|| true`）
+- **既存のホストは `chezmoi init` を 1 回実行する**（フックは `chezmoi.toml` にあり、`update` は `init` を呼ばないため）。
+  それまでは従来どおり、残骸を手で消す（`rm -rf ~/.local/share/chezmoi/home/dot_config/pi`）
+- Windows は、フックを生成しない。実機で未検証のため（quoting と `py` の扱いを確かめてから足す）
+
+標準機能に該当するものは無かった（chezmoi に source 側の無視・掃除の仕組みが無い。[ADR-0031](../adr/0031-evaluate-existing-extensions-first.md)）。
+維持費は約 150 行の Python と試験（`test/test_clean_stale_source.py`）。
+**撤去**: `.chezmoiremove` を廃止したとき、または chezmoi 本体が残骸を扱えるようになったとき、
+スクリプト・試験・`verify.py` の規則・`.chezmoi.toml.tmpl` のフック・この節を消す。
+
 ## 対応環境
 
 | 環境 | 主な導入経路 |
