@@ -340,6 +340,7 @@ chezmoi apply --exclude=scripts
 このリポジトリは、`main`（リリース。他のマシンの `chezmoi update` が見る）・`develop`（統合。この PC の chezmoi のソースが指す）・`feature/<名前>`（作業。専用の worktree）で運用する（[CHG-0047](../change/0047-gitflow.md)）。`release`・`hotfix` は使わない。
 
 - **feature**: 親が `git flow feature start <名前> --worktree --no-fetch` で起票する。AI は feature の worktree（`.tmp/worktrees/<名前>`）で、`git commit` で細かくコミットする（bash の `git commit` は確認なしで通る）。**develop への統合は、下の「統合の規則」に従う**。AI の `gitflow_feature_*` の操作は撤去した（CHG-0050、[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）
+- **feature の統合（2026-11-14。[ADR-0039](../adr/0039-integrate-by-rebase.md)）**: `git flow feature update <名前> --rebase` で `develop` の先頭へ載せ替え、検査をやり直してから、`git flow feature finish <名前> --ff-only --keepremote --no-fetch --no-push --notag`。merge commit を作らず、`develop` は線形に保つ。2 件以上は 1 件ずつ順に行う。
 - **main へ**: 検証（`mise run verify:all`）の後、`git flow integrate develop` で `develop` を `main` に merge する（タグ・fetch は既定でオフ）。`push` は利用者が行う。
 - **統合の規則（stock の pi。2026-11-11）**: 保護ブランチへの統合（`git flow feature finish`・`git flow integrate`）は、AI は**原則実行しない**。**利用者が自分から明示的に指示したときだけ**実行する。
   - AI が「統合してよいですか」と聞いて得た返事は、承認に数えない。AI は、許可を求める質問をせず、「準備ができた」（検証の結果・統合する内容）という報告だけにする。

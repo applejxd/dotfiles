@@ -242,6 +242,8 @@
   {"cmd": "systemctl stop x", "perm": "ask", "csn": "allowed"},
   {"cmd": "git flow integrate develop", "perm": "ask", "csn": "allowed"},
   {"cmd": "git -C /x flow integrate develop", "perm": "ask", "csn": "allowed"},
+  {"cmd": "git flow feature update foo --rebase", "perm": "allow", "csn": "allowed", "note": "feature を develop の先頭へ載せ替える (ADR-0039)"},
+  {"cmd": "git flow feature finish foo --ff-only --keepremote --no-fetch --no-push --notag", "perm": "ask", "csn": "allowed", "note": "統合 (rebase + fast-forward)"},
   {"cmd": "git flow feature finish foo --no-ff --no-squash -M 'msg' --keepremote --no-fetch --no-push --notag", "perm": "ask", "csn": "allowed"},
   {"cmd": "git flow release finish v1", "perm": "ask", "csn": "allowed"},
   {"cmd": "git flow finish", "perm": "ask", "csn": "allowed"},
