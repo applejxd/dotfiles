@@ -297,7 +297,6 @@
       "*": "allow"
     },
     "todo": "allow",
-    "watchdog_diff": "allow",
     "ask_user_question": "allow",
     "subagent": "allow",
     "subagents_enable": "allow",
