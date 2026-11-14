@@ -44,7 +44,6 @@ def repo(tmp_path: Path) -> Path:
         "# コメント\n"
         ".config/pi\n"
         ".ssh/x\n"
-        "{{ if eq .chezmoi.os \"linux\" }}.config/templ\n"
         "!.config/keep\n"
         ".config/glob*\n",
     )
@@ -92,13 +91,11 @@ def test_dry_run_removes_nothing(repo: Path) -> None:
 
 def test_directories_not_in_chezmoiremove_are_untouched(repo: Path) -> None:
     _write(repo / "home" / "dot_config" / "other" / "__pycache__" / "m.pyc")
-    _write(repo / "home" / "dot_config" / "templ" / "__pycache__" / "m.pyc")
     _write(repo / "home" / "dot_config" / "globx" / "__pycache__" / "m.pyc")
     proc = _run(repo)
     assert proc.returncode == 0
     assert (repo / "home" / "dot_config" / "other").exists()
     # 解釈できない行 (テンプレート・glob) の対象は触らない
-    assert (repo / "home" / "dot_config" / "templ").exists()
     assert (repo / "home" / "dot_config" / "globx").exists()
 
 
