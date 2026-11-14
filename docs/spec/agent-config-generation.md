@@ -55,6 +55,14 @@ Python は 3.11 以上を前提とし、TOML は標準ライブラリ `tomllib` 
 
 ## pi の設定
 
+### 設定の置き場（pi の標準の形と、機械ごとの上書き）
+
+pi の設定は、1 か所にまとまっていない。これは pi の標準の形で、このリポジトリが散らしたわけではない（2026-11-15。pi 1.5.2 の `docs/settings.md`・`docs/extensions.md`）。
+
+- **pi 本体**: `~/.pi/agent/settings.json`（全体）と、プロジェクトの `.pi/settings.json`。プロジェクトの設定が全体の設定を上書きする。
+- **拡張**: `~/.pi/agent/extensions/`（全体）か、プロジェクトの `.pi/extensions/` に置く。拡張が自分の設定をどこに置くかは**拡張ごとの決め**で、pi 本体は規約を決めていない。実際の拡張は、`extensions/<拡張名>/config.json` の形を取る（`pi-permission-system`・`pi-permission-explain`・`ai-guard`）。
+- **機械ごとの上書き**: chezmoi の管理外のファイルに置く。一覧は [マシン固有の設定の置き場](shell.md#マシン固有の設定の置き場)（pi に関するものは、`runner.local.toml`・`config.local.json`・`/permission-system`）。
+
 ### 配るもの
 
 | 対象 | 配り方 |

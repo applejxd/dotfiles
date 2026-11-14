@@ -179,6 +179,7 @@ A. 共有の設定はこのリポジトリ（chezmoi が管理）に置き、PC 
 | git の設定 | `~/.config/git/config.local` | すぐ |
 | mise の設定 | `~/.config/mise/conf.d/*.toml` | 次の mise の実行 |
 | pi の囲い（`pib`）で、隠す場所・見せる場所（データセットなど）の追加（Linux / WSL） | `~/.config/pi-sandbox/runner.local.toml`（同じ場所の `.example` から作る）。効いているかは `pib --status` で確かめる（存在しない場所に `✗`） | 次のコマンドの実行 |
+| pi の説明（`Ctrl+E`）に使うモデル | `~/.pi/agent/extensions/permission-explain/config.local.json`（同じ場所の `.example` から作る。上書きできるのは `model` だけ） | `/reload` か pi の再起動 |
 | pi の確認（YOLO など） | `/permission-system` | すぐ（`apply` で戻らない） |
 
 置き場ごとの書き方と注意は

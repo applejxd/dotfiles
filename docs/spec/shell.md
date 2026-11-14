@@ -78,6 +78,7 @@ Nix 化・`rm` の alias 差し替え・環境変数の列挙による人間判�
 | `~/.config/chezmoi/chezmoi.toml` の `[data]` | chezmoi のテンプレートに渡すマシン固有の値（例: `no_proxy`） | `chezmoi apply` のとき | chezmoi の管理外。値の使い道はテンプレートが決める |
 | `~/.config/git/config.local` | git の設定のマシン固有分 | git が設定を読むとき | chezmoi の管理外。`home/dot_config/git/config.tmpl` が、共有設定の後ろに `[include]` で読む（**共有設定を上書きもできる**） |
 | `~/.config/pi-sandbox/runner.local.toml` | pi の囲い（`pib`）で、隠す場所の追記 | `pib` の囲いでコマンドを実行するたび | chezmoi の管理外。追記のみで、`[gpu]`・`[docker]`・`[git]` は書けない。同じ場所の `runner.local.toml.example` から作る（[設定](sandbox/pi-sandbox-runner.md#設定runnertoml)）。Linux / WSL のみ |
+| `~/.pi/agent/extensions/permission-explain/config.local.json` | pi の説明（`Ctrl+E`）に使うモデルの上書き（`model` だけ。`key` は書いても無視される）。同じ場所の `config.local.json.example` から作る | 拡張の起動時（`/reload` か pi の再起動） | chezmoi の管理外。リポジトリの `config.json`（`is-work` でモデルを切り替える）に重ねて読む。詳細は [ローカル版の記録](../research/agents/ask-auto-judge-evaluation-2026-11.md#ローカル版への切り替え2026-11-15) |
 | pi の確認（YOLO など） | `/permission-system` で切り替える | すぐ | 機械ごとの設定で、`chezmoi apply` では戻らない（[YOLO mode](agent-config-generation.md#permission-system-の設定)） |
 
 **共通の約束**（共有の設定とマシン固有の設定を分ける）:
