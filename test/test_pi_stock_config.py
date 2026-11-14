@@ -20,7 +20,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 # settings.json からの相対パスで指す、リポジトリが配るローカル版の package
-LOCAL_PACKAGES = {"./local-packages/pi-permission-explain"}
+LOCAL_PACKAGES = {"./local-packages/pi-permission-explain", "./local-packages/pi-sandbox-toggle"}
 HOME_SRC = ROOT / "home"
 PERMISSION_DIR = ".pi/agent/extensions/pi-permission-system"
 PLAN_MODE_CONFIG = ".pi/agent/pi-plan-mode.json"
@@ -593,6 +593,22 @@ def test_permission_explain_local_package_is_wired_and_patched():
     assert "authorizerChain" not in policy()
 
 
+@pytest.mark.parametrize(("os_name", "wired"), [("linux", True), ("darwin", False), ("windows", False)])
+def test_sandbox_toggle_local_package_is_wired_on_linux_only(tmp_path, os_name, wired):
+    """囲いと YOLO を実行中に切り替える /sandbox の拡張。囲い (bwrap・pib-shell) が Linux だけなので、入れるのも Linux だけ。"""
+    text = render('{{ includeTemplate "pi-stock-packages" . }}', tmp_path, os_name=os_name)
+    packages = [line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")]
+    assert ("./local-packages/pi-sandbox-toggle" in packages) is wired
+    assert len(packages) == len(set(packages))
+
+
+def test_sandbox_toggle_is_never_a_tool_the_model_can_call():
+    """切り替えは利用者が打った /sandbox だけ。モデルが呼べる道具 (registerTool) を登録すると、プロンプトの注入から囲いを外せてしまう。"""
+    src = (ROOT / "home" / "dot_pi" / "agent" / "local-packages" / "pi-sandbox-toggle" / "src" / "index.ts").read_text(encoding="utf-8")
+    assert "registerTool" not in src
+    assert "registerCommand(\"sandbox\"" in src
+
+
 def test_permission_explain_model_follows_the_machine(tmp_path):
     """説明のモデルは設定ファイル (テンプレート) で、is-work により切り替わる。キーは常に Ctrl+E (単独の y・enter にしない)。"""
     name = "dot_pi/agent/extensions/permission-explain/config.json.tmpl"
@@ -620,11 +636,15 @@ def _explain_load_config(tmp_path, base, local, script=None):
     work = tmp_path / "work"
     for pkg, body in {
         "pi-coding-agent": "export const getAgentDir = () => process.env.PI_AGENT_DIR;\n",
-        "pi-tui": "export const isKeyRelease = () => false; export const isKeyRepeat = () => false; export const matchesKey = (data, key) => data === key;\n",
+        "pi-tui": (
+            "export const isKeyRelease = () => false; export const isKeyRepeat = () => false; "
+            "export const matchesKey = (data, key) => data === key;\n"
+        ),
     }.items():
         d = work / "node_modules" / "@earendil-works" / pkg
         d.mkdir(parents=True)
-        (d / "package.json").write_text(json.dumps({"name": f"@earendil-works/{pkg}", "type": "module", "exports": "./index.js"}), encoding="utf-8")
+        manifest = {"name": f"@earendil-works/{pkg}", "type": "module", "exports": "./index.js"}
+        (d / "package.json").write_text(json.dumps(manifest), encoding="utf-8")
         (d / "index.js").write_text(body, encoding="utf-8")
     src = ROOT / "home" / "dot_pi" / "agent" / "local-packages" / "pi-permission-explain" / "src" / "index.ts"
     shutil.copy(src, work / "index.ts")
@@ -632,13 +652,16 @@ def _explain_load_config(tmp_path, base, local, script=None):
     # 実行者の環境 (NODE_OPTIONS の preload など) を引き継がない
     env = {k: v for k, v in os.environ.items() if not k.startswith("NODE_")}
     env["PI_AGENT_DIR"] = str(agent)
-    probe = subprocess.run([node, "--experimental-strip-types", "--no-warnings", "-e", "0"], env=env, capture_output=True, text=True, timeout=60)
+    probe = subprocess.run(
+        [node, "--experimental-strip-types", "--no-warnings", "-e", "0"],
+        env=env, capture_output=True, text=True, encoding="utf-8", timeout=60,
+    )
     if probe.returncode != 0:
         pytest.skip("この node は TypeScript の型の除去 (--experimental-strip-types) を使えない")
     proc = subprocess.run(
         [node, "--experimental-strip-types", "--no-warnings", "-e",
          script or "import('./index.ts').then(m => console.log(JSON.stringify(m.__loadConfigForTest())))"],
-        cwd=work, env=env, capture_output=True, text=True, timeout=60,
+        cwd=work, env=env, capture_output=True, text=True, encoding="utf-8", timeout=60,
     )
     assert proc.returncode == 0, proc.stderr
     return json.loads(proc.stdout.strip().splitlines()[-1])
@@ -654,7 +677,9 @@ import('./index.ts').then((m) => {
     modelRegistry: { find: () => undefined, hasConfiguredAuth: () => false, complete: async () => { throw new Error('x'); } },
   };
   handlers.session_start({}, ctx);
-  events['permissions:ui_prompt']({ requestId: 'r1', surface: 'bash', value: 'ls', request: { surface: 'bash', toolName: 'bash', value: 'ls' } });
+  events['permissions:ui_prompt']({
+    requestId: 'r1', surface: 'bash', value: 'ls', request: { surface: 'bash', toolName: 'bash', value: 'ls' },
+  });
   input('ctrl+e');
   console.log(JSON.stringify(notes));
 });
@@ -662,7 +687,8 @@ import('./index.ts').then((m) => {
 
 
 def test_permission_explain_local_config_overrides_only_the_model(tmp_path):
-    """管理外の config.local.json (このマシンだけの上書き) は、model だけを上書きできる。key は上書きできない (単独の y・enter で承認に届くため)。"""
+    """管理外の config.local.json (このマシンだけの上書き) は、model だけを上書きできる。
+    key は上書きできない (単独の y・enter で承認に届くため)。"""
     base = '{"key": "ctrl+e", "model": "github-copilot/claude-haiku-5.5"}'
     # 上書きなし
     got = _explain_load_config(tmp_path / "a", base, None)
@@ -684,7 +710,7 @@ def test_permission_explain_local_config_overrides_only_the_model(tmp_path):
     assert "config.json" in got["error"]
     # 不正な model (null・数値・配列・空・空白) は、値を出さずに警告し、config.json の値を保つ
     for i, bad in enumerate(['null', '3', '["a"]', '""', '"   "']):
-        got = _explain_load_config(tmp_path / f"m{i}", base, '{"model": %s}' % bad)
+        got = _explain_load_config(tmp_path / f"m{i}", base, f'{{"model": {bad}}}')
         assert got["config"] == {"key": "ctrl+e", "model": "github-copilot/claude-haiku-5.5"}, bad
         assert "model は空でない文字列にする" in got["error"], bad
     # 警告に、絶対パス・入力の断片 (秘密の目印) を出さない
@@ -707,7 +733,8 @@ def test_permission_explain_notifications_never_show_config_values(tmp_path):
 
 
 def test_permission_explain_local_config_example_is_valid():
-    ex = json.loads((ROOT / "home" / "dot_pi" / "agent" / "extensions" / "permission-explain" / "config.local.json.example").read_text(encoding="utf-8"))
+    example = ROOT / "home" / "dot_pi" / "agent" / "extensions" / "permission-explain" / "config.local.json.example"
+    ex = json.loads(example.read_text(encoding="utf-8"))
     assert set(ex) == {"model"}
 
 

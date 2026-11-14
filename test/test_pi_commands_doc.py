@@ -6,6 +6,7 @@
   package が 1 つでも欠けていれば、全体を skip する (一部だけ入った環境で誤って落とさない)。
 - package の prompt template: pi-subagents の ``prompts/*.md``。
 - このリポジトリが配る prompt template: ``home/dot_pi/agent/prompts/*.tmpl``。
+- このリポジトリが配るローカル package のコマンド: ``home/dot_pi/agent/local-packages/*`` の ``registerCommand``。
 
 pi か package が入っていない環境 (CI など) では、その部分を skip する。skip は通過ではない。
 pi か package を更新してコマンドが増減したら、この試験が落ちるので、早見を直す。
@@ -135,6 +136,14 @@ def test_the_package_commands_in_the_doc_match_the_installed_packages():
     # rpiv-todo は、定数 (COMMAND_NAME) でコマンド名を登録する
     actual |= set(re.findall(r'COMMAND_NAME\s*=\s*"([a-z][a-z0-9-]*)"', constants))
     assert _section("package のコマンド") == actual - INTERNAL_COMMANDS
+
+
+def test_the_local_package_commands_in_the_doc_match_the_repository():
+    """このリポジトリが配るローカル package (home/dot_pi/agent/local-packages/) のコマンド。Linux だけに入れるものも含める。"""
+    actual: set[str] = set()
+    for src in sources(ROOT / "home" / "dot_pi" / "agent" / "local-packages"):
+        actual |= registered_commands(src.read_text(encoding="utf-8", errors="ignore"))
+    assert _section("このリポジトリが配るローカル package のコマンド") == actual
 
 
 def test_the_package_prompt_templates_in_the_doc_match_pi_subagents():

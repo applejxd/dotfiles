@@ -6,6 +6,8 @@
 - **関係**: [ADR-0035](0035-pi-sandbox-gpu-runner.md)（拡張に runner を差す）を**置き換える**（2026-11-12 の実装で、拡張を外した。ADR-0035 は `Superseded by ADR-0036`）。ADR-0027（隔離の単位は環境）は**置き換えない**。ADR-0030（凍結）と [ADR-0031](0031-evaluate-existing-extensions-first.md)（既存の評価が先）に沿う
 - **根拠の記録**: [CHG-0066](../change/0066-pi-sandbox-boundary.md)（問題の洗い出しと、境界の検討）、[調査記録](../research/agents/fence-latency-2026-11.md)（Fence と bwrap の実測）
 
+> **部分改定（2026-11-15）**: 決定 5 の「強さの切り替えは、起動時に選ぶ」と、結果の「失うもの」の「実行中の強さの切り替え」を、[ADR-0040](0040-pi-sandbox-session-toggle.md) で改めた（`/sandbox` で、セッションの途中でも切り替えられる）。「昇格の仕組みは作らない」を含め、それ以外の決定は有効。以下の本文は決定当時のまま残している。
+
 ## コンテキスト
 
 ADR-0035 の構成（`pib` ＝ 拡張 `@yuru7/pi-sandbox` ＋ runner）を実機で使い、26 件の問題を洗い出した（CHG-0066）。根は 5 つある。

@@ -79,6 +79,7 @@ ADR-0030 の凍結（フルガード・`pis`・kcage・PR ビューアなど）�
 | --- | --- | --- | --- |
 | 家の機の検索 MCP（`home/dot_config/agents/websearch/`） | 各サービスの無料枠のフォールバックと、クエリの秘匿チェック・SSRF 防止を満たす既製の MCP が、調べた範囲（npm の検索。網羅ではない）で見つからなかった。利用者が自作を選択した（2026-11-08） | 既存のスキルの CLI の核をそのまま使う。新規は MCP の薄い層（約 300 行）と試験 | 同じ要件を満たす既製の MCP・拡張が現れたら置き換える |
 | pi のコマンド実行を包む囲い（`pib`・`pib-shell`・`home/dot_local/bin/executable_pi-sandbox-runner`、[ADR-0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md)。[ADR-0035](0035-pi-sandbox-gpu-runner.md) の拡張を使う方式を置き換えた） | 拡張は bash だけを包み、`bg_run`・`!` が抜ける。既存の囲い（Fence）は、コマンドごとに包む使い方が公式の想定外で、WSL で遅く、保守が緩い。利用者が責務の分担と方式（素の bwrap）を承認した（2026-11-12） | 引数を組み立てる runner（約 520 行。コメントと docstring を含む）・`pib`（約 100 行）・`pib-shell`（約 15 行）・設定・試験・自己確認。追従が要る上流は、pi の `shellPath` の仕様 1 点 | pi 本体が同等の sandbox を標準で持ったとき。`shellPath` の仕様変更が 2 回続けて保守の負担になったとき |
+| pi の囲いと YOLO を実行中に切り替える `/sandbox`（`home/dot_pi/agent/local-packages/pi-sandbox-toggle`、[ADR-0040](0040-pi-sandbox-session-toggle.md)） | 公開の package は bash ツールだけを包む型で、`bg_run`・`!` が抜け、GPU も通せない（ADR-0036 が退けた理由）。標準機能に、囲いの切り替えは無い。利用者が方式・範囲・YOLO の連動を承認した（2026-11-15） | 拡張 約 540 行・試験 約 700 行。追従が要る上流は、pi が起動のたびに環境変数を読む挙動・`pi-permission-system` の設定ファイル（`yoloMode`）・毎ターンの読み直し・プロジェクトの設定を重ねる順序と読み方・公開の判定 API（`checkPermission`）と `permissions:ready`・runner の `MISE_STATE_DIR` | pi 本体が、実行中に切り替えられる sandbox を標準で持ったとき。上流の 4 点のどれかが変わって、2 回続けて保守の負担になったとき |
 
 ## 結果
 

@@ -127,6 +127,8 @@ pi          # 通常起動（囲いなし。確認は permission-system が行�
 
 - 作業対象のディレクトリで起動する。起動のしかた・隠す場所と見せる場所・確かめ方（`pib --status`）は
   [pi-sandbox-runner](docs/spec/sandbox/pi-sandbox-runner.md)。
+- セッションの途中で `/sandbox` を打つと、囲いと YOLO を一緒に切り替えられる（引数なしは on と off のトグル）。
+  [実行中の切り替え](docs/spec/sandbox/pi-sandbox-runner.md#実行中の切り替え)。
 
 ## 安全上の注意
 

@@ -14,6 +14,9 @@ npm:@juicesharp/rpiv-todo@2.15.0
 npm:@juicesharp/rpiv-ask-user-question@2.15.0
 npm:@gotgenes/pi-permission-system@42.0.0
 ./local-packages/pi-permission-explain
+{{ if eq .chezmoi.os "linux" -}}
+./local-packages/pi-sandbox-toggle
+{{ end -}}
 npm:cc-safety-net@2.7.6
 npm:pi-background@0.4.2
 npm:@narumitw/pi-plan-mode@0.60.0

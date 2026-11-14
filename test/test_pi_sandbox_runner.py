@@ -1838,6 +1838,26 @@ def test_pib_shell_is_a_plain_bash_when_the_sandbox_is_not_requested(tmp_path):
 
 @linux_only
 @pytest.mark.parametrize(
+    ("env_extra", "expected"),
+    [
+        # pib で起動して /sandbox で囲いを外した: 囲いの中と同じ、元の PATH (venv の bin を含む)。運び役の変数は渡さない
+        ({"PATH": "/usr/bin:/bin", "PIB_ORIG_PATH": "/w/.venv/bin:/usr/bin:/bin"}, "/w/.venv/bin:/usr/bin:/bin|unset"),
+        # 元の PATH が空だったときは、pi の PATH のまま
+        ({"PATH": "/usr/bin:/bin", "PIB_ORIG_PATH": ""}, "/usr/bin:/bin|unset"),
+        # pib でない普通の pi は、何も変わらない
+        ({"PATH": "/usr/bin:/bin"}, "/usr/bin:/bin|unset"),
+    ],
+)
+def test_pib_shell_without_the_sandbox_passes_the_original_path(tmp_path, env_extra, expected):
+    bin_dir = install_bin(tmp_path, runner_body=RECORDING_RUNNER)
+    result = run_shell(bin_dir, ["-c", 'echo "$PATH|${PIB_ORIG_PATH-unset}"'], {**env_extra, "RECORD": str(tmp_path / "rec")})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == expected
+    assert not (tmp_path / "rec").exists()  # 囲いなし (runner は呼ばれない)
+
+
+@linux_only
+@pytest.mark.parametrize(
     ("mode", "expected"), [("1", ["-c", "echo hi"]), ("offline", ["--offline", "-c", "echo hi"])]
 )
 def test_pib_shell_hands_the_command_to_the_runner_next_to_it(tmp_path, mode, expected):

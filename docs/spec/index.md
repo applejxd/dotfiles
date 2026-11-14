@@ -54,6 +54,6 @@
 | [pi のスラッシュコマンドの早見](pi-commands.md) | 組み込み・package・prompt template のコマンド。実物と突き合わせる試験つき |
 | [サンドボックス（総覧）](sandbox/index.md) | 判断・実行の隔離・環境ごとの隔離の 3 層と、撤去した旧来の囲い |
 | [隔離 GPU サンドボックス（WSL2）](sandbox/wsl-sandbox.md) | 専用 WSL2 ディストロ + Docker + Tailscale SSH の作成スクリプト（`scripts/windows/wsl-sandbox/`、手動実行）。手順、手作業で残る ACL、隔離の限界 |
-| [pi-sandbox-runner（pi のコマンド実行を包む囲い）](sandbox/pi-sandbox-runner.md) | `shellPath` に差す囲い（`pib`・`pib-shell`・runner）。bwrap の引数の並び・設定（`runner.toml`・`runner.local.toml`）・導入と確認・認証情報の扱い・限界。Linux 専用 |
+| [pi-sandbox-runner（pi のコマンド実行を包む囲い）](sandbox/pi-sandbox-runner.md) | `shellPath` に差す囲い（`pib`・`pib-shell`・runner）。bwrap の引数の並び・設定（`runner.toml`・`runner.local.toml`）・実行中の切り替え（`/sandbox`）・導入と確認・認証情報の扱い・限界。Linux 専用 |
 
 [ドキュメント一覧へ戻る](../index.md)

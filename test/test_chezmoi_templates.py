@@ -153,6 +153,8 @@ def test_pi_sandbox_runner_is_linux_only(tmp_path, os_name, ignored):
         ".local/bin/pib-shell",
         ".config/pi-sandbox",
         ".config/pi-sandbox/**",
+        ".pi/agent/local-packages/pi-sandbox-toggle",
+        ".pi/agent/local-packages/pi-sandbox-toggle/**",
     )
     for target in targets:
         assert (target in rendered) is ignored, target

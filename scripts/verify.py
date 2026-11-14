@@ -230,8 +230,9 @@ RULES: tuple[Rule, ...] = (
             "home/dot_local/bin/executable_pib",
             "home/dot_local/bin/executable_pib-shell",
             "home/dot_config/pi-sandbox/**",
+            "home/dot_pi/agent/local-packages/pi-sandbox-toggle/**",
         ),
-        ("test_pi_sandbox_runner",),
+        ("test_pi_sandbox_runner", "test_pi_sandbox_toggle"),
     ),
     Rule("env-check", ("home/dot_agents/skills/env-check/**",), ("test_env_check",)),
     Rule(
