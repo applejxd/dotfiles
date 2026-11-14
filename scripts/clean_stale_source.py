@@ -19,24 +19,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-# source 名の属性接頭辞。順不同・重複して付くので、付かなくなるまで外す
+# ディレクトリの source 名に付く属性接頭辞 (chezmoi v2.67.0 の managed で確認済み。
+# executable_・symlink_・create_・modify_・run_ などはファイル用で、ディレクトリでは名前の一部)。順不同・重複して付くので、付かなくなるまで外す
 _PREFIXES = (
     "exact_",
     "private_",
     "readonly_",
-    "executable_",
-    "symlink_",
-    "empty_",
-    "create_",
-    "modify_",
-    "remove_",
+    "external_",
     "literal_",
-    "encrypted_",
-    "once_",
-    "onchange_",
-    "before_",
-    "after_",
-    "run_",
 )
 _GLOB_CHARS = set("*?[")
 
