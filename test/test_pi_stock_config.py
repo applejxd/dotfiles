@@ -563,6 +563,18 @@ def test_permission_policy_does_not_carry_runtime_keys():
     assert set(policy()) <= {"permission", "shellTools", "commandEffects"}
 
 
+def test_permission_explain_version_and_config_are_pinned():
+    """ask の説明 (押下式) の試験導入。版・軽いモデル・Ctrl+E の設定を固定する。権限を持たないことは、ソースの監査 (docs/research/agents/ask-auto-judge-evaluation-2026-11.md) の範囲で、この試験は証明しない。"""
+    packages = (ROOT / "home" / ".chezmoitemplates" / "pi-stock-packages").read_text(encoding="utf-8")
+    assert "npm:pi-permission-explain@0.1.1" in packages.splitlines()
+    cfg = json.loads((ROOT / "home" / "dot_pi" / "agent" / "extensions" / "permission-explain" / "config.json").read_text(encoding="utf-8"))
+    assert cfg["key"] == "ctrl+e"
+    # 説明は軽いモデルで足りる。セッションの重いモデルを毎回呼ばない
+    assert cfg["model"] == "github-copilot/claude-haiku-5.5"
+    # 説明は判定役ではない。authorizerChain には載せない (方針ファイルの確認だけ)
+    assert "authorizerChain" not in policy()
+
+
 def test_permission_policy_matches_the_contract():
     perm = policy()["permission"]
     for tool in ("read", "write", "edit", "grep", "find", "ls"):
