@@ -13,6 +13,7 @@ import os
 import shutil
 import stat
 import subprocess
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -263,20 +264,27 @@ def render_config(*, path_dir: Path | None = None) -> str:
 
     ``path_dir`` を渡すと PATH をそのディレクトリだけに差し替えるので、
     ``lookPath`` が何を見つけるかをテスト側で決められる。
+
+    実機の chezmoi 設定は読ませない（空の設定を ``--config`` で渡す）。実機の設定には
+    ``[hooks.read-source-state.pre]``（``sh`` を呼ぶ）があり、PATH を差し替えると ``sh`` が
+    見つからず落ちる。設定のある機械でだけ落ちる（CI では設定が無いので通る）のを防ぐ。
     """
     chezmoi = chezmoi_bin()
     env = dict(os.environ)
     if path_dir is not None:
         env["PATH"] = str(path_dir)
-    result = subprocess.run(
-        [chezmoi, "--source", str(ROOT), "execute-template", "--init"],
-        input=CONFIG_TEMPLATE.read_text(encoding="utf-8"),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-        env=env,
-    )
+    with tempfile.TemporaryDirectory() as config_dir:
+        empty_config = Path(config_dir) / "chezmoi.toml"
+        empty_config.write_text("", encoding="utf-8")
+        result = subprocess.run(
+            [chezmoi, "--source", str(ROOT), "--config", str(empty_config), "execute-template", "--init"],
+            input=CONFIG_TEMPLATE.read_text(encoding="utf-8"),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+            env=env,
+        )
     assert result.returncode == 0, result.stderr
     return result.stdout
 

@@ -1,13 +1,13 @@
+# pi-permission-explain
+
 > **ローカル版（このリポジトリが配る）。** 上流 pi-permission-explain 0.1.1（rkshrksh、MIT）に、3 つの改変を加えた: ① 説明キーを承認ダイアログへ通す（未回答の時計が止まる）、② 説明を日本語にする、③ 管理外の `config.local.json` で `model` だけを上書きできる。
 > 差分・理由・撤去の条件は、リポジトリの `docs/research/agents/ask-auto-judge-evaluation-2026-11.md`。以下は上流の README（英語）で、説明の言語・キーの挙動の記述は、この版と異なる。開発手順（`npm run check`・`npm run selfcheck`）も上流向けで、この取り込み版では `package.json` の `scripts` を削除している。
-
-# pi-permission-explain
 
 On-demand, plain-English explanations for [`pi-permission-system`](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-permission-system) permission prompts.
 
 The permission dialog shows technical facts (which tool, which rule matched, the raw command). This extension adds a one-key "what does this actually do?" button to it: press the key, a model explains the pending action in a sentence.
 
-```
+```text
 Permission required
 tool    : bash
 command : git push origin main
@@ -20,7 +20,7 @@ ctrl+e: explain this action
 
 Press the key and the hint becomes:
 
-```
+```text
 explain (AI · commandcode/gpt-6-luna)
 Pushes your local main branch to the origin remote, publishing those commits.
 ```
@@ -76,10 +76,10 @@ Optional. Create `<agent-dir>/extensions/permission-explain/config.json` (usuall
 }
 ```
 
-| Field   | Default            | Meaning                                                               |
-| ------- | ------------------ | --------------------------------------------------------------------- |
-| `key`   | `ctrl+e`           | Key that triggers the explanation, as a key identifier (`ctrl+e`, `ctrl+shift+e`, …). |
-| `model` | session model      | Model to explain with, as `provider/model-id`. If it can't be resolved, the session model is used and a warning is shown every time. |
+| Field   | Default       | Meaning                                                                                                                              |
+| ------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `key`   | `ctrl+e`      | Key that triggers the explanation, as a key identifier (`ctrl+e`, `ctrl+shift+e`, …).                                                |
+| `model` | session model | Model to explain with, as `provider/model-id`. If it can't be resolved, the session model is used and a warning is shown every time. |
 
 Reload pi (`/reload`) after editing. The file is optional — missing, the defaults apply. A malformed file or an unparseable `key` is reported with a warning and the default is used instead.
 
