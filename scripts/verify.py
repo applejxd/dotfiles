@@ -135,7 +135,7 @@ RULES: tuple[Rule, ...] = (
     Rule("共通設定の検証", ("scripts/agents/validate_mcp.py",), ("test_mcp_servers",)),
     Rule(
         "不満・摩擦の集計",
-        (".agents/skills/friction-review/scripts/*.py", ".agents/skills/friction-review/SKILL.md"),
+        ("home/dot_agents/skills/friction-review/scripts/*.py", "home/dot_agents/skills/friction-review/SKILL.md"),
         ("test_friction_scan",),
     ),
     Rule(

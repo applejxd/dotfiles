@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ROOT / ".agents" / "skills" / "friction-review" / "scripts"
+SCRIPTS = ROOT / "home" / "dot_agents" / "skills" / "friction-review" / "scripts"
 
 
 def _load():

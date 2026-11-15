@@ -92,6 +92,7 @@ Claude Code・Copilot CLI・OpenCode は撤去した（[ADR-0037](../adr/0037-re
 自作基盤の凍結（ADR-0030）のあと、skill を pi の運用に合わせた。
 
 - **置き場**: 自作 skill は `home/dot_agents/skills/`（配備先 `~/.agents/skills/`）に置く（以前は `home/dot_claude/skills/`）。`~/.agents/skills` の読み取りと、`python3 ~/.agents/skills/…/*.py` の実行（`-c`・`-m` を除く。読み取り扱い）は、確認なしにしてある。`uv run`・`node` などは、作業ツリー外のパスだと確認になりうる（[権限の方針](agent-config-generation.md)）。
+  - **repo 専用の skill と区別する（2026-11-15）**: このリポジトリの編集・運用だけの skill（`dotfiles-conventions`・`chezmoi-usage`・`feature-orchestration`・`pi-extension-dev`）は `.agents/skills/` に置き、配備しない。共通の指示（`agent-instructions-stock.md`）から名前で呼ばれる skill は、どの repo でも見えるよう `home/dot_agents/skills/` に置く。`friction-review` は共通の指示から呼ばれるのに `.agents/skills/` にあり、他の repo から見つからなかったので移した。
 - **パスの書き方**: `${CLAUDE_SKILL_DIR}` は展開されないので、`~/.agents/skills/<名前>/references/…` の形で書く。
 - **子の呼び方**: `review-loop`・`experiment-loop` は、`reviewer`（`pi-subagents` の組み込み）に合わせた。実機での動作は未確認（skill の中に明記）。
 - **`commit`**: `guarded_*` の記述は撤去した（ADR-0037）。

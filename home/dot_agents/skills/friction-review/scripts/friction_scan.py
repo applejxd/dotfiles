@@ -3,10 +3,10 @@
 出力は `.tmp/friction/<日付>/` の `report.md` と `report.json` だけ (リポジトリには置かない。ログには勤務先の情報や秘密が入り得る)。
 決定的な指標 (ツールのエラー・拒否・二重承認など) と、利用者の発話の抜粋 (不満らしい語を含むもの) を出す。
 抜粋の分類と、新機能の提案は、スキル `friction-review` の手順で子エージェントが行う。
-使い方: python3 .agents/skills/friction-review/scripts/friction_scan.py [--root ~/.pi/agent/sessions] [--since 2026-10-01]
+使い方: python3 ~/.agents/skills/friction-review/scripts/friction_scan.py [--root ~/.pi/agent/sessions] [--since 2026-10-01]
       [--session latest|<ファイル>] [--out .tmp/friction]
       確認の結果 (承認・拒否・時間切れ) の表だけ: ... --approvals [--json]
-see .agents/skills/friction-review/SKILL.md
+see home/dot_agents/skills/friction-review/SKILL.md
 """
 
 from __future__ import annotations

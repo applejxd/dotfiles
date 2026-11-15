@@ -6,7 +6,8 @@ description: "これまでのセッションログから、利用者の不満・
 # friction-review
 
 セッションログ(`~/.pi/agent/sessions/`)を集計し、**利用者が後から指摘した点を、事前に拾える形**にする。
-出力は `.tmp/friction/<日付>/` にだけ置く。**ログには勤務先の情報や秘密が入り得るので、リポジトリには、一般化した結論だけを書く**(`AGENTS.md` の「公開リポジトリ」の規則)。
+出力は `.tmp/friction/<日付>/` にだけ置く。**ログには勤務先の情報や秘密が入り得るので、リポジトリには、一般化した結論だけを書く**(公開リポジトリの規則)。
+このスキルは `~/.agents/skills/` に配備され、どのリポジトリからでも使える。ログ(`~/.pi/agent/sessions/`)は repo をまたいで同じ場所にあるので、集計は全 repo のセッションを含む。レポートは**実行した repo の** `.tmp/friction/` に出る(`.tmp/` が git の管理外であることを先に確かめる。確かめられなければ `--out` で repo の外を指す)。
 
 ## いつ使うか
 
@@ -17,7 +18,7 @@ description: "これまでのセッションログから、利用者の不満・
 ## 手順
 
 1. **集計する**(決定的。親が実行):
-   `python3 .agents/skills/friction-review/scripts/friction_scan.py --since <YYYY-MM-DD>`(最新だけなら `--session latest`)。
+   `python3 ~/.agents/skills/friction-review/scripts/friction_scan.py --since <YYYY-MM-DD>`(最新だけなら `--session latest`)。
    → `.tmp/friction/<日付>/report.md` と `report.json`。内容は、エラーが多いツール、同じ形のエラー、承認されなかった実行、二重承認の候補(投稿・コミットの直前の `ask`)、利用者の発話の抜粋(「ちょっと待って」「ごめん」「やばい」など。偽陽性を含む)。
 2. **分類する**(子エージェント。`scout`。**レポートだけを渡し、生ログは渡さない**):
    次の分類で、各手がかりを分け、根拠(件数・抜粋)を付ける。
@@ -41,12 +42,12 @@ description: "これまでのセッションログから、利用者の不満・
 
 審査ログ (`~/.pi/agent/extensions/pi-permission-system/logs/pi-permission-system-permission-review.jsonl`) を、`--approvals` が標準で読む (`--review-log <パス>`、`none` で読まない)。規則の単位は `<surface>:<matchedPattern>`。
 **`<surface>:*` は、許可リストに無く既定の ask に落ちたもの**で、「何が ask になっているか」を知る入口になる。
-**承認の件数・割合は、許可を足す根拠にしない**（承認は内容を理解しないまま通ることがある。摩擦の大きさを見る用途に限る）。許可に足すかどうかを判断する前に、次を読んで正本の方針と照合する: [dotfiles-conventions の「権限ポリシーを変えるとき」](../dotfiles-conventions/SKILL.md#権限ポリシーを変えるとき)。
+**承認の件数・割合は、許可を足す根拠にしない**（承認は内容を理解しないまま通ることがある。摩擦の大きさを見る用途に限る）。許可に足すかどうかを判断する前に、dotfiles の chezmoi リポジトリの `dotfiles-conventions` スキルの「権限ポリシーを変えるとき」と、正本 `docs/spec/agent-config-generation.md` の「permission-system の設定」を読んで照合する(そのリポジトリの中でだけ読める。他の repo で見つからなければ、許可の変更はそのリポジトリで行う)。
 
 規則ごとの区分別の件数だけを見たいとき (CHG-0054 段 1)。ファイルは書かず、標準出力へ出す。
 
 ```sh
-python3 .agents/skills/friction-review/scripts/friction_scan.py --approvals [--json] [--since 2026-10-01]
+python3 ~/.agents/skills/friction-review/scripts/friction_scan.py --approvals [--json] [--since 2026-10-01]
 ```
 
 - 区分: 承認 / 拒否 (利用者が断った) / 時間切れ / 規則で拒否 / セッション承認で省略 / 保留に保存・確認なしで実行・不明 (旧形式のログだけ)
