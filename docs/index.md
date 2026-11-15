@@ -13,6 +13,7 @@ pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 | 目的 | 文書 |
 | --- | --- |
 | リポジトリ全体の構成を知る | [プロジェクト構造](spec/structure.md) |
+| `chezmoi apply` が `inconsistent state (…, remove)` で止まる（source 側の残骸） | [source 側の残骸の掃除](spec/structure.md#source-側の残骸の掃除) |
 | chezmoi スクリプトが作るキャッシュ・状態ファイルを知る | [スクリプトが作るキャッシュ・状態](spec/script-artifacts.md) |
 | Raspberry Pi へ導入する | [Raspberry Pi](spec/platform-raspberry-pi.md#raspberry-pi) |
 | Raspberry Pi に入った GUI 一式を消す | [入ってしまった GUI 一式を消す](spec/platform-raspberry-pi.md#入ってしまった-gui-一式を消す) |
@@ -34,6 +35,7 @@ pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 | 目的 | 文書 |
 | --- | --- |
 | 開発環境を準備して検証する | [開発ガイド](spec/development.md) |
+| chezmoi 本体の挙動・落とし穴（属性・scripts の実行条件・`.chezmoiignore`・`inconsistent state` など）を調べる | [chezmoi-usage スキル](../.agents/skills/chezmoi-usage/SKILL.md) |
 | テストの種類と Docker ハーネスの契約を知る | [テストと検証の仕組み](spec/testing.md) |
 | Windows 資産を実機で検証する | [Windows 実機での検証](spec/development.md#windows-実機での検証) |
 | まっさらな Windows への導入を Sandbox で検証する | [Windows Sandbox での検証](spec/development.md#windows-sandbox-でのクリーン導入の検証) |
@@ -52,6 +54,7 @@ pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 | --- | --- |
 | 何を守り、なぜ Bitwarden / sops なのかを知る | [セキュリティ](spec/security.md) |
 | pi のコマンド実行を囲いの中だけで動かす（`pib`）・内側から見えない・書けない原因を調べる | [pi-sandbox-runner](spec/sandbox/pi-sandbox-runner.md) |
+| セッションの途中で、囲いと YOLO を切り替える（`/sandbox`） | [実行中の切り替え](spec/sandbox/pi-sandbox-runner.md#実行中の切り替え) |
 
 ### 撤去した自作基盤
 

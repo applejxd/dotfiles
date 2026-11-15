@@ -68,6 +68,9 @@ Documents/**
 .local/bin/pib-shell
 .config/pi-sandbox
 .config/pi-sandbox/**
+# 囲いと YOLO を実行中に切り替える /sandbox の拡張 (pi-stock-packages も Linux だけに入れる)
+.pi/agent/local-packages/pi-sandbox-toggle
+.pi/agent/local-packages/pi-sandbox-toggle/**
 {{- end }}
 
 {{- if eq .chezmoi.os "linux" }}

@@ -83,11 +83,11 @@ chezmoi execute-template '{{ includeTemplate "is-raspi" . }}'   # true なら分
 ### 更新
 
 ```bash
-# 最新版に更新
-chezmoi update
+# 最新版に更新 (--init で設定ファイル chezmoi.toml も作り直す。hooks などの設定の変更を反映するため)
+chezmoi update --init
 
 # または段階的に
-chezmoi pull && chezmoi diff && chezmoi apply
+chezmoi git -- pull && chezmoi init && chezmoi diff && chezmoi apply
 ```
 
 zinit 管理のプラグイン (zeno.zsh など) も最新化したい場合は次のタスクを実行する
@@ -127,6 +127,8 @@ pi          # 通常起動（囲いなし。確認は permission-system が行�
 
 - 作業対象のディレクトリで起動する。起動のしかた・隠す場所と見せる場所・確かめ方（`pib --status`）は
   [pi-sandbox-runner](docs/spec/sandbox/pi-sandbox-runner.md)。
+- セッションの途中で `/sandbox` を打つと、囲いと YOLO を一緒に切り替えられる（引数なしは on と off のトグル）。
+  [実行中の切り替え](docs/spec/sandbox/pi-sandbox-runner.md#実行中の切り替え)。
 
 ## 安全上の注意
 
@@ -179,6 +181,7 @@ A. 共有の設定はこのリポジトリ（chezmoi が管理）に置き、PC 
 | git の設定 | `~/.config/git/config.local` | すぐ |
 | mise の設定 | `~/.config/mise/conf.d/*.toml` | 次の mise の実行 |
 | pi の囲い（`pib`）で、隠す場所・見せる場所（データセットなど）の追加（Linux / WSL） | `~/.config/pi-sandbox/runner.local.toml`（同じ場所の `.example` から作る）。効いているかは `pib --status` で確かめる（存在しない場所に `✗`） | 次のコマンドの実行 |
+| pi の説明（`Ctrl+E`）に使うモデル | `~/.pi/agent/extensions/permission-explain/config.local.json`（同じ場所の `.example` から作る。上書きできるのは `model` だけ） | `/reload` か pi の再起動 |
 | pi の確認（YOLO など） | `/permission-system` | すぐ（`apply` で戻らない） |
 
 置き場ごとの書き方と注意は

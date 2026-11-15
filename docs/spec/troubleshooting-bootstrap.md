@@ -153,7 +153,7 @@ chezmoi execute-template < ~/.local/share/chezmoi/home/.chezmoi.toml.tmpl | diff
 - 差が無い（描画結果が同じ）: **無視してよい**。消したければ `chezmoi init` を実行する（同じ内容で再生成される）
 - 差がある: 新しい値を使うには `chezmoi init` を実行する。それまでは、生成済みの設定が使われ続ける
 
-`init` を前提にした設計にしない理由と、マシン判定を `apply` のたびに評価させる仕組みは
+`init` を前提にしてよい範囲は [ADR-0038](../adr/0038-allow-chezmoi-init-dependency.md)。マシン判定を `apply` のたびに評価させる仕組みは
 [Raspberry Pi](platform-raspberry-pi.md#raspberry-pi) を参照。
 
 **成功の確認**: `chezmoi status` に警告が出ない。

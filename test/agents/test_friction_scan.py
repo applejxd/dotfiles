@@ -286,3 +286,55 @@ def test_report_includes_approvals_section(tmp_path):
     assert "承認" in scan.render(total, 1, "") and "guarded_action:git_commit" in scan.render(
         total, 1, ""
     )
+
+
+def _review(event, resolution, surface, pattern, stamp="2026-11-13T01:00:00Z"):
+    return {
+        "timestamp": stamp,
+        "stream": "review",
+        "event": event,
+        "resolution": resolution,
+        "surface": surface,
+        "matchedPattern": pattern,
+        "command": "秘密を含みうる文面は読まない",
+    }
+
+
+def test_review_log_counts_by_surface_and_pattern(tmp_path):
+    """審査ログ (pi-permission-system) を surface:matchedPattern の単位で数える。"""
+    scan = _load()
+    path = _write(
+        tmp_path,
+        [
+            _review("permission_request.approved", "approved", "bash", "chezmoi *apply*"),
+            _review("permission_request.approved", "approved_for_session", "bash", "chezmoi *apply*"),
+            _review("permission_request.session_approved", "session_approved", "bash", "chezmoi *apply*"),
+            _review("permission_request.denied", "denied_with_reason", "external_directory_read", "*"),
+            _review("permission_request.denied", "confirmation_unavailable", "external_directory_read", "*"),
+            _review("permission_request.blocked", "policy_denied", "path_write", "*.env"),
+            _review("permission_request.infrastructure_auto_allowed", None, "read", "*"),
+            _review("forwarded_permission.approved", "approved", "bash", "x"),
+            _review("permission_request.approved", "approved", "bash", "old", stamp="2026-10-01T00:00:00Z"),
+        ],
+    )
+    table = scan.scan_review_log(path, "2026-11-01")
+    assert table["bash:chezmoi *apply*"] == {"承認": 2, "セッション承認で省略": 1}
+    assert table["external_directory_read:*"] == {"拒否": 1, "時間切れ": 1}
+    assert table["path_write:*.env"] == {"規則で拒否": 1}
+    assert "bash:old" not in table and "bash:x" not in table and "read:*" not in table
+
+
+def test_review_log_missing_or_broken_is_empty(tmp_path):
+    scan = _load()
+    assert scan.scan_review_log(tmp_path / "none.jsonl", "") == {}
+    path = tmp_path / "broken.jsonl"
+    path.write_text("not json\n", encoding="utf-8")
+    assert scan.scan_review_log(path, "") == {}
+
+
+def test_approvals_cli_reads_review_log(tmp_path, capsys):
+    scan = _load()
+    log = _write(tmp_path, [_review("permission_request.approved", "approved", "bash", "git config*")])
+    assert scan.main(["--root", str(tmp_path / "none"), "--review-log", str(log), "--approvals", "--json"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["rules"]["bash:git config*"]["counts"] == {"承認": 1}

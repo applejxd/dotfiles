@@ -3,9 +3,10 @@
 # see https://www.chezmoi.io/user-guide/setup/#create-a-config-file-on-a-new-machine-automatically
 
 {{- /*
-Raspberry Pi の判定はここに置かない。chezmoi update が chezmoi init を
-呼ばないため、[data] に入れると判定が古いまま固定される。
+Raspberry Pi の判定はここに置かない。[data] は init 時にしか更新されず、
+init を忘れると判定が古いまま固定されるため。
 判定は .chezmoitemplates/is-raspi が単一ソース。
+init 前提の可否は docs/adr/0038-allow-chezmoi-init-dependency.md。
 */ -}}
 {{- $http_proxy := env "http_proxy" }}
 {{- $https_proxy := env "https_proxy" }}
@@ -67,6 +68,15 @@ see docs/adr/0003-require-python-311-for-agent-configuration.md
     args = ["-3"]
 {{- else }}
     command = {{ $python | toJson }}
+{{- end }}
+
+# source に残った Git 管理外の残骸が chezmoi を止めるのを防ぐ (失敗しても apply は続ける)。
+# 既存ホストは 1 回 `chezmoi init` が要る。Windows は未検証のため呼ばない。
+# see docs/spec/structure.md#source-側の残骸の掃除
+{{- if ne .chezmoi.os "windows" }}
+[hooks.read-source-state.pre]
+    command = "sh"
+    args = ["-c", "\"$0\" \"$1\" || true", {{ $python | toJson }}, {{ joinPath .chezmoi.sourceDir ".." "scripts" "clean_stale_source.py" | toJson }}]
 {{- end }}
 
 [data]

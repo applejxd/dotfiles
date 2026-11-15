@@ -2,7 +2,7 @@
 
 pi で、**いま実在する**スラッシュコマンドの早見。撤去した自作ハーネス（`pis`）だけにあったコマンド（`/agents`・`/bypass`・`/orchestrate`・`/pending`・`/board`・`/worktrees`・`/work`・`/delegate-stats`）は、無い。
 
-- 確認の日と版: 2026-11-12。pi 1.5.0、package の版は `home/.chezmoitemplates/pi-stock-packages`。
+- 確認の日と版: 2026-11-15。pi 1.5.2（`test/test_pi_commands_doc.py` の 6 件が、この版で全て通った。skip なし）、package の版は `home/.chezmoitemplates/pi-stock-packages`。
 - 実機で見るには、pi の入力欄で `/` を打つ（補完に出る）。
 - **この表は試験で実物と突き合わせる**（`test/test_pi_commands_doc.py`。pi と package が入った機でだけ回る）。pi か package を更新して
   コマンドが増減すると試験が落ちるので、この表を直す。
@@ -71,6 +71,14 @@ pi 本体が組み込みで読み込む拡張（`dist/extensions/`）が登録�
 | `@gotgenes/pi-permission-system` | `/permission-system` | 確認（YOLO など）の切り替え・設定 |
 | `@juicesharp/rpiv-todo` | `/todos` | 今のブランチの todo を、状態ごとに見る |
 | `cc-safety-net` | `/cc-safety-net` | CC Safety Net の操作（ブロックの説明・規則・統合・診断） |
+
+## このリポジトリが配るローカル package のコマンド
+
+`home/dot_pi/agent/local-packages/`（`pi-stock-packages` の `./local-packages/...`）が登録する。
+
+| コマンド | 内容 |
+| --- | --- |
+| `/sandbox` | コマンド実行の囲い（`pib`）と YOLO を、セッションの途中で切り替える（`/sandbox [on\|offline\|off\|status]`。引数なしは `on` と `off` のトグル。Linux だけ。[仕様](sandbox/pi-sandbox-runner.md#実行中の切り替え)） |
 
 ## package が同梱する prompt template
 

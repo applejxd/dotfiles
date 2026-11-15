@@ -19,6 +19,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+# settings.json からの相対パスで指す、リポジトリが配るローカル版の package
+LOCAL_PACKAGES = {"./local-packages/pi-permission-explain", "./local-packages/pi-sandbox-toggle"}
 HOME_SRC = ROOT / "home"
 PERMISSION_DIR = ".pi/agent/extensions/pi-permission-system"
 PLAN_MODE_CONFIG = ".pi/agent/pi-plan-mode.json"
@@ -257,6 +259,9 @@ def test_stock_packages_are_pinned_npm(tmp_path):
     pkgs = stock_packages(tmp_path)
     assert len(pkgs) == len(set(pkgs)) > 0
     for pkg in pkgs:
+        # このリポジトリが配るローカル版 (home/dot_pi/agent/local-packages/ の下) だけが、npm 以外の指定
+        if pkg in LOCAL_PACKAGES:
+            continue
         assert re.fullmatch(r"npm:(@[a-z0-9._-]+/)?[a-z0-9._-]+@\d+\.\d+\.\d+", pkg), pkg
 
 
@@ -455,6 +460,18 @@ def test_stock_agents_md_has_no_harness_words(tmp_path):
         assert word not in text, word
 
 
+def test_stock_agents_md_asks_for_absolute_cd_until_upstream_fix(tmp_path):
+    """TEMP-REMOVE: pi-permission-system が cd 先の ~・変数を解決しない間の一時対処。上流が直ったら削除する。
+
+    理由・撤去の条件は docs/spec/temporary-workarounds.md#pi-permission-system-の-cd-先の誤判定
+    """
+    text = render_file("dot_pi/agent/AGENTS.md.tmpl", tmp_path)
+    assert "`cd` は絶対パスで書く" in text
+    assert "TEMP-REMOVE" in text
+    doc = (ROOT / "docs" / "spec" / "temporary-workarounds.md").read_text(encoding="utf-8")
+    assert "## pi-permission-system の cd 先の誤判定" in doc
+
+
 
 
 # --- permission-system の設定 ------------------------------------------
@@ -549,6 +566,176 @@ def test_permission_config_leaves_broken_input_alone(tmp_path):
 def test_permission_policy_does_not_carry_runtime_keys():
     """実行時の値 (yoloMode など) は拡張が書き換える。リポジトリは方針だけを持つ。"""
     assert set(policy()) <= {"permission", "shellTools", "commandEffects"}
+
+
+def test_permission_explain_local_package_is_wired_and_patched():
+    """ask の説明 (押下式) のローカル版。上流 0.1.1 を取り込み、3 つの改変だけを加えた。配線・設定・改変の有無を固定する。
+    権限を持たないことは、ソースの監査 (docs/research/agents/ask-auto-judge-evaluation-2026-11.md) の範囲で、この試験は証明しない。"""
+    packages = (ROOT / "home" / ".chezmoitemplates" / "pi-stock-packages").read_text(encoding="utf-8").splitlines()
+    assert "./local-packages/pi-permission-explain" in packages
+    # npm 版と二重に入れない (同じ拡張が 2 回読み込まれる)
+    assert not [p for p in packages if p.startswith("npm:pi-permission-explain")]
+    pkg_dir = ROOT / "home" / "dot_pi" / "agent" / "local-packages" / "pi-permission-explain"
+    meta = json.loads((pkg_dir / "package.json").read_text(encoding="utf-8"))
+    assert meta["pi"]["extensions"] == ["./src/index.ts"]
+    assert "dependencies" not in meta  # 本体が提供するものを同梱しない (pi の docs)
+    assert (pkg_dir / "LICENSE").read_text(encoding="utf-8").startswith("MIT License")
+    src = (pkg_dir / "src" / "index.ts").read_text(encoding="utf-8")
+    # 出典と、上流 0.1.1 の src/index.ts の sha256 が、ファイルの先頭に残っている
+    assert "5fb67a86b3d06e62e4402d20d69f5217791502457c9956c3a2a4c15eb875ae04" in src
+    # 改変 1: 説明キーを consume しない (ダイアログへ通し、未回答の時計を止める)
+    assert "consume: true" not in src
+    # 改変 2: 説明は日本語
+    assert "日本語の 1 文" in src and "You explain, in one sentence" not in src
+    # 説明は軽いモデルで足りる。セッションの重いモデルを毎回呼ばない。機の種類 (is-work) でプロバイダを切り替える:
+    # 会社 PC (tester) は Bedrock、家の機 (applejxd) は Copilot (テンプレートの描画は test_permission_explain_model_follows_the_machine)
+    # 説明は判定役ではない。authorizerChain には載せない (方針ファイルの確認だけ)
+    assert "authorizerChain" not in policy()
+
+
+@pytest.mark.parametrize(("os_name", "wired"), [("linux", True), ("darwin", False), ("windows", False)])
+def test_sandbox_toggle_local_package_is_wired_on_linux_only(tmp_path, os_name, wired):
+    """囲いと YOLO を実行中に切り替える /sandbox の拡張。囲い (bwrap・pib-shell) が Linux だけなので、入れるのも Linux だけ。"""
+    text = render('{{ includeTemplate "pi-stock-packages" . }}', tmp_path, os_name=os_name)
+    packages = [line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")]
+    assert ("./local-packages/pi-sandbox-toggle" in packages) is wired
+    assert len(packages) == len(set(packages))
+
+
+def test_sandbox_toggle_is_never_a_tool_the_model_can_call():
+    """切り替えは利用者が打った /sandbox だけ。モデルが呼べる道具 (registerTool) を登録すると、プロンプトの注入から囲いを外せてしまう。"""
+    src = (ROOT / "home" / "dot_pi" / "agent" / "local-packages" / "pi-sandbox-toggle" / "src" / "index.ts").read_text(encoding="utf-8")
+    assert "registerTool" not in src
+    assert "registerCommand(\"sandbox\"" in src
+
+
+def test_permission_explain_model_follows_the_machine(tmp_path):
+    """説明のモデルは設定ファイル (テンプレート) で、is-work により切り替わる。キーは常に Ctrl+E (単独の y・enter にしない)。"""
+    name = "dot_pi/agent/extensions/permission-explain/config.json.tmpl"
+    work = json.loads(render_file(name, tmp_path, username="tester"))
+    home = json.loads(render_file(name, tmp_path, username="applejxd"))
+    assert work == {"key": "ctrl+e", "model": "amazon-bedrock/us.anthropic.claude-haiku-5-5"}
+    assert home == {"key": "ctrl+e", "model": "github-copilot/claude-haiku-5.5"}
+
+
+def _explain_load_config(tmp_path, base, local, script=None):
+    """ローカル版を node で実際に動かす (pi の 2 つのパッケージは、最小の代役に差し替える)。script が無ければ loadConfig の結果を返す。"""
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node が無い")
+    agent = tmp_path / "agent"
+    cfg_dir = agent / "extensions" / "permission-explain"
+    cfg_dir.mkdir(parents=True)
+    if base is not None:
+        (cfg_dir / "config.json").write_text(base, encoding="utf-8")
+    if local is not None:
+        (cfg_dir / "config.local.json").write_text(local, encoding="utf-8")
+    work = tmp_path / "work"
+    for pkg, body in {
+        "pi-coding-agent": "export const getAgentDir = () => process.env.PI_AGENT_DIR;\n",
+        "pi-tui": (
+            "export const isKeyRelease = () => false; export const isKeyRepeat = () => false; "
+            "export const matchesKey = (data, key) => data === key;\n"
+        ),
+    }.items():
+        d = work / "node_modules" / "@earendil-works" / pkg
+        d.mkdir(parents=True)
+        manifest = {"name": f"@earendil-works/{pkg}", "type": "module", "exports": "./index.js"}
+        (d / "package.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (d / "index.js").write_text(body, encoding="utf-8")
+    src = ROOT / "home" / "dot_pi" / "agent" / "local-packages" / "pi-permission-explain" / "src" / "index.ts"
+    shutil.copy(src, work / "index.ts")
+    (work / "package.json").write_text('{"type": "module"}', encoding="utf-8")
+    # 実行者の環境 (NODE_OPTIONS の preload など) を引き継がない
+    env = {k: v for k, v in os.environ.items() if not k.startswith("NODE_")}
+    env["PI_AGENT_DIR"] = str(agent)
+    probe = subprocess.run(
+        [node, "--experimental-strip-types", "--no-warnings", "-e", "0"],
+        env=env, capture_output=True, text=True, encoding="utf-8", timeout=60,
+    )
+    if probe.returncode != 0:
+        pytest.skip("この node は TypeScript の型の除去 (--experimental-strip-types) を使えない")
+    proc = subprocess.run(
+        [node, "--experimental-strip-types", "--no-warnings", "-e",
+         script or "import('./index.ts').then(m => console.log(JSON.stringify(m.__loadConfigForTest())))"],
+        cwd=work, env=env, capture_output=True, text=True, encoding="utf-8", timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr
+    return json.loads(proc.stdout.strip().splitlines()[-1])
+
+
+_EXPLAIN_NOTIFICATIONS_SCRIPT = """
+import('./index.ts').then((m) => {
+  const handlers = {}; const events = {}; const notes = []; let input;
+  m.default({ on: (n, h) => { handlers[n] = h; }, events: { on: (n, h) => { events[n] = h; } } });
+  const ctx = {
+    hasUI: true, mode: 'tui', model: undefined, signal: undefined,
+    ui: { notify: (msg) => notes.push(msg), setWidget() {}, onTerminalInput: (cb) => { input = cb; return () => {}; } },
+    modelRegistry: { find: () => undefined, hasConfiguredAuth: () => false, complete: async () => { throw new Error('x'); } },
+  };
+  handlers.session_start({}, ctx);
+  events['permissions:ui_prompt']({
+    requestId: 'r1', surface: 'bash', value: 'ls', request: { surface: 'bash', toolName: 'bash', value: 'ls' },
+  });
+  input('ctrl+e');
+  console.log(JSON.stringify(notes));
+});
+"""
+
+
+def test_permission_explain_local_config_overrides_only_the_model(tmp_path):
+    """管理外の config.local.json (このマシンだけの上書き) は、model だけを上書きできる。
+    key は上書きできない (単独の y・enter で承認に届くため)。"""
+    base = '{"key": "ctrl+e", "model": "github-copilot/claude-haiku-5.5"}'
+    # 上書きなし
+    got = _explain_load_config(tmp_path / "a", base, None)
+    assert got == {"config": {"key": "ctrl+e", "model": "github-copilot/claude-haiku-5.5"}}
+    # model の上書き。key は config.json のまま
+    got = _explain_load_config(tmp_path / "b", base, '{"model": "amazon-bedrock/us.anthropic.claude-haiku-5-5"}')
+    assert got == {"config": {"key": "ctrl+e", "model": "amazon-bedrock/us.anthropic.claude-haiku-5-5"}}
+    # key を書いても無視して警告する
+    got = _explain_load_config(tmp_path / "c", base, '{"key": "y", "model": "x/y"}')
+    assert got["config"] == {"key": "ctrl+e", "model": "x/y"}
+    assert "key は上書きできない" in got["error"]
+    # 壊れたローカルの設定は無視して警告する (config.json の値は保つ)
+    got = _explain_load_config(tmp_path / "d", base, "{broken")
+    assert got["config"] == {"key": "ctrl+e", "model": "github-copilot/claude-haiku-5.5"}
+    assert "config.local.json" in got["error"]
+    # config.json が壊れていても、ローカルの model は効く
+    got = _explain_load_config(tmp_path / "e", "{broken", '{"model": "x/y"}')
+    assert got["config"] == {"model": "x/y"}
+    assert "config.json" in got["error"]
+    # 不正な model (null・数値・配列・空・空白) は、値を出さずに警告し、config.json の値を保つ
+    for i, bad in enumerate(['null', '3', '["a"]', '""', '"   "']):
+        got = _explain_load_config(tmp_path / f"m{i}", base, f'{{"model": {bad}}}')
+        assert got["config"] == {"key": "ctrl+e", "model": "github-copilot/claude-haiku-5.5"}, bad
+        assert "model は空でない文字列にする" in got["error"], bad
+    # 警告に、絶対パス・入力の断片 (秘密の目印) を出さない
+    got = _explain_load_config(tmp_path / "leak", base, '{"model": "x/y", "SECRET-MARK-123": ')
+    assert "SECRET-MARK-123" not in got["error"]
+    assert str(tmp_path) not in got["error"]
+    assert "JSON として読めない" in got["error"]
+
+
+def test_permission_explain_notifications_never_show_config_values(tmp_path):
+    """拡張を実際に動かして、通知 (設定の警告・モデル未解決・key の不正) に、設定の値 (絶対パス・秘密の目印) を出さない。"""
+    secret = "/home/alice/SECRET-MARK-123"
+    base = json.dumps({"key": "control+" + secret, "model": "github-copilot/claude-haiku-5.5"})
+    local = json.dumps({"model": secret})
+    notes = _explain_load_config(tmp_path, base, local, script=_EXPLAIN_NOTIFICATIONS_SCRIPT)
+    text = "\n".join(notes)
+    assert "SECRET-MARK-123" not in text and "/home/alice" not in text and str(tmp_path) not in text
+    # 3 つの経路が、実際に通知を出した: key の不正・設定のモデルが見つからない (説明キーを押した)
+    assert any("key" in n for n in notes) and any("モデルが見つからない" in n for n in notes), notes
+
+
+def test_permission_explain_local_config_example_is_valid():
+    example = ROOT / "home" / "dot_pi" / "agent" / "extensions" / "permission-explain" / "config.local.json.example"
+    ex = json.loads(example.read_text(encoding="utf-8"))
+    assert set(ex) == {"model"}
 
 
 def test_permission_policy_matches_the_contract():

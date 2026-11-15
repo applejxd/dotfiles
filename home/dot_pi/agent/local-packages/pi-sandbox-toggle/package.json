@@ -1,0 +1,29 @@
+{
+  "name": "pi-sandbox-toggle-local",
+  "version": "0.1.0-local.1",
+  "private": true,
+  "description": "pi のコマンド実行の囲い (pib) と YOLO を、セッションの途中で切り替える /sandbox (このリポジトリだけが配る自作)",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}

@@ -39,7 +39,7 @@ pi 本体・LLM 認証・拡張・MCP（外側）
 
 `pib --help`（日本語の使い方。**pi のヘルプを上書きする**。pi のヘルプは `pi --help`。先頭に置いたときだけ。配備が壊れていても読める）と `pib [--offline] --status`（読み取り専用の診断。囲いが使える状態か、いま効いている設定を見せる）がある。
 
-強さは**起動時に選ぶ**（実行中には切り替えない）。囲いの外が要る作業（`gh`・`git push`・docker・Windows 側の実行ファイル）は、`pi`（囲いなし）か別のターミナルで行う。昇格の仕組みは作らない。
+強さは、起動時に選ぶほか、**セッションの途中でも `/sandbox` で切り替えられる**（[実行中の切り替え](#実行中の切り替え)。[ADR-0040](../../adr/0040-pi-sandbox-session-toggle.md)）。囲いの外が要る作業（`gh`・`git push`・docker・Windows 側の実行ファイル）は、`/sandbox off` か、`pi`（囲いなし）・別のターミナルで行う。エージェントが囲いの外を要求できる昇格の仕組みは作らない（切り替えは利用者が打つ `/sandbox` だけ）。
 
 ## 部品
 
@@ -51,10 +51,11 @@ pi 本体・LLM 認証・拡張・MCP（外側）
 | `shellPath` の設定 | `home/.chezmoitemplates/modify_pi_stock_settings.py.tmpl`（`home/dot_pi/agent/modify_settings.json.py.tmpl` が呼ぶ） | `~/.pi/agent/settings.json` の `shellPath`（Linux だけ。利用者が別の値を書いていれば保つ） |
 | 設定（共有） | `home/dot_config/pi-sandbox/runner.toml` | `~/.config/pi-sandbox/runner.toml`（chezmoi 管理。apply で上書きされる） |
 | 設定（このマシンだけ） | `home/dot_config/pi-sandbox/runner.local.toml.example`（見本） | `~/.config/pi-sandbox/runner.local.toml`（**chezmoi の管理外**。見本をコピーして作る。任意） |
+| 実行中の切り替え（`/sandbox`） | `home/dot_pi/agent/local-packages/pi-sandbox-toggle/`（pi の package。`pi-stock-packages` が Linux だけに入れる） | `~/.pi/agent/local-packages/pi-sandbox-toggle/` |
 | 実機の確認 | `scripts/pi_sandbox_selftest.py` | `python3 scripts/pi_sandbox_selftest.py`（リポジトリ直下で実行） |
 | 試験 | `test/test_pi_sandbox_runner.py` | — |
 
-Linux 以外へは配らない（`.chezmoiignore.tmpl`）。pi の拡張は使わない（`@yuru7/pi-sandbox` を外した。[ADR-0036](../../adr/0036-pi-sandbox-shell-wrap-and-tool-policy.md)）。
+Linux 以外へは配らない（`.chezmoiignore.tmpl`）。囲い自体は pi の拡張で包まない（`@yuru7/pi-sandbox` を外した。[ADR-0036](../../adr/0036-pi-sandbox-shell-wrap-and-tool-policy.md)）。囲いの切り替えだけは、ローカルの拡張が行う（[実行中の切り替え](#実行中の切り替え)）。
 
 ## 仕組み
 
@@ -64,7 +65,7 @@ pi は、シェルを `<shellPath> -c <コマンド>` で起動する（`shellPa
 
 ```text
 pib-shell -c <コマンド>
-  PIB_SANDBOX が空   → /bin/bash -c <コマンド>（普段の pi は何も変わらない）
+  PIB_SANDBOX が空   → /bin/bash -c <コマンド>（普段の pi は何も変わらない。`PIB_ORIG_PATH` があれば、元の PATH を渡して変数を消す）
   PIB_SANDBOX = 1    → pi-sandbox-runner -c <コマンド>
   PIB_SANDBOX = offline → pi-sandbox-runner --offline -c <コマンド>
 ```
@@ -135,6 +136,63 @@ protect = true
 - **fail-closed**: 設定（共有・このマシンだけの追記のどちらも）が読めない（UTF-8 でない場合を含む）・壊れている、共有設定が無い、使い方が違う（`-c <コマンド>` 以外）、作業ディレクトリが広すぎるときは、bwrap を起動せず終了コード 2。エラーは `pi-sandbox-runner:` で始める。bwrap が無いときは 127。
 - 環境変数（試験・調査用）: `PI_SANDBOX_RUNNER_CONFIG`（設定の場所）、`PI_SANDBOX_RUNNER_DRYRUN=1`（exec せずに最終の引数を JSON で出す）。`PIB_SANDBOX`（`pib` が立てる。`1` か `offline`）。
 
+## 実行中の切り替え
+
+`/sandbox`（ローカルの pi の package `pi-sandbox-toggle`。Linux だけ。判断は [ADR-0040](../../adr/0040-pi-sandbox-session-toggle.md)）で、セッションの途中で囲いと YOLO を切り替える。
+
+| 入力 | 動き |
+| --- | --- |
+| `/sandbox` | 囲いなし → `on`、囲いあり（`on`・`offline`）→ `off` のトグル |
+| `/sandbox on` | 囲いあり（通信は開いている）。YOLO を入れる |
+| `/sandbox offline` | 囲いあり（通信を遮断）。YOLO を入れる |
+| `/sandbox off` | 確認を出し、YOLO を切ってから囲いを外す。すでに囲いなしなら、残っている YOLO だけを切る |
+| `/sandbox status` | いまの状態と、囲いが実際に効いているか（試し実行）、設定ファイルの YOLO |
+
+フッターに `sandbox: on` / `offline` / `off` を常に出す。
+
+### 仕組み
+
+- pi は、コマンドを起動するたびに、pi プロセスの環境変数を読む（bash ツール: `dist/core/tools/bash.js` の `env ?? getShellEnv()`、`bg_run`: `pi-background` の `{...process.env}`。pi 1.5.0）。`pib-shell` は `PIB_SANDBOX` が立っているときだけ囲う。拡張は、pi プロセスの `process.env.PIB_SANDBOX` を書き換えるだけで、囲い自体は変えない（`bg_run`・`!`・子の bash も一緒に切り替わる）。
+- **一度に 1 つ**: 切り替えの途中（確認・idle 待ち・試し実行）に、別の `/sandbox` が割り込むと、「`off` のあとに YOLO が入る」などの食い違いが出る。実行中は、次の `/sandbox`（`status` を含む）を断る。**起動時の確認（下の「起動時」）も同じ枠を使う**: pi は、起動の途中（`session_start` の完了前）から入力を受け付けるので、確認の最中に `/sandbox off` が通ると、囲いを外したあとに起動時の処理が YOLO を入れてしまう。起動時の確認の間の `/sandbox` は断る。先に始まった `/sandbox` があれば、起動時の確認は**捨てずに、その終了を待ってから**行う（捨てると、先行の `on` が失敗して囲いなしに戻ったとき、前回の YOLO が残る）。
+- 囲いを入れるとき: ① `settings.json` の実効の `shellPath` が `pib-shell` の絶対パスそのもの（`~/` の略記は可）で、`HOME` が正規の絶対パスであること（`pib` と同じ規則）を確かめる。② 環境変数を書き換える。③ pi の bash と同じ経路で試し実行し、囲いの内側の印（runner が内側だけに設定する `MISE_STATE_DIR=/tmp/pib-mise-state`）が見えることを確かめる。見えなければ（runner・bwrap・設定が使えない、作業ディレクトリが広すぎる、など）環境変数を元に戻し、YOLO も触らない。④ YOLO を入れる（下の条件を満たすときだけ。満たさなくても、囲いは入ったまま、YOLO を入れなかったと知らせる）。
+- 囲いを外すとき: 確認を出し、**ターンの切れ目まで待ち**（実行中のターンは YOLO が入ったまま続くため）、**YOLO を先に切ってから**囲いを外す。YOLO を切れなければ囲いを外さない（設定ファイルが壊れている、**信頼済みのプロジェクトの設定が `yoloMode` を on にしている**、など）。UI が無ければ外さない。
+- **YOLO は囲いに従う。** `pi-permission-system` の設定ファイル（`~/.pi/agent/extensions/pi-permission-system/config.json`）の `yoloMode` だけを書く（他の項目は保つ。壊れていれば触らない。一意な名前の一時ファイルに書いて rename し、失敗時は消す）。拡張が毎ターンの開始時に読み直すので、**次のターンから**効く。
+  - **YOLO を入れるのは、permission-system に「保護が実効の方針で効いている」と確かめられたときだけ。** YOLO は ask を自動承認するので、囲いの外で動くファイルの道具（`write`・`edit`）が、`pi-sandbox-runner`・`pib-shell`・`pib`・`runner.toml`・`runner.local.toml`・`settings.json`・権限の設定・この拡張（本体と、`pi.extensions` の向き先の `package.json`）を書き換えられないことが前提になる。拡張は、規則の評価を**再現せず**、permission-system の公開の判定 API（`checkPermission("path_write", <パス>)`。`write`・`edit` のゲートと同じ判定。global・信頼済みプロジェクト・agent の設定を重ねた、実効の方針）に、この 9 つのパス（拡張の `PROTECTED_PATHS`）を 1 つずつ問い、**すべて、明示の規則が一致した `deny`**（`state === "deny"` かつ `matchedPattern` がある）のときだけ入れる。規則が無く、既定の deny（`permission["*"]`）が答えたものは、`write`・`edit` の path ゲートが何もせず通す（上流の `describePathGate` は、明示の規則が一致しなければスキップする）ので、数えない。ask・allow・例外・判定 API が見つからない、のどれでも入れない。入れないときも、囲いは入る（理由を知らせる）。**確かめられなければ、残っている YOLO（前回の YOLO・手動の YOLO）も切る**（確かめられない保護のまま残さない。切れなければ、そう知らせる）。設定ファイルが無いときも入れず、YOLO だけのファイルは作らない。
+    - 判定 API は、permission-system が起動時（`session_start`）に、ノードの session id をキーに `globalThis` の `Symbol.for("@gotgenes/pi-permission-system:session-services")` へ公開する。拡張の読み込み順で、起動時の同期がそれより前になったときは、`permissions:ready`（公開後に知らせるイベント。上流の文書が、読み込み順に依らない受け取り方として勧める）で**もう一度確かめる**（公開待ちの間は、残っている YOLO を切っておく。セッションの終了・入れ替え `/new`・`/reload` では、保留と購読を捨てる）。
+    - 9 つのパスが、リポジトリの方針でも、明示の規則で deny になることは、判定表（`test/agents/pi_stock/permission_cases.json`。本物の判定エンジンで評価する）と、拡張のパスの一致、本物の判定エンジンで規則が一致すること（`test_sandbox_toggle_protected_paths_are_denied_by_an_explicit_rule`）を試験で固定している。
+  - **YOLO を切るときは、項目が無くても明示の `false` を書く**（global より前に読まれる旧い置き場の `yoloMode: true` に勝つため）。ファイルが無ければ作らない（既定が off）。
+  - **信頼済みのプロジェクトの設定**（`<作業ディレクトリ>/.pi/extensions/pi-permission-system/config.json` と、旧い置き場の `.pi/agent/pi-permissions.jsonc`）が `yoloMode: true` なら、permission-system は global の後にそれを重ねて、global の `false` に勝つ。拡張は、この 2 つを、上流と同じ解釈（コメントを除いて JSON として読み、`yoloMode === true` で判定。キーの `\u` エスケープ・文字列の中の `//`・同じキーが 2 つあるときは最後が勝つ、も上流と同じ）で読み、on なら YOLO を切れないと扱う。**読めない（構文エラー・読み取りエラー）ときも、off と確かめられないので、囲いを外さない**（上流は、読めないファイルを丸ごと無視するが、解釈の食い違いに備えて外さない側に倒す）。信頼していないプロジェクトは読まれないので、見ない。
+  - YOLO は設定ファイルに残るため、**起動時**（`/new`・`/resume`・`/reload` ではない）にも、囲いの状態に揃える。**囲いが効いていると確かめられたとき（`shellPath` の検査と試し実行）だけ**YOLO を入れる。確かめられなければ、YOLO を入れず（前回の YOLO は切る）、エラーとフッターの `（効いていない）` で知らせる。囲いなしの `pi` は YOLO off で始まり、`pib` は（確かめられれば）YOLO on で始まる。`/permission-system` での手動の切り替えは、次の起動まで保たれる。
+- `pib-shell` は、囲いなしのとき `PIB_ORIG_PATH`（`pib` が保存した元の PATH）を渡す。`pib` で起動して囲いを外しても、venv の `bin` が見える（囲いの中と同じ）。
+
+### 安全上の扱い
+
+- **切り替えは、利用者が打った `/sandbox` だけ。** モデルが呼べる道具は登録しない（試験で固定）。pi プロセスの環境変数は、囲いの内側のコマンドから触れない。
+- **拡張のファイルは `path_write` で拒否する**（`~/.pi/agent/local-packages`）。囲いの外の pi 本体で実行されるコードなので、ファイルの道具で書き換えられると、切り替えを含む任意のコードを仕込める。
+- **YOLO が入ると、強制 ask が自動承認になる**（`deny` は残る）。外部への投稿・変更の確認（`gh` の変更系など）は働かない。囲いの内側の `gh` は認証が無く失敗するが、MCP・ファイルの道具・pi 本体の操作は囲いの外にある。YOLO だけを切りたいときは `/permission-system`（次の起動までその値が保たれる）。
+
+### 限界
+
+- **素の `pi` から入れた囲いは、`pib` より弱い。** `pib` の起動時の検査（`--no-approve`・`PATH` の整理・`HOME` と制御ファイルの検査）を通らない。プロジェクトの `.pi/settings.json` が `shellPath` を書き換えても、切り替えの時点の確認だけで、その後は検知しない。確実に守る作業は `pib` で起動する。
+- 切り替えは**次のコマンドから**。すでに動いている背景ジョブ・子エージェントは、起動時の状態のまま（子は起動時の環境変数を引き継ぐ）。
+- 状態は pi プロセス単位で、保存しない。`/new`・`/resume`・`/reload` でも引き継がれ、pi を終えると、起動時の状態に戻る。
+- **YOLO は設定ファイル 1 つを共有する。** 複数の pi を同時に動かすと、一方の切り替え・起動が、他方の次のターンから効く（囲いなしの pi が YOLO になりうる）。同時に使うときは、囲いを切り替えない・`/sandbox status` で確かめる。
+- **保護の確認は、YOLO を入れる時点のもの。** その後に方針が変わっても追わない。特に、信頼済みのプロジェクトの設定（`<作業ディレクトリ>/.pi/extensions/pi-permission-system/config.json`）は作業ツリーの中にあり、エージェントの `write` で書き換えられる。YOLO が入っているあいだに `path_write` を緩める設定を足されると、次のターンの設定の読み直しで、保護が外れうる。`pib` は `--no-approve` でプロジェクトの設定を読まないので、この経路は無い。素の `pi` で入れた囲いは、この点でも `pib` より弱い。判定は agent 名なし（本体のエージェント）の方針に対するもので、agent ごとの方針や子エージェントの方針までは見ない。
+- **YOLO を切る側の検査は、global の設定ファイルと、プロジェクトの 2 か所だけ。** 旧い置き場（`~/.pi/agent/pi-permissions.jsonc`、permission-system の install 先の `config.json`）は、global より前に重なるので、global の明示の `false` が勝つ。永続する別の設定の仕組みが増えたら、見落とす（permission-system の更新で、設定の重なり方が変わったときも同じ）。
+- 設定ファイルの読み取り・書き換えは、協調しない他の書き手（`chezmoi apply`・`/permission-system`・他の pi）と、更新を取り合う。一意な一時ファイルと rename で、ファイルが壊れることは避けるが、同時に起きた別の項目の更新を、古い値で戻すことはありうる。
+- `/sandbox status` の YOLO は、設定ファイルの値（と、プロジェクトの設定の検出）。permission-system が実際に使っている値（読み直しは次のターン）を直接は見られない（外から呼べる API が無い）。
+- 試験（`test/test_pi_sandbox_toggle.py`）は、node と、pi 本体の代役で行う（試験の範囲: 切り替えの順序・試し実行の失敗・YOLO の連動・起動時の同期・`shellPath` と `HOME` の検査）。実際の pi・TUI・bwrap は通っていない。
+
+### 実機で確かめる項目（未確認）
+
+`chezmoi apply` のあと:
+
+1. `pib` で起動し、`/sandbox status`（`sandbox: on`・内側で動く・YOLO on）。
+2. `/sandbox`（確認 → `sandbox: off`・YOLO off）。そのあと、`!echo $MISE_STATE_DIR` が空、`bg_run` も囲いなし。
+3. もう一度 `/sandbox`（`on`）。`!echo $MISE_STATE_DIR` が `/tmp/pib-mise-state`、`bg_run` も内側。
+4. 素の `pi` で起動し、`/sandbox status`（`off`・YOLO off）。`/sandbox on` のあと、`pib` と同じく囲いの内側になる。
+5. `/sandbox offline` で、通信が遮断される。
+
 ## 導入と確認
 
 1. `chezmoi apply` で、上の部品が配備され、`~/.pi/agent/settings.json` に `shellPath`（`~/.local/bin/pib-shell`）が入る（Linux だけ。利用者が別の値を書いていれば保つ）。`shellPath` は全セッション共通の設定だが、`PIB_SANDBOX` が無いときは素の bash なので、普段の `pi` は変わらない。
@@ -175,6 +233,7 @@ protect = true
 ## 保証しないこと・限界
 
 - **コマンドの実行だけを包む。** ファイルの道具（`read`・`write`・`edit`）・pi 本体・拡張・MCP サーバーは外側で動く。MCP で GitHub などへ書き込めるものを入れると、囲いの外から書き込める。
+- **`/sandbox off` の間は、囲いが無い**（フッターに `sandbox: off`）。切り替えは、利用者の操作。
 - **ルートは読み取り専用で見える。** 覆うのは、ホーム・`/tmp`・`/var/tmp`・`/mnt`・`/media`・`/run/user` だけ。それ以外の場所（`/etc`・`/opt`・`/srv`・他のユーザーのホームなど）は読める（書けない）。他のユーザーのホームは、ファイルの権限が守る。
 - **通信は無制限**（`--offline` で全遮断。ドメインの許可リストは作らない）。
 - **環境変数は拒否リスト。** `env.unset` に無い名前（独自のトークンなど）は渡る。
@@ -198,3 +257,4 @@ protect = true
 
 - `uv run --with pytest --no-project pytest test/test_pi_sandbox_runner.py -q`: 設定の検証（このマシンだけの追記の併合・緩める指定の拒否を含む）・引数の組み立て（許可リスト型の並び・worktree の git の検証・hide が visible に勝つ・環境変数・`--offline`）・CLI の fail-closed・`pib` の起動の検査（`shellPath`・プロジェクトの上書き）・`pib-shell`（素の bash・runner への委譲・runner が無いときに素の bash へ落ちない）・実際の bwrap（使える環境だけ）での見える範囲・書き込み・隠蔽・git・環境変数・通信の遮断。CLI と実 bwrap の試験は Linux 以外では skip する（runner は `os.getuid()` と bwrap を使う）。
 - `python3 scripts/pi_sandbox_selftest.py`: 実機の確認（上の「導入と確認」）。
+- `uv run --with pytest --no-project pytest test/test_pi_sandbox_toggle.py -q`: `/sandbox`（[実行中の切り替え](#実行中の切り替え)）を node で動かす。node と TypeScript の型の除去（`--experimental-strip-types`）が要る（無ければ・Linux 以外は skip）。
