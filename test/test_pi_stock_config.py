@@ -746,9 +746,10 @@ def test_permission_policy_matches_the_contract():
     assert perm["bash"]["*"] == "allow"
     assert next(iter(perm["bash"])) == "*"  # 後勝ち: 既定を先頭に置く
     assert perm["external_directory"] == {"*": "ask", "/tmp/*": "allow"}  # /tmp の読み書きだけ事前許可
-    # 読み取りだけの許可リスト (pi 自身のディレクトリと Orca の貼り付け画像)。広い許可 ("*": allow) にはしない
+    # 読み取りだけの許可リスト (pi 自身のディレクトリと Orca の貼り付け画像・添付ファイル)。広い許可 ("*": allow) にはしない
     read = perm["external_directory_read"]
     assert "*" not in read and "~/.pi/agent/extensions/*" in read
+    assert read["~/.orca/agent-session-attachments/*"] == "allow"  # 添付の書き込みは許可しない (external_directory_write は ask のまま)
     keys = list(read)
     for logs in ("~/.pi/agent/extensions/*/logs", "~/.pi/agent/extensions/*/logs/*"):
         assert read[logs] == "ask" and keys.index(logs) > keys.index("~/.pi/agent/extensions/*")  # 後勝ち: logs は許可の後で ask
