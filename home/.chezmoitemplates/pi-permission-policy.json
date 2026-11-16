@@ -438,7 +438,8 @@
       "/usr/include/*": "allow",
       "/var/lib/dpkg/status": "allow",
       "/mnt/wslg/*.log": "allow",
-      "/mnt/c/Users/applejxd/AppData/Local/Temp/orca-paste-*": "allow"
+      "/mnt/c/Users/applejxd/AppData/Local/Temp/orca-paste-*": "allow",
+      "~/.orca/agent-session-attachments/*": "allow"
     }
   }
 }

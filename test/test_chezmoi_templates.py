@@ -132,6 +132,18 @@ def test_git_user_and_ignore_are_deployed_on_windows(tmp_path):
     assert "!.config/git/**" not in rendered
 
 
+@pytest.mark.parametrize("os_name", ["linux", "windows", "darwin"])
+def test_git_flow_worktrees_are_made_under_the_repository_tmp(tmp_path, os_name):
+    """git-flow-next の worktree の既定 (../<repo>-worktrees/) は作業ツリーの外に出るので、.tmp/worktrees/ に直す。
+
+    テンプレートの ``{{ branch }}`` は git-flow-next の変数 (接頭辞つきのブランチ名。feature/x と hotfix/x が衝突しない) で、
+    chezmoi に展開されずに、そのまま残ること。
+    """
+    context = {"chezmoi": {"os": os_name, "destDir": str(tmp_path), "username": "u"}}
+    rendered = execute_with_context(ROOT / "home" / "dot_config" / "git" / "config.tmpl", context, dict(os.environ))
+    assert "[gitflow]\n\tworktreePath = .tmp/worktrees/{{ branch }}\n" in rendered
+
+
 def test_git_user_is_still_rendered_once_on_windows(tmp_path):
     """Windows でも、BW_SESSION が無い間と展開済みの後は user を描画しない。"""
     assert ".config/git/user" in render(home=str(tmp_path), os_name="windows")

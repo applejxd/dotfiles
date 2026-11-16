@@ -592,7 +592,14 @@
   ["external_directory_read", "/usr/share/doc", "ask"],
   ["external_directory_read", "/var/lib/dpkg", "ask"],
   ["external_directory_write", "/var/log/syslog", "ask"],
-  ["external_directory_write", "/etc/hosts", "ask"]
+  ["external_directory_write", "/etc/hosts", "ask"],
+  ["external_directory_read", "$HOME/.orca/agent-session-attachments/u1/notes.zip", "allow"],
+  ["external_directory_read", "$HOME/.orca/agent-session-attachments/u1/dir/x.zip", "allow"],
+  ["external_directory_write", "$HOME/.orca/agent-session-attachments/u1/notes.zip", "ask"],
+  ["external_directory_read", "$HOME/.orca/agent-session-attachments", "ask"],
+  ["external_directory_read", "$HOME/.orca/agent-session-attachments-other/x.zip", "ask"],
+  ["external_directory_read", "$HOME/.orca/config.json", "ask"],
+  ["external_directory_write", "$HOME/.orca/config.json", "ask"]
  ],
  "alias": [
   ["path_write", ["$HOME/.pi/agent/sessions/link", "$HOME/.pi/agent/bin/fd"], "deny"],
@@ -603,13 +610,25 @@
   ["external_directory_read", ["/proc/net/tcp", "/proc/1234/net/tcp"], "allow"],
   ["external_directory_read", ["/proc/self/root/home/u/status", "/home/u/status"], "ask"],
   ["external_directory_read", ["/proc/1234/fd/7/status", "/home/u/private/status"], "ask"],
-  ["external_directory_read", ["/var/log/syslog", "/data/other/syslog"], "allow"]
+  ["external_directory_read", ["/var/log/syslog", "/data/other/syslog"], "allow"],
+  ["external_directory_read", ["$HOME/.orca/agent-session-attachments/u1/link", "$HOME/.orca/config.json"], "allow"],
+  ["external_directory_write", ["$HOME/.orca/agent-session-attachments/u1/link", "$HOME/.orca/config.json"], "ask"],
+  ["path_read", ["$HOME/.orca/agent-session-attachments/u1/link", "$HOME/.ssh/config"], "deny"],
+  ["path_write", ["$HOME/.orca/agent-session-attachments/u1/link", "$HOME/.ssh/config"], "deny"]
  ],
  "access": [
   ["ls /var/log/syslog /var/log/syslog.*", [["/var/log/syslog", "read"], ["/var/log/syslog.*", "read"]]],
   ["python3 $HOME/.agents/skills/away-shift/scripts/away_guard.py check r1", [["$HOME/.agents/skills/away-shift/scripts/away_guard.py", "read"]]],
   ["python3 $HOME/.agents/skills/away-shift/scripts/away_guard.py log r1 --note-file note.md", [["$HOME/.agents/skills/away-shift/scripts/away_guard.py", "read"]]],
   ["python3 $HOME/data/x.py", [["$HOME/data/x.py", "read"]]],
+  ["git worktree add /opt/wt/x", [["/opt/wt/x", "unproven"]]],
+  ["cat $HOME/.orca/agent-session-attachments/u1/notes.zip > .tmp/in.zip", [["$HOME/.orca/agent-session-attachments/u1/notes.zip", "read"]]],
+  ["cat $HOME/.orca/agent-session-attachments/u1/notes.zip > $HOME/out.zip", [["$HOME/.orca/agent-session-attachments/u1/notes.zip", "read"], ["$HOME/out.zip", "write"]]],
+  ["unzip -d .tmp/notes .tmp/in.zip", []],
+  ["unzip -d .tmp/notes $HOME/.orca/agent-session-attachments/u1/notes.zip", [["$HOME/.orca/agent-session-attachments/u1/notes.zip", "unproven"]]],
+  ["cat $HOME/.orca/agent-session-attachments/../notes.zip", [["$HOME/.orca/notes.zip", "read"]]],
+  ["git worktree add .tmp/worktrees/x", []],
+  ["git flow feature start x --worktree", []],
   ["grep -r foo $HOME/.pi/agent/ayu", [["$HOME/.pi/agent/ayu", "read"]]],
   ["python3 -m pytest $HOME/.agents/skills/x/tests", [["$HOME/.agents/skills/x/tests", "unproven"]]],
   ["python3 -c 'pass' $HOME/data/x", [["$HOME/data/x", "unproven"]]],
