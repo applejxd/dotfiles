@@ -153,6 +153,7 @@ package `cc-safety-net` は、破壊的なコマンド（`git reset --hard`・`r
 - 方針の bash の規則は、表のどれかの例が当たること（当たらない規則は書き間違いか、表の不足）を検査する。
 - プロジェクト単位の設定（下の節）が、グローバルの方針と合成されることも確かめる。
 - **範囲外**: bash のトークンを `path` と `external_directory` へ投影するゲート（`cat <秘密のパス>` など。規則の評価だけは surface の表で見る）。エンジンの内部 API を直接呼ぶので、package の版を上げたときに壊れることがある（版は `pi-stock-packages` で固定）。pi の package が無い環境では skip する（skip は通過ではない）。
+- **ゲートに見えない出力先**（2026-11-16）: bash のトークンの投影は、コマンドに**明示したパス**（引数とリダイレクト先）を取り出す。出力先が設定や既定で決まるコマンドは、推定しない。`git flow feature start x --worktree` は、`gitflow.worktreePath` の既定が作業ツリーの外（`../<repo>-worktrees/`）で、別の repo で実際に外へ作られた。判定表の `access` で確かめたのは、**外部パスの投影結果**だけである（`git worktree add /opt/wt/x` は外のパス 1 件が `unproven`、引数にパスが無い `git flow feature start x --worktree` と内部のパスの `git worktree add .tmp/worktrees/x` は、外部パスが 0 件）。`[]` は「外部パスとして出ない」の意味で、実ゲートで確認が出ないことまでは証明しない（実ゲートは判定表の範囲外）。対策は、パスを引数に出させることではなく、**設定の既定を作業ツリーの中にすること**（`home/dot_config/git/config.tmpl` の `[gitflow] worktreePath`。主 worktree のルート基準。[ブランチモデル](development.md#ブランチモデルgitflow-lite)）と、常設の指示で「出力先が既定で決まるコマンドは、実行前に確かめる」こと。`git flow * start` を「引数に `.tmp/` が無ければ deny」にする案は、この repo の通常の操作（引数にパスが無い）を止めるので採らない。
 
 ### プロジェクト単位でデータセットを読み取り専用にする
 
