@@ -68,7 +68,7 @@ pi の設定は、1 か所にまとまっていない。これは pi の標準�
 | 対象 | 配り方 |
 | --- | --- |
 | `~/.pi/agent/AGENTS.md` | `agent-instructions-stock.md`（ツール非依存の短い指示）。委譲の常設の指示を含む |
-| `~/.pi/agent/settings.json` | `modify_pi_stock_settings.py.tmpl`。`packages` を `pi-stock-packages` にし、`defaultTools` を `["+grep", "+find", "+ls"]`（pi の既定 read・bash・edit・write に読み取り専用の探索ツールを足す増分指定。plan mode の探索にも使う。利用者が `+`/`-` だけの増分指定にしたら保つ）にする。撤去した自作ハーネスの `extensions`・`skills` の項目は取り除く。テーマ・既定のモデルなど利用者のキーは触らない |
+| `~/.pi/agent/settings.json` | `modify_pi_stock_settings.py.tmpl`。`packages` を `pi-stock-packages` にし、`defaultTools` を `["+grep", "+find", "+ls"]`（pi の既定 read・bash・edit・write に読み取り専用の探索ツールを足す増分指定。plan mode の探索にも使う。利用者が `+`/`-` だけの増分指定にしたら保つ）にする。撤去した自作ハーネスの `extensions`・`skills` の項目は取り除く。テーマ・既定のモデルなど利用者のキーは触らない **家の機（`is-work` でない）は、`enabledModels` を `["github-copilot/*"]` にする**（2026-11-16。利用者の指示。利用者がすでに `enabledModels` を書いていれば保つ。会社 PC は触らない）。家で AWS CLI の API 検証のために Bedrock の認証情報（`AWS_PROFILE`・`~/.aws`・`AWS_BEARER_TOKEN_BEDROCK` など）を置いても、**pi が Bedrock のモデルで無意識に起動しない**ため。pi は環境変数などの認証情報で Bedrock を使えるようにし（`docs/providers.md`）、`defaultProvider` が無い・Copilot が使えないとき、起動時の選択が別のプロバイダへ落ちうる。`enabledModels` は「起動時の選択とモデルの切り替え（Ctrl+P）の対象」なので（`docs/settings.md`）、Bedrock を外せば、そこへ落ちない。`/model` で明示して選ぶのは妨げない。家で他のプロバイダも使うときは、`settings.json` の `enabledModels` にパターンを足す（利用者の値は保たれる）。AWS CLI 自体は、エージェントからも普通に使える（制限しない）。 |
 | `~/.pi/agent/mcp.json` | `modify_mcp.json.py.tmpl` が `generate.py --target pi-mcp` で配る（下の「MCP 設定」） |
 | `~/.pi/agent/mcp-adapter.json` | 会社 PC（`is-work`）だけ。`generate.py --target pi-mcp-adapter` |
 | `~/.pi/agent/extensions/pi-permission-system/config.json` | `modify_` で配る（下の「permission-system の設定」） |

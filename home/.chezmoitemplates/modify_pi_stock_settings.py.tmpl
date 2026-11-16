@@ -13,6 +13,11 @@ import sys
 PACKAGES_TEXT = {{ .packages | toJson }}
 # 会社 PC (is-work) か。検索の MCP が機で違う (家は websearch、会社 PC は agentcore-websearch)
 IS_WORK = {{ if eq .isWork "true" }}True{{ else }}False{{ end }}
+# 家の機で、起動時の選択とモデルの切り替え (Ctrl+P) の対象にするモデル。家は Copilot だけを使うので、Bedrock の認証情報が
+# 環境変数や ~/.aws に残っていても、pi が Bedrock のモデルで無意識に起動しない (Copilot が使えないときの自動の選択も含む)。
+# /model で明示して選ぶのは妨げない。利用者が enabledModels を書いていれば保つ。会社 PC は触らない (Bedrock を使う)
+HOME_ENABLED_MODELS = ["github-copilot/*"]
+
 # pi のシェル。Linux (Ubuntu / WSL) だけが、コマンド実行の囲い (pib-shell) を指す。空文字なら触らない。
 # pib-shell は、環境変数 PIB_SANDBOX が立っているとき (= pib で起動したとき) だけ囲う。普段の pi は素の bash と同じ
 SHELL_PATH = {{ .shellPath | toJson }}
@@ -151,6 +156,8 @@ def main() -> int:
             else:
                 del data[key]
     data["packages"] = packages()
+    if not IS_WORK and "enabledModels" not in data:
+        data["enabledModels"] = list(HOME_ENABLED_MODELS)
     if SHELL_PATH and "shellPath" not in data:  # 利用者が別のシェルを書いていれば保つ (pib が、囲いを指していないと知らせる)
         data["shellPath"] = SHELL_PATH
     subagents = data.get("subagents")
