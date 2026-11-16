@@ -129,13 +129,14 @@ def lines(text: str) -> set[str]:
 # --- settings.json ----------------------------------------------------
 
 
-def stock_settings_script(tmp_path: Path, os_name: str = "linux") -> Path:
+def stock_settings_script(tmp_path: Path, os_name: str = "linux", **kw) -> Path:
     script = tmp_path / "modify_settings.py"
     script.write_text(
         render_file(
             "dot_pi/agent/modify_settings.json.py.tmpl",
             tmp_path,
             os_name=os_name,
+            **kw,
         ),
         encoding="utf-8",
     )
@@ -219,6 +220,25 @@ def test_stock_settings_from_empty_input(tmp_path):
         "packages": stock_packages(tmp_path),
         "shellPath": str(tmp_path / ".local" / "bin" / "pib-shell"),  # Linux だけ (下の試験)
     }
+
+
+def test_stock_settings_scopes_models_to_copilot_on_personal_machines_only(tmp_path):
+    """家の機は enabledModels を Copilot に絞る。会社 PC は触らない。
+
+    Bedrock の認証情報が残っていても、pi が Bedrock で起動・自動選択しないようにするため。
+    """
+    home = json.loads(run_script(stock_settings_script(tmp_path, username="applejxd"), ""))
+    work = json.loads(run_script(stock_settings_script(tmp_path, username="tester"), ""))
+    assert home["enabledModels"] == ["github-copilot/*"]
+    assert "enabledModels" not in work  # 会社 PC は Bedrock を使う
+
+
+def test_stock_settings_keeps_the_users_enabled_models_and_is_idempotent(tmp_path):
+    script = stock_settings_script(tmp_path, username="applejxd")
+    mine = json.dumps({"enabledModels": ["github-copilot/*", "my-provider/*"]})
+    assert json.loads(run_script(script, mine))["enabledModels"] == ["github-copilot/*", "my-provider/*"]
+    first = run_script(script, "")
+    assert run_script(script, first) == first
 
 
 def test_stock_settings_points_the_shell_at_pib_shell_only_on_linux(tmp_path):
