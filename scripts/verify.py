@@ -148,6 +148,8 @@ RULES: tuple[Rule, ...] = (
             "home/dot_pi/agent/extensions/pi-permission-system/*",
             "home/.chezmoitemplates/modify_pi_stock_settings.py.tmpl",
             "home/.chezmoitemplates/agent-instructions-stock.md",
+            "home/.chezmoitemplates/agent-instructions-home.md",
+            "home/dot_pi/agent/AGENTS.md.tmpl",
             "home/.chezmoiremove",
             "home/dot_pi/agent/**",
             "docs/spec/pi-commands.md",
