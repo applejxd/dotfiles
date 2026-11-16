@@ -549,6 +549,71 @@ def test_fetch_connects_to_the_validated_address_and_extracts_text():
     assert "bad()" not in out["text"] and "x{}" not in out["text"]
 
 
+IPV6 = "2606:4700:4700::1111"  # 公開アドレス (Cloudflare の DNS)
+IPV4 = "93.184.216.34"
+
+
+def test_fetch_tries_ipv4_first_and_falls_back_to_ipv6():
+    """IPv6 が届かない機 (例: tailscale.com の AAAA が先に来る) で、IPv4 へ切り替えて取得できること。"""
+    seen = []
+
+    def transport(parts, address, timeout):
+        seen.append(address)
+        if address == IPV6:
+            raise OSError("IPv6 は届かない")
+        return 200, {"content-type": "text/plain"}, b"ok"
+
+    # getaddrinfo の順序 (IPv6 が先) で返しても、IPv4 から試す
+    out = ws.fetch_page("https://ok.example/", resolver=resolver_to(IPV6, IPV4), transport=transport)
+    assert out["text"] == "ok"
+    assert seen == [IPV4]
+
+
+def test_fetch_falls_back_to_the_next_address_when_one_cannot_be_reached():
+    seen = []
+
+    def transport(parts, address, timeout):
+        seen.append(address)
+        if address == IPV4:
+            raise OSError("IPv4 は届かない")
+        return 200, {"content-type": "text/plain"}, b"ok"
+
+    out = ws.fetch_page("https://ok.example/", resolver=resolver_to(IPV6, IPV4), transport=transport)
+    assert out["text"] == "ok"
+    assert seen == [IPV4, IPV6]
+
+
+def test_fetch_reports_a_network_error_when_every_address_fails():
+    def transport(parts, address, timeout):
+        raise OSError("届かない")
+
+    with pytest.raises(ws.ProviderError):
+        ws.fetch_page("https://ok.example/", resolver=resolver_to(IPV6, IPV4), transport=transport)
+
+
+def test_fetch_gives_up_after_a_few_addresses():
+    seen = []
+
+    def transport(parts, address, timeout):
+        seen.append(address)
+        raise OSError("届かない")
+
+    addresses = [f"93.184.216.{n}" for n in range(1, 8)]
+    with pytest.raises(ws.ProviderError):
+        ws.fetch_page("https://ok.example/", resolver=resolver_to(*addresses), transport=transport)
+    assert len(seen) == ws.MAX_ADDRESS_ATTEMPTS  # 届かない宛先の待ちを積み上げない
+
+
+def test_fetch_still_blocks_a_name_with_an_internal_address_among_reachable_ones():
+    """届く公開アドレスがあっても、内部アドレスが 1 つでも混ざる名前には接続しない (DNS の差し替え対策)。"""
+    with pytest.raises(ws.Blocked):
+        ws.fetch_page(
+            "https://rebind.example/",
+            resolver=resolver_to(IPV4, "10.0.0.1"),
+            transport=lambda *a: (200, {"content-type": "text/plain"}, b"x"),
+        )
+
+
 def test_fetch_limits_and_content_types():
     big = b"a" * 50_000
 
