@@ -834,6 +834,15 @@ def run_papers(
 Resolver = Callable[..., list]
 
 
+# 届かない宛先 (IPv6 が通らない機など) の待ちを積み上げないための、試すアドレス数の上限
+MAX_ADDRESS_ATTEMPTS = 4
+
+
+def _prefer_ipv4(addresses: set[str]) -> list[str]:
+    """IPv4 を先に、同じ族の中は文字列順に並べる (接続を試す順序。IPv6 が通らない機で先に待たない)。"""
+    return sorted(addresses, key=lambda address: (":" in address, address))
+
+
 def _check_ip(address: str) -> None:
     ip = ipaddress.ip_address(address.split("%")[0])
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
@@ -864,7 +873,7 @@ def check_url(
         try:
             default_port = port or (443 if parts.scheme == "https" else 80)
             infos = resolver(parts.hostname, default_port, type=socket.SOCK_STREAM)
-            addresses = sorted({info[4][0] for info in infos})
+            addresses = _prefer_ipv4({info[4][0] for info in infos})
         except OSError:
             raise Blocked("名前を解決できない") from None
     if not addresses:
@@ -988,9 +997,14 @@ def fetch_page(
     current = url
     for _ in range(max_redirects + 1):
         parts, addresses = check_url(current, resolver)
-        try:
-            status, headers, body = transport(parts, addresses[0], timeout)
-        except (OSError, http.client.HTTPException):
+        # 検証済みの宛先を順に試す (1 つめが届かなくても、次へ切り替える)。どれも届かなければ network
+        for address in addresses[:MAX_ADDRESS_ATTEMPTS]:
+            try:
+                status, headers, body = transport(parts, address, timeout)
+                break
+            except (OSError, http.client.HTTPException):
+                continue
+        else:
             raise ProviderError("network", "取得できない") from None
         if status in (301, 302, 303, 307, 308) and headers.get("location"):
             current = urllib.parse.urljoin(current, headers["location"])

@@ -129,13 +129,14 @@ def lines(text: str) -> set[str]:
 # --- settings.json ----------------------------------------------------
 
 
-def stock_settings_script(tmp_path: Path, os_name: str = "linux") -> Path:
+def stock_settings_script(tmp_path: Path, os_name: str = "linux", **kw) -> Path:
     script = tmp_path / "modify_settings.py"
     script.write_text(
         render_file(
             "dot_pi/agent/modify_settings.json.py.tmpl",
             tmp_path,
             os_name=os_name,
+            **kw,
         ),
         encoding="utf-8",
     )
@@ -219,6 +220,25 @@ def test_stock_settings_from_empty_input(tmp_path):
         "packages": stock_packages(tmp_path),
         "shellPath": str(tmp_path / ".local" / "bin" / "pib-shell"),  # Linux だけ (下の試験)
     }
+
+
+def test_stock_settings_scopes_models_to_copilot_on_personal_machines_only(tmp_path):
+    """家の機は enabledModels を Copilot に絞る。会社 PC は触らない。
+
+    Bedrock の認証情報が残っていても、pi が Bedrock で起動・自動選択しないようにするため。
+    """
+    home = json.loads(run_script(stock_settings_script(tmp_path, username="applejxd"), ""))
+    work = json.loads(run_script(stock_settings_script(tmp_path, username="tester"), ""))
+    assert home["enabledModels"] == ["github-copilot/*"]
+    assert "enabledModels" not in work  # 会社 PC は Bedrock を使う
+
+
+def test_stock_settings_keeps_the_users_enabled_models_and_is_idempotent(tmp_path):
+    script = stock_settings_script(tmp_path, username="applejxd")
+    mine = json.dumps({"enabledModels": ["github-copilot/*", "my-provider/*"]})
+    assert json.loads(run_script(script, mine))["enabledModels"] == ["github-copilot/*", "my-provider/*"]
+    first = run_script(script, "")
+    assert run_script(script, first) == first
 
 
 def test_stock_settings_points_the_shell_at_pib_shell_only_on_linux(tmp_path):
@@ -458,6 +478,18 @@ def test_stock_agents_md_has_no_harness_words(tmp_path):
     assert "日本語" in text
     for word in HARNESS_WORDS:
         assert word not in text, word
+
+
+def test_stock_agents_md_adds_the_tailnet_policy_only_on_personal_machines(tmp_path):
+    """開発中の Web サービスを tailnet だけに公開する指示は、家の機 (is-work でない) にだけ足す。会社 PC には出さない。"""
+    personal = render_file("dot_pi/agent/AGENTS.md.tmpl", tmp_path, username="applejxd")
+    work = render_file("dot_pi/agent/AGENTS.md.tmpl", tmp_path, username="tester")
+    assert "tailscale serve --bg" in personal and "tailscale funnel" in personal
+    assert "# 自宅の機だけの指示" in personal and "# 自宅の機だけの指示" not in work
+    assert "tailscale" not in work.lower()
+    assert personal.startswith(work.rstrip("\n"))  # 共通の指示は同じで、家の機は末尾に節を足すだけ
+    for word in HARNESS_WORDS:
+        assert word not in personal, word
 
 
 def test_stock_agents_md_asks_for_absolute_cd_until_upstream_fix(tmp_path):
