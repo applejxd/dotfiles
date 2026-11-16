@@ -145,3 +145,26 @@ URL が未設定だとラッパーは理由を stderr に出して終了する�
 - 返るのは関連部分の抜粋・URL・タイトル・公開日。本文が要るときは別の取得手段と組み合わせる
 - 利用条件として、結果を表示するときは出典リンクを残す
 - Target 単位でドメインの許可・除外リストを強制できる（エージェント側から解除できない）
+
+#### コネクタの版（確認と更新）
+
+出典は AWS 公式の [Web Search Tool](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-target-connector-web-search-tool.html) と
+[Connector versions](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-target-connector-versions.html)（2026-11-16 に本文を取得して確認）。
+
+**target は作成時の版に固定され、自動では新しくならない。**
+版を指定せずに作ると、そのときの既定の版が入る。**その後に既定の版が上がっても、既存の target は上がらない。**
+新しい版にするには `source.version` を指定して target を更新する（指定せずに更新すると、今の版のまま）。
+minor・patch は後方互換（追加だけ）。major は破壊的変更で、移行ガイドが付く。
+この repo は版を指定しない（サンプルの CloudFormation で作る）ので、**会社の target の版は、作った時点の既定のまま**である（版は未確認）。
+
+| 版（`web-search`） | 公開日 | 変更 |
+| --- | --- | --- |
+| 1.3.0（現在の既定） | 2026-10-19 | `tools/list` にツールの注釈（`readOnlyHint: true`・`openWorldHint: true`）が付く。読み取り専用のツールを絞り込む MCP クライアントが、検索ツールを見つけて呼べる |
+| 1.2.0 | 2026-07-20 | 呼び出しごとの絞り込み `filters`（ドメインの許可・除外 各 100 まで、公開日の範囲 ISO-8601 UTC） |
+| 1.1.0 | 2026-06-15 | `structuredContent`、`publishedDate`、スニペットの改善 |
+
+- **版の確認**: `GetGatewayTarget` の応答の `source.version`。または、`tools/list` のスキーマで、`filters` があれば 1.2.0 以上、注釈があれば 1.3.0 以上。AWS の権限が要るので、リポジトリからは確かめられない
+- **更新の効果**: 1.2.0 以上で、モデルが公式サイトのドメイン（`domainFilter.include`。ルートドメインはサブドメインにも一致）や期間（`publishedDateFilter`）で絞れる。1.3.0 の注釈が、pi の plan mode や MCP の扱いにどう効くかは**未確認**
+- **絞り込みの合成**: target 単位のリスト（管理者が設定。エージェントには見えない）と呼び出しごとのフィルタは、除外が**和**、許可が**積**になる。許可リストが両方にあって共通のドメインが無ければ、結果は 0 件。呼び出し側は、target の除外を解けず、許可を広げられない
+- **公式サンプルの README は古い**: 「Web Search は us-east-1 のみ」と書くが、公式 docs 本体は 7 つのリージョン（`us-east-1`・`us-east-2`・`us-west-2`・`eu-west-1`・`ap-southeast-2`・`ap-northeast-1`・`us-gov-west-1`）を挙げる。docs 本体を正とする
+- **検索だけでは足りないとき**（本文・原文の確認が要るとき）: 同じ Gateway に別の built-in connector を足せる。**Web Answer**（`web-answer`。質問に対し、検索とページの読み込みをして、引用つきの回答を返す。**原文は返さない**。`us-east-1` のみ。版 1.1.0 は 2026-11-04）は、`fetch_page` の代わりにならない。原文が要るなら、別の手段（ブラウザなど）になる。足すかは、本文の確認が要る場面の頻度で決める
