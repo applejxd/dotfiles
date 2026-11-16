@@ -1,1 +1,5 @@
-{{ includeTemplate "agent-instructions-stock.md" . }}
+{{ includeTemplate "agent-instructions-stock.md" . | trim }}
+{{- if ne (includeTemplate "is-work" .) "true" }}
+
+{{ includeTemplate "agent-instructions-home.md" . | trim }}
+{{- end }}

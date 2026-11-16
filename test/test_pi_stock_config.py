@@ -460,6 +460,18 @@ def test_stock_agents_md_has_no_harness_words(tmp_path):
         assert word not in text, word
 
 
+def test_stock_agents_md_adds_the_tailnet_policy_only_on_personal_machines(tmp_path):
+    """開発中の Web サービスを tailnet だけに公開する指示は、家の機 (is-work でない) にだけ足す。会社 PC には出さない。"""
+    personal = render_file("dot_pi/agent/AGENTS.md.tmpl", tmp_path, username="applejxd")
+    work = render_file("dot_pi/agent/AGENTS.md.tmpl", tmp_path, username="tester")
+    assert "tailscale serve --bg" in personal and "tailscale funnel" in personal
+    assert "# 自宅の機だけの指示" in personal and "# 自宅の機だけの指示" not in work
+    assert "tailscale" not in work.lower()
+    assert personal.startswith(work.rstrip("\n"))  # 共通の指示は同じで、家の機は末尾に節を足すだけ
+    for word in HARNESS_WORDS:
+        assert word not in personal, word
+
+
 def test_stock_agents_md_asks_for_absolute_cd_until_upstream_fix(tmp_path):
     """TEMP-REMOVE: pi-permission-system が cd 先の ~・変数を解決しない間の一時対処。上流が直ったら削除する。
 

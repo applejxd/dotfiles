@@ -15,6 +15,7 @@ home/.chezmoitemplates/
     modify_pi_permission_config.py.tmpl      permission-system の config.json の変換
     modify_json.py.tmpl                      generate.py を呼ぶ modify_ の共通ラッパー（Python 3.11 以上を選び直す）
     agent-instructions-stock.md              ~/.pi/agent/AGENTS.md の本文（ツール非依存の指示）
+    agent-instructions-home.md               家の機（is-work でない）だけに足す節（開発中の Web サービスは tailnet だけに公開する）
     is-work                                  会社 PC かどうかの判定（検索 MCP・adapter の出し分け）
 scripts/agents/
     generate.py                              pi-mcp-servers.toml から mcp.json・mcp-adapter.json を生成する（pi の MCP だけ）
@@ -67,7 +68,7 @@ pi の設定は、1 か所にまとまっていない。これは pi の標準�
 
 | 対象 | 配り方 |
 | --- | --- |
-| `~/.pi/agent/AGENTS.md` | `agent-instructions-stock.md`（ツール非依存の短い指示）。委譲の常設の指示を含む |
+| `~/.pi/agent/AGENTS.md` | `agent-instructions-stock.md`（ツール非依存の短い指示）。委譲の常設の指示を含む。**家の機（`is-work` が `false`）だけ**、末尾に `agent-instructions-home.md` を足す（2026-11-16。開発中の Web サービスは、Tailscale が使えるなら tailnet だけに公開する。待ち受けは `127.0.0.1` で、`tailscale serve` で出す。`funnel` は利用者が明示したときだけ）。会社 PC には出さない。`AGENTS.md.tmpl` が出し分ける。出典は Tailscale の公式 docs（<https://tailscale.com/docs/reference/tailscale-cli/serve>・<https://tailscale.com/docs/features/tailscale-funnel>。2026-11-16 に検索の要約で確認。**この機には `tailscale` の CLI が無く、公式ページの取得も失敗したので、構文は実機未確認**。指示の中で「実行前に `--help` で確かめる」としている）。`serve` は tailnet だけ、`funnel` は公開、`--bg` は外すまで残る、という区別を指示に入れた |
 | `~/.pi/agent/settings.json` | `modify_pi_stock_settings.py.tmpl`。`packages` を `pi-stock-packages` にし、`defaultTools` を `["+grep", "+find", "+ls"]`（pi の既定 read・bash・edit・write に読み取り専用の探索ツールを足す増分指定。plan mode の探索にも使う。利用者が `+`/`-` だけの増分指定にしたら保つ）にする。撤去した自作ハーネスの `extensions`・`skills` の項目は取り除く。テーマ・既定のモデルなど利用者のキーは触らない |
 | `~/.pi/agent/mcp.json` | `modify_mcp.json.py.tmpl` が `generate.py --target pi-mcp` で配る（下の「MCP 設定」） |
 | `~/.pi/agent/mcp-adapter.json` | 会社 PC（`is-work`）だけ。`generate.py --target pi-mcp-adapter` |
