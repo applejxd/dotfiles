@@ -1,0 +1,19 @@
+{
+  "name": "pingcheck",
+  "version": "1.2.0",
+  "description": "URL の応答(HTTP ステータスと所要時間)を確かめるコマンドラインツール",
+  "bin": {
+    "pingcheck": "bin/pingcheck.js"
+  },
+  "scripts": {
+    "start": "node bin/pingcheck.js",
+    "test": "node --test",
+    "lint": "eslint ."
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {},
+  "type": "module"
+}

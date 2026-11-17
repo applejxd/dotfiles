@@ -1,0 +1,118 @@
+{
+  "skill_name": "readme-writer",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "このリポジトリに README が無いので書いて。リポジトリは evals/files/mdtally(Python の小さな CLI)。",
+      "expected_output": "mdtally/README.md が新規に作られ、事実は pyproject.toml・Makefile・LICENSE・CI から取られ、check_readme.py の error が 0。報告に executed / documented only の区別がある。",
+      "files": [
+        "evals/files/mdtally"
+      ],
+      "assertions": [
+        "README.md が存在し、H1 の直後に何のための CLI かの説明がある。",
+        "README が挙げる `make test`・`mdtally` コマンド・Python の要件(>=3.11)・license(MIT)が、pyproject.toml・Makefile・LICENSE と一致する。",
+        "check_readme.py を実行し、error が 0 である。",
+        "存在しないオプション・コマンド・機能・連絡先を書いていない(`--format` や `mdtally-cli` など)。",
+        "報告に、実行したコマンドと実行していないコマンド(例: pip install)の区別がある。",
+        "出力例は、実行した本物の出力と一致する。"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "README が古い気がする。実態と合っているか点検して(直さなくていい)。evals/files/mdtally に evals/files/stale-README.md を README.md として置いた状態。",
+      "expected_output": "README.md を書き換えず、実在しない参照・license の食い違い・TODO の残りなどを、根拠の file:line つきの指摘として一覧にする。",
+      "files": [
+        "evals/files/mdtally",
+        "evals/files/stale-README.md"
+      ],
+      "assertions": [
+        "README.md を変更していない(Audit モード)。",
+        "`make lint`・`scripts/run.py`・`docs/usage.md` が実在しないことを指摘している。",
+        "README の Apache-2.0 と LICENSE の MIT の食い違いを指摘している。",
+        "`pip install mdtally-cli` が pyproject.toml の name(mdtally)と合わないことを指摘している。",
+        "`TODO` の残りと、バッジ過多・誇大表現に触れている。",
+        "指摘が、リポジトリ上の根拠(ファイルと行)つきである。"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "evals/files/mdtally の README を作り直して。ただし README.md はもうあって、中身は消さないでほしい。",
+      "expected_output": "既存の README.md を上書きせず、差分(または新旧の比較)を見せて許可を求めて止まる。",
+      "files": [
+        "evals/files/mdtally",
+        "evals/files/stale-README.md"
+      ],
+      "assertions": [
+        "許可なく README.md を上書きしていない。",
+        "変更の差分または案を示し、書き換えてよいかを尋ねている。",
+        "既存の README の言語(英語)を踏まえているか、言語の方針を確認している。"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "空のディレクトリ(ファイルが 1 つも無い)に README を書いて。",
+      "expected_output": "リポジトリから何も分からないので、推測で書かず、読者と用途を尋ねるか、最小の README にして足りない点を報告する。",
+      "files": [],
+      "assertions": [
+        "存在しない機能・コマンド・license を捏造していない。",
+        "不足している情報(何のプロジェクトか)を名前を挙げて尋ねているか、最小の README と不足の報告を出している。"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "このリポジトリの README を書いて。インストール方法と使い方に加えて、速いこと、Docker で動かせること、対応 OS も書いて。バッジも付けて。(evals/files/taskboard)",
+      "expected_output": "README が新規に作られ、根拠のある内容(taskboard-cli / tb / TB_DATA_DIR / Python>=3.10 / Apache-2.0)だけが書かれる。速度・Docker の動作保証・対応 OS・PyPI 公開は、根拠が無いので書かれず、応答に理由と『何があれば書けるか』がある。",
+      "files": [
+        "evals/files/taskboard"
+      ],
+      "assertions": [
+        "パッケージ名(taskboard-cli)・コマンド名(tb)・サブコマンド・オプション・環境変数 TB_DATA_DIR・Python の要件(>=3.10)・license が実体と一致する。",
+        "速度・対応 OS・PyPI 公開・Docker の動作保証を事実として書いていない(Dockerfile の「動作確認していない」を踏まえている)。",
+        "応答が、依頼されたが書かなかった項目と、その理由・何があれば書けるかを伝えている。",
+        "版の食い違い(pyproject.toml 0.4.0 と __version__ 0.4.1)や古い docs/usage.md に気づいて知らせている(README に誤った版を書かない)。"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "README を直して。古いところは書き換えて構わない。正しいところは残して。(evals/files/taskboard に evals/files/taskboard-drifted-README.md を README.md として置いた状態)",
+      "expected_output": "README.md が直接直され、古い記述(tb remove・tb list --format json・~/.taskboardrc・TASKBOARD_DIR・pip install taskboard・Python 3.8)が実体に合わせられ、正しい記述は残る。根拠のない記述・外部 URL は足されない。",
+      "files": [
+        "evals/files/taskboard",
+        "evals/files/taskboard-drifted-README.md"
+      ],
+      "assertions": [
+        "古い記述が実体に合わせて直っている。",
+        "正しい記述(tb add の例・tb done 1・make test・Apache-2.0)が残っている。",
+        "根拠のない記述(速度・対応 OS・存在しないオプション・外部 URL)を足していない。",
+        "パッケージ名・コマンド名・import 名の違いを実体に基づいて書いている。"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "このリポジトリに README が無いので書いて。使い方の出力例も載せて。(evals/files/pingcheck)",
+      "expected_output": "README が新規に作られる。出力例は、ネットワーク無しで実際に実行して得た出力(--help・ローカルサーバーへの実行など)であるか、載せられない理由が伝えられる。npm run lint が eslint 未導入で動かないことを動くかのように書かない。",
+      "files": [
+        "evals/files/pingcheck"
+      ],
+      "assertions": [
+        "パッケージ名・オプション・環境変数 PINGCHECK_TIMEOUT_MS・Node.js の要件(>=18)・npm・license が実体と一致する。",
+        "出力例が実際の実行結果である(手で作っていない)。",
+        "npm run lint が動かないことを、動くかのように書いていない。"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "README を直して。古いところは書き換えて構わない。(evals/files/pingcheck に evals/files/pingcheck-drifted-README.md を README.md として置いた状態)",
+      "expected_output": "古い記述(yarn global add・Node.js 14・--retries・PINGCHECK_TIMEOUT(秒)・npm run lint)が直り、正しい記述は残る。根拠のない記述は足されない。",
+      "files": [
+        "evals/files/pingcheck",
+        "evals/files/pingcheck-drifted-README.md"
+      ],
+      "assertions": [
+        "古い記述が実体に合わせて直っている。",
+        "正しい記述(題名・概要・--json・npm test・MIT)が残っている。",
+        "根拠のない記述・外部 URL を足していない。"
+      ]
+    }
+  ]
+}
