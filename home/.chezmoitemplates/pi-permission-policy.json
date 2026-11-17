@@ -175,6 +175,7 @@
       "cargo install*": { "action": "deny", "reason": "グローバルに入るので使わない。ツールの導入は mise で管理する。プロジェクト内の実行は cargo run・go run・bundle exec を使う" },
       "go install*": { "action": "deny", "reason": "グローバルに入るので使わない。ツールの導入は mise で管理する。プロジェクト内の実行は cargo run・go run・bundle exec を使う" },
       "gem install*": { "action": "deny", "reason": "グローバルに入るので使わない。ツールの導入は mise で管理する。プロジェクト内の実行は cargo run・go run・bundle exec を使う" },
+      "nohup *": { "action": "deny", "reason": "nohup での常駐起動は使わない。bg_run ツールがあるなら bg_run で起動する（完了時に終了コードとログの末尾が自動で届き、待つための sleep が要らない）。囲い（pib）の中では、コマンドが終わるとバックグラウンドのプロセスも消える。bg_run を持たない子は、`timeout -k 10 <秒> <cmd>` を前景で実行するか、親に bg_run での起動を依頼する" },
       "gh *pr create*": "ask",
       "gh *pr edit*": "ask",
       "gh *pr review*": "ask",

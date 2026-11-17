@@ -60,7 +60,9 @@ def _home(value: str) -> str:
     return value.replace("$HOME", str(Path.home()))
 
 
-def run_engine(tmp_path: Path, *, bash=(), surface=(), access=(), alias=(), project=None, name="in") -> dict:
+def run_engine(
+    tmp_path: Path, *, bash=(), surface=(), access=(), alias=(), project=None, agents=None, agent_bash=(), name="in"
+) -> dict:
     payload = {
         "pkg": str(PERMISSION_PKG),
         "jiti": str(JITI),
@@ -73,6 +75,9 @@ def run_engine(tmp_path: Path, *, bash=(), surface=(), access=(), alias=(), proj
     }
     if project is not None:
         payload["project"] = project
+    if agents:
+        payload["agents"] = agents
+        payload["agentBash"] = [list(c) for c in agent_bash]
     src = tmp_path / f"{name}.json"
     src.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     done = subprocess.run(
@@ -110,6 +115,35 @@ def test_every_bash_rule_is_exercised_by_the_table(engine_result):
     policy_rules = set(json.loads(POLICY.read_text(encoding="utf-8"))["permission"]["bash"]) - {"*"}
     hit = {g["pattern"] for g in engine_result["bash"]}
     assert not (policy_rules - hit), f"表のどの例も当たらない規則: {sorted(policy_rules - hit)}"
+
+
+@needs_engine
+def test_child_agents_keep_nohup_denied(tmp_path):
+    """bash を持つ子 (``bg_run`` を持たない) の実際の定義ファイルに、グローバルの方針を重ねて判定する。
+
+    読み取りだけではない ``nohup python x.py > run.log 2>&1 &`` の形が、YOLO を切った状態で deny のままであること。
+    ラッパーの床 (``allow`` を ``ask`` に引き上げる) のため、子の frontmatter で allow に上書きしても ``ask`` にしかならない。
+    YOLO が入った状態 (床の ``ask`` が自動承認される) と、他の形は固定しない。
+    固定するのは方針の判定だけ。子が実際にバックグラウンドで投入できるかは、囲い (pib) の有無で変わり、ここでは固定しない
+    (囲いの中では、コマンドの終了でバックグラウンドのジョブも消える。docs/spec/agent-config-generation.md の ``nohup`` の項)。
+    """
+    import re
+
+    agents = {}
+    for md in sorted((ROOT / "home" / "dot_pi" / "agent" / "agents").glob("*.md")):
+        text = md.read_text(encoding="utf-8")
+        tools = re.search(r"^tools:\s*(.*)$", text, re.M)
+        if tools and "bash" in [x.strip() for x in tools.group(1).split(",")]:
+            agents[md.stem] = text
+    assert {"worker", "scout", "oracle"} <= set(agents), sorted(agents)
+    cmd = "nohup python x.py > run.log 2>&1 &"
+    result = run_engine(tmp_path, agents=agents, agent_bash=[(name, cmd) for name in agents])
+    bad = [
+        f"{name}: {cmd!r}: 期待 deny / 実際 {got['state']} ({got['pattern']})"
+        for name, got in zip(agents, result["agentBash"], strict=True)
+        if got["state"] != "deny"
+    ]
+    assert not bad, "\n".join(bad)
 
 
 @needs_engine
