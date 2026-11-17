@@ -5,7 +5,7 @@
 
 - **配布の場所**: `home/dot_agents/skills/readme-writer/`（`chezmoi apply` で `~/.agents/skills/readme-writer/` へ）。pi など、`~/.agents/skills` を読む CLI から使える。
 - **正本は skill-lab**（個人のスキル開発用リポジトリの `skills/readme-writer/`）。ここへは**複製**（vendor）で、このリポジトリでは編集しない。直すときは skill-lab 側で直して、取り込み直す。
-- **取り込んだ版**: skill-lab のコミット `71934b9`（2026-11-17）の `skills/readme-writer/` の追跡ファイル（45 件。`git archive` で取り出した）。
+- **取り込んだ版**: skill-lab のコミット `af3e23d`（2026-11-17）の `skills/readme-writer/` の追跡ファイル（45 件。`git archive` で取り出した）。
 - **正本の仕様・評価**: skill-lab の `docs/spec/0005-readme-writer.md`、`docs/change/0007-readme-writer.md`、`experiments/readme-writer/`（比較評価と改善ループの記録）。
 
 ## 契約
@@ -21,6 +21,8 @@
 
 - スキルの試験（`tests/`、70 件。標準ライブラリの `unittest`）は、スキルの中に置いたまま配布する。実行は、スキルのフォルダで
   `python3 -m unittest discover -s tests`（このリポジトリの `mise run verify` の対象ではない）。評価用のリポジトリ（`evals/files/`）も、試験が使うので配布に含める。
+- 評価用リポジトリの `.github/`（CI の定義）は、**配布先に出ない**（chezmoi は、source の先頭が `.` のディレクトリを配らない）。
+  試験は、`.github` が無くても通るようにしてある（CI の抽出の確認は、あるときだけ行う）。
 - Python の整形・lint は、上流（skill-lab）の書き方のまま保つため、このリポジトリの `ruff` の対象から外す（`pyproject.toml` の `extend-exclude`）。
 - `home/.chezmoiignore.tmpl` で、試験が作る `__pycache__` を配布・取り込みの対象から外す。
 - `SKILL.md` の frontmatter は `name` と `description` だけ（`allowed-tools` なし・`context: fork` なし）。理由は [スキルの frontmatter の方針](skill-frontmatter.md)。

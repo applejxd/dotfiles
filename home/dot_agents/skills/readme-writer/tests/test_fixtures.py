@@ -30,7 +30,8 @@ class FixtureTests(unittest.TestCase):
         invocations = {c["invocation"] for c in facts["commands"]}
         self.assertEqual(invocations, {"mdtally", "make test"})
         self.assertEqual(facts["license"]["spdx"], "MIT")
-        self.assertEqual(facts["ci"][0]["run"], ["make test"])
+        if (FIXTURE / ".github").is_dir():  # chezmoi は先頭が . のディレクトリを配らないので、配布先には無い
+            self.assertEqual(facts["ci"][0]["run"], ["make test"])
         self.assertFalse(facts["readme"]["present"])
         self.assertEqual(facts["warnings"], [])
 
@@ -92,7 +93,8 @@ class MoreFixtureTests(unittest.TestCase):
         invocations = {c["invocation"] for c in facts["commands"]}
         self.assertEqual(invocations, {"npm start", "npm test", "npm run lint", "pingcheck"})
         self.assertEqual(facts["license"]["spdx"], "MIT")
-        self.assertEqual(facts["ci"][0]["run"], ["npm ci", "npm test"])
+        if (SKILL / "evals" / "files" / "pingcheck" / ".github").is_dir():  # 同上
+            self.assertEqual(facts["ci"][0]["run"], ["npm ci", "npm test"])
 
     def test_all_eval_cases_reference_existing_fixtures(self):
         data = json.loads((SKILL / "evals" / "evals.json").read_text(encoding="utf-8"))
