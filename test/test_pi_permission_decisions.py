@@ -117,6 +117,22 @@ def test_every_bash_rule_is_exercised_by_the_table(engine_result):
     assert not (policy_rules - hit), f"表のどの例も当たらない規則: {sorted(policy_rules - hit)}"
 
 
+def test_external_directory_read_keeps_denies_and_asks_after_every_allow():
+    """同じ面では最後に一致した規則が勝ち、値は symlink の実体・``..`` を含む綴りのどれかに一致すればよい。
+
+    deny・ask が allow より前にあると、symlink や ``..`` を含む綴りが、allow に一致して deny・ask を上書きする。
+    方針は「allow が前、``..`` を含む綴りの ask が次、deny・ask が最後」を守る (判定表の ``alias`` が実ゲートと同じ評価で確かめる)。
+    """
+    policy = json.loads(POLICY.read_text(encoding="utf-8"))["permission"]
+    rules = policy["external_directory_read"]
+    actions = [(v["action"] if isinstance(v, dict) else v) for v in rules.values()]
+    first_non_allow = next(i for i, a in enumerate(actions) if a != "allow")
+    assert all(a != "allow" for a in actions[first_non_allow:]), "allow が、deny・ask の後ろにある"
+    assert list(rules)[first_non_allow : first_non_allow + 2] == ["*/../*", "*/.."], "`..` の ask は、deny・ask の前に置く"
+    bare = policy["external_directory"]
+    assert bare["*/../*"] == "ask" and bare["*/.."] == "ask"
+
+
 @needs_engine
 def test_child_agents_keep_nohup_denied(tmp_path):
     """定義ファイルに bash がある子 (``bg_run`` は持たない) の実際の定義に、グローバルの方針を重ねて判定する。
