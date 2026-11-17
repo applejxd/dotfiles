@@ -763,7 +763,8 @@ def test_permission_policy_matches_the_contract():
     # YOLO を切る前提。bash は既定 allow で、止めるものだけを後ろの規則で決める (個別の判定は test_pi_permission_decisions.py の表)
     assert perm["bash"]["*"] == "allow"
     assert next(iter(perm["bash"])) == "*"  # 後勝ち: 既定を先頭に置く
-    assert perm["external_directory"] == {"*": "ask", "/tmp/*": "allow"}  # /tmp の読み書きだけ事前許可
+    # /tmp の読み書きだけ事前許可。``..`` を含む綴りは、allow に一致して外へ出る経路になるので、後ろの ask で止める
+    assert perm["external_directory"] == {"*": "ask", "/tmp/*": "allow", "*/../*": "ask", "*/..": "ask"}
     # 読み取りだけの許可リスト (pi 自身のディレクトリと Orca の貼り付け画像・添付ファイル)。広い許可 ("*": allow) にはしない
     read = perm["external_directory_read"]
     assert "*" not in read and "~/.pi/agent/extensions/*" in read

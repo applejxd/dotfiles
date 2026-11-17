@@ -327,15 +327,11 @@
     "goal_complete": "allow",
     "goal_blocked": "allow",
     "goal_wait": "allow",
-    "external_directory": { "*": "ask", "/tmp/*": "allow" },
+    "external_directory": { "*": "ask", "/tmp/*": "allow", "*/../*": "ask", "*/..": "ask" },
     "external_directory_read": {
-      "~/.pi/agent": { "action": "deny", "reason": "丸ごとは読まない。許可済みの子パスだけを読む" },
-      "~/.pi/agent/pi-permissions.jsonc": { "action": "deny", "reason": "権限の設定そのもの。元データはリポジトリの pi-permission-policy.json" },
       "~/.pi/agent/npm/*": "allow",
       "~/.pi/agent/install/*": "allow",
       "~/.pi/agent/extensions/*": "allow",
-      "~/.pi/agent/extensions/*/logs": "ask",
-      "~/.pi/agent/extensions/*/logs/*": "ask",
       "~/.pi/agent/agents/*": "allow",
       "~/.pi/agent/git/*": "allow",
       "~/.pi/agent/prompts/*": "allow",
@@ -378,9 +374,6 @@
       "/proc/*/limits": "allow",
       "/proc/*/io": "allow",
       "/proc/*/cgroup": "allow",
-      "/proc/*/root/*": "ask",
-      "/proc/*/cwd/*": "ask",
-      "/proc/*/fd/*": "ask",
       "/sys/class/net/*/address": "allow",
       "/sys/class/net/*/operstate": "allow",
       "/sys/class/net/*/mtu": "allow",
@@ -441,7 +434,16 @@
       "/var/lib/dpkg/status": "allow",
       "/mnt/wslg/*.log": "allow",
       "/mnt/c/Users/applejxd/AppData/Local/Temp/orca-paste-*": "allow",
-      "~/.orca/agent-session-attachments/*": "allow"
+      "~/.orca/agent-session-attachments/*": "allow",
+      "*/../*": "ask",
+      "*/..": "ask",
+      "~/.pi/agent": { "action": "deny", "reason": "丸ごとは読まない。許可済みの子パスだけを読む" },
+      "~/.pi/agent/pi-permissions.jsonc": { "action": "deny", "reason": "権限の設定そのもの。元データはリポジトリの pi-permission-policy.json" },
+      "~/.pi/agent/extensions/*/logs": "ask",
+      "~/.pi/agent/extensions/*/logs/*": "ask",
+      "/proc/*/root/*": "ask",
+      "/proc/*/cwd/*": "ask",
+      "/proc/*/fd/*": "ask"
     }
   }
 }

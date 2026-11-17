@@ -622,7 +622,17 @@
   ["external_directory_read", ["$HOME/.orca/agent-session-attachments/u1/link", "$HOME/.orca/config.json"], "allow"],
   ["external_directory_write", ["$HOME/.orca/agent-session-attachments/u1/link", "$HOME/.orca/config.json"], "ask"],
   ["path_read", ["$HOME/.orca/agent-session-attachments/u1/link", "$HOME/.ssh/config"], "deny"],
-  ["path_write", ["$HOME/.orca/agent-session-attachments/u1/link", "$HOME/.ssh/config"], "deny"]
+  ["path_write", ["$HOME/.orca/agent-session-attachments/u1/link", "$HOME/.ssh/config"], "deny"],
+  ["external_directory_read", ["/etc/shadow", "/tmp/../etc/shadow"], "ask"],
+  ["external_directory_write", ["/etc/x", "/tmp/../etc/x"], "ask"],
+  ["external_directory_read", ["$HOME/Documents/private.json", "$HOME/.agents/skills/../../Documents/private.json"], "ask"],
+  ["external_directory_read", ["$HOME/.pi/agent/pi-permissions.jsonc", "$HOME/.agents/skills/../../.pi/agent/pi-permissions.jsonc"], "deny"],
+  ["external_directory_read", ["/tmp/x", "/tmp/a/../x"], "ask"],
+  ["external_directory_write", ["/tmp/x", "/tmp/a/../x"], "ask"],
+  ["external_directory_read", ["$HOME/.agents/skills/link", "$HOME/.pi/agent/pi-permissions.jsonc"], "deny"],
+  ["external_directory_read", ["$HOME/.agents/skills/link", "$HOME/.pi/agent"], "deny"],
+  ["external_directory_read", ["$HOME/.agents/skills/link", "$HOME/.pi/agent/extensions/pi-permission-system/logs"], "ask"],
+  ["external_directory_read", ["$HOME/.agents/skills/link", "/proc/1/root/etc/shadow"], "ask"]
  ],
  "access": [
   ["ls /var/log/syslog /var/log/syslog.*", [["/var/log/syslog", "read"], ["/var/log/syslog.*", "read"]]],
