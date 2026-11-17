@@ -20,13 +20,7 @@ MODIFIERS = {
         ".pi/agent/mcp.json",
         "pi-mcp",
     ),
-    ROOT / "home" / "dot_pi" / "agent" / "modify_mcp-adapter.json.py.tmpl": (
-        ".pi/agent/mcp-adapter.json",
-        "pi-mcp-adapter",
-    ),
 }
-# .chezmoiignore.tmpl が個人の機 (is-work でない機) で外すもの
-WORK_ONLY = {".pi/agent/mcp-adapter.json"}
 # 代表の変換器 (ラッパーの共通の試験に使う)
 MCP_MODIFIER = ROOT / "home" / "dot_pi" / "agent" / "modify_mcp.json.py.tmpl"
 CHEZMOI_CONFIG = ROOT / "home" / ".chezmoi.toml.tmpl"
@@ -90,8 +84,7 @@ def test_modifier_targets_keep_json_names():
     assert result.returncode == 0, result.stderr
     managed = {line.replace("\\", "/") for line in result.stdout.splitlines()}
     for target, _ in MODIFIERS.values():
-        if target not in WORK_ONLY:
-            assert target in managed
+        assert target in managed
         assert f"{target}.py" not in managed
 
 

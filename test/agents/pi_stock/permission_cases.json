@@ -337,8 +337,6 @@
   ["mcp", "websearch", "allow"],
   ["mcp", "agentcore-websearch", "allow"],
   ["mcp", "webfetch", "allow"],
-  ["webfetch_fetch", "*", "allow"],
-  ["webfetch_fetch_x", "*", "ask"],
   ["mcp", "other:tool", "ask"],
   ["some_future_tool", "*", "ask"],
   ["external_directory_read", "$HOME/.pi/agent/npm/node_modules/@gotgenes/pi-permission-system/docs/configuration.md", "allow"],

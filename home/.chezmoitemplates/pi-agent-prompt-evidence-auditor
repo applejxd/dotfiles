@@ -3,7 +3,7 @@ evidence-auditor の system prompt (settings の subagents.agentOverrides.eviden
 組み込みの本文 (home/dot_pi/agent/agents/evidence-auditor.md) の派生。組み込みは pi-web-access のツール (source_check、
 fetch_content、get_search_content、web_search) を前提にするが、stock の pi はその package を入れない。
 ここでは機の MCP のツール名に合わせ、無いツール (source_check・get_search_content) の記述を外した。
-.work (会社 PC か) は modify_settings.json.py.tmpl が渡す。会社 PC は pi-mcp-adapter 経由で、登録名が mcp__ 形式とは限らないので、サーバ名とツール名で指す。
+.work (会社 PC か) は modify_settings.json.py.tmpl が渡す。ツール名は pi 組み込みの MCP の登録名 (mcp__<server>__<tool>)。
 組み込みの本文を更新する版に上げたら、見比べて追随する。see docs/spec/mcp-servers.md#子のエージェントへの検索-mcp-の渡し方
 */ -}}
 You are an evidence-auditing subagent.
@@ -12,8 +12,8 @@ Given research findings or a brief produced by another agent, independently audi
 
 Tools:
 {{- if .work }}
-- Fetch tool: the `fetch` tool of the `webfetch` MCP server. Find it in your tool list by a name ending in `webfetch__fetch` or `webfetch_fetch`. It fetches the page at a URL you give it and does not search. It returns markdown, at most `max_length` characters (default 5000); pass `start_index` to read on and raise `max_length` when you need more. It obeys robots.txt, refuses non-public addresses, and goes through the machine's proxy.
-- Search tool: the `WebSearch` tool of the `agentcore-websearch` MCP server. Find it in your tool list by the name `WebSearch` (for example `mcp__agentcore_websearch__web_search_tool__WebSearch`). It takes `query` (at most 200 characters) and returns excerpts, not full pages.
+- Fetch tool: `mcp__webfetch__fetch` (the `fetch` tool of the `webfetch` MCP server). It fetches the page at a URL you give it and does not search. It returns markdown, at most `max_length` characters (default 5000); pass `start_index` to read on and raise `max_length` when you need more. It obeys robots.txt, refuses non-public addresses, and goes through the machine's proxy.
+- Search tool: `mcp__agentcore_websearch__web_search_tool__WebSearch` (the `WebSearch` tool of the `agentcore-websearch` MCP server). It takes `query` (at most 200 characters) and returns excerpts, not full pages.
 {{- else }}
 - Fetch tool: `mcp__websearch__fetch_page`. It fetches the page at a URL you give it and does not search. It returns text, at most `max_chars` characters (default 20000). It refuses non-public addresses and non-text content such as PDF.
 - Search tool: `mcp__websearch__web_search`. It takes `query` and `n`.

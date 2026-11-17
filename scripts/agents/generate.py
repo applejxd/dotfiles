@@ -3,7 +3,6 @@
 
 Usage:
     generate.py --target pi-mcp --common PATH [--existing PATH]
-    generate.py --target pi-mcp-adapter --common PATH [--existing PATH]
 
 --existing を省くと標準入力を読む。更新後の JSON を標準出力へ出す。
 利用者が ``pi mcp add`` や ``/mcp`` で足したサーバ・キーは保つ。
@@ -116,9 +115,7 @@ def mcp_servers(common: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     return servers
 
 
-def merge_pi_mcp(
-    existing: dict[str, Any], common: dict[str, Any], *, with_exposure: bool = True
-) -> dict[str, Any]:
+def merge_pi_mcp(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
     """``~/.pi/agent/mcp.json`` の ``mcpServers`` を更新する。
 
     ``pi mcp add`` や ``/mcp`` も書き込むので、宣言した名前だけを更新し、
@@ -141,7 +138,7 @@ def merge_pi_mcp(
             stale = ("url", "headers")
         for key in stale:
             entry.pop(key, None)
-        if with_exposure and "pi_exposure" in server:
+        if "pi_exposure" in server:
             # 利用者が /mcp で変えた値を保つ (無いときだけ補う)
             entry.setdefault("exposure", server["pi_exposure"])
         servers[name] = entry
@@ -149,20 +146,8 @@ def merge_pi_mcp(
     return out
 
 
-def merge_pi_mcp_adapter(existing: dict[str, Any], common: dict[str, Any]) -> dict[str, Any]:
-    """``~/.pi/agent/mcp-adapter.json`` の ``mcpServers`` を更新する (pi-mcp-adapter を入れた機だけ)。
-
-    pi-subagents は、adapter が入っているとき、子の ``mcp:`` 指定を adapter の設定ファイル
-    (``mcp-adapter.json`` など。``~/.pi/agent/mcp.json`` は読まない) から解決する。
-    ``mcp.json`` と同じサーバをここにも置いて、子が検索の MCP を使えるようにする。
-    ``exposure`` は pi 組み込みの MCP の概念なので出さない。
-    """
-    return merge_pi_mcp(existing, common, with_exposure=False)
-
-
 TARGETS = {
     "pi-mcp": merge_pi_mcp,
-    "pi-mcp-adapter": merge_pi_mcp_adapter,
 }
 
 

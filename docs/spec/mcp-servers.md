@@ -23,8 +23,7 @@ args = [
 
 | 生成先 | 生成する仕組み |
 | --- | --- |
-| `~/.pi/agent/mcp.json` の `mcpServers`（pi 組み込みの MCP も `pi-mcp-adapter` もこれを読む） | `generate.py --target pi-mcp`。配備は `home/dot_pi/agent/modify_mcp.json.py.tmpl`（Unix・Windows）。宣言したサーバの `command` / `args`（http は `url`）だけを更新し、`pi mcp add` や `/mcp` で足したサーバと、宣言済みサーバの利用者のキー（`env`・`enabled`・`exposure` など）は保つ。`requires_env` は出さない（`pi_exposure` は server の `exposure` へ、無いときだけ補う）。壊れた JSON は触らない |
-| `~/.pi/agent/mcp-adapter.json` の `mcpServers`（`mcp.json` と同じサーバ。`exposure` は無し。会社 PC＝`pi-mcp-adapter` を入れる機だけ） | `generate.py --target pi-mcp-adapter`。配備は `home/dot_pi/agent/modify_mcp-adapter.json.py.tmpl`。目的は[子への検索 MCP の渡し方](#子のエージェントへの検索-mcp-の渡し方) |
+| `~/.pi/agent/mcp.json` の `mcpServers`（pi 組み込みの MCP がこれを読む。[組み込みに一本化した](#pi-mcp-adapter-を使わない理由2026-11-17)） | `generate.py --target pi-mcp`。配備は `home/dot_pi/agent/modify_mcp.json.py.tmpl`（Unix・Windows）。宣言したサーバの `command` / `args`（http は `url`）だけを更新し、`pi mcp add` や `/mcp` で足したサーバと、宣言済みサーバの利用者のキー（`env`・`enabled`・`exposure` など）は保つ。`requires_env` は出さない（`pi_exposure` は server の `exposure` へ、無いときだけ補う）。壊れた JSON は触らない |
 
 **宣言を消しても、生成先からは消えない。** 生成は宣言されたサーバを足す・更新するだけで、消えたサーバを刈らない。消すときは `pi mcp remove` か `mcp.json` を直接編集する。
 
@@ -63,16 +62,15 @@ URL を指定して本文を取る MCP。**検索はしない**（会社 PC の�
 AgentCore Web Search は抜粋だけを返すので、この機の `researcher` は原典を読めなかった。それを埋める（2026-11-17）。
 
 - **既製の `mcp-server-fetch`**（Anthropic 管理の参照実装。MIT）。自作の `fetch_page` はプロキシに対応しておらず、プロキシ必須の環境では動かない。自作で足さない理由・候補の比較・実測は [評価記録](../research/agents/web-fetch-evaluation-2026-11.md)（ADR-0031）。
-- ツールは `fetch` の 1 つ。`pi` に見える名前は、組み込みの MCP なら `mcp__webfetch__fetch`、`pi-mcp-adapter` が入る会社 PC では adapter の命名になりうる（pi-subagents 0.87.0 の対応表では、既定の `toolPrefix`＝`server` で `webfetch_fetch`。**実機で未確認**）。子の prompt はサーバ名とツール名で指す。
+- ツールは `fetch` の 1 つ。`pi` に見える名前は `mcp__webfetch__fetch`（組み込みの MCP の命名）。子の prompt もこの名前で指す。
 - 引数は `url`・`max_length`（既定 5000）・`start_index`・`raw`・`timeout_ms`。応答は markdown。`start_index` で続きを読む。
-- **プロキシ**: 環境変数 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`（`NO_PROXY`）を読む。pi 組み込みの MCP も `pi-mcp-adapter` 7.0.1 も、親の環境変数を stdio サーバへ引き継ぐ（ソースで確認）。値はリポジトリに書かない。NTLM・Kerberos・PAC には対応しない（Basic 認証は URL に埋める形まで）。
+- **プロキシ**: 環境変数 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`（`NO_PROXY`）を読む。pi 組み込みの MCP は、親の環境変数に server の `env` を重ねて stdio サーバへ渡す（pi 1.5.0 の `pi-mcp` の `stdio.js` と `runtime.js` で確認。組み込みの経路は `inheritEnv` を渡さないので、常に引き継ぐ）。値はリポジトリに書かない。NTLM・Kerberos・PAC には対応しない（Basic 認証は URL に埋める形まで）。
 - **版の固定**: `uvx` は依存を固定しないので、`--exclude-newer`（日付）で推移的な依存の上限を切り、版を `==` で固定する。更新するときは、版と日付を一緒に書き換える（`test/agents/test_mcp_servers.py` が形を固定している）。
 - **`--no-readability-js`**: Node.js が PATH にあると、既定では初回に npm レジストリへ接続して依存を入れる（版を固定できない）。避けるために付ける。純 Python の抽出器になり、出力は少し粗い。
 - **守り**: 内部・予約済みのアドレス（`10.*`・`127.*`・`169.254.*`・`localhost` など）は拒否し、リダイレクトの各ホップも検査する。`robots.txt` を守る。本文が 5 MiB を超える応答は拒否する。宣言に `--allow-private-ips`・`--ignore-robots-txt`・`--proxy-url` を書かない（試験で固定）。
 - **残る危険（受容）**: ① プロキシだけが引ける名前は、こちらでは検査できない（上流の README が明記。内部の名前の拒否はプロキシの設定が担う）。② モデルが URL に情報を載せて外部へ送れる（検索のクエリのような秘匿チェックは、この取得には無い）。③ 取得した本文は信頼できない外部の内容で、プロンプトインジェクションの経路になる（子の prompt に「従わない」と書いた）。
-- **adapter が入る機の権限**: adapter は pi 組み込みの MCP を切り（`-builtin:mcp`）、ツールを `<server>_<tool>` の名前で登録する。permission-system は `mcp__<server>__<tool>` 形と `mcp` だけを MCP として扱うので、`webfetch_fetch` は拡張のツール（既定は ask）になり、`mcp` の `webfetch` 規則は効かない。背景の子が確認待ちで止まらないよう、方針のトップレベルに厳密名 `webfetch_fetch` の allow を足した（`toolPrefix` を変えたら、この名前も合わせる）。組み込みの MCP の機では `mcp` の `webfetch` 規則が効く。**既存の `agentcore-websearch` の adapter 登録名（`agentcore-websearch_web-search-tool__WebSearch`）にも同じ問題がありうるが、今回は触っていない**（未確認）。
-- plan mode の許可リストに `mcp__webfetch__fetch` を足した（組み込みの MCP の名前。adapter が入る機では名前が違うので、`/plan settings` で `webfetch_fetch` を足す）。
-- **未確認**: 会社 PC の実機（PyPI へ届くか・プロキシの認証方式・adapter 7.0.1 での `mcp:webfetch` の解決と登録名）。HTTPS の CONNECT 経由は手元で実測できていない（評価記録の「限界」）。
+- plan mode の許可リストに `mcp__webfetch__fetch` を足した。permission は `mcp` の `webfetch` を allow（組み込みの MCP のツール名 `mcp__<server>__<tool>` に効く）。
+- **未確認**: 会社 PC の実機（PyPI へ届くか・プロキシの認証方式・組み込みの MCP で `mcp:webfetch` が解決されること）。HTTPS の CONNECT 経由は手元で実測できていない（評価記録の「限界」）。
 
 `agentcore-websearch` は全機に配る（使うかは実行時に決まる。下の「AgentCore Web Search」。`deepwiki` は外した。索引が古く実ソースと食い違う説明を返したため）。
 `[[mcp]]` が 1 つも無いと `mcp` キー自体が生えないので、参照側は `hasKey` で受けること（`missingkey=error` で描画が止まる）。
@@ -85,7 +83,7 @@ deepwiki の代わりの OSS 調査は `oss-research` スキル（インスト�
 
 - 理由: pi 組み込みの MCP の既定の `exposure` は `codemode` で、ツールはモデルに宣言されず `codemode` のスクリプトから呼ぶ。この形では、plan mode（`@narumitw/pi-plan-mode`）の許可リストは**完全一致の名前だけ**で、`codemode` を許すと任意の MCP を呼べて境界が広がる。`direct` なら、組み込みのツールと同様にモデルへ宣言され、名前 `mcp__<server>__<tool>`（英数字と `_` 以外は `_` に置換）で許可リストに具体名を足せる。
 - `websearch`・`agentcore-websearch`・`webfetch` を `direct` にする。許可リスト側は [追加の 4 つの package](agent-config-generation.md#追加の-4-つの-packagebackgroundplan-modegoalrewind)。permission-system の `mcp` 規則（`"websearch": "allow"` など）は `direct` のツール名にも効く（package の docs で確認。実機は未確認）。
-- `agentcore-websearch` のツールの生の名前は `web-search-tool__WebSearch`（実機で確認済み）。pi に登録される完全な名前は、命名規則から導いた `mcp__agentcore_websearch__web_search_tool__WebSearch`。実機の `/mcp` の Tools 表示では**未確認**。検索の送り先が限られる環境では `pi-mcp-adapter` も入るので、adapter が別の名前で同じツールを出す可能性も未確認。
+- `agentcore-websearch` のツールの生の名前は `web-search-tool__WebSearch`（実機で確認済み）。pi に登録される完全な名前は、命名規則から導いた `mcp__agentcore_websearch__web_search_tool__WebSearch`。実機の `/mcp` の Tools 表示では**未確認**。
 
 ### 子のエージェントへの検索 MCP の渡し方
 
@@ -93,14 +91,27 @@ stock の pi で、検索の子（`researcher`・`evidence-auditor`）が検索�
 
 - **原因 1**: 子の `tools` は厳密な許可リストで、親の MCP ツールは自動では渡らない。2 つの agent 定義の組み込みの `tools` は `pi-web-access` のツール名（`web_search`・`fetch_content`・`get_search_content`・`source_check`）だが、この package は入れない（[評価](../research/agents/pi-stock-packages-evaluation-2026-11.md)）ので、名前に対応するツールが無い。`mcp:` の指定はどの agent にも無かった。
 - **対処 1**: `modify_pi_stock_settings.py.tmpl` の `AGENT_TOOL_OVERRIDES` で、`researcher` = `read`・`write`・`mcp:<検索>`、`evidence-auditor` = `read`・`mcp:<検索>` にする。`<検索>` は家の機が `websearch`（検索も取得も）、会社 PC が `agentcore-websearch`（検索）と `webfetch`（取得。[上の節](#webfetch会社-pc-のページ取得)。2026-11-17 に足した）（`is-work` で切る）。`mcp:<サーバ>` はそのサーバの全ツールを渡す。agent 定義の写し（`~/.pi/agent/agents/`）は組み込みと同一のまま保つ（試験で固定）。settings の上書きは、user の agent ファイルにも効く（pi-subagents 0.87.0 の `applyCustomAgentOverrides`）。
-- **原因 2（会社 PC）**: `pi-mcp-adapter` が入ると、pi-subagents は子の `mcp:` を adapter の設定ファイル（`~/.config/mcp/mcp.json`・`~/.pi/agent/mcp-adapter.json`・`.mcp.json`・`.pi/mcp-adapter.json`）から解決し、`~/.pi/agent/mcp.json` は読まない（0.87.0 の `src/runs/shared/mcp-direct-tool-allowlist.js` の `getConfigPaths`）。adapter 本体は `~/.pi/agent/mcp.json` も読む（7.0.1 の `config.ts`）ので、親では動くのに子では未解決になる食い違いがある。
-- **対処 2**: 同じサーバを `~/.pi/agent/mcp-adapter.json` にも置く（`generate.py --target pi-mcp-adapter`。`command` / `args` は `mcp.json` と同一なので、cache の照合に使う項目も同じになるはずだが、adapter 7.0.1 と pi-subagents 0.87.0 の照合が一致することは未確認）。`exposure` は出さない。家の機は pi 組み込みの MCP が `mcp.json` を読むので配らない。
 - **制約・未確認**:
-  - 会社 PC の実機で、子が `agentcore-websearch` を呼べること（adapter 7.0.1 で `mcp:` が解決されること）は未確認。
-  - adapter 経由の `mcp:` は、背景の子（`async: true`）だけで動く。前景の子は起動が失敗する。adapter のツール情報の cache が要るので、サーバへ一度つないだあと（親が一度使ってから pi を再起動したあと）でないと解決しないことがある（pi-subagents の `docs/agents.md`「MCP tools」）。
+  - 会社 PC の実機で、子が `agentcore-websearch`・`webfetch` を呼べること（組み込みの MCP で `mcp:` が解決されること）は未確認。家の機では、背景の子が `mcp:websearch` を呼べた（2026-11-17）。
   - **prompt の食い違いは直した**（2026-11-17）: 組み込みの `researcher`・`evidence-auditor` の prompt は `web_search` の `queries`・`workflow`、`fetch_content`、`get_search_content`、`source_check`（stock の pi には無い）を前提にしている。`agent 定義の写し`（`~/.pi/agent/agents/`）は組み込みと同一のまま保つ（試験で固定）ので、settings の `subagents.agentOverrides.<役>.systemPrompt` で、機のツールに合わせた文面へ置き換える。文面は `home/.chezmoitemplates/pi-agent-prompt-researcher`・`pi-agent-prompt-evidence-auditor`（組み込みの本文の派生。ツールの節だけを機で出し分け、`source_check` の代わりに「原文を自分で読み、該当の一節を引用し、手作業の確認と書く」とした。取得に失敗したら `Missing evidence` に書き、抜粋を原典として扱わない）。`systemPrompt` は**この repo が管理するキー**で、`chezmoi apply` のたびにこの文面へ揃える（利用者が書き換えても戻る。`tools`・`model` など他のキーは保つ）。
   - **維持費と撤去**: `pi-subagents` を上げたら、組み込みの本文（`~/.pi/agent/npm/node_modules/pi-subagents/agents/`）と見比べて追随する。`pi-web-access` のように、組み込みの prompt が前提とするツールを入れたら、この上書きを外す。
-  - 会社 PC の prompt は、ツールを登録名ではなくサーバ名とツール名（`webfetch` の `fetch`・`agentcore-websearch` の `WebSearch`）で指す。adapter の命名が登録名と食い違っても、子が一覧から探せる。
+  - 会社 PC の prompt は、組み込みの MCP の登録名（`mcp__webfetch__fetch`・`mcp__agentcore_websearch__web_search_tool__WebSearch`）で指す。
+
+### pi-mcp-adapter を使わない理由（2026-11-17）
+
+会社 PC も、家の機と同じ **pi 組み込みの MCP** に一本化した（`pi-mcp-adapter` を `pi-stock-packages` から外した）。`pi-mcp-adapter` が入ると `/mcp` を登録し、pi は組み込みの MCP を読み込まない（pi の `mcp.md`。起動時の通知「registers command `/mcp`, so built-in extension `mcp` was not loaded」はこの結果）。両方は使えず、選ぶ必要があった。
+
+| 観点 | 組み込み | adapter（外した） |
+| --- | --- | --- |
+| 設定 | `mcp.json` の 1 つ | `mcp.json` に加えて `mcp-adapter.json`（子の `mcp:` の解決用）が要った |
+| ツール名と権限 | `mcp__<server>__<tool>`。permission-system が MCP として扱い、方針の `mcp` の allow が効く。plan mode の名前も確定 | direct の登録名は `<server>_<tool>`。permission-system は拡張のツール（既定は ask）として扱い、`mcp` の規則が効かない（deferred 用の `mcp__…` 登録は別）。`mcp.json` の `exposure` は adapter が `directTools` などへ変換する |
+| 子の起動 | 前景・背景のどちらも（文書上。前景は未実測） | 背景の子だけ。ツール情報の cache が要り、初回は再起動が要ることがあった |
+| 利点 | 構成が単純。保守者が増えない | サーバの遅延起動・MCP の管理画面・OAuth の keychain・他の CLI の設定の取り込み |
+
+- 外した理由: 会社 PC の MCP は 2 つの stdio サーバ（`agentcore-websearch`・`webfetch`）で、adapter の利点（多数のサーバ・OAuth）が要らない。一方で、権限・名前・設定の二重管理の費用が実際に出た（`webfetch_fetch` の権限、`-builtin:mcp` を `chezmoi apply` が消して通知が出続ける問題）。出典: adapter 7.0.1 の `CHANGELOG.md`・`index.ts`・`types.ts`・`pi-builtin-mcp.ts`、pi 1.5.0 の `mcp.md`・`resource-loader.js`、permission-system 42.0.0 の `tool-kind.ts`。
+- **再び入れる条件**: MCP のサーバが増える（遅延起動が要る）、OAuth の keychain が要る、組み込みで足りない機能が出たとき。そのときは、ツール名の権限（`<server>_<tool>` の厳密名の allow）と `-builtin:mcp`（`modify_pi_stock_settings.py.tmpl` は `-builtin:` の項目を取り除く）の扱いを先に設計する。
+- **移行**: `chezmoi apply` で `packages` から adapter が外れ、adapter が `settings.json` の `extensions` に足した `-builtin:mcp` も取り除かれる（組み込みの MCP が戻る）。すでに配った `~/.pi/agent/mcp-adapter.json` と、adapter の npm 実体は残る。どちらも読まれない。不要なら利用者が消す。
+- 会社 PC の実機での動作（組み込みの MCP で、子が検索・取得を呼べること）は**未確認**。
 
 ### AgentCore Web Search
 
@@ -160,7 +171,7 @@ aws cloudformation describe-stacks --region us-east-1 --stack-name agentcore-web
 1. 上で得た URL をシェルの初期化ファイル（リポジトリ管理外）に書く:
    `export AGENTCORE_GATEWAY_URL='https://<gateway-id>.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp'`。
    Windows はユーザー環境変数に設定する
-2. `chezmoi apply` で pi の `mcp.json`（と、adapter を入れる機の `mcp-adapter.json`）を生成する
+2. `chezmoi apply` で pi の `mcp.json` を生成する
 3. 確認: pi の `/mcp` で `agentcore-websearch` が connected になり、検索のツールが 1 つ見えること
 
 URL が未設定だとラッパーは理由を stderr に出して終了する（MCP クライアント側では接続失敗として見える）。

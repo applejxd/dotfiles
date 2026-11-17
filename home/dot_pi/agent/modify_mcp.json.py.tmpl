@@ -1,6 +1,6 @@
 {{- /*
 stock の pi の ~/.pi/agent/mcp.json。pi-mcp-servers.toml の [[mcp]] から mcpServers を作る。
-pi 組み込みの MCP も pi-mcp-adapter も、このファイルを読む。利用者が pi mcp add で足したサーバは保つ。
+pi 組み込みの MCP がこのファイルを読む。利用者が pi mcp add で足したサーバは保つ。
 see docs/spec/mcp-servers.md
 */ -}}
 {{ template "modify_json.py.tmpl" (dict "workingTree" .chezmoi.workingTree "common" (includeTemplate "pi-mcp-servers.toml" .) "target" "pi-mcp") -}}

@@ -1,5 +1,9 @@
 # stock の pi の package の評価（2026-11）
 
+> **後続の観測**: 2026-11-17 に、`pi-mcp-adapter`（表の 4）を会社 PC からも外し、MCP を pi 組み込みに一本化した。adapter の登録名は permission-system の MCP 規則に効かず、設定・名前の二重管理の費用が実際に出たため。表の 4 の決定（「検索の送り先が限られる環境の機だけ入れる」）は当時のもの。
+>
+> **現行の仕様**: [pi-mcp-adapter を使わない理由](../../spec/mcp-servers.md#pi-mcp-adapter-を使わない理由2026-11-17)
+
 - **日付**: 2026-11-08〜09（月間ダウンロード数は 2026-11-07 時点。npm の公開 API）
 - **目的**: ADR-0030 で pi を公式の既定＋人気の package へ戻すにあたり、入れる package を 1 つずつ評価して決めた記録。方針は [ADR-0031](../../adr/0031-evaluate-existing-extensions-first.md)。
 - **方法**: `npm view`・`npm pack`（展開して README・設定・ソースを**読むだけ**）。出典は各 package の同梱 README と、npm の公開 API。数値は人気の目安で、安全性の証拠ではない。

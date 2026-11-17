@@ -211,6 +211,14 @@ def test_stock_settings_keeps_user_extension_and_is_idempotent(tmp_path):
     assert run_script(script, first) == first
 
 
+def test_stock_settings_drops_builtin_mcp_off_marker_so_the_builtin_mcp_comes_back(tmp_path):
+    """pi-mcp-adapter が足した -builtin:mcp (組み込みの MCP を切る印) は、apply で取り除く。組み込みの MCP を使う構成のため。"""
+    script = stock_settings_script(tmp_path)
+    out = json.loads(run_script(script, json.dumps({"extensions": ["-builtin:mcp"], "theme": "x"})))
+    assert "extensions" not in out
+    assert out["theme"] == "x"
+
+
 def test_stock_settings_from_empty_input(tmp_path):
     out = json.loads(run_script(stock_settings_script(tmp_path), ""))
     out.pop("subagents")  # agentOverrides は test_pi_subagents_config.py で検査
@@ -316,10 +324,10 @@ def test_stock_packages_never_include_pi_web_access(tmp_path):
         assert not any("pi-web-access" in p for p in stock_packages(tmp_path, user)), user
 
 
-def test_stock_packages_pi_mcp_adapter_is_work_pc_only(tmp_path):
-    """pi-mcp-adapter は会社 PC (is-work) だけ。家の機は pi 組み込みの MCP を使う。"""
-    assert any(p.startswith("npm:pi-mcp-adapter@") for p in stock_packages(tmp_path, "tester"))
-    assert not any("pi-mcp-adapter" in p for p in stock_packages(tmp_path, "applejxd"))
+def test_stock_packages_have_no_mcp_adapter_on_any_machine(tmp_path):
+    """MCP は pi 組み込みの MCP に一本化した (2026-11-17)。pi-mcp-adapter は、会社 PC (is-work) にも入れない。"""
+    for user in ("tester", "applejxd"):
+        assert not any("pi-mcp-adapter" in p for p in stock_packages(tmp_path, user)), user
 
 
 # --- MCP 設定 (~/.pi/agent/mcp.json) ---------------------------------------
@@ -369,39 +377,6 @@ def test_mcp_json_work_pc_has_no_websearch_but_has_webfetch(tmp_path):
     assert fetch["exposure"] == "direct"  # plan mode の許可リストに具体名を足すため
     home = json.loads(run_script(mcp_script(tmp_path, "applejxd"), ""))
     assert "webfetch" not in home["mcpServers"]
-
-
-# --- pi-mcp-adapter の設定 (~/.pi/agent/mcp-adapter.json。会社 PC の stock だけ) ---
-
-MCP_ADAPTER_MODIFY = HOME_SRC / "dot_pi" / "agent" / "modify_mcp-adapter.json.py.tmpl"
-MCP_ADAPTER_TARGET = ".pi/agent/mcp-adapter.json"
-
-
-
-
-def test_mcp_adapter_json_has_the_search_server_of_the_work_pc(tmp_path):
-    script = tmp_path / "modify_mcp_adapter.py"
-    script.write_text(
-        render(
-            MCP_ADAPTER_MODIFY.read_text(encoding="utf-8"),
-            tmp_path,
-            username="tester",
-        ),
-        encoding="utf-8",
-    )
-    existing = {"mcpServers": {"mine": {"command": "x"}}, "settings": {"toolPrefix": "none"}}
-    out = json.loads(run_script(script, json.dumps(existing)))
-    assert out["mcpServers"]["mine"] == {"command": "x"}
-    assert out["settings"] == {"toolPrefix": "none"}
-    server = out["mcpServers"]["agentcore-websearch"]
-    assert server["command"] == "uv"
-    assert "exposure" not in server  # pi 組み込みの MCP の概念
-    mcp_json = json.loads(run_script(mcp_script(tmp_path, "tester"), ""))["mcpServers"]
-    assert {k: v for k, v in mcp_json["agentcore-websearch"].items() if k != "exposure"} == server
-    # 子の mcp:webfetch は adapter の設定から解決される。mcp.json と同じ宣言 (exposure なし) が要る
-    fetch = out["mcpServers"]["webfetch"]
-    assert {k: v for k, v in mcp_json["webfetch"].items() if k != "exposure"} == fetch
-    assert json.loads(run_script(script, json.dumps(out))) == out
 
 
 def test_mcp_json_keeps_user_keys_of_declared_server_and_broken_input(tmp_path):

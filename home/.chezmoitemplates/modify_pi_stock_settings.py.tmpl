@@ -76,7 +76,7 @@ def add_compaction_overrides(data: dict) -> None:
 # bash・write を外す (scout は親への問い合わせ contact_supervisor を残す)。reviewer (読み取り専用) と worker は変えない。
 # 検索の子 (researcher・evidence-auditor) は、組み込みの tools が pi-web-access のツール名 (stock では入れない) なので、
 # 機の検索・取得の MCP を mcp: で渡す。家は websearch (検索も取得も)、会社 PC は agentcore-websearch (検索) と webfetch (取得)。
-# 会社 PC は ~/.pi/agent/mcp-adapter.json にも要る。利用者がすでに同じ役の tools を書いていれば保つ (無いときだけ補う)。
+# 利用者がすでに同じ役の tools を書いていれば保つ (無いときだけ補う)。
 # see docs/spec/mcp-servers.md#子のエージェントへの検索-mcp-の渡し方
 SEARCH_MCP = ["mcp:agentcore-websearch", "mcp:webfetch"] if IS_WORK else ["mcp:websearch"]
 AGENT_TOOL_OVERRIDES = {

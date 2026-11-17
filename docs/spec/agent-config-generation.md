@@ -16,14 +16,14 @@ home/.chezmoitemplates/
     modify_json.py.tmpl                      generate.py を呼ぶ modify_ の共通ラッパー（Python 3.11 以上を選び直す）
     agent-instructions-stock.md              ~/.pi/agent/AGENTS.md の本文（ツール非依存の指示）
     agent-instructions-home.md               家の機（is-work でない）だけに足す節（開発中の Web サービスは tailnet だけに公開する）
-    is-work                                  会社 PC かどうかの判定（検索 MCP・adapter の出し分け）
+    is-work                                  会社 PC かどうかの判定（検索 MCP の出し分け）
 scripts/agents/
-    generate.py                              pi-mcp-servers.toml から mcp.json・mcp-adapter.json を生成する（pi の MCP だけ）
+    generate.py                              pi-mcp-servers.toml から mcp.json を生成する（pi の MCP だけ）
     validate_mcp.py                          描画した pi-mcp-servers.toml の検査（pre-commit）
     validate_skills.py                       SKILL.md の frontmatter の検査（pre-commit）
 home/dot_pi/agent/
     AGENTS.md.tmpl  keybindings.json  prompts/  themes/  agents/
-    modify_settings.json.py.tmpl  modify_mcp.json.py.tmpl  modify_mcp-adapter.json.py.tmpl
+    modify_settings.json.py.tmpl  modify_mcp.json.py.tmpl
     modify_compaction.json.py.tmpl  modify_pi-plan-mode.json.py.tmpl
     extensions/pi-permission-system/modify_config.json.py.tmpl    extensions/subagent/modify_config.json.py.tmpl
 home/dot_cc-safety-net/rules/            cc-safety-net の規則
@@ -71,7 +71,6 @@ pi の設定は、1 か所にまとまっていない。これは pi の標準�
 | `~/.pi/agent/AGENTS.md` | `agent-instructions-stock.md`（ツール非依存の短い指示）。委譲の常設の指示を含む。**家の機（`is-work` が `false`）だけ**、末尾に `agent-instructions-home.md` を足す（2026-11-16。開発中の Web サービスは、Tailscale が使えるなら tailnet だけに公開する。待ち受けは `127.0.0.1` で、`tailscale serve` で出す。`funnel` は利用者が明示したときだけ。2026-11-17: tailnet の端末は利用者本人のものだけという利用者の方針で、tailnet への公開に事前の確認・警告は要らないとした。WSL では Windows 側の `tailscale.exe` を呼ぶ・既存の https ポートを上書きしない、を足した）。会社 PC には出さない。`AGENTS.md.tmpl` が出し分ける。出典は Tailscale の公式 docs（<https://tailscale.com/docs/reference/tailscale-cli/serve>・<https://tailscale.com/docs/features/tailscale-funnel>）。**2026-11-16 に本文を取得して確認した**: `--bg` は外すまでバックグラウンドで残り、再起動や `tailscale down` / `up` の後も再開する（付けなければ止まる）／外すには、有効にしたコマンドの末尾に `off` を付ける／`tailscale serve reset` は設定を全て消す／`tailscale serve status` で一覧／Funnel は tailnet 外の誰にでも公開し、tailnet 内だけなら Serve を使う。構文は版で違いうるので、指示の中で「実行前に `--help` で確かめる」としている。**2026-11-17 に WSL2（mirrored）の実機で確かめた**: WSL の中に `tailscale` の CLI は無く、Windows 側の `tailscale.exe` を WSL から呼べた（`serve status`・`ip -4`・`serve --bg --https=8443 3080`）。Windows の serve にはすでに `https :443`・`tcp 50022` があり、`--bg <ポート>` だけでは :443 を上書きするので別のポートにした。Windows の `curl.exe` で、公開した URL に届くこと（アプリのトークン認証の 401 と、トークン付きの 303）を確かめた。WSL の中から自分の `100.x` の公開ポートへは、タイムアウトした（`platform-wsl.md` の既知の挙動と同じ）。Host ヘッダを検査するアプリ（dsh）は、`--public-url` と `--trusted-host` で公開 URL のホスト名を許可した。`serve` は tailnet だけ、`funnel` は公開、`--bg` は外すまで残る、という区別を指示に入れた |
 | `~/.pi/agent/settings.json` | `modify_pi_stock_settings.py.tmpl`。`packages` を `pi-stock-packages` にし、`defaultTools` を `["+grep", "+find", "+ls"]`（pi の既定 read・bash・edit・write に読み取り専用の探索ツールを足す増分指定。plan mode の探索にも使う。利用者が `+`/`-` だけの増分指定にしたら保つ）にする。撤去した自作ハーネスの `extensions`・`skills` の項目は取り除く。テーマ・既定のモデルなど利用者のキーは触らない **家の機（`is-work` でない）は、`enabledModels` を `["github-copilot/*"]` にする**（2026-11-16。利用者の指示。利用者がすでに `enabledModels` を書いていれば保つ。会社 PC は触らない）。家で AWS CLI の API 検証のために Bedrock の認証情報（`AWS_PROFILE`・`~/.aws`・`AWS_BEARER_TOKEN_BEDROCK` など）を置いても、**pi が Bedrock のモデルで無意識に起動しない**ため。pi は環境変数などの認証情報で Bedrock を使えるようにし（`docs/providers.md`）、`defaultProvider` が無い・Copilot が使えないとき、起動時の選択が別のプロバイダへ落ちうる。`enabledModels` は「起動時の選択とモデルの切り替え（Ctrl+P）の対象」なので（`docs/settings.md`）、Bedrock を外せば、そこへ落ちない。`/model` で明示して選ぶのは妨げない。家で他のプロバイダも使うときは、`settings.json` の `enabledModels` にパターンを足す（利用者の値は保たれる）。AWS CLI 自体は、エージェントからも普通に使える（制限しない）。 |
 | `~/.pi/agent/mcp.json` | `modify_mcp.json.py.tmpl` が `generate.py --target pi-mcp` で配る（下の「MCP 設定」） |
-| `~/.pi/agent/mcp-adapter.json` | 会社 PC（`is-work`）だけ。`generate.py --target pi-mcp-adapter` |
 | `~/.pi/agent/extensions/pi-permission-system/config.json` | `modify_` で配る（下の「permission-system の設定」） |
 | `~/.pi/agent/extensions/subagent/config.json`・`agents/` | pi-subagents の設定と agent 定義（下の「pi-subagents の設定」） |
 | `~/.pi/agent/pi-plan-mode.json`・`compaction.json` | `modify_` で配る（下の「追加の 4 つの package」「圧縮の設定」） |
@@ -184,7 +183,7 @@ package `cc-safety-net` は、破壊的なコマンド（`git reset --hard`・`r
 
 - `~/.pi/agent/mcp.json` を `modify_mcp.json.py.tmpl`が配る。`[[mcp]]`（`clis` に `pi` を含むもの）から `mcpServers` を作る。仕様は [MCP サーバの設定](mcp-servers.md)。
 - 宣言したサーバだけを更新し（`command` / `args`）、利用者が足したサーバと利用者のキーは保つ。壊れた JSON は触らない。何度流しても同じ結果。
-- **package の一覧の変更**: `pi-web-access` を外した（家の検索は自作の MCP `websearch`）。`pi-mcp-adapter` は `is-work` の機だけ入れる（他の機は pi 組み込みの MCP で足りる）。評価は [記録](../research/agents/pi-stock-packages-evaluation-2026-11.md)。
+- **package の一覧の変更**: `pi-web-access` を外した（家の検索は自作の MCP `websearch`）。`pi-mcp-adapter` は 2026-11-17 に、会社 PC からも外した（どの機も pi 組み込みの MCP。[理由](mcp-servers.md#pi-mcp-adapter-を使わない理由2026-11-17)）。評価は [記録](../research/agents/pi-stock-packages-evaluation-2026-11.md)。
 - **permission**: `mcp` は `"*": "ask"` のまま、`websearch`・`agentcore-websearch`（サーバ名だけのルール）を allow。他の MCP は ask。
 - **未確認**（実機）: permission-system は `mcp` に allow が 1 つでもあると `mcp_status` などの探索系を自動で allow にする、と docs にある。実挙動は未確認。
 

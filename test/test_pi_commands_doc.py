@@ -29,8 +29,6 @@ AGENT_DIR = Path(os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi" / 
 NODE_MODULES = AGENT_DIR / "npm" / "node_modules"
 # 利用者が使うコマンドではない (host の統合用)。早見には載せない
 INTERNAL_COMMANDS = {"pi-subagents-bridge", "subagents-inspect-rpc"}
-# 仕事用の機だけが入れる package (pi-stock-packages の is-work の中)。この機に無いのが普通なので、突き合わせから外す
-WORK_ONLY_PACKAGES = {"pi-mcp-adapter"}
 
 
 def doc_sections() -> dict[str, set[str]]:
@@ -69,7 +67,7 @@ def stock_package_names() -> list[str]:
     names = []
     for raw in STOCK_PACKAGES.read_text(encoding="utf-8").splitlines():
         match = re.match(r"npm:(@?[^@\s]+(?:/[^@\s]+)?)@", raw.strip())
-        if match and match.group(1) not in WORK_ONLY_PACKAGES:
+        if match:
             names.append(match.group(1))
     return names
 
