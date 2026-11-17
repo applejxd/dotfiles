@@ -79,6 +79,7 @@ B が、まだ develop に入っていない A の変更を要るとき、A の�
 
 ## 落とし穴
 
+- **worktree の中だけで完結させる**: cwd が worktree のとき、本体と他の worktree は作業ツリーの外で、`cd`・`ls`・`cat` に確認が出る（子は確認なしで拒否される）。本体の内容は `git show develop:<パス>`、他の feature の内容は `git show feature/<名前>:<パス>` で読み、子へ渡す資料は worktree の中（`.tmp/keep/plan/` など）へ写す。詳細は [dotfiles-conventions](../dotfiles-conventions/SKILL.md#feature-の-worktree-で作業するとき本体のパスへ出ない)。
 - **整形 hook が書き込み直後にファイルを書き換える**。すぐ `git add` すると空のファイルをステージする。`git add -A` のあと `git diff --cached --numstat` で見る（必要なら少し待ってから）。
 - **全件検査は 1 本ずつ回す**。重なると負荷が上がり、時間に依存する試験が落ちる。落ちたら、負荷が下がってから**単独で再実行して確かめる**（再実行で通るなら負荷が原因）。
 - **統合したあとの実機への反映は、`chezmoi apply`**（この PC の chezmoi のソースは `develop`。pull しない）。`chezmoi update` は `git pull --autostash --rebase` を固定で実行するので、**未 push の merge commit がある `develop` では、merge commit が平らに作り直される**（2026-11-14 に実際に起きた）。`chezmoi update` は、未 push のコミットが無いとき（`git rev-list --count @{u}..HEAD` が 0）に限る。他のホストの更新は、利用者が push したあとに `chezmoi update --init`。
