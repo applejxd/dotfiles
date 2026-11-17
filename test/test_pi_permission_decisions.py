@@ -119,7 +119,10 @@ def test_every_bash_rule_is_exercised_by_the_table(engine_result):
 
 @needs_engine
 def test_child_agents_keep_nohup_denied(tmp_path):
-    """bash を持つ子 (``bg_run`` を持たない) の実際の定義ファイルに、グローバルの方針を重ねて判定する。
+    """定義ファイルに bash がある子 (``bg_run`` は持たない) の実際の定義に、グローバルの方針を重ねて判定する。
+
+    実効の道具は settings.json の ``agentOverrides`` が決め、実際に bash を持つのは worker だけ (scout・oracle は外される)。
+    ここは定義ファイルを見るので、上書きが外れても方針が崩れないことまで固定する。
 
     読み取りだけではない ``nohup python x.py > run.log 2>&1 &`` の形が、YOLO を切った状態で deny のままであること。
     ラッパーの床 (``allow`` を ``ask`` に引き上げる) のため、子の frontmatter で allow に上書きしても ``ask`` にしかならない。
