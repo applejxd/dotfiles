@@ -34,6 +34,14 @@ description: "chezmoi の dotfiles リポジトリのファイルを編集する
 
 `*.ps1` / `*.ps1.tmpl`、`home/dot_config/powershell/`、`home/.chezmoiscripts/300_windows/` を触ったら **Windows の PowerShell で**検証する。WSL では対話テストが skip されるだけなので、通っても **Windows 側は未検証**。実機で回せないときはそう明記する（[手順と拾える範囲](../../../docs/spec/development.md#windows-実機での検証)）。
 
+## feature の worktree で作業するとき（本体のパスへ出ない）
+
+一般の指針（worktree の中だけで完結させる・`git rev-parse --show-toplevel`・`git show <基本の枝>:<パス>`）は、全リポジトリへ効くグローバルの指示（`agent-instructions-stock.md` の「確認（ask）」）にある。このリポジトリでの具体は次のとおり。
+
+- cwd が `.tmp/worktrees/<名前>/` のとき、本体（`~/.local/share/chezmoi`）と他の worktree は「作業ツリーの外」で、`cd`・`ls`・`cat` に確認が出る（権限の規則に本体を許可する項目は無い。判定エンジンで確認）。基本の枝は `develop`: `git show develop:<パス>`・`git diff develop...HEAD`・`git log develop`。他の feature の内容は `git show feature/<名前>:<パス>`。
+- `cd` は worktree の絶対パスだけにする（`cd ~/…`・`cd $VAR` は使わない。[上流の不具合](../../../docs/spec/temporary-workarounds.md#pi-permission-system-の-cd-先の誤判定)）。
+- 本体へ触るのは、利用者が指示した統合（`git flow feature finish`・`git flow integrate`）と `chezmoi apply` だけ（どちらも確認が出る前提）。この PC の chezmoi のソースは本体（`develop`）なので、worktree の変更は、統合するまで実機へ反映されない。
+
 ## 公開情報に無いことをするとき
 
 実装の前に「本当に必要か」「この事例に固有の事情か」を検討する。
