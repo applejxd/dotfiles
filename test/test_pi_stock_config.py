@@ -33,7 +33,9 @@ NEW_PACKAGES = (
     "npm:pi-show-token-rate@",
     "npm:@ayulab/pi-rewind@",
 )
-HARNESS_WORDS = ("guarded_", "フルガード", "worktree", "pis", "kcage", "feature-orchestration")  # stock の AGENTS.md に出さない語
+# stock の AGENTS.md に出さない語。旧ハーネスの feature の置き場 (.tmp/worktrees) は出さない。
+# 一般の git worktree の指示は、全リポジトリへ効かせるので載せてよい。
+HARNESS_WORDS = ("guarded_", "フルガード", ".tmp/worktrees", "pis", "kcage", "feature-orchestration")
 
 
 def chezmoi_bin() -> str:
