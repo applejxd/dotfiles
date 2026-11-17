@@ -35,6 +35,8 @@ extend-exclude = [
   "home/dot_agents/skills/imozuru/scripts/watch.py",
   # conference-video は skill-lab (正本) からの複製。上流との差分を小さく保つため、整形・lint しない (docs/spec/conference-video.md)
   "home/dot_agents/skills/conference-video",
+  # readme-writer も skill-lab (正本) からの複製。同じ理由で整形・lint しない (docs/spec/readme-writer.md)
+  "home/dot_agents/skills/readme-writer",
 ]
 # 既存コードの実測に合わせる (最長 109 桁、100 桁超は 7 行だけ)。
 # 既定の 88 桁にすると 74 行の折り返しが必要になり、変更が本題からずれる。
