@@ -47,7 +47,7 @@ pi 本体が組み込みで読み込む拡張（`dist/extensions/`）が登録�
 
 ## package のコマンド
 
-どれも `home/.chezmoitemplates/pi-stock-packages` の package が登録する（仕事用の機だけが入れる `pi-mcp-adapter` は対象外）。設定とツールの扱いは
+どれも `home/.chezmoitemplates/pi-stock-packages` の package が登録する。設定とツールの扱いは
 [agent-config-generation.md](agent-config-generation.md#追加の-4-つの-packagebackgroundplan-modegoalrewind)・
 [permission-system の設定](agent-config-generation.md#permission-system-の設定)。
 

@@ -1,7 +1,7 @@
 """pi の MCP サーバの宣言 (pi-mcp-servers.toml) から mcp.json が生成されることを固定する。
 
 ユーザ・機 (is-work) による出し分けは pi-mcp-servers.toml 側の chezmoi テンプレートが行うので、
-生成側 (generate.py) には条件が無い。ここでは「描画結果が mcp.json・mcp-adapter.json へそのまま
+生成側 (generate.py) には条件が無い。ここでは「描画結果が mcp.json へそのまま
 伝わること」と、壊れた宣言が apply を止めることを確かめる。
 
 Run with: ``uv run --with pytest --no-project pytest test/agents/ -q``
@@ -162,19 +162,11 @@ def test_pi_exposure_is_validated():
 
 
 def test_pi_mcp_targets_are_registered():
-    assert {
-        "pi-mcp": gen.merge_pi_mcp,
-        "pi-mcp-adapter": gen.merge_pi_mcp_adapter,
-    } == gen.TARGETS
-    for modifier, target in (
-        ("modify_mcp.json.py.tmpl", "pi-mcp"),
-        ("modify_mcp-adapter.json.py.tmpl", "pi-mcp-adapter"),
-    ):
-        text = (ROOT / "home/dot_pi/agent" / modifier).read_text(encoding="utf-8")
-        assert f'"target" "{target}"' in text
-    ignore = (ROOT / "home/.chezmoiignore.tmpl").read_text(encoding="utf-8")
-    # adapter は adapter を入れる機 (is-work) だけ
-    assert ignore.splitlines().count(".pi/agent/mcp-adapter.json") == 1
+    assert {"pi-mcp": gen.merge_pi_mcp} == gen.TARGETS
+    text = (ROOT / "home/dot_pi/agent/modify_mcp.json.py.tmpl").read_text(encoding="utf-8")
+    assert '"target" "pi-mcp"' in text
+    # pi-mcp-adapter は入れない (MCP は pi 組み込みに一本化)。adapter 用の設定は生成しない
+    assert not (ROOT / "home/dot_pi/agent/modify_mcp-adapter.json.py.tmpl").exists()
 
 
 @pytest.mark.parametrize("common", [HOME, WORK], ids=["home", "work"])
@@ -210,40 +202,6 @@ def test_pi_exposure_fills_only_when_missing():
 def test_pi_mcp_websearch_only_on_personal_machine():
     assert "websearch" in gen.merge_pi_mcp({}, HOME)["mcpServers"]
     assert "websearch" not in gen.merge_pi_mcp({}, WORK)["mcpServers"]
-
-
-def test_pi_mcp_adapter_has_the_same_servers_as_mcp_json_without_exposure():
-    """会社 PC (is-work) の pi-mcp-adapter 用。pi-subagents が子の mcp: を ~/.pi/agent/mcp.json から解決しないため。"""
-    merged = gen.merge_pi_mcp_adapter({}, WORK)
-    plain = gen.merge_pi_mcp({}, WORK)["mcpServers"]
-    for name, entry in merged["mcpServers"].items():
-        assert entry == {k: v for k, v in plain[name].items() if k != "exposure"}
-    assert "exposure" in plain["agentcore-websearch"]  # mcp.json 側は従来どおり
-    # 利用者のサーバ・キーは保ち、何度流しても同じ
-    existing = {
-        "mcpServers": {"mine": {"url": "https://example.com/mcp"}},
-        "settings": {"toolPrefix": "none"},
-    }
-    kept = gen.merge_pi_mcp_adapter(existing, WORK)
-    assert kept["mcpServers"]["mine"] == {"url": "https://example.com/mcp"}
-    assert kept["settings"] == {"toolPrefix": "none"}
-    assert gen.merge_pi_mcp_adapter(kept, WORK) == kept
-
-
-@pytest.mark.parametrize(
-    ("common", "servers"),
-    [(WORK, ["agentcore-websearch", "webfetch"]), (HOME, ["websearch"])],
-    ids=["work", "home"],
-)
-def test_the_servers_given_to_search_agents_are_declared_on_that_machine(common, servers):
-    """settings の researcher・evidence-auditor が mcp: で指すサーバは、その機に宣言されている。"""
-    declared = dict(gen.mcp_servers(common))
-    source = (ROOT / "home/.chezmoitemplates/modify_pi_stock_settings.py.tmpl").read_text(
-        encoding="utf-8"
-    )
-    for server in servers:
-        assert server in declared
-        assert f'"mcp:{server}"' in source
 
 
 def test_pi_mcp_keeps_user_servers_and_keys_and_drops_pi_unknown_keys():

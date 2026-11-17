@@ -241,10 +241,11 @@ def test_settings_replaces_the_search_agent_prompt_with_the_machines_tool_names(
         assert "`mcp__websearch__fetch_page`" in prompt
         assert "webfetch" not in prompt
     else:
-        # 会社 PC は pi-mcp-adapter 経由で登録名が一つに決まらない。サーバ名とツール名で指す
-        assert "`fetch` tool of the `webfetch` MCP server" in prompt
-        assert "`WebSearch` tool of the `agentcore-websearch` MCP server" in prompt
+        # 会社 PC も pi 組み込みの MCP の登録名 (mcp__<server>__<tool>) で指す
+        assert "`mcp__webfetch__fetch`" in prompt
+        assert "`mcp__agentcore_websearch__web_search_tool__WebSearch`" in prompt
         assert "mcp__websearch__" not in prompt
+        assert "adapter" not in prompt.lower()
     # 成果物の様式は組み込みと同じ (researcher)
     if name == "researcher":
         assert "# Research: [topic]" in prompt

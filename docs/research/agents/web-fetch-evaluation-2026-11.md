@@ -25,8 +25,8 @@
   - `tools/list` は `fetch` だけ。`https://example.com/` を取得できた。
   - `http://169.254.169.254/…` と `http://localhost:8080/` は、「公開アドレスではない」として拒否された。
   - 偽のプロキシ（HTTP の絶対 URI 要求だけに答える）を `HTTP_PROXY` に指定し、`http://only-the-proxy-can-resolve.invalid/page`（手元では解決できない名前）を取得できた。プロキシは `robots.txt` と本文の 2 件の要求を受けた。**プロキシ越しの取得と、手元で解決できない名前の通過を確かめた**。
-- **pi 側**: 組み込みの MCP も、`pi-mcp-adapter` 7.0.1 も、stdio サーバの環境変数に、親の環境変数を引き継ぐ（組み込み: pi 1.5.0 の同梱ソース、adapter: `server-manager.ts` の `resolveEnv` で確認。どちらも `inheritEnv` が `false` でない限り）。したがってプロキシの環境変数は、子のサーバに届く。
-- **adapter が入る機の名前と権限**（`reviewer` の監査で判明）: adapter は pi 組み込みの MCP を切り（`pi-builtin-mcp.ts` が `-builtin:mcp` を設定へ足す）、ツールを `<server>_<tool>`（既定の `toolPrefix`＝`server`）の名前で登録する。この機では `fetch` は `webfetch_fetch` になる。permission-system は `mcp__<server>__<tool>` 形と `mcp` だけを MCP として扱い、`webfetch_fetch` は拡張のツール（方針の既定は ask）になる。方針の `mcp` の `webfetch` 規則はこの名前に効かないため、トップレベルに `webfetch_fetch` の allow を足した。**実機では未確認**。
+- **pi 側**: 組み込みの MCP も、`pi-mcp-adapter` 7.0.1 も、stdio サーバの環境変数に、親の環境変数を引き継ぐ（組み込み: pi 1.5.0 の `pi-mcp` の `stdio.js`・`runtime.js`。組み込みの経路は `inheritEnv` を渡さず、常に引き継ぐ。adapter: `server-manager.ts` の `resolveEnv`。`inheritEnv` が `false` でない限り）。したがってプロキシの環境変数は、子のサーバに届く。
+- **adapter が入る機の名前と権限**（`reviewer` の監査で判明。**後続: 同日、adapter を外して組み込みの MCP に一本化したので、この項は経緯**。[理由](../../spec/mcp-servers.md#pi-mcp-adapter-を使わない理由2026-11-17)）: adapter は pi 組み込みの MCP を切り（`pi-builtin-mcp.ts` が `-builtin:mcp` を設定へ足す）、ツールを `<server>_<tool>`（既定の `toolPrefix`＝`server`）の名前で登録する。この機では `fetch` は `webfetch_fetch` になる。permission-system は `mcp__<server>__<tool>` 形と `mcp` だけを MCP として扱い、`webfetch_fetch` は拡張のツール（方針の既定は ask）になる。方針の `mcp` の `webfetch` 規則はこの名前に効かない。**実機では未確認**。
 
 ## 採用の条件と選んだ設定
 
@@ -36,7 +36,7 @@
 
 ## 限界（未確認を含む）
 
-- **adapter が入る機の実機は未確認**: PyPI へ届くか（AgentCore のラッパーが同じ `uvx` を使うので届く見込みはあるが、確認していない）、プロキシの認証方式、`pi-mcp-adapter` 7.0.1 での `mcp:webfetch` の解決とツールの登録名。
+- **会社 PC の実機は未確認**: PyPI へ届くか（AgentCore のラッパーが同じ `uvx` を使うので届く見込みはあるが、確認していない）、プロキシの認証方式、組み込みの MCP での `mcp:webfetch` の解決。
 - **HTTPS の CONNECT は未実測**: 手元で作った CONNECT 中継が上流へ届かず（原因は未調査）、確かめられなかった。httpx は標準で CONNECT を使う（`server.py` のコメントと README の記述）。
 - **認証**: httpx が扱えるのは URL に埋めた Basic 認証まで。NTLM・Kerberos・PAC（自動設定スクリプト）には対応しない。
 - **SSRF の限界**: プロキシだけが引ける名前は検査されず、DNS rebinding も防げない（README に明記）。プロキシ越しでは、接続先 IP の固定ができない（自作でも同じ）。内部の名前の拒否は、プロキシの設定が担う。
