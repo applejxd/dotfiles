@@ -360,10 +360,15 @@ def test_mcp_json_home_declares_websearch_and_keeps_user_servers(tmp_path):
     assert json.loads(again) == out
 
 
-def test_mcp_json_work_pc_has_no_websearch(tmp_path):
+def test_mcp_json_work_pc_has_no_websearch_but_has_webfetch(tmp_path):
     out = json.loads(run_script(mcp_script(tmp_path, "tester"), ""))
     assert "websearch" not in out["mcpServers"]
     assert "agentcore-websearch" in out["mcpServers"]
+    fetch = out["mcpServers"]["webfetch"]
+    assert fetch["command"] == "uvx"
+    assert fetch["exposure"] == "direct"  # plan mode の許可リストに具体名を足すため
+    home = json.loads(run_script(mcp_script(tmp_path, "applejxd"), ""))
+    assert "webfetch" not in home["mcpServers"]
 
 
 # --- pi-mcp-adapter の設定 (~/.pi/agent/mcp-adapter.json。会社 PC の stock だけ) ---
@@ -393,6 +398,9 @@ def test_mcp_adapter_json_has_the_search_server_of_the_work_pc(tmp_path):
     assert "exposure" not in server  # pi 組み込みの MCP の概念
     mcp_json = json.loads(run_script(mcp_script(tmp_path, "tester"), ""))["mcpServers"]
     assert {k: v for k, v in mcp_json["agentcore-websearch"].items() if k != "exposure"} == server
+    # 子の mcp:webfetch は adapter の設定から解決される。mcp.json と同じ宣言 (exposure なし) が要る
+    fetch = out["mcpServers"]["webfetch"]
+    assert {k: v for k, v in mcp_json["webfetch"].items() if k != "exposure"} == fetch
     assert json.loads(run_script(script, json.dumps(out))) == out
 
 
@@ -427,6 +435,7 @@ SEARCH_TOOLS = [
     "mcp__websearch__fetch_page",
     "mcp__websearch__search_papers",
     "mcp__agentcore_websearch__web_search_tool__WebSearch",
+    "mcp__webfetch__fetch",
 ]
 
 

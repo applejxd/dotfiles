@@ -204,18 +204,98 @@ def test_settings_overrides_scout_and_oracle_read_only(settings_script):
 
 
 @pytest.mark.parametrize(
-    ("username", "server"),
-    [("tester", "agentcore-websearch"), ("applejxd", "websearch")],
+    ("username", "servers"),
+    [("tester", ["agentcore-websearch", "webfetch"]), ("applejxd", ["websearch"])],
 )
-def test_settings_gives_search_agents_the_machines_search_mcp(tmp_path, username, server):
-    """検索の子は、機の検索の MCP を mcp: で受け取る。組み込みの web_search 系 (pi-web-access) は入れない。"""
+def test_settings_gives_search_agents_the_machines_search_mcp(tmp_path, username, servers):
+    """検索の子は、機の検索・取得の MCP を mcp: で受け取る。組み込みの web_search 系 (pi-web-access) は入れない。"""
     path = script(SETTINGS_MODIFY, tmp_path, "modify_settings.py", username)
     overrides = json.loads(run(path, "{}"))["subagents"]["agentOverrides"]
-    assert overrides["researcher"]["tools"] == ["read", "write", f"mcp:{server}"]
-    assert overrides["evidence-auditor"]["tools"] == ["read", f"mcp:{server}"]
+    mcp = [f"mcp:{server}" for server in servers]
+    assert overrides["researcher"]["tools"] == ["read", "write", *mcp]
+    assert overrides["evidence-auditor"]["tools"] == ["read", *mcp]
     for name in ("researcher", "evidence-auditor"):
         assert not {"web_search", "fetch_content", "source_check"} & set(overrides[name]["tools"])
         assert not {"bash", "edit"} & set(overrides[name]["tools"]), name
+
+
+# 組み込みの prompt が勧める pi-web-access のツール。stock の pi には無い
+MISSING_TOOLS = ("fetch_content", "get_search_content", "queries", "workflow")
+
+
+@pytest.mark.parametrize("username", ["tester", "applejxd"])
+@pytest.mark.parametrize("name", ["researcher", "evidence-auditor"])
+def test_settings_replaces_the_search_agent_prompt_with_the_machines_tool_names(
+    tmp_path, username, name
+):
+    """組み込みの prompt は存在しないツール (fetch_content など) を勧める。機のツールに合わせた文面で置き換える。"""
+    path = script(SETTINGS_MODIFY, tmp_path, "modify_settings.py", username)
+    prompt = json.loads(run(path, "{}"))["subagents"]["agentOverrides"][name]["systemPrompt"]
+    assert "{{" not in prompt and "}}" not in prompt  # 描画されている
+    for missing in MISSING_TOOLS:
+        assert missing not in prompt, missing
+    # source_check は「無い」と書く 1 か所だけ (使えと言わない)
+    assert prompt.count("source_check") == 1 and "no `source_check` tool" in prompt
+    if username == "applejxd":
+        assert "`mcp__websearch__web_search`" in prompt
+        assert "`mcp__websearch__fetch_page`" in prompt
+        assert "webfetch" not in prompt
+    else:
+        # 会社 PC は pi-mcp-adapter 経由で登録名が一つに決まらない。サーバ名とツール名で指す
+        assert "`fetch` tool of the `webfetch` MCP server" in prompt
+        assert "`WebSearch` tool of the `agentcore-websearch` MCP server" in prompt
+        assert "mcp__websearch__" not in prompt
+    # 成果物の様式は組み込みと同じ (researcher)
+    if name == "researcher":
+        assert "# Research: [topic]" in prompt
+
+
+LEGACY_WORK_TOOLS = {
+    "researcher": ["read", "write", "mcp:agentcore-websearch"],
+    "evidence-auditor": ["read", "mcp:agentcore-websearch"],
+}
+
+
+def _overrides(output: str) -> dict:
+    return json.loads(output)["subagents"]["agentOverrides"]
+
+
+@pytest.mark.parametrize("name", ["researcher", "evidence-auditor"])
+def test_settings_moves_the_old_default_tools_to_the_new_default_on_the_work_pc(tmp_path, name):
+    """取得の MCP を足す前に apply 済みの会社 PC でも、子に webfetch が渡る。旧既定のままなら新既定へ移す (再適用しても同じ)。"""
+    path = script(SETTINGS_MODIFY, tmp_path, "modify_settings.py", "tester")
+    existing = {"subagents": {"agentOverrides": {name: {"tools": list(LEGACY_WORK_TOOLS[name])}}}}
+    first = run(path, json.dumps(existing))
+    assert "mcp:webfetch" in _overrides(first)[name]["tools"]
+    assert _overrides(first)[name]["tools"] == _overrides(run(path, "{}"))[name]["tools"]
+    assert run(path, first) == first
+
+
+@pytest.mark.parametrize("name", ["researcher", "evidence-auditor"])
+def test_settings_keeps_tools_the_user_changed_and_does_not_migrate_the_home_machine(tmp_path, name):
+    work = script(SETTINGS_MODIFY, tmp_path, "modify_settings_work.py", "tester")
+    custom = [*LEGACY_WORK_TOOLS[name], "grep"]  # 旧既定と違う配列は利用者の選択として保つ
+    existing = {"subagents": {"agentOverrides": {name: {"tools": custom}}}}
+    assert _overrides(run(work, json.dumps(existing)))[name]["tools"] == custom
+    # 家の機の既定は変わっていない。会社 PC の旧既定と同じ配列があっても、家では移さない
+    home = script(SETTINGS_MODIFY, tmp_path, "modify_settings_home.py", "applejxd")
+    legacy = {"subagents": {"agentOverrides": {name: {"tools": list(LEGACY_WORK_TOOLS[name])}}}}
+    assert _overrides(run(home, json.dumps(legacy)))[name]["tools"] == LEGACY_WORK_TOOLS[name]
+
+
+def test_settings_manages_the_search_agent_prompt_but_keeps_other_user_keys(tmp_path):
+    """systemPrompt はこの repo が管理する (古い文面を残さない)。同じ役の他のキー (model など) は保つ。"""
+    path = script(SETTINGS_MODIFY, tmp_path, "modify_settings.py", "applejxd")
+    existing = {
+        "subagents": {
+            "agentOverrides": {"researcher": {"systemPrompt": "old", "model": "a/b", "tools": ["read"]}}
+        }
+    }
+    first = run(path, json.dumps(existing))
+    researcher = json.loads(first)["subagents"]["agentOverrides"]["researcher"]
+    assert researcher["systemPrompt"] != "old" and "research subagent" in researcher["systemPrompt"]
+    assert researcher["model"] == "a/b" and researcher["tools"] == ["read"]
+    assert run(path, first) == first
 
 
 def test_settings_keeps_user_overrides(settings_script):

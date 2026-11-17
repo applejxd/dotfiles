@@ -9,6 +9,7 @@ Web 検索・ページ取得・論文検索。**自作の MCP サーバ `websear
 
 **個人用（`is-work` でない機、つまり `applejxd`）だけに配る。**（切り替えの経緯は [記録](../research/agents/web-search-spec-notes.md)） 制約のある環境用（Bedrock）は、検索を
 [AgentCore Web Search の MCP](mcp-servers.md#mcp-サーバ)に一本化する（制約のある環境の機のクエリを AWS の外の検索へ出さず、手段が 2 つになってモデルが迷うのを避ける）。
+ページ本文の取得（URL の指定。検索ではない）だけは、既製の取得 MCP を足した（[webfetch](mcp-servers.md#webfetch会社-pc-のページ取得)。この文書の自作の `fetch_page` はプロキシに非対応で、会社 PC へは配らない）。
 
 - 核と MCP の配布: `home/.chezmoiignore.tmpl` が、`is-work` のとき `.config/agents/websearch/` を除く（skill `web-search` は廃止したので、スキルの配布は無い）
 - 他の CLI で検索が要るなら、その CLI の MCP 宣言（`[[mcp]]`）で足す（スキルの CLI は戻さない）

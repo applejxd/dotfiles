@@ -1,1 +1,2 @@
-{{ template "modify_pi_stock_settings.py.tmpl" (dict "packages" (includeTemplate "pi-stock-packages" .) "isWork" (includeTemplate "is-work" .) "shellPath" (ternary (printf "%s/.local/bin/pib-shell" .chezmoi.homeDir) "" (eq .chezmoi.os "linux"))) -}}
+{{- $prompt := dict "work" (eq (includeTemplate "is-work" .) "true") -}}
+{{ template "modify_pi_stock_settings.py.tmpl" (dict "packages" (includeTemplate "pi-stock-packages" .) "isWork" (includeTemplate "is-work" .) "shellPath" (ternary (printf "%s/.local/bin/pib-shell" .chezmoi.homeDir) "" (eq .chezmoi.os "linux")) "researcherPrompt" (includeTemplate "pi-agent-prompt-researcher" $prompt) "evidenceAuditorPrompt" (includeTemplate "pi-agent-prompt-evidence-auditor" $prompt)) -}}

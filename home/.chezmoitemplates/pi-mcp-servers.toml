@@ -40,3 +40,19 @@ args = [
   '{{ .chezmoi.homeDir }}/.config/agents/websearch/mcp_server.py',
 ]
 {{- end }}
+
+{{- if eq (includeTemplate "is-work" .) "true" }}
+
+# 会社 PC のページ取得 (URL を指定して本文を取る。検索はしない)。既製の mcp-server-fetch (Anthropic 管理の参照実装)。
+# プロキシは環境変数 (HTTP_PROXY / HTTPS_PROXY / ALL_PROXY) を読む。版と、推移的な依存の日付 (--exclude-newer) を固定する。
+# Node.js と npm を起動させない (--no-readability-js)。tool は fetch (mcp__webfetch__fetch)。
+# see docs/spec/mcp-servers.md#webfetch会社-pc-のページ取得
+[[mcp]]
+id = "webfetch"
+purpose = "URL を指定してページ本文を取得する (既製の mcp-server-fetch。検索はしない)"
+# 既定の codemode ではモデルに直接見えず、plan mode の許可リストに具体名を足せない。direct にして mcp__webfetch__* で見せる
+pi_exposure = "direct"
+transport = "stdio"
+command = "uvx"
+args = ["--exclude-newer", "2026-11-17", "mcp-server-fetch==2026.11.11", "--no-readability-js"]
+{{- end }}
