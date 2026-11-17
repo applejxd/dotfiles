@@ -6,7 +6,9 @@
 //   policy     config.json の中身 (permission / commandEffects / shellTools)。yoloMode は常に false で評価する
 //   project    作業ツリーの .pi/extensions/pi-permission-system/config.json の中身 (任意)
 //   alias      [[surface, [別名, 実体, ...]]...]。symlink の別名と解決後の実体を合わせた判定 (任意)
-// 標準出力へ JSON: { bash: [{state, pattern}...], surface: [{action, pattern}...], access: [[{path, effect, source}...]...], alias: [{action, pattern}...] }
+//   agents     { <agent 名>: <~/.pi/agent/agents/<名>.md の中身> } (任意)。agent の frontmatter の permission は、グローバルより後に重なって勝つ
+//   agentBash  [[agent 名, cmd]...]。その agent として bash を判定する (任意)
+// 標準出力へ JSON: { bash: [{state, pattern}...], surface: [{action, pattern}...], access: [[{path, effect, source}...]...], alias: [{action, pattern}...], agentBash: [{state, pattern}...] }
 // bash は、実際のゲートと同じく複合コマンドを分解し、ラッパーの床 (opaque / indirection / unparsed) も含めて判定する。
 // access: [cmd...] は、bash のトークンの投影 (作業ツリーの外のパスと、commandEffects を含む向き) を返す。
 // surface の照合は規則の評価だけ (向きに応じた ask の判定は、access の向きと surface の判定を合わせて読む)。
@@ -37,6 +39,8 @@ const { foldDeclaredCommandEffects } = await load("src/config/command-effects-co
 const agentDir = mkdtempSync(join(tmpdir(), "perm-agent-"));
 mkdirSync(join(agentDir, "extensions/pi-permission-system"), { recursive: true });
 writeFileSync(join(agentDir, "extensions/pi-permission-system/config.json"), JSON.stringify({ ...input.policy, yoloMode: false }));
+mkdirSync(join(agentDir, "agents"), { recursive: true });
+for (const [name, body] of Object.entries(input.agents ?? {})) writeFileSync(join(agentDir, "agents", `${name}.md`), body);
 const cwd = mkdtempSync(join(tmpdir(), "perm-proj-"));
 if (input.project) {
   mkdirSync(join(cwd, ".pi/extensions/pi-permission-system"), { recursive: true });
@@ -57,11 +61,15 @@ if (!BashProgram.parseSync("true", normalizer)) {
 }
 
 const rules = manager.getComposedConfigRules();
-const out = { bash: [], surface: [], access: [], alias: [] };
+const out = { bash: [], surface: [], access: [], alias: [], agentBash: [] };
 const declared = foldDeclaredCommandEffects({}, input.policy.commandEffects, "global");
 for (const cmd of input.bash ?? []) {
   const r = resolveBashAdvisoryCheck(cmd, undefined, resolver, normalizer);
   out.bash.push({ state: r.state, pattern: r.matchedPattern ?? null });
+}
+for (const [agent, cmd] of input.agentBash ?? []) {
+  const r = resolveBashAdvisoryCheck(cmd, agent, resolver, normalizer);
+  out.agentBash.push({ state: r.state, pattern: r.matchedPattern ?? null });
 }
 for (const cmd of input.access ?? []) {
   const program = BashProgram.parseSync(cmd, normalizer, { commandEffects: declared });

@@ -34,5 +34,6 @@ subagent({
 ## 時間と終了
 
 - 子の `stop` は、子が起動したサブプロセスを止めない。長く動くコマンドには、契約で `timeout` を付けさせる。
+- **確認が出ない書き方を契約に書く**（子は無人で、確認は 5 分待って拒否され、その間コマンドが止まる）: `env VAR=1 cmd` は `VAR=1 cmd`、`bash -c '…'`・`eval` は中を直接書く、`nohup` は拒否される（長い処理は前景で `timeout -k 10 <秒> <cmd>`）。`xargs`・`find -exec` は、読み取りだけのコマンドなら確認なし。詳細は away-shift の `references/child-brief.md`。
 - 子の自己申告（「通った」「確認なしで動いた」）は当てにしない。親が同じコマンドを再実行して確かめる。確認が出たかどうかは、審査ログ
   （`~/.pi/agent/extensions/pi-permission-system/logs/pi-permission-system-permission-review.jsonl`）が正。

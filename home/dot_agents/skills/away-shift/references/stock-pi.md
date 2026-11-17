@@ -15,6 +15,7 @@
 | 種類 | 例 |
 | --- | --- |
 | 特権・push | `sudo *`、`git push*` |
+| 常駐の起動 | `nohup *`（親は `bg_run`。`bg_run` を持たない子は、前景で `timeout -k 10 <秒> <cmd>` を実行するか、親に `bg_run` での起動を頼む。囲いの中では、`&` で出したジョブもコマンドの終了で消える） |
 | git の設定の書き込み | `git config` の書き込み（`--get`・`--get-all`・`--get-regexp`・`--list` の読み取りは可。通常の形で確認になるのは `user.name`・`user.email` を含むものだけ。`git -C <dir> config ...` は、読み書きとも確認） |
 | スクリプトをシェルへ渡す形 | `sh`・`bash`・`zsh`・`dash`（単独）、`sh -`・`bash -s*` |
 | 秘密を取るコマンド | `gh auth token`、`gh secret set\|list`、`bw get\|list\|export`、`op read`、`op item get`、`vault read\|kv get`、`chezmoi secret` |
@@ -35,7 +36,7 @@
 ## 床の確認（解釈できない・別のコマンドを包む形）
 
 - `bash -c`・`eval`（中身を再解析しない）
-- `sudo`・`env`・`xargs`・`nohup`・`parallel`・`watch`・`flock`、`find -exec`・`fd -x` など、別のコマンドを実行する前置き
+- `env`・`xargs`・`parallel`・`watch`・`flock`、`find -exec`・`fd -x` など、別のコマンドを実行する前置き（`sudo`・`nohup` は確認ではなく拒否される）
   （`time`・`timeout`・`nice`・`stdbuf`・`setsid` は、中のコマンドで判定されるので、`timeout 20m <command>` は使ってよい）
 - 解析できない形。例: heredoc と `2>&1` とパイプを同時に使う（`git commit -F - <<'EOF' 2>&1 | tail`）。長い本文は `write` でファイルに書く
 
