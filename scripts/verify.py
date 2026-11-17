@@ -138,6 +138,7 @@ RULES: tuple[Rule, ...] = (
         ("home/dot_agents/skills/friction-review/scripts/*.py", "home/dot_agents/skills/friction-review/SKILL.md"),
         ("test_friction_scan",),
     ),
+    Rule("過去セッションの読み取り", ("home/dot_agents/skills/session-recall/**",), ("test_session_recall",)),
     Rule(
         "pi の設定 (stock)",
         (

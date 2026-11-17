@@ -53,6 +53,7 @@ Claude Code・Copilot CLI・OpenCode は撤去した（[ADR-0037](../adr/0037-re
 | `cuda-version-migration`・`uv-migration` | なし | 長時間で、判断が人の側。調査の段だけを `plan` 役へ任せる（CHG-0044） | なし |
 | `oss-research` | なし | 読み取り中心で自己完結だが、`gh`・`curl` の実行と `rm` の承認が、子では通らない | なし |
 | `experiment-loop` | なし | 実行・記録・比較は CLI（`exp.py`）が担い、採否の判断と仮説は会話の文脈が材料。長い実行は背景（pi の `bg_run`）で回す | なし（`[pi.skill_scripts.allow]` へは足していない） |
+| `session-recall` | なし | 条件は満たせるが、**便益が無い**（結果を親がそのまま引き継ぎに使う。会話の文脈が材料で、子に回すと往復が増えるだけ）。スクリプトは cwd のリポジトリに固定されるので、子の cwd でも範囲は変わらない | なし（`friction-review` と同じく宣言しない） |
 | `env-check` | なし | 条件は満たせるが、**便益が無い**（道具。結果を親がそのまま使う。子に回すと往復が増えるだけ） | `env-check` はスクリプトだけ |
 
 `allowed-tools` を持つスキル:
