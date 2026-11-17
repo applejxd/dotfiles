@@ -1,0 +1,13 @@
+[
+  {"query": "このリポジトリに README.md が無いので、中身を読んで書いてくれる？", "should_trigger": true},
+  {"query": "README が古くなってる気がする。インストール手順とかコマンドが今のコードと合ってるか点検して", "should_trigger": true},
+  {"query": "README.ja.md を作って、英語版と内容を揃えてほしい", "should_trigger": true},
+  {"query": "README のリンク切れとコマンドの間違いを直して整理して", "should_trigger": true},
+  {"query": "Write a good README for this CLI tool, with install and usage sections.", "should_trigger": true},
+  {"query": "このプロジェクトの AGENTS.md を作って。ビルドとテストの手順を書いてほしい", "should_trigger": false},
+  {"query": "docs/ に調査記録と仕様を書いて、索引も更新して", "should_trigger": false},
+  {"query": "公開前にリポジトリ全体を監査して、README・LICENSE・SECURITY・CI を見て", "should_trigger": false},
+  {"query": "このライブラリの API リファレンスを全部生成して、ドキュメントサイトにしたい", "should_trigger": false},
+  {"query": "README の誤字を 1 つ直して(commit まで)", "should_trigger": false},
+  {"query": "CHANGELOG と CONTRIBUTING.md を作って", "should_trigger": false}
+]

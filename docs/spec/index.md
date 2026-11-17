@@ -41,6 +41,7 @@
 | [imozuru（調べものスキル）](imozuru.md) | 上流 MaryCache/imozuru（MIT）を vendor して調整した調べものスキル。原文を要約せず保存し、検索は使える検索ツール（MCP の websearch）を使う。配る範囲・書き込み先の制限・接続の固定・秘匿チェック・YouTube（applejxd 限定）・`pis` の許可規則・レビューの経緯・未確認 |
 | [away-shift（離席中の検証・実験）](away-shift.md) | 離席中に承認なしで検証を反復するスキル。stock の pi での前提（確認は 5 分で拒否・方針は離席中を区別できない）、事前判定を使わない判断、再開の仕組みの評価・未確認 |
 | [conference-video（学会発表動画風の解説動画）](conference-video.md) | skill-lab から複製したスキル。流れ・依存（uv・Manim・VOICEVOX）・成果物の保存先・このリポジトリでの扱い（配布から外すもの・lint の対象外） |
+| [readme-writer（README を作る・直す・点検する）](readme-writer.md) | skill-lab から複製したスキル。事実の抽出と README の実在検査をスクリプトで行う。配る範囲・このリポジトリでの扱い・評価の結果 |
 | [スキルの frontmatter の方針](skill-frontmatter.md) | `allowed-tools` の書き方、スキルごとの宣言、委譲の型の割り当て |
 | [トラブルシューティング](troubleshooting.md) | 症状 → 対象 OS・CLI → 対応先の索引 |
 | [トラブルシューティング: 導入と適用](troubleshooting-bootstrap.md) | スクリプトの再実行、Python・Bitwarden・mise・APT・pi の導入で起きる障害 |

@@ -49,7 +49,7 @@ Claude Code・Copilot CLI・OpenCode は撤去した（[ADR-0037](../adr/0037-re
 | --- | --- | --- | --- |
 | `fix` | あり（`general-purpose`・`background: false`） | 5 条件を満たす | 使う linter だけ |
 | `away-shift`・`commit`・`learn`・`onboarding`・`review-loop`・`skill-creator`・`github-operations`・`ipynb-to-marimo-pages` | なし（本文が付けないと明記） | 質問・承認・会話履歴・子の使用のどれかが本質 | 下の表 |
-| `arxiv-paper-ja`・`powerpoint-studio`・`conference-video`・`imozuru`・`friction-review`・`pi-extension-dev`・`sdd-docs`・`feature-orchestration` | なし | 子を使う・質問や承認が要る・会話の文脈が材料 | 下の表 |
+| `arxiv-paper-ja`・`powerpoint-studio`・`conference-video`・`readme-writer`・`imozuru`・`friction-review`・`pi-extension-dev`・`sdd-docs`・`feature-orchestration` | なし | 子を使う・質問や承認が要る・会話の文脈が材料 | 下の表 |
 | `cuda-version-migration`・`uv-migration` | なし | 長時間で、判断が人の側。調査の段だけを `plan` 役へ任せる（CHG-0044） | なし |
 | `oss-research` | なし | 読み取り中心で自己完結だが、`gh`・`curl` の実行と `rm` の承認が、子では通らない | なし |
 | `experiment-loop` | なし | 実行・記録・比較は CLI（`exp.py`）が担い、採否の判断と仮説は会話の文脈が材料。長い実行は背景（pi の `bg_run`）で回す | なし（`[pi.skill_scripts.allow]` へは足していない） |
