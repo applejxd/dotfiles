@@ -485,6 +485,8 @@ def test_stock_agents_md_adds_the_tailnet_policy_only_on_personal_machines(tmp_p
     personal = render_file("dot_pi/agent/AGENTS.md.tmpl", tmp_path, username="applejxd")
     work = render_file("dot_pi/agent/AGENTS.md.tmpl", tmp_path, username="tester")
     assert "tailscale serve --bg" in personal and "tailscale funnel" in personal
+    assert "tailscale.exe" in personal and "--https=8443" in personal  # WSL では Windows 側を呼び、既存の https ポートを上書きしない
+    assert "事前の確認・警告は要らない" in personal
     assert "# 自宅の機だけの指示" in personal and "# 自宅の機だけの指示" not in work
     assert "tailscale" not in work.lower()
     assert personal.startswith(work.rstrip("\n"))  # 共通の指示は同じで、家の機は末尾に節を足すだけ
