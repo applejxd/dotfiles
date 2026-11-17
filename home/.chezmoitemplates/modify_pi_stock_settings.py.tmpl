@@ -11,6 +11,11 @@ import json
 import sys
 
 PACKAGES_TEXT = {{ .packages | toJson }}
+# 検索の子 (researcher・evidence-auditor) の system prompt。機の検索・取得のツール名に合わせた文面 (.chezmoitemplates の 2 ファイル)
+SEARCH_AGENT_PROMPTS = {
+    "researcher": {{ .researcherPrompt | toJson }},
+    "evidence-auditor": {{ .evidenceAuditorPrompt | toJson }},
+}
 # 会社 PC (is-work) か。検索の MCP が機で違う (家は websearch、会社 PC は agentcore-websearch)
 IS_WORK = {{ if eq .isWork "true" }}True{{ else }}False{{ end }}
 # 家の機で、起動時の選択とモデルの切り替え (Ctrl+P) の対象にするモデル。家は Copilot だけを使うので、Bedrock の認証情報が
@@ -70,16 +75,21 @@ def add_compaction_overrides(data: dict) -> None:
 # 組み込みの既定: scout = read, grep, find, ls, bash, write, contact_supervisor / oracle = read, grep, find, ls, bash。
 # bash・write を外す (scout は親への問い合わせ contact_supervisor を残す)。reviewer (読み取り専用) と worker は変えない。
 # 検索の子 (researcher・evidence-auditor) は、組み込みの tools が pi-web-access のツール名 (stock では入れない) なので、
-# 機の検索の MCP を mcp: で渡す。家は websearch、会社 PC は agentcore-websearch (~/.pi/agent/mcp-adapter.json も要る)。
-# 利用者がすでに同じ役の tools を書いていれば保つ (無いときだけ補う)。
+# 機の検索・取得の MCP を mcp: で渡す。家は websearch (検索も取得も)、会社 PC は agentcore-websearch (検索) と webfetch (取得)。
+# 会社 PC は ~/.pi/agent/mcp-adapter.json にも要る。利用者がすでに同じ役の tools を書いていれば保つ (無いときだけ補う)。
 # see docs/spec/mcp-servers.md#子のエージェントへの検索-mcp-の渡し方
-SEARCH_MCP = "mcp:agentcore-websearch" if IS_WORK else "mcp:websearch"
+SEARCH_MCP = ["mcp:agentcore-websearch", "mcp:webfetch"] if IS_WORK else ["mcp:websearch"]
 AGENT_TOOL_OVERRIDES = {
     "scout": ["read", "grep", "find", "ls", "contact_supervisor"],
     "oracle": ["read", "grep", "find", "ls"],
-    "researcher": ["read", "write", SEARCH_MCP],
-    "evidence-auditor": ["read", SEARCH_MCP],
+    "researcher": ["read", "write", *SEARCH_MCP],
+    "evidence-auditor": ["read", *SEARCH_MCP],
 }
+# 前の既定の tools (会社 PC は取得の MCP を足す前)。この配列のままなら、利用者が選んだ値ではないので新しい既定へ移す
+LEGACY_AGENT_TOOLS = {
+    "researcher": ["read", "write", "mcp:agentcore-websearch"],
+    "evidence-auditor": ["read", "mcp:agentcore-websearch"],
+} if IS_WORK else {}
 
 
 # 役割ごとのモデル (subagents.agentOverridesByProvider.<プロバイダ>.<役>.model。`:` の後ろは思考の深さ)。
@@ -170,8 +180,13 @@ def main() -> int:
         entry = overrides.get(name)
         if not isinstance(entry, dict):
             entry = {}
+        if entry.get("tools") == LEGACY_AGENT_TOOLS.get(name):
+            entry["tools"] = list(tools)
         entry.setdefault("tools", list(tools))
         overrides[name] = entry
+    for name, prompt in SEARCH_AGENT_PROMPTS.items():
+        # 組み込みの prompt は存在しないツール名を勧めるので、この repo の文面で置き換える (毎回これに揃える。管理するキー)
+        overrides[name]["systemPrompt"] = prompt
     by_provider = subagents.get("agentOverridesByProvider")
     if not isinstance(by_provider, dict):
         by_provider = {}

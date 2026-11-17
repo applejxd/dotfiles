@@ -9,6 +9,7 @@ Run with: ``uv run --with pytest --no-project pytest test/agents/ -q``
 
 from __future__ import annotations
 
+import datetime
 import json
 import subprocess
 import sys
@@ -61,10 +62,37 @@ def test_declared_servers_pass_validation(common):
         assert server["purpose"], f"{server['id']}: purpose が空"
 
 
-def test_home_has_the_own_search_and_work_has_only_agentcore():
-    """個人の機には自作の検索 MCP (websearch) が入る。会社 PC は AgentCore の 1 本だけ。"""
+def test_home_has_the_own_search_and_work_has_agentcore_and_webfetch():
+    """個人の機には自作の検索 MCP (websearch) が入る。会社 PC は AgentCore (検索) と webfetch (取得) の 2 つだけ。"""
     assert [name for name, _ in gen.mcp_servers(HOME)] == ["agentcore-websearch", "websearch"]
-    assert [name for name, _ in gen.mcp_servers(WORK)] == ["agentcore-websearch"]
+    assert [name for name, _ in gen.mcp_servers(WORK)] == ["agentcore-websearch", "webfetch"]
+
+
+# 監査済みの組 (版と、推移的な依存の日付)。更新するときは、版と日付を一緒に、ここと宣言の両方で書き換える
+WEBFETCH_VERSION = "2026.11.11"
+WEBFETCH_CUTOFF = "2026-11-17"
+
+
+def test_webfetch_is_the_pinned_off_the_shelf_fetch_server_without_search_or_loosening():
+    """会社 PC のページ取得は既製の mcp-server-fetch。監査済みの版と日付の組へ完全一致させる (引数の追加・省略形も通さない)。"""
+    (server,) = [s for s in WORK["mcp"] if s["id"] == "webfetch"]
+    assert server["command"] == "uvx"
+    # 守りを緩める引数 (--allow-private-ips・--ignore-robots-txt・--proxy-url。argparse は省略形も受ける) は、完全一致が止める。
+    # --no-readability-js は Node.js・npm を起動させない。プロキシの値は環境変数で渡し、宣言に書かない
+    assert server["args"] == [
+        "--exclude-newer",
+        WEBFETCH_CUTOFF,
+        f"mcp-server-fetch=={WEBFETCH_VERSION}",
+        "--no-readability-js",
+    ]
+    datetime.date.fromisoformat(WEBFETCH_CUTOFF)  # 日付として読める
+    assert server["pi_exposure"] == "direct"
+    assert "requires_env" not in server
+
+
+def test_webfetch_is_not_on_the_personal_machine():
+    """家の機の取得は websearch の fetch_page。重ねない。"""
+    assert "webfetch" not in dict(gen.mcp_servers(HOME))
 
 
 def test_agentcore_websearch_runs_the_deployed_wrapper():
@@ -202,14 +230,20 @@ def test_pi_mcp_adapter_has_the_same_servers_as_mcp_json_without_exposure():
     assert gen.merge_pi_mcp_adapter(kept, WORK) == kept
 
 
-@pytest.mark.parametrize(("common", "server"), [(WORK, "agentcore-websearch"), (HOME, "websearch")])
-def test_the_server_given_to_search_agents_is_declared_on_that_machine(common, server):
+@pytest.mark.parametrize(
+    ("common", "servers"),
+    [(WORK, ["agentcore-websearch", "webfetch"]), (HOME, ["websearch"])],
+    ids=["work", "home"],
+)
+def test_the_servers_given_to_search_agents_are_declared_on_that_machine(common, servers):
     """settings の researcher・evidence-auditor が mcp: で指すサーバは、その機に宣言されている。"""
-    assert server in dict(gen.mcp_servers(common))
+    declared = dict(gen.mcp_servers(common))
     source = (ROOT / "home/.chezmoitemplates/modify_pi_stock_settings.py.tmpl").read_text(
         encoding="utf-8"
     )
-    assert f'"mcp:{server}"' in source
+    for server in servers:
+        assert server in declared
+        assert f'"mcp:{server}"' in source
 
 
 def test_pi_mcp_keeps_user_servers_and_keys_and_drops_pi_unknown_keys():
