@@ -1,12 +1,4 @@
----
-name: onboarding
-description: "リポジトリを調査し、質問を通して AGENTS.md を新規作成・整理・陳腐化箇所の更新をする。「AGENTS.md を作って」「AGENTS.md を整理して／見直して」と言われたときに使う。会話で分かった知見の追記は learn スキル、docs/ の仕様・調査記録は sdd-docs スキルの領分なので使わない。"
-allowed-tools: Read, Grep, Glob, Edit(AGENTS.md)
----
-
-# AGENTS.md Onboarding Skill
-
-> **fork しない（`context: fork` を付けない）。** 質問と承認でユーザーとやり取りするため。
+# AGENTS.md の新規作成・整理
 
 このスキルは **AGENTS.md 一本化運用** を前提に、既存プロジェクトの指示ファイルを安全に再構築する。
 
@@ -59,7 +51,7 @@ allowed-tools: Read, Grep, Glob, Edit(AGENTS.md)
 
 ### 4) AGENTS.md ドラフト作成
 
-`~/.agents/skills/onboarding/references/agents-template.md` をベースに作成する。
+`~/.agents/skills/agents-md/references/agents-template.md` をベースに作成する。
 
 品質基準:
 
@@ -84,7 +76,7 @@ allowed-tools: Read, Grep, Glob, Edit(AGENTS.md)
 
 ### 6) 承認後に反映
 
-ユーザーが明示承認したら、`~/.agents/skills/onboarding/references/review-checklist.md` を読み全項目を確認してから `AGENTS.md` を更新する。
+ユーザーが明示承認したら、`~/.agents/skills/agents-md/references/review-checklist.md` を読み全項目を確認してから `AGENTS.md` を更新する。
 
 ## 出力フォーマット（会話）
 
@@ -94,10 +86,10 @@ allowed-tools: Read, Grep, Glob, Edit(AGENTS.md)
 
 ## 参照ファイル
 
-パスは `~/.agents/skills/onboarding/references/` 配下（pi・Copilot CLI では `${CLAUDE_SKILL_DIR}` が展開されないため、絶対パスで書く）。
+パスは `~/.agents/skills/agents-md/references/` 配下。
 
-- テンプレート: `~/.agents/skills/onboarding/references/agents-template.md`
-- チェックリスト: `~/.agents/skills/onboarding/references/review-checklist.md`
+- テンプレート: `~/.agents/skills/agents-md/references/agents-template.md`
+- チェックリスト: `~/.agents/skills/agents-md/references/review-checklist.md`
 
 ## 付記（モノレポの場合のみ）
 

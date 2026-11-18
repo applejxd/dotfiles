@@ -214,14 +214,20 @@ def load_skill(name: str) -> tuple[dict, str]:
     return yaml.safe_load(frontmatter), body
 
 
-def test_learn_proposes_by_default():
-    """description は「提案する」なのに本文が直接書き込ませていた。"""
-    data, body = load_skill("learn")
+def test_agents_md_proposes_by_default():
+    """description は「提案する」なのに本文が直接書き込ませていた (旧 learn)。"""
+    data, _ = load_skill("agents-md")
     assert "提案" in data["description"]
-    assert "書き込まない" in body
-    assert "明示的" in body
+    # 追記の手順は references にある
+    append = (
+        CLAUDE_SKILLS / "agents-md/references/append-from-conversation.md"
+    ).read_text(encoding="utf-8")
+    assert "書き込まない" in append
+    assert "明示的" in append
     # fork を撤去した後も残っていた、サブエージェント前提の宛先
-    assert "親エージェント" not in body
+    assert "親エージェント" not in append
+    # 手動起動
+    assert data["disable-model-invocation"] is True
 
 
 def test_review_loop_description_states_the_real_stop_condition():
