@@ -22,7 +22,8 @@
 - `home/.chezmoiignore.tmpl` で、実行時に作られるもの（`.venv`・`.pytest_cache`・`.ruff_cache`・`.tmp`・`__pycache__`）を配布・取り込みの対象から外す（`powerpoint-studio` と同じ扱い）。
 - スキルの試験（`tests/`）は、スキルの中に置いたまま配布する。実行は、スキルのフォルダで `uv run --no-project --with pytest pytest tests -p no:cacheprovider --ignore=tests/e2e`（取り込み時に 253 件とサブテスト 146 件が通ることを確かめた。e2e はブラウザと VOICEVOX が要るので手動・未実施）。このリポジトリの `mise run verify` の対象ではない。
 - Python の整形・lint は、上流（skill-lab）の書き方のまま保つため、このリポジトリの `ruff` の対象から外す（`pyproject.toml` の `extend-exclude`）。`vendor/`（manim-skill）の Markdown も、無改変で保つため markdownlint の対象から外す（`.markdownlint-cli2.jsonc` の `ignores`）。
-- `SKILL.md` の frontmatter は `name` と `description` だけ（`allowed-tools` なし・`context: fork` なし）。理由は [スキルの frontmatter の方針](skill-frontmatter.md)。
+- `SKILL.md` の frontmatter は `name` と `description` のほかは、手動起動の 1 行だけ（`allowed-tools` なし・`context: fork` なし）。理由は [スキルの frontmatter の方針](skill-frontmatter.md)。
+- ローカルの変更: `SKILL.md` の frontmatter に `disable-model-invocation: true` を 1 行足した（2026-11-18。利用者の決定。理由は skill-frontmatter の「[手動起動](skill-frontmatter.md#手動起動disable-model-invocation)」）。skill-lab 側にも同じ変更を入れて取り込み直すまで、`sync_skill_lab.py` の置き換えで消える（`--check` の差分に出る）。
 
 ## 更新の手順
 

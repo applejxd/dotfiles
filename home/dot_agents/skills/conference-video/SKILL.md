@@ -1,6 +1,7 @@
 ---
 name: conference-video
 description: "研究のリポジトリ・論文から、3〜5 分の学会発表動画風の日本語解説動画を作る。動機と理論背景は Manim の動く映像で、結果は録画済みの実動作動画を貼り込み、VOICEVOX のナレーションと字幕を付けて video.mp4 に仕上げる。「学会動画を作って」「論文解説動画を作って」「発表動画を manim と音声合成で」「この研究の紹介動画」で使う。数学の定理・証明だけの解説、スライド資料(pptx)の作成、論文の全文翻訳、動画の公開・投稿、英語ナレーションには使わない。"
+disable-model-invocation: true
 ---
 
 # conference-video

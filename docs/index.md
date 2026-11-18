@@ -45,6 +45,7 @@ pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 | MCP サーバを追加・変更する | [MCP サーバ](spec/mcp-servers.md#mcp-サーバ) |
 | Bedrock の PC で web 検索を使えるようにする（AgentCore Web Search） | [AgentCore Web Search](spec/mcp-servers.md#agentcore-web-search) |
 | 調べものスキル（imozuru）を使う・変える・上流を更新する | [imozuru](spec/imozuru.md) |
+| スキルを手動起動にする・Orca が入れたスキルを除外する | [手動起動](spec/skill-frontmatter.md#手動起動disable-model-invocation) |
 | pi で作業を並列に進める（`/fleet`・`subagent`） | [プロンプトテンプレート](spec/agent-config-generation.md#プロンプトテンプレートfleetstepback)・[pi のコマンド早見](spec/pi-commands.md) |
 | pi のスラッシュコマンドを調べる（`/fleet`・`/subagents-fleet`・`/plan` など） | [pi のスラッシュコマンド（stock）の早見](spec/pi-commands.md) |
 

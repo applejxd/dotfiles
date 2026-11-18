@@ -1,6 +1,6 @@
 # Tailscale の導入（macOS・Linux）
 
-`applejxd` の機械だけに、Tailscale を**導入する**（ログインはしない）。Windows は導入済みで、設定（Unattended）の仕様は [Windows の設定](windows-settings.md#tailscale-の-unattended) にある。WSL は Windows 側の Tailscale を使うので、入れない（[WSL](platform-wsl.md)）。
+`applejxd` の機械だけに、Tailscale を**導入する**（ログインはしない）。Windows は導入済みで、設定（Unattended）の仕様は [Windows の設定](windows-settings.md#tailscale-の-unattended) にある。WSL は Windows 側の Tailscale を使うので、入れない（[WSL](platform-wsl.md)）。開発中の Web サービスを tailnet へ公開する指示は、この文書の対象ではなく、家の機だけに配るスキル `tailscale-serve` にある（[配るもの](agent-config-generation.md#配るもの)）。
 
 | OS | スクリプト | 導入元 |
 | --- | --- | --- |

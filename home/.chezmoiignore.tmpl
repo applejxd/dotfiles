@@ -133,6 +133,13 @@ Documents/**
 .agents/skills/imozuru/**
 {{- end }}
 
+# 会社 PC には Tailscale の指示（スキル）を出さない
+# see docs/spec/agent-config-generation.md#配るもの
+{{- if eq (includeTemplate "is-work" .) "true" }}
+.agents/skills/tailscale-serve/
+.agents/skills/tailscale-serve/**
+{{- end }}
+
 # Bitwarden 由来のファイルは一度のみ展開する
 # (毎回 Bitwarden を引くと chezmoi diff がマスターパスワードを要求するため)
 #

@@ -25,7 +25,8 @@
   試験は、`.github` が無くても通るようにしてある（CI の抽出の確認は、あるときだけ行う）。
 - Python の整形・lint は、上流（skill-lab）の書き方のまま保つため、このリポジトリの `ruff` の対象から外す（`pyproject.toml` の `extend-exclude`）。
 - `home/.chezmoiignore.tmpl` で、試験が作る `__pycache__` を配布・取り込みの対象から外す。
-- `SKILL.md` の frontmatter は `name` と `description` だけ（`allowed-tools` なし・`context: fork` なし）。理由は [スキルの frontmatter の方針](skill-frontmatter.md)。
+- `SKILL.md` の frontmatter は `name` と `description` のほかは、手動起動の 1 行だけ（`allowed-tools` なし・`context: fork` なし）。理由は [スキルの frontmatter の方針](skill-frontmatter.md)。
+- ローカルの変更: `SKILL.md` の frontmatter に `disable-model-invocation: true` を 1 行足した（2026-11-18。利用者の決定。理由は skill-frontmatter の「[手動起動](skill-frontmatter.md#手動起動disable-model-invocation)」）。skill-lab 側にも同じ変更を入れて取り込み直すまで、`sync_skill_lab.py` の置き換えで消える（`--check` の差分に出る）。 あわせて、description の対象外案内の「AGENTS.md / CLAUDE.md の作成(onboarding)」は、`onboarding` を `agents-md` へ統合したので古い（skill-lab 側で直す。手動起動なので害は小さい）。
 
 ## 評価の結果（正本の記録の要約。skill-lab 側が正本）
 

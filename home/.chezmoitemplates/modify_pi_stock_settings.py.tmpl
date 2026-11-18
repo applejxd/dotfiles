@@ -30,6 +30,9 @@ SHELL_PATH = {{ .shellPath | toJson }}
 # 自作ハーネスだけが入れる extensions / skills の項目 (scripts/agents/generate.py の宣言に対応)
 HARNESS_EXTENSION_MARKS = (".config/pi/harness", "!extensions/**", "+extensions/", "-builtin:")
 HARNESS_SKILL_MARKS = ("~/.claude/skills", "-~/.agents/skills/", "-~/.claude/skills/")
+# Orca が ~/.agents/skills/ へ入れるスキルを、ディレクトリ名で除外する (戻すときは利用者が +skills/<名前> を足す)
+# see docs/spec/agent-config-generation.md#pi-の設定
+EXCLUDED_SKILLS = ("!computer-use", "!orca-cli", "!orchestration")
 
 # pi の既定 (read・bash・edit・write) に、読み取り専用の探索ツールを足す (増分指定)。plan mode の探索と通常の探索で使う
 # 利用者が +/- だけの増分指定に変えていたら保つ。自作ハーネスの全置換の値 (["read"] など) は初期値に置き換える
@@ -158,13 +161,17 @@ def main() -> int:
         return 0
     if not is_incremental(data.get("defaultTools")):
         data["defaultTools"] = list(DEFAULT_TOOLS)
+    skills_not_list = "skills" in data and not isinstance(data["skills"], list)
     for key, marks in (("extensions", HARNESS_EXTENSION_MARKS), ("skills", HARNESS_SKILL_MARKS)):
-        if key in data:
+        if key in data and not (key == "skills" and skills_not_list):
             kept = drop_marked(data[key], marks)
             if kept:
                 data[key] = kept
             else:
                 del data[key]
+    skills = data.get("skills", [])
+    if not skills_not_list:  # 配列でなければ触らない
+        data["skills"] = skills + [i for i in EXCLUDED_SKILLS if i not in skills]
     data["packages"] = packages()
     if not IS_WORK and "enabledModels" not in data:
         data["enabledModels"] = list(HOME_ENABLED_MODELS)
