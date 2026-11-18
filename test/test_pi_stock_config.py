@@ -188,8 +188,9 @@ CUSTOM_SETTINGS = {
 
 def test_stock_settings_removes_harness_keys_and_sets_packages(tmp_path):
     out = json.loads(run_script(stock_settings_script(tmp_path), json.dumps(CUSTOM_SETTINGS)))
-    for key in ("extensions", "skills"):
-        assert key not in out, key
+    assert "extensions" not in out
+    # 旧ハーネスの skills の印は消え、Orca のスキルの除外だけが残る
+    assert out["skills"] == ["!computer-use", "!orca-cli", "!orchestration"]
     # 自作ハーネスの全置換の defaultTools (["read"]) は、読み取り専用の探索ツールの増分に置き換わる
     assert out["defaultTools"] == ["+grep", "+find", "+ls"]
     # 利用者のキーと pi 自身のキーは残る
@@ -203,6 +204,23 @@ def test_stock_settings_removes_harness_keys_and_sets_packages(tmp_path):
     ):
         assert out[key] == CUSTOM_SETTINGS[key], key
     assert out["packages"] == stock_packages(tmp_path)
+
+
+def test_stock_settings_excludes_the_orca_skills_every_run(tmp_path):
+    script = stock_settings_script(tmp_path)
+    excluded = ["!computer-use", "!orca-cli", "!orchestration"]
+    first = run_script(script, "")
+    assert json.loads(first)["skills"] == excluded
+    assert run_script(script, first) == first  # 何度流しても同じ (重複しない)
+    # 利用者の項目 (戻しの +skills/orca-cli を含む) と並びを保ち、足りない除外だけを足す
+    src = json.dumps({"skills": ["~/mine", "+skills/orca-cli", "!orca-cli"]})
+    kept = json.loads(run_script(script, src))["skills"]
+    assert kept == ["~/mine", "+skills/orca-cli", "!orca-cli", "!computer-use", "!orchestration"]
+    # 旧ハーネスの印は取り除かれ、新しい 3 項目は残る
+    mixed = json.dumps({"skills": ["~/.claude/skills", "-~/.agents/skills/orca-cli", "!orca-cli", "-~/.claude/skills/herdr"]})
+    assert json.loads(run_script(script, mixed))["skills"] == ["!orca-cli", "!computer-use", "!orchestration"]
+    # 配列でない skills は触らない
+    assert json.loads(run_script(script, '{"skills": "x"}'))["skills"] == "x"
 
 
 def test_stock_settings_keeps_user_extension_and_is_idempotent(tmp_path):
@@ -227,6 +245,7 @@ def test_stock_settings_from_empty_input(tmp_path):
     out.pop("compaction")  # modelOverrides は test_pi_compaction_config.py で検査
     assert out == {
         "defaultTools": ["+grep", "+find", "+ls"],
+        "skills": ["!computer-use", "!orca-cli", "!orchestration"],
         "packages": stock_packages(tmp_path),
         "shellPath": str(tmp_path / ".local" / "bin" / "pib-shell"),  # Linux だけ (下の試験)
     }
@@ -471,13 +490,25 @@ def test_stock_agents_md_adds_the_tailnet_policy_only_on_personal_machines(tmp_p
     personal = render_file("dot_pi/agent/AGENTS.md.tmpl", tmp_path, username="applejxd")
     work = render_file("dot_pi/agent/AGENTS.md.tmpl", tmp_path, username="tester")
     assert "tailscale serve --bg" in personal and "tailscale funnel" in personal
-    assert "tailscale.exe" in personal and "--https=8443" in personal  # WSL では Windows 側を呼び、既存の https ポートを上書きしない
+    assert "tailscale-serve" in personal  # 手順はスキルへ案内する
     assert "事前の確認・警告は要らない" in personal
     assert "# 自宅の機だけの指示" in personal and "# 自宅の機だけの指示" not in work
     assert "tailscale" not in work.lower()
     assert personal.startswith(work.rstrip("\n"))  # 共通の指示は同じで、家の機は末尾に節を足すだけ
     for word in HARNESS_WORDS:
         assert word not in personal, word
+
+
+def test_tailscale_serve_skill_carries_the_procedure_and_is_deployed_only_to_personal_machines(tmp_path):
+    skill = (HOME_SRC / "dot_agents" / "skills" / "tailscale-serve" / "SKILL.md").read_text(encoding="utf-8")
+    # WSL では Windows 側を呼び、既存の https ポートを上書きしない
+    for word in ("tailscale.exe", "--https=8443", "tailscale serve reset", "funnel"):
+        assert word in skill, word
+    target = ".agents/skills/tailscale-serve/"
+    work = lines(render_file(".chezmoiignore.tmpl", tmp_path, username="tester"))
+    personal = lines(render_file(".chezmoiignore.tmpl", tmp_path, username="applejxd"))
+    assert target in work and target + "**" in work
+    assert target not in personal and target + "**" not in personal
 
 
 def test_stock_agents_md_asks_for_absolute_cd_until_upstream_fix(tmp_path):
