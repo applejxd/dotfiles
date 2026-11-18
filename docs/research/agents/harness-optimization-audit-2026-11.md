@@ -132,12 +132,13 @@
 - 固定部分: 最新セッションの先頭の system メッセージ（`~/.pi/agent/sessions/**/*.jsonl` の `role: system` の `sections` と `toolsAdded`）の文字数を、節・ツール宣言ごとに数える。
 - 使われ方: セッションの assistant メッセージの toolCall（ツール名・`read` の `path` が `*/skills/<名前>/SKILL.md`）と、`custom` エントリの `customType` を数える。
 - 確認の件数: 審査ログ `~/.pi/agent/extensions/pi-permission-system/logs/pi-permission-system-permission-review.jsonl` の `permission_request.*` を、surface・要求元の agent・決定の主体（`decidedBy.kind`）で数える（`friction-review` の `--approvals` が同じ数え方の入口）。
+- スキルの除外・手動起動の確認: 一時の `HOME`（`.agents/skills/` にテスト用のスキル、`.pi/agent/settings.json` に `skills`）で、pi の `dist/core/resource-loader.js` の `DefaultResourceLoader`（`reload()` → `getSkills()`）と `dist/core/skills.js` の `formatSkillsForPrompt()` を、node で実行する。使い捨てのスクリプト（コミットしない）。
 - どれも件数と文字数だけを出し、本文は読まない。
 
 ## 未確認・限界
 
 - `/plan`・`/btw`・`/rewind`・`/sandbox` の実際の使用は、ログから完全には分からない。窓は 8 日で、専門スキルの月次の使用は不明。
-- 設定 `skills` の `!名前` が、自動検出した `~/.agents/skills/` のスキルに効くことは、pi 1.5.0 のソース（`package-manager.js`）の読解で確かめた。実機の起動では未確認。
+- 設定 `skills` の `!名前`: `!名前` が自動検出した `~/.agents/skills/` のスキルに効くことは、pi 1.5.0 のソース（`package-manager.js`）の読解に加えて、`DefaultResourceLoader` を一時の `HOME` で実行して確かめた（2026-11-18。`skills: ["!computer-use", …]` で 3 本が読み込まれず、他は残る。`+skills/<名前>` は並びによらず復帰させ、`+<名前>`（`skills/` なし）は復帰させない。手動起動のスキルは読み込まれるが、一覧からだけ外れる）。配備した実機の起動は未確認。
 - 判定エンジンの実ゲートの挙動は、reviewer も親も未確認（設定・試験・仕様・エンジンのソースの読解まで）。
 - T3 Code が足す節（4,007 字）と `mcp__t3-code__*` のツールは、このリポジトリの管理外。ホストの節は「`delegate_task` を使う」と案内するため、常設の指示の「`subagent` で委譲する」と競合する。ホスト側の設定の確認が要る。
 - 費用は、pi が計算する名目の値。Copilot 経由の実費は別の可能性がある（推測）。
