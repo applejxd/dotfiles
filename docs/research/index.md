@@ -67,6 +67,7 @@
 | [pi の sandbox 拡張と GPU: 実機の比較（bubblewrap 系・Docker 系）](agents/pi-gpu-sandbox-2026-11.md) | 2026-11-11〜12。`pi-safe`・`@yuru7/pi-sandbox`・`pi-permission-modes`・`pi-less-yolo` のフラグを WSL2 で実測。どれも設定だけでは GPU が通らず、`--dev-bind /dev/dxg` を `--dev /dev` の後に足せば通る。`pi-safe` は docker 経由で HOME に書ける、`pi-less-yolo` は rootless で cwd に書けない、など |
 | [Fence を pi のシェルの先に置く実測（WSL2）と、起動の遅さの原因](agents/fence-latency-2026-11.md) | 2026-11-12。bash・`bg_run`・`!` 相当・子の bash が囲いを通り、GPU・秘密・`/tmp`・通信・キャッシュは設定で通る。遅さ（1 コマンド約 1.0 秒）の主因は、WSL の `/mnt` 配下の `PATH` 要素と cwd の走査で、ラッパーで `PATH` から `/mnt` を外すと約 0.25 秒（実測）。公式は全体を 1 回包む使い方を勧め、常駐の仕組みは無い |
 | [ask の自動判定（LLM を判定役にする案）の評価（2026-11）](agents/ask-auto-judge-evaluation-2026-11.md) | 2026-11-15。審査ログ 80 件の内訳（自動 allow の効く範囲は約 12%）、拡張の `authorizerChain`・第三者の判定役・他の主要エージェント・研究の調査、`pi-permission-classifier` のソース grep。結論は「今は導入しない」で、再検討の条件つき。追記: 土台（`pi-permission-system`）の是非を再評価して維持、`ai-guard` は監査で BLOCK のため見送り、押下式の説明 `pi-permission-explain` を試験導入。 |
+| [pi ハーネスの最適化の監査（2026-11）](agents/harness-optimization-audit-2026-11.md) | 2026-11-18。固定部分は約 3 万トークンで毎ターンの入力の約 9.5%（2 割減らしても全体で約 2%）、目的は費用でなく保守と正確さ。使われ方・構成の規模・外部の根拠・上流の最新・5 つの線の比較と利用者の決定（手動起動 9 本・Orca 3 本の除外・経緯の分離は実施、診断 allow・YOLO 連動・自作 4 件・package 更新は見送り／維持）・未確認 |
 | [stock の pi の package の評価（2026-11）](agents/pi-stock-packages-evaluation-2026-11.md) | 2026-11-08〜09。入れる 7 つ（permission-system・cc-safety-net・subagents・mcp-adapter・web-access・rpiv-todo・rpiv-ask-user-question。**mcp-adapter は 2026-11-17 に外した**）の評価・決定と、追加の 4 つ（pi-background・pi-plan-mode・pi-goal・pi-rewind）の評価・決定、検索の決定の経緯、見つけた他の候補（未評価）、btw（`@narumitw/pi-btw@0.63.5`。ツール登録なし・実依存 1 つを grep で確認、実機の `/btw` の確認が導入の条件）の評価・決定、tok/s 表示（`pi-show-token-rate@0.3.0`。ファイル・ネットワーク・子プロセスが 0 件なことを grep で確認、実機での数値の確認が導入の条件）の評価・決定。 |
 | [会社 PC のページ取得（URL 指定）の評価](agents/web-fetch-evaluation-2026-11.md) | 2026-11-17。プロキシ必須の環境で本文を取る手段の比較。自作の `fetch_page` はプロキシ非対応。既製の `mcp-server-fetch` 2026.11.11 を採用（版と依存の日付を固定・`--no-readability-js`）。偽のプロキシで、手元で解決できない名前の取得を実測。会社 PC の実機・HTTPS の CONNECT は未確認。adapter の名前・権限の問題は、同日に adapter を外して解消 |
 | [過去セッションの引き継ぎ（session-recall）の評価](agents/session-recall-evaluation-2026-11.md) | 2026-11-18。pi の既存の拡張 6 件は、今の cwd のリポジトリへの固定を強制できず不採用。権限の規則に cwd の変数が無いため、cwd 固定の skill + CLI を作った。実ログ 8 件で生 13.7MB → 抽出後 2.1% |
@@ -76,6 +77,7 @@
 | [子エージェント（guarded_task。撤去済み）の経緯・日付・試験結果](agents/pi-subagents-spec-history.md) | 2026-10-09〜22。`pi-guard.md` から移設 |
 | [web 検索スキル仕様の実測・経緯](agents/web-search-spec-notes.md) | 2026-10-11〜26 の実測と CHG-0032 の経緯（`web-search.md` から移設） |
 | [子エージェントの権限（agent ファイルの `permission:`）の実測](agents/subagent-permission-frontmatter-2026-11.md) | 2026-11-10。`external_directory: deny`（単一の値）は、作業ツリーの外の `read`・bash のパス引数を確認なしで即座に拒否した（審査ログでも確認）。入れ子の書式は agent 定義が無効になる。許可リストより `deny` が強い。user 配下の写しでの実測は未確認 |
+| [権限の方針の経緯・実測・決め直しの根拠（2026-11）](agents/permission-policy-rationale-2026-11.md) | 2026-11-10〜18。`agent-config-generation.md` から 2026-11-18 に分離（逐語）。許可リストの経緯・`..` を含む綴り・systemd の決め直し・`nohup` と `git config` の根拠・確認で待たせない方針の実測・`pi-rewind` の警告の調査・Tailscale の指示の経緯 |
 
 ### テスト
 

@@ -47,7 +47,7 @@ Zed などは完全に再起動します。既に落ちる PC では、`powershe
   `cd ~/<プロジェクト>/docs && ls ../README.md` は、`<プロジェクトの 1 つ上>/README.md` について確認が出る
 - **判定の見落とし**: 相対パスが `path` 規則の候補から落ちる。絶対パスで書いた deny（`~/.pi/agent/auth.json` など）は、
   `cd ~/.pi/agent && cat auth.json` では適用されない可能性がある。`cd` の行き先自体は外部ディレクトリとして確認が出るが、
-  YOLO が入っていると自動承認になる。pib の囲い（`runner.toml` の `hide`）が同じ秘密を隠す設計だが、囲いが効いているかは未確認。
+  YOLO が入っていると自動承認になる。pib の囲い（`runner.toml` の `hide`）が同じ秘密を隠す設計だが、囲いが効いているかは未確認（囲いの内側の実測は [pi-sandbox-runner の確認](sandbox/pi-sandbox-runner.md#導入と確認)にあるが、`cd` の経路そのものを検証したものではない）。
   名前だけの規則（`*.env` など）は、候補に残った表記（`.env`・`./config.env`）には適用されるが、
   素の名前（`config.env`）は候補から落ちる
 

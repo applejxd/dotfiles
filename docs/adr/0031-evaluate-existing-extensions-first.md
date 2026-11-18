@@ -77,9 +77,10 @@ ADR-0030 の凍結（フルガード・`pis`・kcage・PR ビューアなど）�
 
 | 自作 | 理由 | 維持費の見込み | 撤去の条件 |
 | --- | --- | --- | --- |
-| 家の機の検索 MCP（`home/dot_config/agents/websearch/`） | 各サービスの無料枠のフォールバックと、クエリの秘匿チェック・SSRF 防止を満たす既製の MCP が、調べた範囲（npm の検索。網羅ではない）で見つからなかった。利用者が自作を選択した（2026-11-08） | 既存のスキルの CLI の核をそのまま使う。新規は MCP の薄い層（約 300 行）と試験 | 同じ要件を満たす既製の MCP・拡張が現れたら置き換える |
-| pi のコマンド実行を包む囲い（`pib`・`pib-shell`・`home/dot_local/bin/executable_pi-sandbox-runner`、[ADR-0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md)。[ADR-0035](0035-pi-sandbox-gpu-runner.md) の拡張を使う方式を置き換えた） | 拡張は bash だけを包み、`bg_run`・`!` が抜ける。既存の囲い（Fence）は、コマンドごとに包む使い方が公式の想定外で、WSL で遅く、保守が緩い。利用者が責務の分担と方式（素の bwrap）を承認した（2026-11-12） | 引数を組み立てる runner（約 520 行。コメントと docstring を含む）・`pib`（約 100 行）・`pib-shell`（約 15 行）・設定・試験・自己確認。追従が要る上流は、pi の `shellPath` の仕様 1 点 | pi 本体が同等の sandbox を標準で持ったとき。`shellPath` の仕様変更が 2 回続けて保守の負担になったとき |
-| pi の囲いと YOLO を実行中に切り替える `/sandbox`（`home/dot_pi/agent/local-packages/pi-sandbox-toggle`、[ADR-0040](0040-pi-sandbox-session-toggle.md)） | 公開の package は bash ツールだけを包む型で、`bg_run`・`!` が抜け、GPU も通せない（ADR-0036 が退けた理由）。標準機能に、囲いの切り替えは無い。利用者が方式・範囲・YOLO の連動を承認した（2026-11-15） | 拡張 約 540 行・試験 約 700 行。追従が要る上流は、pi が起動のたびに環境変数を読む挙動・`pi-permission-system` の設定ファイル（`yoloMode`）・毎ターンの読み直し・プロジェクトの設定を重ねる順序と読み方・公開の判定 API（`checkPermission`）と `permissions:ready`・runner の `MISE_STATE_DIR` | pi 本体が、実行中に切り替えられる sandbox を標準で持ったとき。上流の 4 点のどれかが変わって、2 回続けて保守の負担になったとき |
+| 家の機の検索 MCP（`home/dot_config/agents/websearch/`） | 各サービスの無料枠のフォールバックと、クエリの秘匿チェック・SSRF 防止を満たす既製の MCP が、調べた範囲（npm の検索。網羅ではない）で見つからなかった。利用者が自作を選択した（2026-11-08） | 既存のスキルの CLI の核をそのまま使う。実測（2026-11-18）: 核 1,366 行・MCP の層 289 行（計 1,655 行）・試験 914 行 | 同じ要件を満たす既製の MCP・拡張が現れたら置き換える |
+| pi のコマンド実行を包む囲い（`pib`・`pib-shell`・`home/dot_local/bin/executable_pi-sandbox-runner`、[ADR-0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md)。[ADR-0035](0035-pi-sandbox-gpu-runner.md) の拡張を使う方式を置き換えた） | 拡張は bash だけを包み、`bg_run`・`!` が抜ける。既存の囲い（Fence）は、コマンドごとに包む使い方が公式の想定外で、WSL で遅く、保守が緩い。利用者が責務の分担と方式（素の bwrap）を承認した（2026-11-12） | 実測（2026-11-18）: 一式 1,043 行（runner 668 行・`pib` 351 行・`pib-shell` 24 行。コメントと docstring を含む）・試験 2,603 行・設定・自己確認。追従が要る上流は、pi の `shellPath` の仕様 1 点 | pi 本体が同等の sandbox を標準で持ったとき。`shellPath` の仕様変更が 2 回続けて保守の負担になったとき |
+| pi の囲いと YOLO を実行中に切り替える `/sandbox`（`home/dot_pi/agent/local-packages/pi-sandbox-toggle`、[ADR-0040](0040-pi-sandbox-session-toggle.md)） | 公開の package は bash ツールだけを包む型で、`bg_run`・`!` が抜け、GPU も通せない（ADR-0036 が退けた理由）。標準機能に、囲いの切り替えは無い。利用者が方式・範囲・YOLO の連動を承認した（2026-11-15） | 実測（2026-11-18）: 拡張 545 行・試験 711 行。追従が要る上流は、pi が起動のたびに環境変数を読む挙動・`pi-permission-system` の設定ファイル（`yoloMode`）・毎ターンの読み直し・プロジェクトの設定を重ねる順序と読み方・公開の判定 API（`checkPermission`）と `permissions:ready`・runner の `MISE_STATE_DIR` | pi 本体が、実行中に切り替えられる sandbox を標準で持ったとき。上流の 4 点のどれかが変わって、2 回続けて保守の負担になったとき |
+| `pi-permission-explain` のフォーク（`home/dot_pi/agent/local-packages/pi-permission-explain`。上流 rkshrksh 0.1.1 の改変。2026-11-18 に一覧へ追記。それまで載っていなかった） | 確認画面の説明キー（`Ctrl+E`）を押したときに、未回答のカウントダウンも止めたい（利用者の要望）。npm の版は、このキーを横取りして時計が止まらない。後付けのパッチ（A）は、package の取得と apply の順序待ち・再取得での消失・版を上げるときのハッシュ更新を管理する必要があり、取り込み（B）を選んだ。決定は 2026-11-15（[評価の記録](../research/agents/ask-auto-judge-evaluation-2026-11.md)の「ローカル版への切り替え」） | 実測（2026-11-18）: 443 行（上流の改変は 3 つ）。上流の更新時に差分を再確認する。追従が要る上流は、`pi-permission-explain` 本体 | 上流が同じ修正を取り込んだとき（npm 版へ戻し、このディレクトリと試験を消す）。上流への依頼は利用者が出す |
 
 ## 結果
 
@@ -99,6 +100,7 @@ ADR-0030 の凍結（フルガード・`pis`・kcage・PR ビューアなど）�
 
 - 導入した package で、実際の事故または事故の寸前が起きたとき。
 - 例外の自作が 3 件を超えたとき（置き換えられるものがないか再評価する）。
+  - **2026-11-18: この条件を満たした**（自作は 4 件。permission-explain のフォークが一覧から漏れていたので足した）。再評価の結果、利用者の判断で 4 件とも維持する。置き換え候補は見つからなかった（permission-explain は上流が 0.1.1 のままで、改変の取り込みがない）。決定は変えないので、新しい ADR は起こさない。次の見直しの条件: 自作がさらに増えたとき・上流が同等の機能を出したとき。測定と経緯は [監査の記録](../research/agents/harness-optimization-audit-2026-11.md)。
 
 ## 参考
 

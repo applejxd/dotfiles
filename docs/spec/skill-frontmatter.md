@@ -27,7 +27,7 @@ Claude Code・Copilot CLI・OpenCode は撤去した（[ADR-0037](../adr/0037-re
 - ファイルのツールは、本文が実際に使うものだけ。一部のファイルだけなら `Edit(AGENTS.md)` の形（新規作成も、この形の編集の許可で足りる）
 - 本文のコマンドが `$SKILL_DIR` などの変数を使うと、許可の型に一致しない（照合は、書かれた文字列に対して行われる）。許可したいときは、`~/.agents/skills/<名前>/...` の形で書く
 - `Task` は 2.1.63 で `Agent` に改名され、古い名前は別名として動く。古い版との互換のため、`Task` のまま
-- 付けないもの: `github-operations`（書き込みは確認が本質）・`oss-research`・`learn`（Bash なし）・各移行スキル。検索のスクリプトなど、足したくなったら、パターンの一致試験と合わせて足す
+- 付けないもの: `github-operations`（書き込みは確認が本質）・`oss-research`・`agents-md`・各移行スキル。検索のスクリプトなど、足したくなったら、パターンの一致試験と合わせて足す
 - 副作用の確認: 本文が書くスクリプトの呼び出しが、許可の型に一致するかは機械的に試験できる（2026-10-28 に実施）。Claude Code は撤去したので、実機での確認はしない。許可から外れた操作は、確認が 1 回増えるだけで、動作は変わらない
 
 ## `context: fork` の基準
@@ -48,7 +48,7 @@ Claude Code・Copilot CLI・OpenCode は撤去した（[ADR-0037](../adr/0037-re
 | スキル | `context: fork` | 理由 | `allowed-tools` |
 | --- | --- | --- | --- |
 | `fix` | あり（`general-purpose`・`background: false`） | 5 条件を満たす | 使う linter だけ |
-| `away-shift`・`commit`・`learn`・`onboarding`・`review-loop`・`skill-creator`・`github-operations`・`ipynb-to-marimo-pages` | なし（本文が付けないと明記） | 質問・承認・会話履歴・子の使用のどれかが本質 | 下の表 |
+| `away-shift`・`commit`・`agents-md`・`review-loop`・`skill-creator`・`github-operations`・`ipynb-to-marimo-pages` | なし（本文が付けないと明記） | 質問・承認・会話履歴・子の使用のどれかが本質 | 下の表 |
 | `arxiv-paper-ja`・`powerpoint-studio`・`conference-video`・`readme-writer`・`imozuru`・`friction-review`・`pi-extension-dev`・`sdd-docs`・`feature-orchestration` | なし | 子を使う・質問や承認が要る・会話の文脈が材料 | 下の表 |
 | `cuda-version-migration`・`uv-migration` | なし | 長時間で、判断が人の側。調査の段だけを `plan` 役へ任せる（CHG-0044） | なし |
 | `oss-research` | なし | 読み取り中心で自己完結だが、`gh`・`curl` の実行と `rm` の承認が、子では通らない | なし |
@@ -67,8 +67,7 @@ Claude Code・Copilot CLI・OpenCode は撤去した（[ADR-0037](../adr/0037-re
 | `ipynb-to-marimo-pages` | 自分のスクリプト・`uv run marimo check`・`convert`・`ruff`・`pre-commit`（`export html` は含めない） |
 | `fix` | `ruff`・`pre-commit`・`mise run`・`eslint`・`prettier`・`gofmt`・`go vet`・`golangci-lint`・`cargo fmt`・`cargo clippy`・`clang-format`・`git ls-files`（`Write` は外した） |
 | `commit` | 読み取りの git・`git add`・`git restore --staged`・`git commit`（`git commit` は ask が優先） |
-| `onboarding` | `Read`・`Grep`・`Glob`・`Edit(AGENTS.md)` |
-| `learn` | `Read`・`Edit`・`Write`・`Grep`・`Glob`（Bash なし） |
+| `agents-md` | `onboarding` と `learn` を統合したスキル（2026-11-18）。統合前はどちらも Bash を使わない宣言だった。現在の宣言は `SKILL.md` が正本 |
 | `review-loop`・`powerpoint-studio`・`conference-video` | 変更なし。テストの実行（対象リポジトリ依存）や `$SKILL_DIR` の変数を使うコマンドが、パターンに落とせないため。`powerpoint-studio` の Web 系の許可は、本文が求める箇所を特定できていない（見直しの候補） |
 
 ## 委譲の型（親をオーケストレーターに寄せる設計。案）
@@ -82,11 +81,21 @@ Claude Code・Copilot CLI・OpenCode は撤去した（[ADR-0037](../adr/0037-re
 | --- | --- | --- | --- |
 | A 丸ごと委譲 | 依頼文を渡して結果を受ける | 全部 | `fix`・`env-check`・`friction-review` の分類の段 |
 | B 合意だけ親 | 費用・範囲などの合意を取る | 実行（合意は引数で受ける） | `ipynb-to-marimo-pages`・`uv-migration`・`cuda-version-migration` の実行の段 |
-| C 文脈を渡して書かせる | 会話の決定事項を要約して依頼文に入れる | 文書・差分を作る | `sdd-docs`・`learn`・`commit` |
-| D 対話そのもの | 質問・承認 | 重い読み物・草稿・試験 | `onboarding`・`skill-creator`・`pi-extension-dev`・`github-operations`・`feature-orchestration`（ただし、草稿・実装・試験・読み戻しは子の工程。承認に結び付く書き込みは、親側の限定操作） |
+| C 文脈を渡して書かせる | 会話の決定事項を要約して依頼文に入れる | 文書・差分を作る | `sdd-docs`・`agents-md`（旧 `learn`）・`commit` |
+| D 対話そのもの | 質問・承認 | 重い読み物・草稿・試験 | `agents-md`（旧 `onboarding`）・`skill-creator`・`pi-extension-dev`・`github-operations`・`feature-orchestration`（ただし、草稿・実装・試験・読み戻しは子の工程。承認に結び付く書き込みは、親側の限定操作） |
 | E 自分が指揮役 | 子の管理（再開・停止・利用者の復帰を扱う長寿命の制御を含む） | 翻訳・レビュー・検索・取得など | `arxiv-paper-ja`・`review-loop`・`away-shift`・`powerpoint-studio`・`imozuru` |
 
 例（工程への展開）: `skill-creator` は D（聞き取り）→ C（草稿）→ E（比較試験の管理）→ C（修正）。`github-operations` は D（対象・意図の確認）→ 子（現状調査・本文の準備）→ 親側の承認つき操作 → 子（読み戻し）。`oss-research` は A（調べて報告）だが、`gh`・`curl` の実行と取得物の削除の承認が要るので、承認の経路（CHG-0045 の段 4）が前提。
+
+## 手動起動（`disable-model-invocation`）
+
+利用者が呼んだときだけ使うスキルは、`SKILL.md` の frontmatter に `disable-model-invocation: true` を書いて、スキル一覧（毎要求の先頭に載る固定部分）から外す（2026-11-18。利用者の決定。測定と比較は [監査の記録](../research/agents/harness-optimization-audit-2026-11.md)）。
+
+- **手動起動にしたスキル（9 本）**: `conference-video`・`powerpoint-studio`・`ipynb-to-marimo-pages`・`arxiv-paper-ja`・`cuda-version-migration`・`uv-migration`・`readme-writer`・`fix`・`agents-md`（旧 `learn`・`onboarding` を統合）。
+- **理由**: 一覧の固定部分を減らす。自動の選択の便益が小さい。戻しは 1 行（その `disable-model-invocation: true` を消す）。
+- **呼び方**: `/skill:<名前>`。
+- **skill-lab からの複製**（`conference-video`・`readme-writer`）は、この 1 行をこのリポジトリで足している。skill-lab 側にも同じ変更を入れて取り込み直すまで、`sync_skill_lab.py` の置き換えで消える（`--check` の差分に出る）。
+- **Orca が入れたスキル 3 本**（`computer-use`・`orca-cli`・`orchestration`）は、設定 `skills` の `!名前` で除外する（`modify_pi_stock_settings.py.tmpl` が毎回そろえる。戻すときは `+skills/<名前>`）。`!名前` が自動検出した `~/.agents/skills/` のスキルに効くことは、pi 1.5.0 のソース（`package-manager.js`）の読解で確かめた。実機の起動では未確認。
 
 ## pi 向けの書き直し（2026-11-10〜11）
 
@@ -100,6 +109,7 @@ Claude Code・Copilot CLI・OpenCode は撤去した（[ADR-0037](../adr/0037-re
 - **`feature-orchestration`**: feature の worktree＋`pi-subagents` の運用。子への依頼の契約は `references/worker-contract.md`。
 - **`github-operations`**: 本文・変更項目を会話に示してから、そのまま `gh` を実行する。承認は権限の確認（変更系の `gh` は ask）に任せ、会話では聞き直さない（承認が 2 回になるため。確認の画面には `--body-file` の本文が出ないので、本文は先に示す）。変更系が確認なしで通る環境と分かっているときだけ、会話で承認を得る。破壊的操作は、利用者が会話で明示したときだけ。
 - **`agent-workflow`**: 自作基盤前提のスキルで、撤去した。
+- **`tailscale-serve`**（2026-11-18）: 開発中の Web サービスを tailnet へ公開する手順のスキル。家の機だけに配る（会社 PC は `home/.chezmoiignore.tmpl` で除外）。常設の指示（家の機の節）は核の 2 行だけで、手順はこのスキルに置く。
 - **`uv-migration`**: スクリプトは `python3`（`uv run` は確認が出ることがある）。
 
 ## `review-loop` の step back
