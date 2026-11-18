@@ -71,7 +71,7 @@
 - Anthropic "Making Claude Code safer with sandboxing"（2025-10-20。再確認）: 「sandboxing safely reduces permission prompts by 84%」。承認の連打は「approval fatigue」。
   効く囲いは、ファイルシステムとネットワークの**両方**の隔離が要る（ネットワークが開いたままだと、読んだ秘密を送り出せる）。pi の `pib` は通信を既定で開けている（ADR-0036）。
 - Anthropic の auto mode の記事（2026-03-25）: 確認の 93% が承認される。広いシェルの許可規則を外す（子の調査。未再確認）。
-- pi 公式 `docs/security.md`（pi 1.5.0）: 承認の画面・transcript の監視・project trust・差分の確認は安全の境界ではなく、境界は OS・コンテナ・VM・sandbox で作る。
+- pi 公式の docs の `security.md`（pi 1.5.0）: 承認の画面・transcript の監視・project trust・差分の確認は安全の境界ではなく、境界は OS・コンテナ・VM・sandbox で作る。
 
 ## 上流の最新（子の調査 R2。2026-11-17〜18。npm の 3 版は親が再確認）
 
