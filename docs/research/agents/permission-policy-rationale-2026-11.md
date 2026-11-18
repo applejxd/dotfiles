@@ -9,11 +9,11 @@
 
 - **ディレクトリを根にした再帰への備え（2026-11-11）**: ゲートが見るのはパスのトークンだけで、`grep -r`・`find` の再帰は中を見ない（根のトークンが読み取りと投影されるだけ。判定エンジンで確認）。`~/.ssh/*` のように `/*` だけの規則は、ディレクトリ自体（`ls ~/.ssh`・`grep -r x ~/.ssh`）に一致せず、`path` は allow のまま外のフォルダの確認（ask）へ落ちる。そのため、**秘密のディレクトリの deny は、ディレクトリ自体の規則も併せて置く**（`~/.ssh`・`~/.aws`・`~/.gnupg`・`~/.config/gh`・`~/.pi/agent/ayu`）。読み取りの許可リストのうち、pi の公開ディレクトリ（`npm`・`install`・`agents`・`git`・`prompts`・`skills`・`themes`）には、ディレクトリ自体の allow を**追加しない**（`/*` の規則だけを置く。既存の `~/.agents/skills` と `/tmp` の根の allow は、別の判断（2026-11-10）で残っている）。根の allow は、根の直下に置かれた `.env`・鍵のように `path` の deny に当たる名前のファイルへ、根を起点にした再帰が確認なしで届くため（2026-11-11 の監査の指摘。実在は未確認）。`ls ~/.pi/agent/agents` のようなディレクトリ自体への確認は残るが、減る確認は実績で数件なので受け入れる（判定表に、根が ask のままである例を置いている）。根拠の再集計（YOLO を切った後の確認 92 件）: 外のフォルダ 73 件（79%）・bash 19 件。許可リストを足した後も、ディレクトリ自体の確認（`extensions` 3 件・`agents` 2 件）が出ていた。**既知の限界（受容）**: `extensions/<名前>` を根にした再帰は `extensions/*` の allow に当たり、`logs` の ask をすり抜ける。許可したディレクトリの下に `.env`・鍵が置かれても、根を起点にした再帰では `path` の deny に当たらない。pi の公開ディレクトリについて許可するのは、秘密を置かない前提の中身（`/*`）だけで、配下に秘密が無いことの確認は取れていない（運用の条件）。
 
-## Orca の添付ファイルの読み取りの許可
+## Orca の添付ファイル
 
 - **Orca の添付ファイル（`~/.orca/agent-session-attachments/*`）は、読み取りだけ allow**（2026-11-16。利用者の指示。`external_directory_read` に足した。貼り付け画像と同じ層）。利用者が Orca から添付したファイル（zip など）の置き場で、`unzip -d <dir> x.zip` のような**向きを証明できないコマンド**（`unproven`。読み取りと書き込みの両方を調べる）が確認になっていた。**書き込みは allow にしない**（`external_directory_write` は ask のまま）。書き込みも allow にする案は、添付の配下の symlink（zip の展開で入りうる）が、実体の既定の ask を上書きして、リンク先（例: `~/.orca/config.json`）への書き込みまで通すので、`reviewer` の監査（MAJOR）で採らなかった。**確認を避ける手順**: `cat <添付のパス> > .tmp/<話題>/x.zip` で作業ツリーへ写してから展開する（`cat` は既知の読み取りで、リダイレクト先は作業ツリーの中。判定表の `access`。`unzip -d .tmp/notes .tmp/x.zip` は外部パスが 0 件）。添付のパスを直接 `unzip` に渡すと、従来どおり確認になる（`unproven`）。`cp` は送り元が書き込み側として扱われ（2026-11-16 に、`cp` の読み取り元が拒否された実測）、確認が減らない。コマンドごとの宣言（`commandEffects`）で `unzip` を `read` と宣言しない理由は、**推論（実機未確認）**: 展開先は引数に現れない暗黙の作業ディレクトリで、`cd` で許可済みの外のディレクトリへ移った後の展開が、確認なしで通りうる。**ディレクトリ自体と、`~/.orca/` の他のパス、似た名前（`agent-session-attachments-other`）は ask のまま**（判定表）。**限界（受容）**: 添付の配下の symlink 経由で、リンク先の**読み取り**は、実体の既定の ask を上書きして通る（`/var/log/syslog` の別名の例と同じ性質。判定表の `alias`）。`path` の deny（`~/.ssh` など）は実体にも効く（判定表の `alias`）。`..` を含む形は正規化されてから評価される（判定表の `access`）。実ゲートは判定表の範囲外で、表で確かめたのは規則の評価と外部パスの投影まで。
 
-## external_directory_read の並び順と .. を含む綴り
+## 並び順と .. を含む綴り
 
 - **`external_directory_read` の並び順と、`..` を含む綴り（2026-11-18）**: 同じ面では**最後に一致した規則が勝ち**、値は「書いたままの綴り」「`..` を含む綴り」「symlink の実体」のどれかに一致すればよい（エンジンの `getPathPolicyValues`・`evaluateAnyValue`。判定表の `alias` が同じ評価で確かめる）。そのため、方針は **allow を前、`..` を含む綴りの ask（`*/../*`・`*/..`）を次、deny・ask を最後**に並べる（試験で固定）。これで、symlink が `~/.pi/agent` などの deny・ask の場所を指しても、`<許可した場所>/../../.pi/agent/…` と書いても、deny・ask のまま。
   - **既存の穴を塞いだ**: これまで、`/tmp/../etc/shadow` や `~/.agents/skills/../../Documents/x` のように `..` を含む綴りが、`/tmp/*` などの allow に一致して、確認なしで通っていた（読み取りも、裸の `external_directory` を通る書き込みも）。`..` を含む綴りは、解決後の絶対パスと一緒に候補へ入り、allow に一致した側が勝つため。裸の `external_directory`（読み書き両方）にも `*/../*`・`*/..` の ask を足した。
@@ -21,7 +21,7 @@
   - **対象外の綴り**: 先頭だけの `../x` は `*/../*`・`*/..` に一致しない。ただし原形 `../x` は方針の allow（すべて絶対パス）に一致せず、許可されるのは解決後の絶対パスが許可の範囲にある場合だけなので、脱出の経路にはならない。組み込みのファイルツールは、絶対パスの `..` を正規化して渡し、原形を候補に残さない（判定表の `alias` の結果を、全ツール共通の追加確認と読まない）。
   - **限界**: リンク先が「既定の ask」の場所（deny でない）のとき、許可した場所の中の symlink は確認なしで通る（この方針の allow 全般に共通）。
 
-## システム診断の読み取りの許可リスト
+## システム診断の許可リスト
 
 - **システム診断の読み取りの許可リスト（2026-11-11。Linux / WSL の一覧。OS の条件は付けない）**: `/var/log` のような診断で読むパスを、先に許可しておく。許可の根拠は、承認の履歴ではなく、パスそのものの危険度。**ディレクトリではなく名前で許可する**（ゲートはトークンだけを見るので、`/var/log/*` のような広い許可は `btmp` などへ再帰で届く）。許可: ログ（`/var/log/` の `syslog`・`kern.log`・`dmesg`・`boot.log`・`dpkg.log` と、その回転 `*.<n>`）、`/proc`（`cpuinfo`・`meminfo`・`loadavg`・`uptime`・`version`・`mounts`・`net/*`、`sys/` の `vm/*`・`fs/*`・`kernel/` の `hostname`・`osrelease`・`ostype`・`version`・`pid_max`・`threads-max`、プロセスごとの `status`・`stat`・`limits`・`io`・`cgroup`）、`/sys`（**葉の名前だけ**: `class/net/*/` の `address`・`operstate`・`mtu`・`speed`・`carrier`・`statistics/*`、`block/*/` の `size`・`stat`・`queue/*`、`class/block/*/size`、`class/thermal/*/` の `temp`・`type`、`class/hwmon/*/` の `name`・`temp*_input`・`fan*_input`、`class/power_supply/*/` の `capacity`・`status`・`online`・`type`、`devices/system/cpu` の `online`・`offline`・`possible`・`present`・`cpu*/topology/*`・`cpu*/cpufreq/*`、`devices/system/node` の `online`・`node*/meminfo`、`fs/cgroup/*`、`kernel/mm/*`。sysfs は symlink（`device`・`subsystem`・`driver` など）で別の枝へ辿れ、判定は「書いたままの別名」と「解決した実体」の**どちらかに一致した最後の規則**で決まる（拡張の `evaluateAnyValue`。source で確認）。木全体の allow は、別名経由で `iscsi_session/…/password` に届くので置かない）、`/etc`（`os-release`・`lsb-release`・`hostname`・`hosts`・`resolv.conf`・`wsl.conf`・`passwd`・`group`・`timezone`）、導入済みのものの参照（`/usr/share/doc`・`/usr/share/man`・`/usr/include`・`/var/lib/dpkg/status`）、WSL（`/mnt/wslg/*.log`）。**許可しない（ask のまま）**: `btmp`・`wtmp`・`lastlog`・`auth.log`・`secure`・`cloud-init*`（誤入力のパスワードや生成された鍵が残りうる）、`/proc/*/environ`・`mem`・`kcore`、`/etc/shadow`・`gshadow`・`sudoers`・`ssh/ssh_host_*`・`apt/auth.conf*`・`NetworkManager/system-connections/*`・`wireguard/*`・`openvpn/*`、`/var/lib/docker`・`/run/user`、`/sys/kernel/debug`、`/sys/class/iscsi_session`（CHAP の `password`・`password_in`。`/sys/class/*`・`/sys/devices/*`・`/sys/bus/*` の包括許可はこれを含むので置かない）、`/var/log/apt/*`（`history.log` のコマンドラインにプロキシの認証が残りうる。`term.log` は導入スクリプトの出力）、`/etc/fstab`（CIFS の `password=`）・`/etc/apt/sources.list*`（URL に認証を書ける）・`/etc/sysctl*`・`/proc/sys/net/*`（`tcp_fastopen_key`・`stable_secret` など秘密値）。`/proc/*/status` などの `*` は貪欲なので、`/proc/<pid>/root/…` 経由で同名のファイル（`status` など）に届く。そこで `/proc/*/root/*`・`/proc/*/cwd/*`・`/proc/*/fd/*`（開いているディレクトリへの経路）を ask に戻す（後勝ち。判定表に例）。ディレクトリ自体（`/var/log`・`/proc`・`/etc` など）の allow は置かないので、`ls /var/log` は確認になる（`ls /var/log/syslog /var/log/syslog.*` の形なら通る）。OS の条件は付けない（macOS には `/proc`・`/sys` などが無く、`/etc/hosts`・`passwd`・`group` は同じ種類のファイルなので害は無い。macOS 固有のパスは後から足す）。末尾だけの `*` は、`sources.list.d` のようなディレクトリ自体に一致するので、完全名と `.*` で書く。この一覧は知識（FHS・systemd・WSL）に基づく草案で、この機械に実在するかは確認していない。足りないパスは、確認で足す。
 
@@ -32,7 +32,7 @@
   - **書き込み**: `~/.config/systemd/user` は ask（外のフォルダの既定）。**`/etc/systemd/system` は deny**（root で起動時に実行される。設置は利用者）。ask は防御ではなく操作の確認で、user unit に書くと有効化・起動で任意のコードが動く危険は、deny にすると開発できなくなるので**受容する**（`--user` の `systemctl` の起動・再起動は確認なし。当初書いた「書き込み ask と `systemctl` ask の二重の関門」は誤りだった）。
   - **`systemctl`**: `enable`・`link` は、`--user` や `--now` などの前置きが付いても ask（`*enable*`・`*link*`。ログイン後も残る変更）。`start`・`stop`・`restart`・`daemon-reload` は、前置きなしのシステム側の形だけ ask で、`--user` は確認なし（開発の往復）。判定表に前置きの順序違いを入れた。
 
-## ~/.pi/agent と watchdog_diff の deny の経緯
+## pi agent と watchdog_diff の deny
 
 - **`~/.pi/agent` と `watchdog_diff` の deny（2026-11-14）**: `~/.pi/agent` 自体と `~/.pi/agent/pi-permissions.jsonc` は許可リストに当たらず ask だったので、deny を明示した（権限の設定そのものの元データはこのリポジトリ。子や離席中は ask で 5 分止まらず即座に拒否される）。`watchdog_diff` も deny にした。pi-subagents 0.87.0 の実装（`src/watchdog/diff-tool.js`）は `git diff --no-ext-diff` で `--no-textconv` が無く、textconv が設定されたリポジトリで外部コマンドが動き得る。また path 引数が無いと permission-system の path ゲート（`handlers/gates/path.ts`）が省かれ、追跡済み `.env` の差分が確認なしで返り得る。allow にも ask にもせず deny にしたのは、差分をファイルで渡す運用で足りることと、feature の作業ディレクトリ（worktree）で使えないことがあり（推測。審査ログでは未確認）、ask が出て 5 分止まるのを避けるため。見直しの条件: 上流が `--no-textconv` を付け、path 無しでも path の deny が効くようになったとき。
 
@@ -48,38 +48,38 @@
 
 - **読み取りの許可リスト**（2026-11-10。承認の手間を下げるため最優先で足した）: pi 自身のディレクトリ（`~/.pi/agent/` の `npm/`・`install/`・`extensions/`・`agents/`・`git/`・`prompts/`・`skills/`・`themes/`、`AGENTS.md`・`settings.json`）と、skill の置き場 `~/.agents/skills/`（2026-11-10。自作 skill の `references/`・`scripts/` を読むたびに確認が出ていた。**読み取りだけ**で、書き込みは ask のまま。配備先は `chezmoi apply` で元に戻り、skill の手順書を黙って書き換えられると次回以降の指示が変わりうるため）と、`/tmp` 自体（`cd /tmp`・`ls /tmp` で確認が出ていた。`/tmp/*` はディレクトリ自体に一致しない。読み取りだけで、書き込みは ask）と、Orca の貼り付け画像（Windows の Temp の `orca-paste-*`）。拡張が `read`・`grep`・`find`・`ls` のツールにだけ自動許可する「基盤のパス」と同じ範囲を、bash にも広げた形。**`extensions/*/logs` だけは ask のまま**（レビューログにはコマンドの文字列が残り、秘密が混ざりうるため。拡張も、ここは自動許可しない設計）。`~/.pi/agent/` の認証情報・`models.json`・`mcp.json`・`sessions/` は許可リストに無く、ask のまま。
 
-## 子エージェントの出力の読み取りの許可
+## 子の出力の読み取り
 
 - **子エージェントの出力の読み取り（2026-11-11）**: 子の結果が長いと、完了の通知に `~/.pi/agent/sessions/<プロジェクト>/subagent-artifacts/…` のパスが付く。親がこれを読むたびに確認が出ていた（承認しないと 5 分で拒否される）。**`*_output.md`（子の最終の出力）と `outputs/*`（保存された出力）の読み取りだけ**を allow にした（`~/.pi/agent/sessions/*/subagent-artifacts/*_output.md`・`.../outputs/*`）。`*_transcript.jsonl`（子の全やり取り）・`*_input.md`（依頼文）・セッション自体（`*.jsonl`）は、これまでどおり ask（広く許可しない。実機で `outputs/<id>/context.md` のような深い階層にも `*` が届くことを、判定表で確かめた）。
 
-## commandEffects の宣言の経緯
+## commandEffects
 
 - **`commandEffects`（パス引数の向きの宣言。2026-11-10）**: `git` の `log`・`status`・`diff`・`show`（`--output` が付くと外す）と、`python3` を読み取りと宣言する。skill のスクリプトの実行（`python3 ~/.agents/skills/<名前>/scripts/*.py`）は、宣言が無いと向きを証明できず（unproven）、書き込み側の ask になる（実測 2 件）。**`python3 -c`・`-m` が付くと宣言を外す**（`-m venv` などが書くため。読み取りと書き込みの両方を調べる）。宣言しても、許可リストの外のパスは読み取りの ask のまま。python3 のスクリプトが自分で書く先は検査できない（インラインコードの迂回と同じく受容する）。向きの表は `permission_cases.json` の `access`（`test_bash_path_effects_match_the_table`）。
 
-## subagent_launch の allow の経緯
+## subagent_launch
 
 - **`subagent_launch` は allow**（2026-11-09。当面の運用）。これは pi-subagents が、ワークフロー（`workflow`・`chain`・`tasks` で複数の子を組み合わせて起動する形）で子を起動する直前に出す入れ子の呼び出しで、ask のままだと子ごとに確認が出る。子の終了後に走る `gate`・`acceptance.verify` のシェルコマンドも載るが、**この呼び出しの時点では bash の規則で検査されない**（pi-subagents の docs `workflows.md`。この拡張が `commands` を検査するかは未確認）。運用では `gate`・`acceptance.verify` を使わない（[feature-orchestration の運用](../../../.agents/skills/feature-orchestration/references/pi-subagents.md)）ので、実害は出にくい。`ask` へ戻せば、毎回その内容を見られる。
 
-## bash の規則の出典と、判定器を自作しなかった理由
+## bash の規則の出典
 
 `bash` の規則（spec）の出典と、受容した迂回の経緯。
 
 - 出典は、撤去したフルガードの deny・confirm の一覧から利用者が選んだもの（2026-11-09）。`git reset --hard`・`git stash drop`・`git branch -D`・`git clean -f`・`mkfs` などは `cc-safety-net` が既に止めるので足さない（[評価の記録](pi-stock-packages-evaluation-2026-11.md)）。
 - **受容するもの**: 変数経由（`cmd=push; git $cmd`）・インラインコード（`python -c`・heredoc の中のスクリプト）での迂回は検出しない。ガードは意図的な迂回を保証しない（ガードの範囲）。撤去したフルガードの判定器はこれらを検出したが、インラインコードから外部コマンドを実行する形を一律に deny するため、過去のコマンドの 1.3% を誤って止めた。判定器を自作して載せる案は、この誤判定と維持費で見送った。
 
-## グローバルな環境変更を deny にする理由
+## グローバルな環境変更の deny
 
 `bash` の deny（spec）のうち、グローバルな環境変更の規則の根拠。
 
 - グローバルな変更は確認（ask）にせず deny にする（離席中に利用者を待って止まらないため）。deny の `reason` がブロックのメッセージに付くので、`uv add`・`uvx`・`npx`・プロジェクト内の `mise use` など正しい手段へエージェントが自分で切り替えられる（常用ツールの追加は利用者へ依頼）。
 
-## git worktree remove の allow の経緯
+## git worktree remove
 
 強制 ask（spec）のうち、`git worktree remove` の例外の根拠。
 
 - `git worktree remove` も、パスが `.tmp/worktrees/` の下で、`--force`・`-f`・`..` を含まないときだけ allow （git 自身が、未コミットの変更がある worktree の削除を断り、枝は残る。`--force` は cc-safety-net も拒否する。消えるのは ignored のファイルだけ。2026-11-10）。
 
-## ~/.pi/agent の deny を 1 つずつ置く理由
+## pi agent の deny の置き方
 
 - **`~/.pi/agent/` の、pi が読み込む・実行するもの**: `settings.json`（`shellPath`）・`AGENTS.md`・`extensions/`（権限の設定を含む）・`agents/`・`npm/`・`install/`・`prompts/`・`skills/`・`themes/`・`missions/`・`permission-mode/`・`pi-subagents/`・各拡張の設定（`compaction.json` など）・**`bin/`**（pi のランチャー `pi` と、pi が管理する `fd`・`rg`。**`PATH` の先頭**で、`find`・`grep` はこれを `shellPath` を通さず直接起動する）・`git/`（git の package）・**`tmp/`**（`-e` で指定した一時 package の置き場 `tmp/extensions`。更新に失敗するとキャッシュを再利用するので、置かれたコードが次の `pi -e` で実行される）。**許可リスト型（`~/.pi/agent/*` を deny して `sessions/*` だけ allow）にはしない**: 方向別の規則は共通の `path` の後ろに足されるので、後ろの allow が `*.env` の deny やリンク先の保護を上書きしてしまう（再監査の指摘）。そのため、`sessions/`（子エージェントの成果物。実ログでは、ファイルの道具が書いていたのはここだけ）を除いて、1 つずつ deny を置く。**chezmoi が `~/.pi/agent` へ配るものは、すべて deny に入っていることを試験で固定する**（新しく配るものを足し忘れない）。
 
@@ -87,19 +87,19 @@
 
 - **`/sandbox`（ローカルの拡張）は、囲いに合わせて YOLO も切り替える**（囲いあり = ON、囲いなし = OFF。起動時にも揃える。2026-11-15、[ADR-0040](../../adr/0040-pi-sandbox-session-toggle.md)）。囲いの内側で動かすコマンドは、YOLO でも OS が守る。囲いの外（MCP・ファイルの道具・pi 本体）の強制 ask は、YOLO で働かなくなる。YOLO を入れるのは、囲いと権限の設定を守るパスへの書き込みが、実効の方針で deny だと permission-system 自身に確かめられたときだけ。信頼済みのプロジェクトの設定が `yoloMode` を on にしていると（global の後に重なって勝つ）、囲いを外せない。仕様は [実行中の切り替え](../../spec/sandbox/pi-sandbox-runner.md#実行中の切り替え)。
 
-## 囲いの中で読み取り専用に見せるもの
+## 囲いの読み取り専用の一覧
 
 - **囲いの中で読み取り専用に見せるものすべて（`runner.toml` の `visible.read`）**: `~/.local/bin/`（pib の部品を含む）・`~/.local/share/mise`・`~/.local/share/uv`・`~/.config/mise`・`~/.config/uv`・`~/.gitconfig` と git の設定・`~/.cargo`・`~/.rustup`。囲いが読み取り専用にしているのは、書き換えられると囲いが外れるから（例: mise・uv が管理するツールや、`~/.local/bin` のランチャーは、ホストで後から実行される。runner 自身は、システムの `/usr/bin/python3 -I -S` で動かすので、mise の Python には依らない）。**この一致は `test_pi_sandbox_runner` が固定する**。
 
-## 囲いの保護を既定の場所に固定する理由
+## 囲いの保護の固定
 
 - **この保護は既定の場所に固定**: `pib` は、`PI_CODING_AGENT_DIR`・`PI_SANDBOX_RUNNER_CONFIG`・`XDG_CONFIG_HOME` が既定と違うと起動しない。制御ファイル（runner・`pib-shell`・`runner.toml`・`runner.local.toml`・`~/.pi/agent/settings.json`・管理済みの `bin/fd`・`bin/rg`・`bin/pi`）と、その置き場のディレクトリがリンクで既定の位置の外を指していても起動しない（拒否は名前に付くので、リンク先を直接指されると効かない）。
 
-## path の deny を囲いの hide と同じ集合に保つ理由
+## path の deny と hide
 
 - **`path` の deny は、pib の囲いの `hide`（`runner.toml`）と同じ集合に保つ**（2026-11-12）。`~/.config/gcloud`・`~/.docker`・`~/.kube`・`~/.azure`・`~/.password-store`、`~/.git-credentials`・`~/.config/git/credentials`・`~/.pypirc`・`~/.vault-token`、Hugging Face のトークン、`~/.pi/agent/oauth.json` も deny。囲いの中で隠しても、囲いの外で動く `read` ツールで読めてしまうため（YOLO は ask を自動で許可するので、確認にも頼れない）。食い違いは `test_pi_sandbox_runner` が検出する。
 
-## 確認で待たせない方針の実測
+## 確認で待たせない方針
 
 「確認で待たせない方針」（spec）の補足。
 
