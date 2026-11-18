@@ -117,8 +117,15 @@
 - よく読まれるスキルの分割: dotfiles-conventions・feature-orchestration・commit・sdd-docs を、核 + references（見出しは残し、本文を references へ）。`pi-extension-dev` の参照切れを直した。
 - 常設の指示: `watchdog_diff` の記述を直し、Tailscale の節を核 2 行 + スキルにした（家の機の節 1,243 → 447 字）。グローバルの指示の全体は 3,886 → 3,614 字（−7%）。
   **指示ファイル（AGENTS.md）は、固定部分の 11% で、もともと大きな削減の対象ではなかった。**
-- 権限: `git flow … publish` を deny（12 規則）、`gh *api` の前置き対応（7 規則）。判定表に例を足した。
+- 権限: `git flow … publish` を deny（6 規則。bash の規則の末尾）、`gh *api` の前置き対応（7 規則）。判定表に例を足した。最初の実装は 12 規則（前置き × 4 形）を `finish` の規則の前に置いたため、枝名に `finish`・`config` を含む `publish` が後ろの ask に上書きされる穴と、種別の扱いの過不足があった。独立した reviewer の監査で見つかり（MAJOR 1・MINOR 3）、位置を末尾にして 6 規則へ直した。
 - 仕様書（手動起動の方針は [skill-frontmatter](../../spec/skill-frontmatter.md#手動起動disable-model-invocation)）: [`agent-config-generation.md`](../../spec/agent-config-generation.md) の経緯・実測を [`permission-policy-rationale-2026-11.md`](permission-policy-rationale-2026-11.md) へ移し、現行の仕様に絞った。仕様と方針の食い違い 3 件を直した。
+
+### 実施後の固定部分の見込み（推定。実機の起動では未確認）
+
+- スキル一覧: 15,754 字（31 本）→ 約 8,900 字（19 本。−44%）。配備後の `SKILL.md` の frontmatter から、pi の `formatSkillsForPrompt`（`disable-model-invocation: true` を一覧から除く）と同じ形で数えた。
+  内訳: 手動起動 9 本・Orca 3 本の除外・`learn` と `onboarding` の統合で 13 本が減り、家の機だけ `tailscale-serve` が 1 本増える。
+- 指示ファイル: 6,946 字 → 約 5,880 字（−15%。グローバル 3,886→3,614、家の機の節 1,243→447）。
+- 固定部分の全体: 約 62,300 字 → 約 54,400 字（−13%）。トークンでは約 3.0 万 → 約 2.6 万の見込み。毎ターンの入力に占める割合は約 9.5% → 約 8.3% で、費用への効きは小さい（上の結論どおり）。
 
 ## 測定の方法（再現）
 
