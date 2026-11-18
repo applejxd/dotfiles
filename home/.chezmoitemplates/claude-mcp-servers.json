@@ -1,0 +1,20 @@
+{{- /*
+  Claude Code に配る MCP サーバ (会社 PC 向けの 2 件)。
+  home/modify_private_dot_claude.json が ~/.claude.json の mcpServers へ置き、home/dot_claude/modify_private_settings.json が、
+  同じ名前のサーバのツールを permissions.allow へ足す。どちらも is-work の機だけ。
+  pi-mcp-servers.toml の同名の宣言から手で写した静的な写し (共有しない)。pi 側の版・引数を変えたら、ここも直す。
+  claude mcp add-json が保存する形 (type・command・args) に合わせてある。
+  see docs/spec/claude-code.md#mcp会社-pc-だけ
+*/ -}}
+{
+  "agentcore-websearch": {
+    "type": "stdio",
+    "command": "uv",
+    "args": ["run", "--no-project", "--quiet", {{ printf "%s/.config/agents/agentcore_websearch_mcp.py" .chezmoi.homeDir | toJson }}, "--service", "bedrock-agentcore", "--region", "us-east-1", "--disable-telemetry"]
+  },
+  "webfetch": {
+    "type": "stdio",
+    "command": "uvx",
+    "args": ["--exclude-newer", "2026-11-17", "mcp-server-fetch==2026.11.11", "--no-readability-js"]
+  }
+}

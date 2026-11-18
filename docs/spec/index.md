@@ -37,6 +37,7 @@
 | [秘密情報の管理セットアップ（sops + age）](sops-age.md) | age 鍵の作成・バックアップ、プロジェクト設定、鍵の復旧手順 |
 | [MCP サーバの設定](mcp-servers.md) | `[[mcp]]` から pi の `mcp.json` を生成する仕様、AgentCore Web Search の構成 |
 | [pi の設定の生成と所有権](agent-config-generation.md) | pi の設定ファイルの構成と編集ルール、宣言した項目と利用者の項目の分け方、permission-system・package・圧縮・子エージェントの設定 |
+| [Claude Code（予備のハーネス）の設定](claude-code.md) | `~/.claude` に配るもの（最低限の `CLAUDE.md`・`settings.json` の `permissions.deny/ask`・`commands/stepback.md`・スキル `commit`・`sdd-docs` の写し）と、会社 PC だけの MCP（`~/.claude.json` の 2 件）、pi から写したもの・写さなかったもの、限界。会社用の前提。pi とは共有せず、試験の対象外 |
 | [Web 検索（自作の MCP と核）](web-search.md) | 自作 MCP `websearch` と、それが呼ぶ核の Web 検索・ページ取得・論文検索（スキル web-search は廃止）。検索の鎖（Brave → Exa → Tavily → DuckDuckGo）と次へ回す条件、鍵、クエリの秘匿チェックと取得の SSRF 対策、実測、未実装 |
 | [imozuru（調べものスキル）](imozuru.md) | 上流 MaryCache/imozuru（MIT）を vendor して調整した調べものスキル。原文を要約せず保存し、検索は使える検索ツール（MCP の websearch）を使う。配る範囲・書き込み先の制限・接続の固定・秘匿チェック・YouTube（applejxd 限定）・`pis` の許可規則・レビューの経緯・未確認 |
 | [away-shift（離席中の検証・実験）](away-shift.md) | 離席中に承認なしで検証を反復するスキル。stock の pi での前提（確認は 5 分で拒否・方針は離席中を区別できない）、事前判定を使わない判断、再開の仕組みの評価・未確認 |

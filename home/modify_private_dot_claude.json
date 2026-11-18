@@ -1,0 +1,35 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- /*
+  ~/.claude.json (本体が頻繁に書く状態ファイル) の mcpServers のうち、claude-mcp-servers.json が宣言した名前の
+  サーバだけを置く。ほかのキー (認証の状態・履歴・プロジェクトごとの設定・利用者が足したサーバ) は、触らずに保つ。
+  宣言した名前のサーバは、定義ぜんぶをこの内容にそろえる (利用者の編集は消える)。
+  すでにそろっているときは、入力をそのまま返す (本体の整形のまま。書き換えないので、競合の窓も status の差分も生まない)。
+  ファイルが無い・空のときは、mcpServers だけのファイルを作る。壊れた JSON は、apply がこのファイルの変換でエラーにする。
+  宣言を消しても、配備先からは消えない (claude mcp remove --scope user <名前> で消す)。
+  配るのは、claude があり、is-work の機だけ (.chezmoiignore.tmpl)。
+  see docs/spec/claude-code.md#mcp会社-pc-だけ
+*/ -}}
+{{- $want := includeTemplate "claude-mcp-servers.json" . | fromJson -}}
+{{- $raw := .chezmoi.stdin -}}
+{{- $cur := dict -}}
+{{- if $raw | trim -}}
+{{-   $cur = fromJson $raw -}}
+{{- end -}}
+{{- $have := dict -}}
+{{- if hasKey $cur "mcpServers" -}}
+{{-   $have = index $cur "mcpServers" -}}
+{{- end -}}
+{{- $same := true -}}
+{{- range $name, $def := $want -}}
+{{-   if ne (toJson (index $have $name)) (toJson $def) -}}
+{{-     $same = false -}}
+{{-   end -}}
+{{- end -}}
+{{- if and $same ($raw | trim) -}}
+{{ $raw }}
+{{- else -}}
+{{-   range $name, $def := $want -}}
+{{-     $cur = setValueAtPath (printf "mcpServers.%s" $name) $def $cur -}}
+{{-   end -}}
+{{ $cur | toPrettyJson }}
+{{- end -}}

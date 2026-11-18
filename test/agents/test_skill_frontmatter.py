@@ -43,6 +43,11 @@ def test_known_skills_are_collected(relpath: str):
     assert ROOT / relpath in SKILL_PATHS
 
 
+# Claude Code (予備のハーネス) 向けの写し (home/dot_claude/skills) は、検査・試験の対象外 (ADR-0041)。
+# SKILL_ROOTS には足さず、ここで明示して除く
+EXCLUDED_ROOTS = ("home/dot_claude/skills/",)
+
+
 def tracked_skill_files() -> list[Path]:
     out = subprocess.run(
         ["git", "ls-files", "-z", "--", ":(glob)home/**/SKILL.md"],
@@ -52,7 +57,7 @@ def tracked_skill_files() -> list[Path]:
         encoding="utf-8",
         check=True,
     ).stdout
-    return [ROOT / p for p in out.split("\0") if p]
+    return [ROOT / p for p in out.split("\0") if p and not p.startswith(EXCLUDED_ROOTS)]
 
 
 def test_every_tracked_skill_is_collected():

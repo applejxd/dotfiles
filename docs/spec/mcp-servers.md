@@ -6,6 +6,8 @@ pi の MCP サーバの宣言（`home/.chezmoitemplates/pi-mcp-servers.toml` の
 
 MCP サーバの宣言は `pi-mcp-servers.toml`（chezmoi テンプレート）が単一ソース。ユーザ・機（`is-work`）による出し分けはテンプレート側に書き、生成側（`scripts/agents/generate.py`）は展開後の表だけを見る。
 
+**Claude Code（予備。会社用の前提）にも、会社 PC の 2 件（`agentcore-websearch`・`webfetch`）の静的な写しを配る**（`home/.chezmoitemplates/claude-mcp-servers.json`。共有しない）。この 2 件の版・引数を変えたら、写しも直す（[Claude Code の MCP](claude-code.md#mcp会社-pc-だけ)）。
+
 ```toml
 [[mcp]]
 id = "agentcore-websearch"

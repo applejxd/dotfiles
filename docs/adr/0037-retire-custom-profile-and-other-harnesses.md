@@ -3,7 +3,7 @@
 - **ステータス**: Accepted
 - **日付**: 2026-11-12
 - **決定者**: applejxd
-- **関係**: [ADR-0030](#置き換えた決定と記録)（自作基盤の凍結）と ADR-0034（凍結した試験を `verify:all` から外す）を置き換える。pi の標準の構成は [ADR-0031](0031-evaluate-existing-extensions-first.md)。
+- **関係**: [ADR-0030](#置き換えた決定と記録)（自作基盤の凍結）と ADR-0034（凍結した試験を `verify:all` から外す）を置き換える。pi の標準の構成は [ADR-0031](0031-evaluate-existing-extensions-first.md)。Claude Code の**設定の管理**だけは、[ADR-0041](0041-claude-code-spare-harness-static-config.md)（2026-11-18）が部分的に置き換える（導入・生成・hook は撤去のまま）。
 
 ## コンテキスト
 

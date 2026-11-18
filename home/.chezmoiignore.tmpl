@@ -140,6 +140,17 @@ Documents/**
 .agents/skills/tailscale-serve/**
 {{- end }}
 
+# Claude Code (予備のハーネス) の設定は、claude が PATH にある機だけに配る。導入は自動化しない (ADR-0037)
+# MCP (~/.claude.json) は、そのうえで会社 PC (is-work) だけ。claude は会社用の前提 (ADR-0041)
+# see docs/spec/claude-code.md
+{{- if not (lookPath "claude") }}
+.claude
+.claude/**
+.claude.json
+{{- else if ne (includeTemplate "is-work" .) "true" }}
+.claude.json
+{{- end }}
+
 # Bitwarden 由来のファイルは一度のみ展開する
 # (毎回 Bitwarden を引くと chezmoi diff がマスターパスワードを要求するため)
 #

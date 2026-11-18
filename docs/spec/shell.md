@@ -84,7 +84,8 @@ Nix 化・`rm` の alias 差し替え・環境変数の列挙による人間判�
 **共通の約束**（共有の設定とマシン固有の設定を分ける）:
 
 - 共有の設定（リポジトリ。chezmoi が管理し、`apply` で上書きされる）とは別に、マシン固有のファイルは **chezmoi の管理外**に置く。`chezmoi apply` で消えず、`chezmoi diff` にも出ない。
-- 生成物（`~/.claude/settings.json` など）は直接編集しない。`apply` で作り直される。
+- chezmoi が管理するファイル（`~/.pi/agent/settings.json`・`~/.claude/CLAUDE.md` など）は直接編集しない。`apply` で作り直される。
+  `~/.claude/settings.json` は、`permissions.deny` と `permissions.ask` だけを chezmoi が置き換える（ほかのキーは保つ。[Claude Code の設定](claude-code.md)）。
 
 **sandbox の許可を足すファイル**（`agents/local.toml` の `[sandbox]`・`runner.local.toml`）は、さらに次を守る。
 
