@@ -1,6 +1,7 @@
 ---
 name: fix
 description: "プロジェクトの linter / formatter を実行し、解決法が明確な指摘だけを自動修正する。「lint を直して」「lint エラーを直して」「フォーマットして」「/fix」と言われたときに使う。バグ修正・テストの失敗・型エラー・ビルドエラーには使わない（「fix して」がそれらを指すときも使わない）。"
+disable-model-invocation: true
 context: fork
 agent: general-purpose
 background: false

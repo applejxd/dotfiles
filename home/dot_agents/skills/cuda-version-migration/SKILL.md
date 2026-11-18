@@ -1,6 +1,7 @@
 ---
 name: cuda-version-migration
 description: "CUDA 11.x 時代に書かれた PyTorch の CUDA 拡張を CUDA 12.x / 13.x へ移行し、ビルドと数値検証まで通す。PyTorch CUDA 拡張の toolkit 更新が目的のとき、または更新が原因だと確認できたときに使う。「CUDA 12 でビルドできない」「CUDA 13 に上げたい」「unsupported gpu architecture 'compute_37'」「no kernel image is available for execution on the device」「undefined symbol: _ZNK3c10...」「THC/THC.h が無い」「AT_CHECK が未定義」は、toolkit 更新が原因と確認できた場合だけ該当する（torch の版ずれや依存の不整合が原因なら使わない）。torch を新しくするだけの作業や、CUDA バージョンを変えない依存整理（uv-migration スキルの領分）には使わない。"
+disable-model-invocation: true
 ---
 
 # CUDA version migration

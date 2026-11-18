@@ -1,6 +1,7 @@
 ---
 name: powerpoint-studio
 description: "編集可能な PowerPoint（.pptx）の新規作成・大幅改稿・テンプレートへの内容充填に使う。「パワポを作って」「PowerPoint 資料で図や実験結果を見やすく貼って」「スライドをデザインして」「テンプレートに収めて」で使う。Use to create, substantially redesign, or fill a template with an editable .pptx deck. .pptx のテキスト抽出や軽微な一語置換には使わない。"
+disable-model-invocation: true
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob, WebFetch, WebSearch, Task
 ---
 
