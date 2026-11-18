@@ -1,15 +1,4 @@
----
-name: learn
-description: "会話履歴から AGENTS.md/CLAUDE.md に追記すべき知見を抽出し、差分を提案する。反映を明示的に頼まれた場合だけ書き込む。会話中に、今後も繰り返し適用する規約・パターン・落とし穴が確定した際に使う。AGENTS.md の新規作成・全面整理は onboarding、docs/ の仕様・調査記録・ADR は sdd-docs、圧縮に備えた作業記録は checkpoint の領分なので使わない。"
-allowed-tools: Read, Edit, Write, Grep, Glob
----
-
-# learn
-
-> **この skill は fork しない（`context: fork` を付けない）**
->
-> 入力が親の会話そのものなので、独立したサブエージェントでは成立しない。
-> fork すると**会話が見えないまま知見を捏造する**ことになる。
+# 会話の知見を AGENTS.md へ追記する
 
 ## 手順
 

@@ -1,6 +1,7 @@
 ---
 name: readme-writer
 description: "リポジトリの実体(manifest・ソース・CI・LICENSE)に裏づけられた README.md を、作る・直す・点検する。事実の抽出と、README が約束するコマンド・パス・リンクの実在検査をスクリプトで行い、実行して確かめた内容と未確認の項目を、短く正直に報告する。「README を作って」「README を書いて」「README を直して・整理して」「README が古いので点検して」「README が実態と合っているか見て」「README.ja.md を作って」で使う。ドキュメントサイト、API リファレンス、CHANGELOG・CONTRIBUTING の作成、AGENTS.md / CLAUDE.md の作成(onboarding)、docs/ の仕様・調査記録(sdd-docs)、リポジトリ全体の公開前監査には使わない。"
+disable-model-invocation: true
 ---
 
 # readme-writer
