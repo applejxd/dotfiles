@@ -76,6 +76,7 @@
 | [子エージェント（guarded_task。撤去済み）の経緯・日付・試験結果](agents/pi-subagents-spec-history.md) | 2026-10-09〜22。`pi-guard.md` から移設 |
 | [web 検索スキル仕様の実測・経緯](agents/web-search-spec-notes.md) | 2026-10-11〜26 の実測と CHG-0032 の経緯（`web-search.md` から移設） |
 | [子エージェントの権限（agent ファイルの `permission:`）の実測](agents/subagent-permission-frontmatter-2026-11.md) | 2026-11-10。`external_directory: deny`（単一の値）は、作業ツリーの外の `read`・bash のパス引数を確認なしで即座に拒否した（審査ログでも確認）。入れ子の書式は agent 定義が無効になる。許可リストより `deny` が強い。user 配下の写しでの実測は未確認 |
+| [権限の方針の経緯・実測・決め直しの根拠（2026-11）](agents/permission-policy-rationale-2026-11.md) | 2026-11-10〜18。`agent-config-generation.md` から 2026-11-18 に分離（逐語）。許可リストの経緯・`..` を含む綴り・systemd の決め直し・`nohup` と `git config` の根拠・確認で待たせない方針の実測・`pi-rewind` の警告の調査・Tailscale の指示の経緯 |
 
 ### テスト
 
