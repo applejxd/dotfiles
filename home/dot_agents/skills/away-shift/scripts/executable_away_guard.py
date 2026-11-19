@@ -196,9 +196,10 @@ def make_dir(path: Path) -> None:
 
 
 def append_text(path: Path, text: str) -> None:
+    """追記する。改行は OS によらず LF のまま書く (Windows で LF が CRLF に変換され、本文の CR と重なって空行が増えるのを防ぐ)。"""
     confine(path)
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | _NOFOLLOW, 0o666)
-    with os.fdopen(fd, "a", encoding="utf-8") as f:
+    with os.fdopen(fd, "a", encoding="utf-8", newline="\n") as f:
         f.write(text)
 
 
@@ -506,7 +507,7 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 def read_note(run_id: str, name: str) -> str:
-    """<run ディレクトリ>/work/<name> の通常ファイルを UTF-8 で読む。"""
+    """<run ディレクトリ>/work/<name> の通常ファイルを UTF-8 で読む。改行は LF にそろえる (CRLF・CR 単独 → LF)。"""
     if (
         not name
         or "/" in name
@@ -532,7 +533,7 @@ def read_note(run_id: str, name: str) -> str:
         data = read_bytes(path, NOTE_MAX_BYTES + 1)
         if len(data) > NOTE_MAX_BYTES:
             raise Refused(f"{path} が {NOTE_MAX_BYTES} バイトを超える")
-        return data.decode("utf-8")
+        return data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
     except OSError as exc:
         raise Refused(f"{path} を読めません: {exc}") from None
     except UnicodeDecodeError:

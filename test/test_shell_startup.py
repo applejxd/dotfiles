@@ -72,6 +72,23 @@ def home(tmp_path: Path) -> Path:
     return home
 
 
+# shellenv.sh は LC_ALL / LANG の既定を ja_JP.UTF-8 にする。その locale を生成していない機
+# (素の Ubuntu・GitHub Actions の ubuntu-24.04 runner など) では、bash 本体が
+# "warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8)" を stderr に出す (zsh は出さない)。
+# これは機の都合で出る bash の警告で、dotfiles が出した出力ではない。「alias も出力も持たない」契約の
+# 検査からはこの警告だけを外す。既定値そのもの (ja_JP.UTF-8) の検査は残す。
+# 別の locale の警告や、ほかの stderr は外さない。
+_HOST_LOCALE_WARNING = re.compile(
+    r"^[^\n]*warning: setlocale: (?:LC_[A-Z_]+|LANG): "
+    r"cannot change locale \(ja_JP\.UTF-8\)[^\n]*\n?",
+    re.MULTILINE,
+)
+
+
+def _drop_host_locale_warning(stderr: str) -> str:
+    return _HOST_LOCALE_WARNING.sub("", stderr)
+
+
 def run(argv: list[str], home: Path, **extra: str) -> subprocess.CompletedProcess[str]:
     env = {
         k: v
@@ -80,7 +97,7 @@ def run(argv: list[str], home: Path, **extra: str) -> subprocess.CompletedProces
     }
     env["HOME"] = str(home)
     env.update(extra)
-    return subprocess.run(
+    done = subprocess.run(
         argv,
         cwd=home,  # .zshenv が git リポジトリ内で TMPDIR を書き換えないように
         capture_output=True,
@@ -90,6 +107,20 @@ def run(argv: list[str], home: Path, **extra: str) -> subprocess.CompletedProces
         env=env,
         timeout=30,
     )
+    done.stderr = _drop_host_locale_warning(done.stderr)
+    return done
+
+
+def test_host_locale_warning_filter_drops_only_the_default_locale_warning():
+    prefix = "warning: setlocale: LC_ALL: cannot change locale"
+    missing = f"bash: {prefix} (ja_JP.UTF-8): No such file or directory\n"
+    in_script = f"/h/.config/shell/shellenv.sh: line 22: {prefix} (ja_JP.UTF-8)\n"
+    other_locale = f"bash: {prefix} (de_DE.UTF-8)\n"
+    assert _drop_host_locale_warning(missing) == ""
+    assert _drop_host_locale_warning(in_script) == ""
+    assert _drop_host_locale_warning(f"before\n{missing}after\n") == "before\nafter\n"
+    assert _drop_host_locale_warning(other_locale) == other_locale
+    assert _drop_host_locale_warning("echo-to-stderr\n") == "echo-to-stderr\n"
 
 
 def _zsh() -> str:
