@@ -179,6 +179,13 @@ def test_pi_sandbox_runner_is_linux_only(tmp_path, os_name, ignored):
 
 
 
+@pytest.mark.parametrize("os_name", ["linux", "windows", "darwin"])
+def test_t3_usage_status_package_is_never_ignored(tmp_path, os_name):
+    """T3 Code に費用とキャッシュヒット率を出す拡張は OS を問わず配る (pi-sandbox-toggle と違い、除外しない)。"""
+    rendered = render(home=str(tmp_path), os_name=os_name)
+    assert not [line for line in rendered if "t3-usage-status" in line]
+
+
 SHELL_PLUGINS = {
     ".z": ("git-repo", "https://github.com/rupa/z.git"),
     ".zinit/bin": ("git-repo", "https://github.com/zdharma-continuum/zinit.git"),

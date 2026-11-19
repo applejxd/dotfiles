@@ -11,6 +11,7 @@ npm:@juicesharp/rpiv-todo@2.15.0
 npm:@juicesharp/rpiv-ask-user-question@2.15.0
 npm:@gotgenes/pi-permission-system@42.0.0
 ./local-packages/pi-permission-explain
+./local-packages/t3-usage-status
 {{ if eq .chezmoi.os "linux" -}}
 ./local-packages/pi-sandbox-toggle
 {{ end -}}
