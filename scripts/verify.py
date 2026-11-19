@@ -244,6 +244,19 @@ RULES: tuple[Rule, ...] = (
         ("test_t3_usage_status",),
     ),
     Rule("env-check", ("home/dot_agents/skills/env-check/**",), ("test_env_check",)),
+    # Claude Code (予備のハーネス) は、利用者の決定で、専用の試験を置かない (docs/spec/claude-code.md#試験の対象外)。
+    # この規則が無いと、規則に当たらないパスとして全件に回る。
+    # パスが重なる共通の規則の試験は、ほかと同じく選ばれる
+    Rule(
+        "Claude Code の設定 (予備のハーネス。専用の試験なし)",
+        (
+            "home/dot_claude/**",
+            "home/modify_private_dot_claude.json",
+            "home/.chezmoitemplates/claude-permissions.json",
+            "home/.chezmoitemplates/claude-mcp-servers.json",
+        ),
+        lints=("templates",),
+    ),
     Rule(
         "テンプレート検査器",
         ("scripts/lint_templates.py",),

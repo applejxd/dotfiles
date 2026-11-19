@@ -1,6 +1,8 @@
 # pi の MCP サーバの宣言 (~/.pi/agent/mcp.json の元)。
 # chezmoi テンプレート。ユーザ・OS・機の出し分けはここに書く (生成側 scripts/agents/generate.py は展開後の表だけを見る)。
 # 仕組み・判断基準は docs/spec/mcp-servers.md が正本。
+# 会社 PC の 2 件 (agentcore-websearch・webfetch) は、Claude Code 向けに claude-mcp-servers.json へ手で写してある (共有しない)。
+# その 2 件の版・引数を変えたら、そちらも直す。see docs/spec/claude-code.md#mcp会社-pc-だけ
 
 # see docs/spec/mcp-servers.md 「MCP サーバ」
 # ★deepwiki は索引が古く、実ソースと食い違う説明を返すため 2026-09-25 に外した。

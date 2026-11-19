@@ -42,6 +42,7 @@ pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 | 新しい機械での初回導入を Docker で検証する | [Docker での検証](spec/development.md#新しい機械での初回導入を-docker-で検証する) |
 | gitflow-lite の運用（起票は親、AI は feature の worktree でコミット、統合は利用者の指示で）を知る | [開発ガイドのブランチモデル](spec/development.md#ブランチモデルgitflow-lite) |
 | pi の設定の生成と所有権（宣言した項目と利用者の項目の分け方）を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
+| 予備のハーネス Claude Code の設定（何を配り、何を配らないか）を知る・直す | [Claude Code の設定](spec/claude-code.md)・[ADR-0041](adr/0041-claude-code-spare-harness-static-config.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/mcp-servers.md#mcp-サーバ) |
 | Bedrock の PC で web 検索を使えるようにする（AgentCore Web Search） | [AgentCore Web Search](spec/mcp-servers.md#agentcore-web-search) |
 | 調べものスキル（imozuru）を使う・変える・上流を更新する | [imozuru](spec/imozuru.md) |
@@ -61,6 +62,7 @@ pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 
 旧 custom プロファイル（フルガード・`pis`）・kcage・PR ビューア・作業台帳・pi 以外のハーネス（Claude Code・Codex・Copilot CLI・Gemini CLI・OpenCode・oh-my-pi）は、
 2026-11-12 に撤去した（[ADR-0037](adr/0037-retire-custom-profile-and-other-harnesses.md)）。復元はタグ `archive/custom-harness-2026-11-12`。
+Claude Code の設定だけは、予備のハーネスとして静的な標準設定を配る（[ADR-0041](adr/0041-claude-code-spare-harness-static-config.md)）。生成・導入・hook は撤去のまま。
 
 | 目的 | 文書 |
 | --- | --- |

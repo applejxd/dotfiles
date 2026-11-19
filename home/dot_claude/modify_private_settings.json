@@ -1,0 +1,34 @@
+{{- /* chezmoi:modify-template */ -}}
+{{- /*
+  ~/.claude/settings.json の permissions.deny / permissions.ask だけを、claude-permissions.json の内容に置き換える。
+  ほかのキー (hooks・enabledPlugins・env・sandbox・permissions.defaultMode など) は、Orca や /config が書くので、
+  触らずに保つ。ファイルが無い・空のときは、permissions だけの設定を作る。
+  permissions.allow は、利用者のものなので置き換えない。is-work の機だけ、claude-mcp-servers.json が宣言した
+  サーバ (検索・取得は読み取り) を mcp__<名前> として足す (すでにあれば足さない。順序は保つ。allow が配列でないときは、配列として作り直す)。
+  何度流しても同じ結果になる (キーの並びは辞書順に整う)。壊れた JSON のときは、apply がこのファイルの変換でエラーにする。
+  利用者の個人用の追加は、置き換えで消えるので、.claude/settings.local.json に書く (規則のリストはスコープをまたいで結合される)。
+  see docs/spec/claude-code.md
+*/ -}}
+{{- $perm := includeTemplate "claude-permissions.json" . | fromJson -}}
+{{- $cur := dict -}}
+{{- if .chezmoi.stdin | trim -}}
+{{-   $cur = fromJson .chezmoi.stdin -}}
+{{- end -}}
+{{- $out := $cur | setValueAtPath "permissions.deny" $perm.deny | setValueAtPath "permissions.ask" $perm.ask -}}
+{{- if eq (includeTemplate "is-work" .) "true" -}}
+{{-   $allow := list -}}
+{{-   if hasKey $cur "permissions" -}}
+{{-     $p := index $cur "permissions" -}}
+{{-     if and (kindIs "map" $p) (hasKey $p "allow") (kindIs "slice" (index $p "allow")) -}}
+{{-       $allow = index $p "allow" -}}
+{{-     end -}}
+{{-   end -}}
+{{-   range $name, $_ := (includeTemplate "claude-mcp-servers.json" . | fromJson) -}}
+{{-     $rule := printf "mcp__%s" $name -}}
+{{-     if not (has $rule $allow) -}}
+{{-       $allow = append $allow $rule -}}
+{{-     end -}}
+{{-   end -}}
+{{-   $out = setValueAtPath "permissions.allow" $allow $out -}}
+{{- end -}}
+{{ $out | toPrettyJson }}

@@ -144,7 +144,8 @@ Windows の pi は mise が入れます（[Windows の pi](#windows-の-pi)）�
   （shim が公式版より先に PATH で見つかり起動を横取りする。経緯は [AI CLI が mise に global default version を指定しろと言う](troubleshooting-bootstrap.md#ai-cli-が-mise-に-global-default-version-を指定しろと言う)）。
 - 導入に失敗した回は再実行の印（`~/.local/share/dotfiles/retry/agent-cli-failed`）を書き直すので、次の apply でも走り直します
   （[スクリプトを走らせ直す](troubleshooting-bootstrap.md#スクリプトを走らせ直す)）。毎回ダウンロードしないので apply が遅くなりません。
-- Claude Code・Copilot CLI・OpenCode・oh-my-pi は導入しません（[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）。すでに入っているものは触らず、設定も管理しません。
+- Claude Code・Copilot CLI・OpenCode・oh-my-pi は導入しません（[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）。すでに入っているものは触りません。
+  設定を管理するのは Claude Code だけで、予備のハーネスとして、claude が PATH にある機に標準の設定だけを配ります（[Claude Code の設定](claude-code.md)・[ADR-0041](../adr/0041-claude-code-spare-harness-static-config.md)）。
 
 ## Herdr の管理
 

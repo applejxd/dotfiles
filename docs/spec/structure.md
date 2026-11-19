@@ -112,7 +112,8 @@ OSごとの差分は `.chezmoiignore.tmpl`、テンプレート条件、OS別ス
 
 pi が全リポジトリで常時読む指示は `~/.pi/agent/AGENTS.md` です。本文は `home/.chezmoitemplates/agent-instructions-stock.md`
 （ツール非依存の短い指示。応答・検証・書式・委譲・確認）で、`home/dot_pi/agent/AGENTS.md.tmpl` が埋め込みます。
-自作 skill の置き場は `home/dot_agents/skills/`（`~/.agents/skills/` へ展開。pi が読む。旧い置き場 `~/.claude/skills` の配備は `.chezmoiremove` が消す）。
+自作 skill の置き場は `home/dot_agents/skills/`（`~/.agents/skills/` へ展開。pi が読む。旧い置き場 `~/.claude/skills` の配備は `.chezmoiremove` が消す。ただし予備の Claude Code 向けに、`commit`・`sdd-docs` の写しだけは `~/.claude/skills` へ配る。[ADR-0041](../adr/0041-claude-code-spare-harness-static-config.md)）。
 
 **リポジトリ直下の `AGENTS.md` は対象外**: 適用範囲（このリポジトリのみ）も内容（リポジトリ固有の約束）も別系統です。
-Claude Code・Codex・Copilot CLI・OpenCode 向けの指示ファイルは、撤去しました（[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）。
+Codex・Copilot CLI・OpenCode 向けの指示ファイルは、撤去しました（[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）。
+Claude Code 向けの `~/.claude/CLAUDE.md` だけは、予備のハーネスとして管理します（`home/dot_claude/CLAUDE.md`。pi とは共有しない。[Claude Code の設定](claude-code.md)）。
