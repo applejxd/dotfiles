@@ -222,6 +222,16 @@ package `cc-safety-net` は、破壊的なコマンド（`git reset --hard`・`r
 `home/.chezmoitemplates/pi-stock-packages` を編集して `chezmoi apply`（1 行に 1 つ、`npm:<名前>@<版>`）。
 版を固定した npm の package は再取得されない。版を上げるときは書き換える。
 
+### 自作の拡張の置き場
+
+自作の拡張（[ADR-0031](../adr/0031-evaluate-existing-extensions-first.md) の例外の一覧にあるもの）は、先例（`pi-permission-explain`・`pi-sandbox-toggle`・`t3-usage-status`。2026-11-19 にここへ記録）に従う。
+
+- **置き場**: `home/dot_pi/agent/local-packages/<名前>/`（配備先は `~/.pi/agent/local-packages/<名前>/`）。pi の package の形で、`package.json` の `pi.extensions` が `./src/index.ts` を指す。本体が出すもの（`@earendil-works/pi-coding-agent`）は `dependencies` に入れず、`peerDependencies`（`optional`）にする。
+- **読み込み**: `pi-stock-packages` に `./local-packages/<名前>` を 1 行足す（`settings.json` からの相対パス）。OS を限るなら、その行だけをテンプレートの条件で囲み、`.chezmoiignore.tmpl` でも配備を除く（`pi-sandbox-toggle` は Linux だけ）。OS を問わない拡張（`t3-usage-status`）は無条件の 1 行にする。
+- **配らないもの**: stock は、自作の拡張のコードを `~/.pi/agent/extensions/` へ配らない（そこにあるのは package の設定だけ）。
+- **保護**: 配備先は `path_write` で deny（`~/.pi/agent/local-packages`。[判定表](#権限の方針の試験)）。囲いの外の pi 本体で実行されるコードなので、ファイルの道具で書き換えさせない。
+- **試験の登録**: `test/test_<名前>.py` を作り、`scripts/verify.py` の `Rule` に `home/dot_pi/agent/local-packages/<名前>/**` を登録する。配線（`pi-stock-packages` の 1 行）は `test/test_pi_stock_config.py` の `LOCAL_PACKAGES` と配線の試験で固定する。
+
 ### Windows
 
 pi 本体と設定（`~/.pi/agent/`）は Windows にも配る。`prompts/`（`/fleet`・`/stepback`）と、囲い（`pib`・`pi-sandbox-runner`）は Unix（Linux / WSL）だけ。

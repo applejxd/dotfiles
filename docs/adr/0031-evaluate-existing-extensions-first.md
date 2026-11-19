@@ -81,6 +81,29 @@ ADR-0030 の凍結（フルガード・`pis`・kcage・PR ビューアなど）�
 | pi のコマンド実行を包む囲い（`pib`・`pib-shell`・`home/dot_local/bin/executable_pi-sandbox-runner`、[ADR-0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md)。[ADR-0035](0035-pi-sandbox-gpu-runner.md) の拡張を使う方式を置き換えた） | 拡張は bash だけを包み、`bg_run`・`!` が抜ける。既存の囲い（Fence）は、コマンドごとに包む使い方が公式の想定外で、WSL で遅く、保守が緩い。利用者が責務の分担と方式（素の bwrap）を承認した（2026-11-12） | 実測（2026-11-18）: 一式 1,043 行（runner 668 行・`pib` 351 行・`pib-shell` 24 行。コメントと docstring を含む）・試験 2,603 行・設定・自己確認。追従が要る上流は、pi の `shellPath` の仕様 1 点 | pi 本体が同等の sandbox を標準で持ったとき。`shellPath` の仕様変更が 2 回続けて保守の負担になったとき |
 | pi の囲いと YOLO を実行中に切り替える `/sandbox`（`home/dot_pi/agent/local-packages/pi-sandbox-toggle`、[ADR-0040](0040-pi-sandbox-session-toggle.md)） | 公開の package は bash ツールだけを包む型で、`bg_run`・`!` が抜け、GPU も通せない（ADR-0036 が退けた理由）。標準機能に、囲いの切り替えは無い。利用者が方式・範囲・YOLO の連動を承認した（2026-11-15） | 実測（2026-11-18）: 拡張 545 行・試験 711 行。追従が要る上流は、pi が起動のたびに環境変数を読む挙動・`pi-permission-system` の設定ファイル（`yoloMode`）・毎ターンの読み直し・プロジェクトの設定を重ねる順序と読み方・公開の判定 API（`checkPermission`）と `permissions:ready`・runner の `MISE_STATE_DIR` | pi 本体が、実行中に切り替えられる sandbox を標準で持ったとき。上流の 4 点のどれかが変わって、2 回続けて保守の負担になったとき |
 | `pi-permission-explain` のフォーク（`home/dot_pi/agent/local-packages/pi-permission-explain`。上流 rkshrksh 0.1.1 の改変。2026-11-18 に一覧へ追記。それまで載っていなかった） | 確認画面の説明キー（`Ctrl+E`）を押したときに、未回答のカウントダウンも止めたい（利用者の要望）。npm の版は、このキーを横取りして時計が止まらない。後付けのパッチ（A）は、package の取得と apply の順序待ち・再取得での消失・版を上げるときのハッシュ更新を管理する必要があり、取り込み（B）を選んだ。決定は 2026-11-15（[評価の記録](../research/agents/ask-auto-judge-evaluation-2026-11.md)の「ローカル版への切り替え」） | 実測（2026-11-18）: 443 行（上流の改変は 3 つ）。上流の更新時に差分を再確認する。追従が要る上流は、`pi-permission-explain` 本体 | 上流が同じ修正を取り込んだとき（npm 版へ戻し、このディレクトリと試験を消す）。上流への依頼は利用者が出す |
+| T3 Code に pi のセッションの費用とキャッシュヒット率（CH%）を出す拡張（`home/dot_pi/agent/local-packages/t3-usage-status`） | 費用と CH% を `ctx.ui.setStatus` で出し、T3 Code の入力欄のバナーにする既製の package が、調べた範囲（npm の検索と pi.dev/packages。網羅ではない。[下の探索の記録](#t3-usage-status-の探索の記録2026-11-19)）で見つからなかった。T3 Code 自身にはセッションごとの費用・CH% を出す面が無く、pi のフッターは T3 Code の中では見えない。stock の `pi-show-token-rate` は TPS・TTFT だけで、費用と CH% は出さない。利用者が自作を承認した（2026-11-19。T3 Code のフォークの会話で「拡張を用意して」「chezmoi への組み込みもやって」） | 拡張 約 100 行（コメントを含む）・試験 約 300 行。追従が要る上流は、セッションのエントリの usage の形（`input`・`cacheRead`・`cacheWrite`・`cost.total`）・pi のフッターの計算の規則（`footer.js` の `getSessionStats`）・`ctx.ui.setStatus` と `ctx.mode`・T3 Code が `setStatus` を入力欄のバナーにする挙動 | `pi-stock-packages` の `./local-packages/t3-usage-status` の 1 行と、パッケージのディレクトリ・試験・`scripts/verify.py` の規則を消す（配備済みの機は `.chezmoiremove`）。T3 Code 自身がセッションごとの費用・CH% を表示するようになったとき（T3 Code のフォークの案 B）に、不要になる |
+
+### t3-usage-status の探索の記録（2026-11-19）
+
+上の 1〜4 の順序で探した（承認は、利用者が自作を決めたことの記録。探索は、記録と、既製品が足りるかの確認のために行った）。
+
+1. **pi 本体の標準機能・設定**: フッターは TUI 専用。RPC モードでは、拡張が `setFooter` で差し替えても何も起きず（`dist/modes/rpc/rpc-mode.js`、pi 1.5.2）、`setStatus` と `setWidget`（文字列の配列だけ）だけが、ホストへ `extension_ui_request` として届く。T3 Code の入力欄のバナーは `setStatus` だけを読む（T3 Code の調査メモの読み。T3 Code のソースは再確認していない）。
+2. **すでに入れている package**: `pi-show-token-rate@0.3.0` は TPS・TTFT だけ（バナーの「TPS … · TTFT …」はこれ）。費用と CH% は出さない。
+3. **公開の package**: pi.dev/packages（検索は JS の描画で取れず、静的に出る 57 件。費用・キャッシュ・ステータス系は 0 件）。npm の検索（`keywords:pi-package` に cost・cache hit・usage・setStatus・t3・cache を足した 6 本と、自由文 8 本。いずれも 2026-11-19）。検索結果は重複を除いて約 220 件（pi と無関係なものを含む）。名前と説明で絞り、37 件を `npm pack` で展開して読んだ（`--ignore-scripts`・実行も install もしない）。`setStatus` と `setFooter` の使い方を grep し、近いものはソースを読んだ。
+4. **skill + CLI / MCP**: 該当しない（状態の表示は、pi の `session_start`・`turn_end` のイベントで拡張が出す以外に手段が無い）。
+
+結論: **足りる既製品は無い**。近いものと、足りない点:
+
+| 候補（版・月間 DL） | 出すもの | 足りない点 |
+| --- | --- | --- |
+| `pi-context-stats@1.4.0`（753。MIT。2026-10-27） | `setStatus` に、圧縮の回数・キャッシュ読み取りの token 数・費用の合計 | CH% は status に出ず、コマンド `/ctxstats` の中だけ。`ctx.hasUI` で出すので TUI でも出て、フッターと二重になる（RPC 限定にできない）。通知・設定（`settings.json`）の読み・コマンドが付き、文言は中国語。最も近いが、要件（フッターと同じ CH% と費用。TUI で二重にしない）を満たさない |
+| `pi-cost-tracker@0.1.0`（161）・`@tallshort/pi-inclusive-cost@0.2.0`（110） | `setStatus` に費用だけ（前者は独自の集計。後者は子エージェント込み） | CH% が無い |
+| `@cnife/pi-cache-hit-rate@0.4.1`（32。deprecated） | `setStatus` に CH% だけ | 累計のヒット率（pi のフッターは最新のメッセージ）。費用が無い。廃止予定 |
+| `pi-cache-monitor@0.1.0`（17）・`@narumitw/pi-cache-hit-monitor@0.1.4`（799） | ヒット率と費用を、入力欄の上のウィジェット（`setWidget`）に | T3 Code のバナーは `setStatus` だけを読む見込みで、出ない。表示はスパークライン・差分つきで、フッターと別物。費用はモデルの価格表からの推定 |
+| フッターの差し替え型（`@nilskluewer/pi-cost-transparency-statusline`・`@giladbarnea/pi-custom-footer`・`pi-stats-footer`・`@iaziz786/pi-footer`・`pi-status-footer` など） | TUI のフッターに費用・ヒット率 | RPC では `setFooter` が何もしないので、T3 Code には出ない |
+| 他（`@kaishin/pi-usage`・`@tduyng/pi-cost`・`pi-tokenburn`・`pi-cache-guard` など） | 特定のプロバイダの残量・TPS・キャッシュの期限・期間別の使用量 | 目的が別（費用と最新の CH% を出さない） |
+
+この追加で、例外の自作は 5 件になった（2026-11-18 の再評価で維持を決めた 4 件に、この 1 件が加わった）。「今後の見直し条件」（3 件を超えたとき）に再び当たる。再評価は、この件の範囲外（利用者の判断待ち）。
 
 ## 結果
 
@@ -101,6 +124,7 @@ ADR-0030 の凍結（フルガード・`pis`・kcage・PR ビューアなど）�
 - 導入した package で、実際の事故または事故の寸前が起きたとき。
 - 例外の自作が 3 件を超えたとき（置き換えられるものがないか再評価する）。
   - **2026-11-18: この条件を満たした**（自作は 4 件。permission-explain のフォークが一覧から漏れていたので足した）。再評価の結果、利用者の判断で 4 件とも維持する。置き換え候補は見つからなかった（permission-explain は上流が 0.1.1 のままで、改変の取り込みがない）。決定は変えないので、新しい ADR は起こさない。次の見直しの条件: 自作がさらに増えたとき・上流が同等の機能を出したとき。測定と経緯は [監査の記録](../research/agents/harness-optimization-audit-2026-11.md)。
+  - **2026-11-19: 自作が 5 件になった**（[t3-usage-status](#t3-usage-status-の探索の記録2026-11-19) を足した）。この条件に再び当たる。再評価は未実施（利用者の判断待ち）。
 
 ## 参考
 

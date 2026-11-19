@@ -238,6 +238,11 @@ RULES: tuple[Rule, ...] = (
         ),
         ("test_pi_sandbox_runner", "test_pi_sandbox_toggle"),
     ),
+    Rule(
+        "t3-usage-status",
+        ("home/dot_pi/agent/local-packages/t3-usage-status/**",),
+        ("test_t3_usage_status",),
+    ),
     Rule("env-check", ("home/dot_agents/skills/env-check/**",), ("test_env_check",)),
     Rule(
         "テンプレート検査器",
