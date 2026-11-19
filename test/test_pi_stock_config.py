@@ -20,7 +20,11 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 # settings.json からの相対パスで指す、リポジトリが配るローカル版の package
-LOCAL_PACKAGES = {"./local-packages/pi-permission-explain", "./local-packages/pi-sandbox-toggle"}
+LOCAL_PACKAGES = {
+    "./local-packages/pi-permission-explain",
+    "./local-packages/pi-sandbox-toggle",
+    "./local-packages/t3-usage-status",
+}
 HOME_SRC = ROOT / "home"
 PERMISSION_DIR = ".pi/agent/extensions/pi-permission-system"
 PLAN_MODE_CONFIG = ".pi/agent/pi-plan-mode.json"
@@ -617,6 +621,29 @@ def test_sandbox_toggle_local_package_is_wired_on_linux_only(tmp_path, os_name, 
     text = render('{{ includeTemplate "pi-stock-packages" . }}', tmp_path, os_name=os_name)
     packages = [line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")]
     assert ("./local-packages/pi-sandbox-toggle" in packages) is wired
+    assert len(packages) == len(set(packages))
+
+
+def test_t3_usage_status_line_is_unconditional_in_the_stock_packages_template():
+    """T3 Code に費用とキャッシュヒット率を出す拡張は OS を問わない。pi-stock-packages の条件の外に 1 回だけ置く (chezmoi が無くても確かめる)。"""
+    depth = 0
+    hits = []
+    for line in (ROOT / "home" / ".chezmoitemplates" / "pi-stock-packages").read_text(encoding="utf-8").splitlines():
+        text = line.strip()
+        if text.startswith(("{{ if", "{{- if")):
+            depth += 1
+        if text == "./local-packages/t3-usage-status":
+            hits.append(depth)
+        if text.startswith(("{{ end", "{{- end")) or "{{ end -}}" in text:
+            depth -= 1
+    assert hits == [0]
+
+
+@pytest.mark.parametrize("os_name", ["linux", "darwin", "windows"])
+def test_t3_usage_status_local_package_is_wired_on_every_os(tmp_path, os_name):
+    text = render('{{ includeTemplate "pi-stock-packages" . }}', tmp_path, os_name=os_name)
+    packages = [line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")]
+    assert packages.count("./local-packages/t3-usage-status") == 1
     assert len(packages) == len(set(packages))
 
 
