@@ -88,7 +88,7 @@ pi の機能を足す・変えるときは、**既存の拡張・設定の評価
 [ADR-0031](../../../docs/adr/0031-evaluate-existing-extensions-first.md) の自作の条件（a〜d）を、着手前にもう一度確かめる。
 
 - **最小にする**: 薄く、公式の拡張点で、pi の内部の挙動に頼らない。形は pi の package（公式 `docs/packages.md`。ローカルパスから読ませられる）
-- **置き場と配備の細部は未決**（最初の自作のときに決め、`docs/spec/agent-config-generation.md` の「pi のプロファイル」へ書く。stock は自作の拡張ディレクトリを配らない）
+- **置き場と配備**: `home/dot_pi/agent/local-packages/<名前>/` に package の形で置き、`pi-stock-packages` に `./local-packages/<名前>` を 1 行足す（[決定](../../../docs/spec/agent-config-generation.md#自作の拡張の置き場)。先例: `t3-usage-status`）。stock は自作の拡張ディレクトリ（`extensions/`）を配らない
 - 試験は、公式の拡張点の範囲で自動化できるものを書く。skip は通過ではない。TUI の表示など自動で確かめられないものは、未確認として実機確認の項目へ足す
 - ADR-0031 の「例外として残す自作の一覧」へ、理由・維持費の見込み・撤去の条件を足す
 
