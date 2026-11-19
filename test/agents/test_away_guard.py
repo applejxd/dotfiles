@@ -490,11 +490,11 @@ def test_note_file_is_appended_like_text(workspace):
 def test_note_file_written_with_crlf_is_logged_as_lf_only(workspace):
     """Windows で書かれた CRLF のノートでも、サイクル記録は LF だけで空行が増えない (どの OS でも再現する)。"""
     work = note_run(workspace)
-    (work / "note.md").write_bytes("本文\r\n$(not run)\r\n".encode("utf-8"))
+    (work / "note.md").write_bytes("本文\r\n$(not run)\r\n".encode())
     assert log_note("note.md") == guard.EXIT_CONTINUE
     raw = (workspace / ".tmp/away-shift/r1/cycles/cycle-000.md").read_bytes()
     assert b"\r" not in raw
-    assert raw.endswith("\n本文\n$(not run)\n".encode("utf-8"))
+    assert raw.endswith("\n本文\n$(not run)\n".encode())
 
 
 def test_note_file_and_text_are_exclusive(workspace):
