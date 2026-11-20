@@ -35,6 +35,7 @@ chezmoi status --include=scripts   # 次の apply で走るスクリプト（R�
 | `apt update` が GitHub CLI の `NO_PUBKEY` を警告する | Ubuntu | [apt update が GitHub CLI の NO_PUBKEY を警告する](troubleshooting-bootstrap.md#apt-update-が-github-cli-の-no_pubkey-を警告する) |
 | `apt update` が VS Code のソース二重登録を警告する | ネイティブ Linux | [apt update が VS Code のソース二重登録を警告する](troubleshooting-bootstrap.md#apt-update-が-vs-code-のソース二重登録を警告する) |
 | `No version is set for shim`、`configuration invalid` | Linux / WSL / macOS の旧 AI CLI | [AI CLI が mise に global default version を指定しろと言う](troubleshooting-bootstrap.md#ai-cli-が-mise-に-global-default-version-を指定しろと言う) |
+| `UnicodeEncodeError: 'cp932' codec can't encode character` で `modify_` スクリプトが落ちる、pi の設定が文字化けする | Windows（日本語） | [modify スクリプトの文字コード](agent-config-generation.md#modify-スクリプトの文字コード) |
 | `pi --version` が `SyntaxError` などで落ちる、pi の導入（npm）が失敗する | Windows の pi | [Windows で pi が起動しない（古い node が先に見つかる）](troubleshooting-bootstrap.md#windows-で-pi-が起動しない古い-node-が先に見つかる) |
 
 [仕様・運用一覧へ戻る](index.md)
