@@ -54,6 +54,21 @@ test/
 Python は 3.11 以上を前提とし、TOML は標準ライブラリ `tomllib` で読む（[ADR-0003](../adr/0003-require-python-311-for-agent-configuration.md)）。
 `modify_` のラッパーは、Unix では `python3`、Windows では最新の Python 3 を選び直す。3.11 未満では `tomllib` の import が失敗するため、project の uv 環境や外部の `tomli` には依存しない。
 
+### modify スクリプトの文字コード
+
+Python の標準入出力は、Windows ではロケールのコードページ（日本語環境は cp932）が既定で、UTF-8 で話す chezmoi と食い違う（2026-11-20 に日本語 Windows の `chezmoi apply` で確認）。
+`modify_*.py.tmpl` が `sys.stdin` を読み `sys.stdout` へ書くなら、`main()` の先頭（読み書きより前）で次の 2 行を呼んで UTF-8 に固定する。
+
+```python
+sys.stdin.reconfigure(encoding="utf-8")
+sys.stdout.reconfigure(encoding="utf-8")
+```
+
+- **症状**: 出力に cp932 で書けない文字があると `UnicodeEncodeError: 'cp932' codec can't encode character '\u2014'` で apply が止まる。`settings.json` の出力は、調査の子の system prompt（`pi-agent-prompt-researcher`）に U+2014（EM DASH）を含むので、必ず当たる。cp932 で書ける文字（日本語など）だけの出力は、エラーにならず cp932 のバイト列を返して、chezmoi が UTF-8 として読み、文字化けする。入力側も同じで、UTF-8 の JSON を cp932 として読み誤る。
+- **検査**: `scripts/lint_templates.py` が、`modify_*.py.tmpl`（描画できない `home/.chezmoitemplates/` の共有テンプレートを含む）の**ソース**を見て、`sys.stdin` / `sys.stdout` を text で使うのに、使う前の固定が無いものを落とす。`.buffer` 経由のバイト列の入出力（`modify_json.py.tmpl`）は対象外。`print()`・`input()` のように `sys.stdin` / `sys.stdout` を名指ししない入出力は見ない。新しい `modify_*.py.tmpl` を足すときは、同じ 2 行を置く。
+- **実行で確かめない理由**: Windows の CI（`windows.yml`）は `PYTHONUTF8=1` で回す（[Windows の GitHub Actions](testing.md#windows-の-github-actions)）ので、この不具合は実行の試験では捕まらない。Linux では既定が UTF-8 で、cp932 を再現できるのは `PYTHONIOENCODING=cp932` を渡した子プロセスだけ。そこで固定の有無を静的に見る。
+- **改行**: `reconfigure(encoding=...)` は改行の変換を変えない。Windows の text の標準出力は `\n` を `\r\n` にする（既存の挙動で、この規則の対象外）。
+
 ## pi の設定
 
 ### 設定の置き場（pi の標準の形と、機械ごとの上書き）
