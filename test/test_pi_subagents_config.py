@@ -336,9 +336,9 @@ def test_settings_assigns_models_by_role_for_copilot(settings_script):
     assert models["worker"] == "github-copilot/claude-sonnet-5.5:medium"
     assert models["scout"] == "github-copilot/claude-sonnet-5.5:low"
     # oracle は reviewer と同じ別系統 (親・worker の Claude と別の目。自己選好と自己点検の限界を避ける)
-    assert models["oracle"] == models["reviewer"] == "github-copilot/gpt-6.1-sol:high"
+    assert models["oracle"] == models["reviewer"] == "github-copilot/gpt-6.2-sol:high"
     # 実装と監査は系統を分ける (worker は Claude、reviewer は GPT)
-    assert models["reviewer"] == "github-copilot/gpt-6.1-sol:high"
+    assert models["reviewer"] == "github-copilot/gpt-6.2-sol:high"
     assert models["evidence-auditor"] == models["reviewer"]
 
 
@@ -373,8 +373,31 @@ def test_settings_moves_the_old_oracle_default_but_keeps_a_users_choice(settings
         }
     }
     out = json.loads(run(settings_script, json.dumps(old)))
-    assert by_provider(out)["github-copilot"]["oracle"]["model"] == "github-copilot/gpt-6.1-sol:high"
+    assert by_provider(out)["github-copilot"]["oracle"]["model"] == "github-copilot/gpt-6.2-sol:high"
     assert by_provider(out)["amazon-bedrock"]["oracle"]["model"] == "amazon-bedrock/us.anthropic.claude-opus-5-5:high"
+
+
+def test_settings_moves_the_previous_gpt_default_to_6_2_for_copilot_only(settings_script):
+    """前の既定 (6.1 sol の high) のままの Copilot の 3 役は 6.2 sol へ移す。利用者が選んだ値と、Bedrock は触らない。"""
+    old = {
+        "subagents": {
+            "agentOverridesByProvider": {
+                "github-copilot": {
+                    "reviewer": {"model": "github-copilot/gpt-6.1-sol:high"},
+                    "evidence-auditor": {"model": "github-copilot/gpt-6.1-sol:high"},
+                    "oracle": {"model": "github-copilot/gpt-6.1-sol:xhigh"},  # 利用者が思考の深さを変えた
+                },
+                "amazon-bedrock": {"reviewer": {"model": "amazon-bedrock/us.openai.gpt-6.1-sol:high"}},
+            }
+        }
+    }
+    out = json.loads(run(settings_script, json.dumps(old)))
+    copilot = by_provider(out)["github-copilot"]
+    assert copilot["reviewer"]["model"] == "github-copilot/gpt-6.2-sol:high"
+    assert copilot["evidence-auditor"]["model"] == "github-copilot/gpt-6.2-sol:high"
+    assert copilot["oracle"]["model"] == "github-copilot/gpt-6.1-sol:xhigh"  # 利用者の選択を保つ
+    # Bedrock は、6.2 の ID が未確認なので、6.1 のまま
+    assert by_provider(out)["amazon-bedrock"]["reviewer"]["model"] == "amazon-bedrock/us.openai.gpt-6.1-sol:high"
 
 
 def test_settings_keeps_a_users_model_and_other_providers(settings_script):
@@ -390,7 +413,7 @@ def test_settings_keeps_a_users_model_and_other_providers(settings_script):
     layer = by_provider(out)["github-copilot"]
     assert layer["worker"]["model"] == "x/y"  # 利用者の model を保つ
     assert layer["reviewer"]["thinking"] == "low"
-    assert layer["reviewer"]["model"] == "github-copilot/gpt-6.1-sol:high"  # 無いものは補う
+    assert layer["reviewer"]["model"] == "github-copilot/gpt-6.2-sol:high"  # 無いものは補う
     assert by_provider(out)["openrouter"] == {"worker": {"model": "z/w"}}  # 知らないプロバイダの層は触らない
 
 

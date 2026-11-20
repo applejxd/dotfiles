@@ -358,12 +358,13 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
   | 役割 | github-copilot | amazon-bedrock | 理由 |
   | --- | --- | --- | --- |
   | `worker` | `claude-sonnet-5.5:medium` | `us.anthropic.claude-sonnet-5-5:medium` | 実装は medium で足りる（opus と合格率が同じで sonnet が速い） |
-  | `reviewer`・`evidence-auditor` | `gpt-6.1-sol:high` | `us.openai.gpt-6.1-sol:high` | 実装（Claude）と**別系統**にして、独立した目で見る（second_opinion） |
-  | `oracle` | `gpt-6.1-sol:high` | `us.openai.gpt-6.1-sol:high` | 二番目の意見。**親・worker の Claude と別系統**にし（同じモデルの自己点検はほとんど効かず、評価役は同系統の出力を好むため。根拠）、`reviewer` と同じにする。Bedrock の Opus 5.5 は、カタログでは plan 役の既定で、ほかは明示の指示のときだけ。自律に起動する子には使わない（高価）。`context: fork` で親の会話を引き継ぐので、別モデルでは読み込みの再利用が効かない（少し高い） |
+  | `reviewer`・`evidence-auditor` | `gpt-6.2-sol:high` | `us.openai.gpt-6.1-sol:high` | 実装（Claude）と**別系統**にして、独立した目で見る（second_opinion）。Copilot は 2026-11-21 に 6.1 から 6.2 へ上げた（利用者の指示） |
+  | `oracle` | `gpt-6.2-sol:high` | `us.openai.gpt-6.1-sol:high` | 二番目の意見。**親・worker の Claude と別系統**にし（同じモデルの自己点検はほとんど効かず、評価役は同系統の出力を好むため。根拠）、`reviewer` と同じにする。Bedrock の Opus 5.5 は、カタログでは plan 役の既定で、ほかは明示の指示のときだけ。自律に起動する子には使わない（高価）。`context: fork` で親の会話を引き継ぐので、別モデルでは読み込みの再利用が効かない（少し高い） |
   | `scout` | `claude-sonnet-5.5:low` | `us.anthropic.claude-sonnet-5-5:low` | 速い調査（**新しい判断**。カタログに階層が無い。`explore` は計測が要るとされていた） |
   | `researcher` | `claude-sonnet-5.5:medium` | `us.anthropic.claude-sonnet-5-5:medium` | 調査の合成（**新しい判断**。カタログに階層が無い） |
 
   Haiku は使わない（利用者の方針。担当外の編集・書式崩れの実測）。Bedrock の `gpt-6.1-sol`・`opus-5-5` は `verified=false`（会社の機での pi のツール呼び出しは未確認）。`delegate` は設定せず、親のモデルを継ぐ。
+  **GPT sol の版（2026-11-21）**: Copilot の `gpt-6.2-sol` は、pi のカタログ（`pi --list-models sol`。コンテキスト 1.1M・思考あり）に在る。Bedrock の 6.2 の ID（`us.openai.gpt-6.2-sol`）はカタログに無く、実在を確かめていないので、Bedrock は 6.1 のまま（会社の機で使えると分かったら上げる）。前の既定（6.1 の high）のままの Copilot の 3 役は、`chezmoi apply` が 6.2 へ移す（`LEGACY_AGENT_MODELS`。利用者が別の値にしていれば保つ）。
 - **agent 定義の写し**（`home/dot_pi/agent/agents/{worker,reviewer,scout,oracle,researcher,evidence-auditor}.md`。配備先は `~/.pi/agent/agents/`。）: 組み込みの agent を**そのまま写し**、frontmatter に `permission: { external_directory: deny }` だけを足した。
   - **理由（ADR-0031 の評価）**: 子が作業ツリーの外を読もうとすると、方針は確認（ask）になり、**親の画面へ転送される。離席中は誰も答えず、5 分止まる**（実例: 2026-11-10、`review` の worker が `cd ~/.pi/…` で 240 秒以上待った）。確認ではなく**即座の拒否**にしたい。agent ごとの `permission:` は、agent ファイルの frontmatter にしか書けない（settings の `agentOverrides` は `permission` を扱えない）。ほかの標準の手段は無い。
   - **実測**（2026-11-10。使い捨ての project agent で。審査ログの `permission_request.blocked`・`origin: project-agent` でも確認。記録は [権限の frontmatter の実測](../research/agents/subagent-permission-frontmatter-2026-11.md)。**user 配下に配備した写しでの実測は、反映後に一度確かめる（未確認）**）: `external_directory: deny` で、作業ツリーの外の `read` と bash のパス引数は即座に拒否された（`/etc/hostname`・`/etc`・`/tmp`・`~/.agents/skills/…`。pi 本体の `~/.pi/agent/npm/…` は読めた）。作業ツリーの中は通った。`skills: <名>` と `inheritSkills: false` で、子には指定した skill だけが見えた。
