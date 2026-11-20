@@ -14,6 +14,10 @@
 ``--skip-secrets`` を付けるので Bitwarden 等は呼ばれない。秘密を使う
 テンプレートは chezmoi が "skip template" を返すので、それはスキップ扱いにする。
 
+描画では見えない規則として、modify script (``modify_*.py.tmpl``。単体で描画できない
+共有テンプレートを含む) の標準入出力が UTF-8 に固定されているかをソースの文字列で見る
+(``check_modify_stdio``。see docs/spec/agent-config-generation.md#modify-スクリプトの文字コード)。
+
 Usage:
     lint_templates.py [--source REPO] [PATH...]
 """
@@ -22,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -55,6 +60,11 @@ EXCLUDED = {
 # 単体では描画できない (呼び出し側から dict を受け取る)。
 # test_modifier_wrappers.py が呼び出し側ごと検査している。
 EXCLUDED_PREFIXES = ("home/.chezmoitemplates/",)
+
+# chezmoi の modify script (標準入力の現状を変換して標準出力へ返す Python)
+MODIFY_SCRIPT = re.compile(r"(?:^|/)modify_[^/]*\.py\.tmpl$")
+# text の標準入出力のうち、UTF-8 への固定を求める口
+TEXT_STREAMS = ("stdin", "stdout")
 
 # chezmoi が --skip-secrets でテンプレートを飛ばすときの目印
 SKIP_SENTINEL = "skip template"
@@ -195,15 +205,18 @@ def check(source: Path, path: str) -> list[str]:
     return failures
 
 
+def tracked_templates(source: Path) -> list[str]:
+    listed = subprocess.run(
+        ["git", "-C", str(source), "ls-files", "*.tmpl"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return listed.stdout.split()
+
+
 def templates(source: Path, paths: list[str]) -> list[str]:
-    if not paths:
-        listed = subprocess.run(
-            ["git", "-C", str(source), "ls-files", "*.tmpl"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        paths = listed.stdout.split()
+    paths = paths or tracked_templates(source)
     return [
         path
         for path in sorted(paths)
@@ -211,6 +224,39 @@ def templates(source: Path, paths: list[str]) -> list[str]:
         and path not in EXCLUDED
         and not path.startswith(EXCLUDED_PREFIXES)
     ]
+
+
+def modify_scripts(source: Path, paths: list[str]) -> list[str]:
+    """modify script のテンプレート。描画の対象外 (共有テンプレート) も含める。"""
+    return sorted(p for p in (paths or tracked_templates(source)) if MODIFY_SCRIPT.search(p))
+
+
+def _code_only(text: str) -> str:
+    """説明文の ``sys.stdin`` や、コメントアウトした固定を使用と数えないよう、コメントと docstring を落とす。"""
+    text = re.sub(r"\"\"\"[\s\S]*?\"\"\"|'''[\s\S]*?'''", '""', text)
+    return re.sub(r"(?m)^[ \t]*#.*$", "", text)
+
+
+def check_modify_stdio(path: str, text: str) -> list[str]:
+    """text で使う標準入出力が、使う前に UTF-8 へ固定されているかを見る。
+
+    Windows の標準入出力はロケールのコードページ (日本語環境は cp932) が既定で、UTF-8 の chezmoi と食い違う。
+    ``.buffer`` 経由のバイト列の入出力は対象外 (自分でエンコードしている)。
+    ``input()`` / ``print()`` のように ``sys.stdin`` / ``sys.stdout`` を名指ししない入出力は見ない。
+    """
+    code = _code_only(text)
+    problems: list[str] = []
+    for stream in TEXT_STREAMS:
+        used = re.search(rf"\bsys\.{stream}\b(?!\.(?:buffer|reconfigure)\b)", code)
+        if used is None:
+            continue
+        pin = re.search(rf"\bsys\.{stream}\.reconfigure\(\s*encoding\s*=\s*[\"']utf-?8[\"']", code)
+        if pin is None or pin.start() > used.start():
+            problems.append(
+                f'{path}: sys.{stream} を text で使う前に sys.{stream}.reconfigure(encoding="utf-8") が要る'
+                " (see docs/spec/agent-config-generation.md#modify-スクリプトの文字コード)"
+            )
+    return problems
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -223,6 +269,8 @@ def main(argv: list[str] | None = None) -> int:
     failures: list[str] = []
     for path in templates(source, args.paths):
         failures.extend(check(source, path))
+    for path in modify_scripts(source, args.paths):
+        failures.extend(check_modify_stdio(path, (source / path).read_text(encoding="utf-8-sig")))
 
     for failure in failures:
         print(failure, file=sys.stderr)
