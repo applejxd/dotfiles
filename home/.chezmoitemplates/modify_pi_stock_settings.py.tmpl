@@ -98,8 +98,9 @@ LEGACY_AGENT_TOOLS = {
 # 役割ごとのモデル (subagents.agentOverridesByProvider.<プロバイダ>.<役>.model。`:` の後ろは思考の深さ)。
 # pi-subagents が、親のセッションのモデルのプロバイダ (/model で替えても追従する) ごとに層を重ねる (docs/models.md)。
 # 以前の Copilot / Bedrock のカタログ (撤去した common.toml.tmpl の [pi.model.tier.*]) に合わせる:
-# worker = Sonnet 5.5 の medium、reviewer・evidence-auditor = 別系統の second_opinion (GPT 6.1 sol。worker と系統を分ける)、
-# oracle = reviewer と同じ GPT 6.1 sol の high (2026-11-10。親・worker の Claude と別系統の二番目の意見にするため。根拠は docs/research/agents/ の記録)。
+# worker = Sonnet 5.5 の medium、reviewer・evidence-auditor = 別系統の second_opinion (GPT sol。worker と系統を分ける)、
+# oracle = reviewer と同じ GPT sol の high (2026-11-10。親・worker の Claude と別系統の二番目の意見にするため。根拠は docs/research/agents/ の記録)。
+# GPT sol は、Copilot が 6.2 (2026-11-21 に利用者の指示で 6.1 から上げた。pi のカタログに在る)。Bedrock は、6.2 の ID が未確認なので 6.1 のまま。
 # Opus は高価で、カタログでは plan 役の既定。指示なしに自律で起動する子には使わない。
 # scout = low、researcher = medium は、カタログに階層が無い新しい判断。Haiku は使わない。
 # 利用者がすでに同じ役の model を書いていれば保つ (無いときだけ補う)。
@@ -108,9 +109,9 @@ PROVIDER_AGENT_MODELS = {
         "scout": "github-copilot/claude-sonnet-5.5:low",
         "researcher": "github-copilot/claude-sonnet-5.5:medium",
         "worker": "github-copilot/claude-sonnet-5.5:medium",
-        "reviewer": "github-copilot/gpt-6.1-sol:high",
-        "evidence-auditor": "github-copilot/gpt-6.1-sol:high",
-        "oracle": "github-copilot/gpt-6.1-sol:high",
+        "reviewer": "github-copilot/gpt-6.2-sol:high",
+        "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
+        "oracle": "github-copilot/gpt-6.2-sol:high",
     },
     "amazon-bedrock": {
         "scout": "amazon-bedrock/us.anthropic.claude-sonnet-5-5:low",
@@ -123,10 +124,12 @@ PROVIDER_AGENT_MODELS = {
 }
 
 
-# 前の既定値 (プロバイダ, 役) -> モデル。この値のままなら、利用者が選んだ値ではないので新しい既定へ移す
+# 前の既定値 (プロバイダ, 役) -> モデルの一覧。この値のままなら、利用者が選んだ値ではないので新しい既定へ移す
 LEGACY_AGENT_MODELS = {
-    ("github-copilot", "oracle"): "github-copilot/claude-sonnet-5.5:xhigh",
-    ("amazon-bedrock", "oracle"): "amazon-bedrock/us.anthropic.claude-sonnet-5-5:xhigh",
+    ("github-copilot", "reviewer"): ("github-copilot/gpt-6.1-sol:high",),
+    ("github-copilot", "evidence-auditor"): ("github-copilot/gpt-6.1-sol:high",),
+    ("github-copilot", "oracle"): ("github-copilot/claude-sonnet-5.5:xhigh", "github-copilot/gpt-6.1-sol:high"),
+    ("amazon-bedrock", "oracle"): ("amazon-bedrock/us.anthropic.claude-sonnet-5-5:xhigh",),
 }
 
 
@@ -208,7 +211,7 @@ def main() -> int:
             entry = layer.get(name)
             if not isinstance(entry, dict):
                 entry = {}
-            if entry.get("model") == LEGACY_AGENT_MODELS.get((provider, name)):
+            if entry.get("model") in LEGACY_AGENT_MODELS.get((provider, name), ()):
                 entry["model"] = model
             entry.setdefault("model", model)
             layer[name] = entry
