@@ -429,6 +429,146 @@ def test_shellrc_defines_no_agent_alias_or_copilot_function(home):
     assert "alias agent=" not in done.stdout and "function" not in done.stdout
 
 
+# ---- drypi・superpi (外部の pi が PATH にあるときだけ定義する) ----
+
+# functions/pi.sh の _PI_DRY_ARGS。drypi も superpi も、これを pi の先頭へ渡す
+_DRY_ARGS = ["--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-approve"]
+# 渡された引数・作業ディレクトリ・HOME・PATH・エージェントの置き場・自分のパスを、そのまま出す偽の pi
+_FAKE_PI = (
+    '#!/bin/sh\necho "cwd=$(pwd)"\necho "self=$0"\necho "home=$HOME"\necho "path=$PATH"\n'
+    'echo "agent=$PI_CODING_AGENT_DIR"\nfor a in "$@"; do echo "arg=[$a]"; done\n'
+)
+# 呼ばれたことを出して、環境を捨てて (sudo の env_reset に相当)、残りの引数を実行する偽の sudo。
+# 本物の sudo は、パスワードを求める。HOME・PATH・エージェントの置き場を、呼ぶ側が明示して渡さないと、pi に届かない
+_FAKE_SUDO = (
+    '#!/bin/sh\necho "sudo-first=$1"\n'
+    'exec /usr/bin/env -i HOME=/nonexistent-root PATH=/usr/bin:/bin "$@"\n'
+)
+
+
+def _stub(directory: Path, **bodies: str) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, body in bodies.items():
+        (directory / name).write_text(body, encoding="utf-8")
+        (directory / name).chmod(0o755)
+    return directory
+
+
+@pytest.fixture
+def fakebin(tmp_path: Path) -> Path:
+    """偽の pi と sudo を置いたディレクトリ。"""
+    return _stub(tmp_path / "fakebin", pi=_FAKE_PI, sudo=_FAKE_SUDO)
+
+
+def _absolute_shell(argv: list[str]) -> list[str]:
+    """PATH を絞った起動では、シェル自身を PATH から探せない。先頭のシェルを絶対パスにする。"""
+    return [shutil.which(argv[0]) or argv[0], *argv[1:]]
+
+
+def _pi_args(stdout: str) -> list[str]:
+    return [ln[5:-1] for ln in stdout.splitlines() if ln.startswith("arg=[")]
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_drypi_passes_the_dry_flags_and_keeps_the_cwd(home, fakebin, shell):
+    """drypi は、切るものの一覧を先頭に付けて pi を呼ぶ。作業ディレクトリは変えず、引数は素通し。"""
+    script = 'mkdir -p "$HOME/work" && cd "$HOME/work" && drypi --model m "hello world"'
+    done = run(_source_shellrc(shell, script), home, PATH=f"{fakebin}:{os.environ['PATH']}")
+    assert done.returncode == 0, done.stderr
+    assert f"cwd={home}/work" in done.stdout.splitlines()
+    assert _pi_args(done.stdout) == [*_DRY_ARGS, "--model", "m", "hello world"]
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_superpi_runs_the_dry_pi_as_root_from_the_root_directory(home, fakebin, shell):
+    """superpi は、sudo env で、利用者の HOME・PATH・エージェントの置き場を明示して渡し、/ から drypi と同じ一覧で pi を呼ぶ。
+
+    偽の sudo は環境を捨てるので、明示して渡さなかったものは pi に届かない。
+    セッションは保存せず (--no-session)、起動時の通信もしない (--offline)。呼んだシェルの作業ディレクトリは変わらない。
+    """
+    script = (
+        'mkdir -p "$HOME/work" && cd "$HOME/work" && echo "shell-path=$PATH" && superpi --model m; echo "after=$(pwd)"'
+    )
+    done = run(
+        _source_shellrc(shell, script), home, PATH=f"{fakebin}:{os.environ['PATH']}", PI_CODING_AGENT_DIR=""
+    )
+    assert done.returncode == 0, done.stderr
+    lines = done.stdout.splitlines()
+    shell_path = next(ln.removeprefix("shell-path=") for ln in lines if ln.startswith("shell-path="))
+    assert "sudo-first=env" in lines
+    assert "cwd=/" in lines
+    assert f"self={fakebin}/pi" in lines
+    assert f"home={home}" in lines and f"agent={home}/.pi/agent" in lines
+    assert f"path={shell_path}" in lines
+    assert _pi_args(done.stdout) == [*_DRY_ARGS, "--no-session", "--offline", "--model", "m"]
+    assert f"after={home}/work" in lines
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_superpi_keeps_an_explicit_agent_dir(home, fakebin, shell):
+    done = run(
+        _source_shellrc(shell, "superpi"), home, PATH=f"{fakebin}:{os.environ['PATH']}", PI_CODING_AGENT_DIR="/x/agent"
+    )
+    assert done.returncode == 0, done.stderr
+    assert "agent=/x/agent" in done.stdout.splitlines()
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_superpi_makes_a_relative_path_entry_absolute_before_changing_directory(home, tmp_path, shell):
+    """PATH に相対の要素があって、そこで pi が見つかっても、cd / のあとに別の pi を探さない。"""
+    _stub(home / "work" / "rel", pi=_FAKE_PI)
+    sudo_only = _stub(tmp_path / "sudo-only", sudo=_FAKE_SUDO)
+    done = run(
+        _source_shellrc(shell, 'cd "$HOME/work" && superpi'),
+        home,
+        PATH=f"rel:{sudo_only}:{os.environ['PATH']}",
+        PI_CODING_AGENT_DIR="",
+    )
+    assert done.returncode == 0, done.stderr
+    lines = done.stdout.splitlines()
+    assert f"self={home}/work/rel/pi" in lines
+    assert "cwd=/" in lines
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_drypi_and_superpi_are_not_defined_without_an_external_pi(home, tmp_path, shell):
+    """pi が PATH に無い機では、何も定義しない。alias・関数の pi だけがあるときも、定義しない。"""
+    empty = tmp_path / "emptybin"
+    empty.mkdir()
+    probe = "type -t drypi superpi" if shell == "bash" else "whence -w drypi superpi"
+    done = run(_absolute_shell(_source_shellrc(shell, probe)), home, PATH=str(empty))
+    assert "function" not in done.stdout, done.stdout
+    # 関数の pi だけがある (外部の pi は無い)
+    argv = _absolute_shell(_source_shellrc(shell, probe))
+    argv[-1] = "pi() { :; }; " + argv[-1]
+    done = run(argv, home, PATH=str(empty))
+    assert "function" not in done.stdout, done.stdout
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_superpi_refuses_without_sudo(home, tmp_path, shell):
+    only_pi = _stub(tmp_path / "nosudo", pi=_FAKE_PI)
+    done = run(_absolute_shell(_source_shellrc(shell, "superpi; echo rc=$?")), home, PATH=str(only_pi))
+    assert "rc=1" in done.stdout.splitlines()
+    assert "sudo が無い" in done.stderr
+    assert "cwd=" not in done.stdout  # pi は起動しない
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_superpi_refuses_when_pi_left_the_path_after_loading(home, tmp_path, shell):
+    """読み込んだあとで PATH から pi が消えたら、sudo の前に止まる。"""
+    both = _stub(tmp_path / "both", pi=_FAKE_PI, sudo=_FAKE_SUDO)
+    sudo_only = _stub(tmp_path / "sudo-only", sudo=_FAKE_SUDO)
+    done = run(
+        _absolute_shell(_source_shellrc(shell, f'PATH="{sudo_only}"; superpi; echo rc=$?')),
+        home,
+        PATH=str(both),
+    )
+    assert "rc=1" in done.stdout.splitlines()
+    assert "pi の実行ファイルが PATH に無い" in done.stderr
+    assert "sudo-first" not in done.stdout
+
+
 # ---- ROS setup の選び方 ----
 
 

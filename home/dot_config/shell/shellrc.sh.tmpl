@@ -204,8 +204,8 @@ function video-dl() {
 # functions #
 #-----------#
 
-# 大きめの関数は functions/ に分けている (archive: extract / zpack / zunpack, cpp: runcpp)
-for _shellrc_fn in archive cpp; do
+# 大きめの関数は functions/ に分けている (archive: extract / zpack / zunpack, cpp: runcpp, pi: drypi / superpi)
+for _shellrc_fn in archive cpp pi; do
     # shellcheck source=/dev/null
     source "${HOME}/.config/shell/functions/${_shellrc_fn}.sh"
 done

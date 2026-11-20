@@ -54,7 +54,8 @@ PATH と `LD_LIBRARY_PATH`（`/usr/lib/wsl/lib`）は既にあれば足さない
 5. 関数内の失敗は `exit` ではなく `return` で抜ける（`ccd` / `jcd` / `cdf`）。
    `zpack` は既存の出力先を上書きせず、一時ファイル経由で成功したときだけ移す。
 6. 大きい関数は `~/.config/shell/functions/` に分け、`shellrc.sh` の末尾で読み込む
-   （`archive.sh`: `extract` / `zpack` / `zunpack`、`cpp.sh`: `runcpp`）。
+   （`archive.sh`: `extract` / `zpack` / `zunpack`、`cpp.sh`: `runcpp`、`pi.sh`: `drypi` / `superpi`。
+   `pi.sh` は、外部の `pi`（alias・関数ではない実行ファイル）が PATH にある機だけ定義する）。
    テンプレート機能が要らないので素の `.sh` にし、pre-commit の shellcheck を効かせる。
    読み込み元が `shellrc.sh` だけなので、対話シェル専用であることは変わらない。
    小さい関数は `shellrc.sh` に残す。zsh の `autoload` は bash で使えないので採らない。
@@ -63,9 +64,44 @@ Nix 化・`rm` の alias 差し替え・環境変数の列挙による人間判�
 
 検査は `test/test_shell_startup.py`（非対話 zsh / login bash の alias・環境変数・
 出力、`.zshrc` の早期 return、`shellenv.sh` 単体、`functions/` の読み込み、`zpack`、
-`runcpp`）。一時 HOME に描画結果を
+`runcpp`、`drypi`・`superpi`）。一時 HOME に描画結果を
 置いて実行し、zinit・mise・fzf・ネットワークは使わない。実機の対話シェルの
 起動（プロンプトまで）は検査しない。
+
+## pi の特殊な起動 drypi と superpi
+
+2026-11-20。外部の `pi`（alias・関数ではない実行ファイル）が PATH にある機だけ、対話シェルに 2 つの関数を定義する（`functions/pi.sh`。bash・zsh。Windows の PowerShell は対象外）。引数は pi へそのまま渡す。
+
+| 名前 | 中身 |
+| --- | --- |
+| `drypi` | 起動した場所のまま、`pi --no-extensions --no-skills --no-prompt-templates --no-context-files --no-approve` を呼ぶ |
+| `superpi` | `drypi` と同じ一覧に `--no-session --offline` を足し、`cd /` したサブシェルから `sudo env HOME=… PATH=… PI_CODING_AGENT_DIR=… pi …` で root として呼ぶ |
+
+- **由来（dry mode）**: 2026-11-19（UTC）の @skirano のツイート（`https://x.com/skirano/status/2123524161192743060`。取得は 2026-11-20）。「サブエージェントのモデルは、モデルの上に載るものを全部切った dry mode で動かすと、速く効率よく動く」。添付の画像は、Codex の `codex exec -m <モデル> -s workspace-write -C <dir> -c 'mcp_servers={}' --disable plugins --disable apps … --disable browser_use … --disable skill_search … -- -`（標準入力から依頼を読む非対話の実行）。ツイートの主張（速く効率的になる）は未検証。
+- **Codex から pi への対応**:
+
+  | Codex | pi |
+  | --- | --- |
+  | `-c 'mcp_servers={}'`・`--disable plugins`・`apps`・`browser_use`・`computer_use`・`image_generation` など | `--no-extensions`（組み込みの MCP・`tool_search`・`codemode`、設定した package 由来の拡張も切る。`--no-mcp` はこれに含まれるので足さない） |
+  | `--disable skill_search`・`skill_mcp_dependency_install` | `--no-skills` |
+  | （対応なし） | `--no-prompt-templates`・`--no-context-files`（`AGENTS.md`・`CLAUDE.md`）・`--no-approve`（信頼の対象になる、プロジェクトの `.pi/` の設定・拡張・MCP を無視する。ただし、起動時の `sessionDir` の先読みは残る。出典は pi 1.5.2 同梱の `docs/security.md`） |
+  | `-C <dir>` | 付けない（起動した場所のまま。利用者の指定） |
+  | `-m <モデル>` | 付けない（既定のモデル。`drypi --model …` で指定できる） |
+  | `-s workspace-write`（囲い） | 付けない（利用者の判断。下の注意） |
+  | `exec … -- -`（非対話・標準入力） | 対話が既定。`drypi -p "依頼"` や、標準入力を渡す `drypi -p` で非対話にできる |
+
+  残るもの: pi の既定のシステムプロンプト、ユーザー設定（`settings.json`。既定のモデル・`defaultTools`・テーマなど）、agent ディレクトリの `SYSTEM.md`・`APPEND_SYSTEM.md`（あれば。この機には無い）、組み込みの道具（read・bash・edit・write。設定の `defaultTools` で足した grep・find・ls は残るはずだが、未確認）。明示した `-e`・`--skill`・`--prompt-template` は、停止のフラグがあっても読み込まれる。
+- **注意（権限の方針も囲いも効かない）**: 拡張を切るので、権限の拡張（`pi-permission-system`）の deny・ask が効かない（`.env` や鍵のパス・危険なコマンドの拒否も無い）。囲い（`pib`）も通さない（2026-11-20 の利用者の判断。`pib` 経由にする案もあったが、素の `pi` を選んだ）。囲いが要るときは `pib --no-extensions …` を直接使う。
+- **`superpi` の注意**: root で、権限の方針も囲いも無く動く。
+  - `cd /` はサブシェルの中だけで、呼んだシェルの作業ディレクトリは変わらない。
+  - `HOME` と `PI_CODING_AGENT_DIR`（設定済みならそれ、無ければ `~/.pi/agent`）は、利用者のものを渡す（認証・設定を共有するため）。**root が `~/.pi/agent` に root 所有のファイルを作ると、あとで通常の pi が書けなくなる**。そのため、セッションを保存せず（`--no-session`）、起動時の自動の通信もしない（`--offline`）。認証の更新などで、root 所有のファイルが残りうる。直すには `sudo chown -R "$USER" ~/.pi/agent`。
+  - sudo が落とす環境変数（プロキシ・`AWS_PROFILE` など）は渡さない。渡すのは `HOME`・`PATH`・`PI_CODING_AGENT_DIR` だけ（`TERM` は sudo が保つ）。必要なら `functions/pi.sh` の `env` に足す。
+  - `PATH` を丸ごと root へ渡す（利用者の例と同じ。sudo の `secure_path` は使わない）。利用者が書き込める場所の実行ファイルを、root が実行しうる。
+  - pi の実体は、外部の実行ファイルの絶対パス（bash は `type -P pi`、zsh は `whence -p pi`）。相対の `PATH` 要素で見つかったときは、`cd /` する前の作業ディレクトリで絶対にする。alias・関数の `pi` は使わない。`$HOME/.local/bin/pi` に固定しない（この機には無く、`~/.pi/agent/bin/pi` と `~/bin/pi` がある）。
+  - sudo が無ければ `superpi: sudo が無い`、読み込んだあとで PATH から pi が消えたら `superpi: pi の実行ファイルが PATH に無い` と出して、sudo の前に失敗する。
+- **ADR-0037 との関係**: 撤去したのは、pi 以外の CLI の起動関数と `agent` の別名。pi を起動する別名は対象外（`test_shellrc_defines_no_agent_alias_or_copilot_function` は、そのまま通る）。
+- **既存の評価（ADR-0031）**: pi の標準のフラグだけで足りる。自作は関数 2 つ（約 20 行）で、拡張・package は足さない。pi 1.5.2 の `pi --help` と docs に、一括で切る profile のようなフラグは無い（2026-11-20 に確認）。あれば置き換える。
+- **変え方**: 切る範囲は `_PI_DRY_ARGS`（`drypi` も `superpi` も共有）。試験は `test/test_shell_startup.py`（偽の `pi`・`sudo` を PATH に置いて、渡す引数・作業ディレクトリ・環境変数を、bash と zsh で確かめる。偽の sudo は環境を捨てるので、`HOME`・`PATH`・エージェントの置き場を明示して渡さないと、pi に届かない）。**未検証**: 実機の `sudo` と、実際の pi の起動（`--no-extensions` で、設定の package・権限の拡張・MCP が本当に読まれないこと）。
 
 ## マシン固有の設定の置き場
 
