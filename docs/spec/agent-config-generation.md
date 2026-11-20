@@ -110,6 +110,7 @@ stock の確認画面は package `@gotgenes/pi-permission-system`。設定ファ
   - 作業ツリーの中の `read`・`write`・`edit`・`grep`・`find`・`ls` は allow。作業ツリーの外（`external_directory`）は、**読み書きとも allow は `/tmp/*` だけ**、**読み取りだけ allow は下の許可リスト**、それ以外は ask。プロジェクトごとの事前許可（データセットの読み取りなど）は [プロジェクト単位でデータセットを読み取り専用にする](#プロジェクト単位でデータセットを読み取り専用にする)。
     - **読み取りの許可リスト**（2026-11-10）: `~/.pi/agent/` の公開ディレクトリ（`npm/`・`agents/`・`skills/` など）・`~/.agents/skills/`・`/tmp` 自体・Orca の貼り付け画像は**読み取りだけ** allow。`extensions/*/logs`・認証情報・`sessions/` は ask。 経緯・実測は [research](../research/agents/permission-policy-rationale-2026-11.md#読み取りの許可リストの経緯)。
     - **Orca の添付ファイル（`~/.orca/agent-session-attachments/*`）は、読み取りだけ allow**（2026-11-16）。書き込みは allow にしない。展開は `cat` で作業ツリーへ写してから行う。**受容した限界**: 添付の配下の symlink 経由で、リンク先の読み取りが通る。 経緯・実測は [research](../research/agents/permission-policy-rationale-2026-11.md#orca-の添付ファイル)。
+    - **T3 Code の添付ファイル（`~/.t3/userdata/attachments/*`）も、読み取りだけ allow**（2026-11-19。利用者の指示）。T3 は、利用者が添付した画像・ファイルを作業ツリーの外のこの場所に置き、パスを指示に添える。読むたびに確認が出ていたため。書き込みは allow にしない。`~/.t3/userdata/` のそのほか（状態の DB など）は ask のまま。**受容した限界**: Orca の添付と同じく、配下の symlink 経由で、リンク先の読み取りが通る。 経緯・実測は [research](../research/agents/permission-policy-rationale-2026-11.md#t3-code-の-mcp-ツールと添付ファイル)。
     - **子エージェントの出力の読み取り（2026-11-11）**: `subagent-artifacts/` の `*_output.md` と `outputs/*` だけ allow（transcript・依頼文・セッションは ask）。 経緯・実測は [research](../research/agents/permission-policy-rationale-2026-11.md#子の出力の読み取り)。
     - **`external_directory_read` の並び順と、`..` を含む綴り（2026-11-18）**: **allow、`..` を含む綴りの ask（`*/../*`・`*/..`）、deny・ask の順**に並べる（後勝ち。試験で固定）。代償: 原形に `..` が残る綴りは ask になる（正規化したパスで書く）。**受容した限界**: 許可した場所の中の symlink は、リンク先が「既定の ask」の場所なら通る。 経緯・実測は [research](../research/agents/permission-policy-rationale-2026-11.md#並び順と--を含む綴り)。
     - **システム診断の読み取りの許可リスト（2026-11-11。OS の条件は付けない）**: `/var/log`・`/proc`・`/sys`・`/etc` の診断用のパスを、**ディレクトリではなく名前で**許可する。`btmp`・`auth.log`・`/proc/*/environ`・`/etc/shadow` など秘密が残りうるものは ask のまま。草案で、実在は未確認。 経緯・実測は [research](../research/agents/permission-policy-rationale-2026-11.md#システム診断の許可リスト)。
@@ -138,7 +139,7 @@ stock の確認画面は package `@gotgenes/pi-permission-system`。設定ファ
     - **この保護は既定の場所に固定**: `pib` は、設定の場所の環境変数が既定と違うと、制御ファイルがリンクで外を指していると、起動しない。 経緯・実測は [research](../research/agents/permission-policy-rationale-2026-11.md#囲いの保護の固定)。
   - **全 deny に理由をつける**（2026-11-11）: `deny` の値は `{ "action": "deny", "reason": "…" }` と書ける。理由は、拒否の文に付いてエージェントへ届く（「なぜ拒否され、代わりに何をすべきか」を読める）。すべての deny に理由がある（件数は書かない。試験 `test_every_deny_rule_carries_a_reason` が全件を検査する）。
     **ask には、理由を付ける仕組みが無い**（拡張の docs: 理由は deny の値にだけ書ける）。確認の画面には、コマンドとパスだけが出る。そのため、「子が絶対にやってはいけない」操作は、理由つきの deny にする（無人の確認は 5 分で拒否され、止まる）。人が在席して承認したい操作（`gh` の変更系・`git rebase` など）だけを、ask に残す。
-  - `mcp` は ask（検索の `websearch`・`agentcore-websearch` だけ allow。上の「MCP 設定」）、`skill` は allow。入れる拡張の自分のツール（`todo`・`ask_user_question`・`subagent`・`subagents_enable`・`bg_wait`）は毎回の確認を出さないよう allow。上のどれにも当たらないツール（`*`）は ask。
+  - `mcp` は ask（検索の `websearch`・`agentcore-websearch`・`webfetch` と、T3 Code の読み取り・表示などの 21 本だけ allow。上の「MCP 設定」と [T3 Code の MCP ツールの権限](#t3-code-の-mcp-ツールの権限)）、`skill` は allow。入れる拡張の自分のツール（`todo`・`ask_user_question`・`subagent`・`subagents_enable`・`bg_wait`）は毎回の確認を出さないよう allow。上のどれにも当たらないツール（`*`）は ask。
   - **`subagent_launch` は allow**（2026-11-09。当面の運用）。workflow の子の起動ごとの確認を出さないため。`gate`・`acceptance.verify` のシェルはこの時点で検査されないので、運用では使わない。 経緯・実測は [research](../research/agents/permission-policy-rationale-2026-11.md#subagent_launch)。
   - 子と親の連絡用のツール（`contact_supervisor`・`intercom`・`structured_output`・`subagent_command`）も allow。YOLO を切ると、規則の無いツールは `*` の ask になり、子が進捗を連絡するたびに確認が出るため。
   - 追加の 4 つの package のツール（下の「追加の 4 つの package」）: `bg_status`・`bg_kill`・`plan_mode_question`・`plan_mode_complete`・`goal_complete`・`goal_blocked`・`goal_wait` も allow（状態を記録するだけ、または読み取りのツール）。`bg_run` は allow にしない（`shellTools` で bash と同じ判定に通す）。
@@ -199,8 +200,28 @@ package `cc-safety-net` は、破壊的なコマンド（`git reset --hard`・`r
 - `~/.pi/agent/mcp.json` を `modify_mcp.json.py.tmpl`が配る。`[[mcp]]`（`clis` に `pi` を含むもの）から `mcpServers` を作る。仕様は [MCP サーバの設定](mcp-servers.md)。
 - 宣言したサーバだけを更新し（`command` / `args`）、利用者が足したサーバと利用者のキーは保つ。壊れた JSON は触らない。何度流しても同じ結果。
 - **package の一覧の変更**: `pi-web-access` を外した（家の検索は自作の MCP `websearch`）。`pi-mcp-adapter` は 2026-11-17 に、会社 PC からも外した（どの機も pi 組み込みの MCP。[理由](mcp-servers.md#pi-mcp-adapter-を使わない理由2026-11-17)）。評価は [記録](../research/agents/pi-stock-packages-evaluation-2026-11.md)。
-- **permission**: `mcp` は `"*": "ask"` のまま、`websearch`・`agentcore-websearch`（サーバ名だけのルール）を allow。他の MCP は ask。
+- **permission**: `mcp` は `"*": "ask"` のまま、`websearch`・`agentcore-websearch`（サーバ名だけのルール）を allow。他の MCP は ask。 T3 Code のツールは、[別に決めている](#t3-code-の-mcp-ツールの権限)。
 - **未確認**（実機）: permission-system は `mcp` に allow が 1 つでもあると `mcp_status` などの探索系を自動で allow にする、と docs にある。実挙動は未確認。
+
+### T3 Code の MCP ツールの権限
+
+2026-11-19。T3 Code の中で pi を動かすと、T3 が MCP のツール（71 本。pi では `mcp__t3-code__<名前>`）を足す。`mcp.json` に無いサーバなので、権限の判定は名前を最初の `__` で分け、`t3-code_<名前>`・`t3-code:<名前>`・`t3-code`・`<名前>`・完全名・`mcp_call` と、面全体の `mcp` の 7 つを照合する（拡張 42.0.0 の `createPiMcpToolTargets` と `normalizeMcpTargets`）。既定は ask（`"*": "ask"`）。
+
+- **ツールごとに allow する**（`t3-code:<名前>`）。サーバ単位の `t3-code` の allow は、全ツールと将来の追加分まで通すので置かない（試験で固定）。
+- **allow は 21 本**。基準は、定義から読み取りだけ・表示だけと言えて、害の経路が見えないこと（承認された件数は根拠にしない）。**確実と言えないものは ask に残す**（例外は、下の受容した 3 本）。
+  - 読み取り 18: `orchestrator_capabilities`・`task_status`・`t3_thread_list`・`t3_thread_search`・`t3_thread_read`・`t3_thread_wait`・`t3_worktree_list`・`t3_worktree_status`・`list_thread_pull_requests`・`read_pull_request_guide`・`t3_project_list`・`t3_project_read`・`t3_environment_read`・`list_scheduled_tasks`・`t3_preview_list`・`preview_status`・`t3_theme_read`・`device_list`
+  - 表示だけ 1: `send_to_user`
+  - ブラウザの付随操作 2: `preview_wait_for`（待つだけ）・`t3_preview_close`（このスレッドが持つタブを閉じるだけ）
+  - **確実とは言い切れないが、リスクを受容して allow にした例外 3 本**（2026-11-19。実装者の判断）:
+    `t3_thread_read` は、子の最終結果を読むと「配信済み」になる（`task_status` も同じ）。任意のスレッドを読めるので、ほかのスレッドの子の結果を読んだとき、その親の完了の通知に影響するかが未確認。毎回使う読み取りで、ask にすると allow を足した意味が薄れるため残した。害は、通知が先に「配信済み」になる程度と見たが、裏付けは無い。最初の監査の reviewer は ask を勧めた。`t3_environment_read` は、返却項目と秘匿化が未確認（「identity と preferences の読み取り」という定義だけが根拠）。`send_to_user` は、Markdown が外部画像を取得するかが未確認（通常の返信と同じ表示の経路なら、新しい経路ではない）。いずれも、T3 側の改修後に確かめ、危ういと分かれば ask に戻す。
+- **ask のまま 50**: 起動・送信・停止（`delegate_task`・`t3_thread_launch`・`t3_thread_send` など。費用・自律実行・ほかのスレッドへの指示）、スケジュール、プロジェクトと環境の設定の変更、ブラウザ操作（`preview_open`・`preview_navigate`・`preview_act`・`preview_evaluate` など。任意の URL・スクリプトの実行・ローカルファイルのアップロード）、`request_secret` など利用者への問い、元に戻せる整理 7 本（`t3_thread_update`・`t3_thread_organize`・`link_pull_request`・`link_pull_requests`・`unlink_pull_request`・`unlink_pull_requests`・`unwatch_pull_request`）、`html_preview`・`html_render`。
+  - **`preview_resize`・`preview_set_appearance` も ask**（2026-11-19。reviewer の指摘）。タブの大きさ・`prefers-color-scheme` を変えると、開いているページの `resize`・`matchMedia` の処理が動く。ページが外部のものなら、その処理が通信を起こせる。表示を変えるだけとは言えないので、確実とは言えない。
+- **決めていないこと（利用者が T3 側を改修したあとに再判断。2026-11-19）**:
+  - `html_preview`・`html_render`: 外部 URL を読み、スクリプトが動く。家は allow、仕事は deny して代替を案内する案。
+  - 外へ情報を出せるツール（上の 2 本とブラウザ操作）と、T3 経由の委譲・スレッドの作成と送信（別のプロバイダのモデルへ文脈が送れる）を、仕事の機（`is-work`）で deny にするか。実装は、`is-work` のときだけ deny を足す重ね（未実装）。**deny にした MCP のツールは、モデルから隠れる**（対象のどれかに一致した最後の規則が deny なら隠す。拡張の `isToolFullyDenied`）ので、deny の理由に書いた代替の案内は、モデルに届かない。代替の案内（外部 URL を含まない HTML を `.tmp/` に書く、委譲は pi の `subagent`）は、仕事の機だけに足す指示文で行う。
+  - 元に戻せる整理 7 本と、`preview_resize`・`preview_set_appearance` を allow にするか。
+- **注意**: T3 のツールは pi の囲い（sandbox）の外で動く。ブラウザ系は外部ネットワークへ通信できる。
+- 試験: 判定表の `t3_mcp`（71 本の分類）を、実ゲートの `normalizeInput`（対象の生成）と `evaluateAnyValue` に通して、規則が意図どおりに当たることを確かめる（駆動の `mcpTools`）。T3 のツールが増減したら、表と方針をそろえる。
 
 ### 追加の 4 つの package（background・plan mode・goal・rewind）
 

@@ -8,7 +8,10 @@
 //   alias      [[surface, [別名, 実体, ...]]...]。symlink の別名と解決後の実体を合わせた判定 (任意)
 //   agents     { <agent 名>: <~/.pi/agent/agents/<名>.md の中身> } (任意)。agent の frontmatter の permission は、グローバルより後に重なって勝つ
 //   agentBash  [[agent 名, cmd]...]。その agent として bash を判定する (任意)
-// 標準出力へ JSON: { bash: [{state, pattern}...], surface: [{action, pattern}...], access: [[{path, effect, source}...]...], alias: [{action, pattern}...], agentBash: [{state, pattern}...] }
+//   mcpTools   [MCP ツールのフルネーム (mcp__<server>__<tool>)...]。実ゲートの normalizeInput (対象の生成。面全体の mcp を含む) と
+//              evaluateAnyValue (対象のどれかに一致した最後の規則が勝つ) で判定する (任意)
+//   mcpServers  mcp.json に宣言されたサーバ名の一覧 (任意)。名前の分け方に効く
+// 標準出力へ JSON: { bash: [{state, pattern}...], surface: [{action, pattern}...], access: [[{path, effect, source}...]...], alias: [{action, pattern}...], agentBash: [{state, pattern}...], mcpTools: [{action, pattern, values}...] }
 // bash は、実際のゲートと同じく複合コマンドを分解し、ラッパーの床 (opaque / indirection / unparsed) も含めて判定する。
 // access: [cmd...] は、bash のトークンの投影 (作業ツリーの外のパスと、commandEffects を含む向き) を返す。
 // surface の照合は規則の評価だけ (向きに応じた ask の判定は、access の向きと surface の判定を合わせて読む)。
@@ -33,6 +36,7 @@ const { BashProgram } = await load("src/access-intent/bash/program.ts");
 const { warmBashParser } = await load("src/access-intent/bash/parser.ts");
 const { resolveBashAdvisoryCheck } = await load("src/service/bash-advisory-check.ts");
 const { evaluate, evaluateAnyValue } = await load("src/policy/rule.ts");
+const { normalizeInput } = await load("src/access-intent/input-normalizer.ts");
 const { posixPathFlavor } = await load("src/path/path-flavor.ts");
 const { foldDeclaredCommandEffects } = await load("src/config/command-effects-config.ts");
 
@@ -61,7 +65,7 @@ if (!BashProgram.parseSync("true", normalizer)) {
 }
 
 const rules = manager.getComposedConfigRules();
-const out = { bash: [], surface: [], access: [], alias: [], agentBash: [] };
+const out = { bash: [], surface: [], access: [], alias: [], agentBash: [], mcpTools: [] };
 const declared = foldDeclaredCommandEffects({}, input.policy.commandEffects, "global");
 for (const cmd of input.bash ?? []) {
   const r = resolveBashAdvisoryCheck(cmd, undefined, resolver, normalizer);
@@ -83,5 +87,11 @@ for (const [surface, value] of input.surface ?? []) {
 for (const [surface, values] of input.alias ?? []) {
   const { rule } = evaluateAnyValue(surface, values, rules, posixPathFlavor);
   out.alias.push({ action: rule.action, pattern: rule.pattern });
+}
+// mcpTools: Pi の MCP ツール (mcp__<server>__<tool>) の判定。対象の生成は実ゲートの normalizeInput をそのまま使う
+for (const tool of input.mcpTools ?? []) {
+  const { surface, values } = normalizeInput(tool, undefined, input.mcpServers ?? []);
+  const { rule } = evaluateAnyValue(surface, values, rules, posixPathFlavor);
+  out.mcpTools.push({ action: rule.action, pattern: rule.pattern, values });
 }
 console.log(JSON.stringify(out));

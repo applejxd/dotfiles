@@ -47,7 +47,7 @@ args = ["run", "--no-project", "--quiet", '{{ .chezmoi.homeDir }}/.config/agents
 - `pi_exposure = "direct"`: pi の `mcp.json` の `exposure` に補う（下の「`pi_exposure`」）。モデルに直接見えるツール名は `mcp__websearch__web_search`・`mcp__websearch__fetch_page`・`mcp__websearch__search_papers`。
 - **`is-work` が `true` の機では宣言しない**（`[[mcp]]` のブロックごと条件で囲む）。検索の送り先が限られる環境では登録しない、という一般論による。その機の検索は `agentcore-websearch` だけ。
 - 家の機の `mcp.json` には `agentcore-websearch` も出る。認証が無ければツールの無い空のサーバになる。受け入れる。
-- permission: `pi-permission-policy.json` の `mcp` は、`websearch`・`agentcore-websearch`・`webfetch` を allow（検索・取得は読み取りのため）、他の MCP は ask のまま。
+- permission: `pi-permission-policy.json` の `mcp` は、`websearch`・`agentcore-websearch`・`webfetch` を allow（検索・取得は読み取りのため）、他の MCP は ask のまま。 T3 Code が足す MCP ツールは、ツールごとに決める（[T3 Code の MCP ツールの権限](agent-config-generation.md#t3-code-の-mcp-ツールの権限)）。
 
 ### webfetch（会社 PC のページ取得）
 

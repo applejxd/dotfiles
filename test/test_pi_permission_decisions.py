@@ -27,6 +27,13 @@ CSN_RULES = ROOT / "home" / "dot_cc-safety-net" / "rules"
 DRIVER = ROOT / "test" / "agents" / "pi_stock" / "permission_check.mjs"
 CASES = json.loads((ROOT / "test" / "agents" / "pi_stock" / "permission_cases.json").read_text(encoding="utf-8"))
 
+
+# T3 の MCP ツール (pi では mcp__t3-code__<名前>)。判定表の t3_mcp に無い新しいツールが ask になることも確かめる
+T3_FUTURE_TOOL = "a_future_tool_not_in_the_table"
+T3_TOOLS = [(t, "allow") for t in CASES["t3_mcp"]["allow"]] + [(t, "ask") for t in [*CASES["t3_mcp"]["ask"], T3_FUTURE_TOOL]]
+# mcp.json に宣言されたサーバ (T3 は宣言されない。宣言されないサーバの名前は、最初の ``__`` で分けられる)
+MCP_SERVERS = ["agentcore-websearch", "websearch", "webfetch"]
+
 AGENT_DIR = Path(os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi" / "agent")
 NODE_MODULES = AGENT_DIR / "npm" / "node_modules"
 PERMISSION_PKG = NODE_MODULES / "@gotgenes" / "pi-permission-system"
@@ -61,7 +68,17 @@ def _home(value: str) -> str:
 
 
 def run_engine(
-    tmp_path: Path, *, bash=(), surface=(), access=(), alias=(), project=None, agents=None, agent_bash=(), name="in"
+    tmp_path: Path,
+    *,
+    bash=(),
+    surface=(),
+    access=(),
+    alias=(),
+    mcp_tools=(),
+    project=None,
+    agents=None,
+    agent_bash=(),
+    name="in",
 ) -> dict:
     payload = {
         "pkg": str(PERMISSION_PKG),
@@ -72,6 +89,8 @@ def run_engine(
         "surface": [[s[0], _home(s[1])] for s in surface],
         "access": [_home(c) for c in access],
         "alias": [[a[0], [_home(v) for v in a[1]]] for a in alias],
+        "mcpTools": list(mcp_tools),
+        "mcpServers": MCP_SERVERS,
     }
     if project is not None:
         payload["project"] = project
@@ -96,6 +115,7 @@ def engine_result(tmp_path_factory):
         surface=CASES["surface"],
         access=[c[0] for c in CASES["access"]],
         alias=CASES.get("alias", []),
+        mcp_tools=[f"mcp__t3-code__{tool}" for tool, _ in T3_TOOLS],
     )
 
 
@@ -131,6 +151,22 @@ def test_external_directory_read_keeps_denies_and_asks_after_every_allow():
     assert list(rules)[first_non_allow : first_non_allow + 2] == ["*/../*", "*/.."], "`..` の ask は、deny・ask の前に置く"
     bare = policy["external_directory"]
     assert bare["*/../*"] == "ask" and bare["*/.."] == "ask"
+
+
+def test_t3_mcp_allow_list_matches_the_policy():
+    """T3 の MCP は、ツールごとに ``t3-code:<名前>`` で allow する (読み取り・表示だけ・無害な操作に限る)。
+
+    サーバ単位の ``t3-code`` の allow は、全ツールと将来の追加分まで通すので置かない。
+    判定そのものは、``test_t3_mcp_decisions_match_the_table`` が確かめる。
+    """
+    mcp = json.loads(POLICY.read_text(encoding="utf-8"))["permission"]["mcp"]
+    table = CASES["t3_mcp"]
+    assert next(iter(mcp)) == "*" and mcp["*"] == "ask", "既定は ask。最後に一致した規則が勝つので、先頭に置く"
+    assert "t3-code" not in mcp, "サーバ単位の allow は、全ツールと将来の追加分まで通す"
+    t3 = {key.split(":", 1)[1]: value for key, value in mcp.items() if key.startswith("t3-code:")}
+    assert set(t3.values()) == {"allow"}, "T3 のツールは、allow だけを足す (ask は既定、deny は理由つきで別に決める)"
+    assert set(t3) == set(table["allow"]), "方針の allow と、判定表の allow が食い違っている"
+    assert not set(table["allow"]) & set(table["ask"]), "判定表で、同じツールが allow と ask の両方にある"
 
 
 @needs_engine
@@ -205,6 +241,21 @@ def test_alias_decisions_match_the_table(engine_result):
     for case, got in zip(CASES.get("alias", []), engine_result["alias"], strict=True):
         if got["action"] != case[2]:
             bad.append(f"{case[0]} {case[1]!r}: 期待 {case[2]} / 実際 {got['action']} ({got['pattern']})")
+    assert not bad, "\n".join(bad)
+
+
+@needs_engine
+def test_t3_mcp_decisions_match_the_table(engine_result):
+    """T3 の MCP ツールの判定。対象の生成は、手で書かず、実ゲートの ``normalizeInput`` をそのまま通す。
+
+    allow は、意図した規則 (``t3-code:<名前>``) が当たって allow になる。ほかは既定の ask (``*``)。
+    表に無い新しいツールも ask になる (サーバ単位の allow が入ると、ここで落ちる)。
+    """
+    bad = []
+    for (tool, want), got in zip(T3_TOOLS, engine_result["mcpTools"], strict=True):
+        pattern = f"t3-code:{tool}" if want == "allow" else "*"
+        if (got["action"], got["pattern"]) != (want, pattern):
+            bad.append(f"{tool}: 期待 {want} ({pattern}) / 実際 {got['action']} ({got['pattern']}) 対象 {got['values']}")
     assert not bad, "\n".join(bad)
 
 
