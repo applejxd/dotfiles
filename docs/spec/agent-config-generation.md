@@ -33,6 +33,7 @@ home/dot_agents/skills/tailscale-serve/  tailnet への公開手順のスキル�
 test/
     test_pi_stock_config.py  test_pi_subagents_config.py  test_pi_compaction_config.py
     test_pi_permission_decisions.py  test_pi_commands_doc.py  test_pi_theme.py  test_pi_sandbox_runner.py
+    test_modify_legacy_cp932.py
     agents/test_mcp_servers.py  agents/test_modifier_wrappers.py
 ```
 
@@ -65,10 +66,23 @@ sys.stdin.reconfigure(encoding="utf-8")
 sys.stdout.reconfigure(encoding="utf-8")
 ```
 
+旧版が cp932 で書いた対象ファイルが残りうる 5 つ（`modify_settings`・`modify_compaction`・`modify_pi-plan-mode`・`pi-permission-system/modify_config`・`subagent/modify_config`）は、入力の固定の代わりに `read_stdin()`（bytes で読み、UTF-8 で読めなければ cp932 で読み直す）を使う。[旧版が書いた cp932 のファイルの移行](#旧版が書いた-cp932-のファイルの移行)を見る。新しい `modify_*.py.tmpl` は、上の 2 行でよい。
+
 - **症状**: 出力に cp932 で書けない文字があると `UnicodeEncodeError: 'cp932' codec can't encode character '\u2014'` で apply が止まる。`settings.json` の出力は、調査の子の system prompt（`pi-agent-prompt-researcher`）に U+2014（EM DASH）を含むので、必ず当たる。cp932 で書ける文字（日本語など）だけの出力は、エラーにならず cp932 のバイト列を返して、chezmoi が UTF-8 として読み、文字化けする。入力側も同じで、UTF-8 の JSON を cp932 として読み誤る。
 - **検査**: `scripts/lint_templates.py` が、`modify_*.py.tmpl`（描画できない `home/.chezmoitemplates/` の共有テンプレートを含む）の**ソース**を見て、`sys.stdin` / `sys.stdout` を text で使うのに、使う前の固定が無いものを落とす。`.buffer` 経由のバイト列の入出力（`modify_json.py.tmpl`）は対象外。`print()`・`input()` のように `sys.stdin` / `sys.stdout` を名指ししない入出力は見ない。新しい `modify_*.py.tmpl` を足すときは、同じ 2 行を置く。
 - **実行で確かめない理由**: Windows の CI（`windows.yml`）は `PYTHONUTF8=1` で回す（[Windows の GitHub Actions](testing.md#windows-の-github-actions)）ので、この不具合は実行の試験では捕まらない。Linux では既定が UTF-8 で、cp932 を再現できるのは `PYTHONIOENCODING=cp932` を渡した子プロセスだけ。そこで固定の有無を静的に見る。
 - **改行**: `reconfigure(encoding=...)` は改行の変換を変えない。Windows の text の標準出力は `\n` を `\r\n` にする（既存の挙動で、この規則の対象外）。
+
+#### 旧版が書いた cp932 のファイルの移行
+
+UTF-8 に固定する前（2026-11-20 より前）の日本語 Windows では、`modify_` が cp932 のバイト列を書いていた。そのファイルが対象ファイルに残っていると、固定後の `modify_` は UTF-8 として読めず、`chezmoi apply` / `chezmoi update` が `UnicodeDecodeError: 'utf-8' codec can't decode byte …` と `chezmoi: .pi/agent/….json: exit status 1` で止まる（2026-11-21 に確認。`compaction.json` と `pi-permission-system/config.json`。`--init` の有無に関係しない）。
+
+- **対処（コード）**: 5 つの `modify_` は標準入力を bytes で読み、UTF-8 として読めなければ cp932 として読み直す（`read_stdin()`）。出力は UTF-8 で返すので、次の apply で対象ファイルが UTF-8 になる。cp932 でも読めないバイト列は、黙って壊さず `UnicodeDecodeError` で止める。
+- **対処（手作業）**: コードを入れる前に止まった機は、対象ファイルを cp932 から UTF-8 へ 1 回だけ変換してもよい（UTF-8 のファイルを cp932 として読むと壊れるので、先に UTF-8 で読めるかを見る）。
+- **Linux との関係**: Linux では標準入出力が UTF-8 なので、cp932 のファイルは作られていない。UTF-8 として読める入力は、読み方が text から bytes の復号に変わるだけで、結果（改行の扱いを含む）は今までと変わらない。
+- **検査**: `test/test_modify_legacy_cp932.py` が、5 つの `modify_` を `PYTHONIOENCODING=cp932` の子プロセスで動かし、cp932 の入力が UTF-8 の同じ内容になること・UTF-8 の入力と同じ結果になること・壊れた JSON を作り直さず内容を保つこと（UTF-8 化と、text の標準入力と同じ改行の変換だけは行う。UTF-8 の BOM も保つ）・読めない入力で止まることを見る。
+  ファイルの実体（機ごとの状態）は静的に見られないので、`lint_templates.py` には足していない（lint はソースの形だけを見る）。
+- **撤去の条件**: 使っている全ての Windows 機で `chezmoi apply` が 1 回通り、対象ファイルが UTF-8 になったら、`read_stdin()` の cp932 の読み直しと試験を外す（利用者が判断する。他の Windows 機の有無は、この repo からは分からない）。
 
 ## pi の設定
 

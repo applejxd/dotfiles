@@ -287,7 +287,9 @@ def test_removing_the_pin_from_the_stock_settings_modifier_fails():
     assert linter.check_modify_stdio(path, text) == []
     unpinned = re.sub(r"(?m)^[ \t]*sys\.std(?:in|out)\.reconfigure\(.*\)\n", "", text)
     assert unpinned != text
-    assert streams(linter.check_modify_stdio(path, unpinned)) == ["stdin", "stdout"]
+    # 標準入力は read_stdin() が bytes (.buffer) で読む (cp932 の旧ファイルを読み直すため) ので、固定の対象外。
+    # 標準出力の固定を外したときだけ落ちる
+    assert streams(linter.check_modify_stdio(path, unpinned)) == ["stdout"]
 
 
 # ---------------------------------------------------------------------------

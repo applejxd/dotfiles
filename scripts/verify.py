@@ -164,6 +164,7 @@ RULES: tuple[Rule, ...] = (
             "test_pi_compaction_config",
             "test_pi_subagents_config",
             "test_pi_permission_decisions",
+            "test_modify_legacy_cp932",
             "test_pi_theme",
         ),
         ("templates",),

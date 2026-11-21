@@ -205,6 +205,7 @@ chezmoi が `skip template` を返し、検査対象から外れる。
 描画とは別に、`lint_templates.py` は `modify_*.py.tmpl`（共有テンプレートを含む）のソースを見て、`sys.stdin` / `sys.stdout` を text で使うのに
 UTF-8 への固定（`sys.stdin.reconfigure(encoding="utf-8")` など）が無いものを落とす。日本語 Windows（cp932）で `UnicodeEncodeError` になる不具合の再発を止める。
 規則と理由は [modify スクリプトの文字コード](agent-config-generation.md#modify-スクリプトの文字コード)。
+旧版が cp932 で書いたファイルを読めるかは、ソースの形では分からないので、実行の試験 `test_modify_legacy_cp932.py` が見る。
 実行する経路は上の検査と同じ（`mise run verify` の `templates`、pre-push の `lint-templates-local`、`test_lint_templates.py` が CI の `pytest test/` で回す）。
 
 ### 新しい機械での初回導入を Docker で検証する

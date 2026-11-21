@@ -30,11 +30,23 @@ RUNTIME_DEFAULTS = {
 }
 
 
+def read_stdin() -> str:
+    """標準入力を UTF-8 として読む。読めなければ、旧版が cp932 で書いた残りとして読み直す。
+
+    背景と撤去の条件は docs/spec/agent-config-generation.md#旧版が書いた-cp932-のファイルの移行
+    """
+    data = sys.stdin.buffer.read()
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode("cp932")
+    return text.replace("\r\n", "\n").replace("\r", "\n")  # text モードの標準入力と同じ改行の扱い
+
+
 def main() -> int:
-    # 標準入出力は UTF-8 に固定する (Windows の既定は cp932)。see docs/spec/agent-config-generation.md#modify-スクリプトの文字コード
-    sys.stdin.reconfigure(encoding="utf-8")
+    # 標準出力は UTF-8 に固定する (Windows の既定は cp932)。入力は read_stdin が UTF-8 で読む。see docs/spec/agent-config-generation.md#modify-スクリプトの文字コード
     sys.stdout.reconfigure(encoding="utf-8")
-    raw = sys.stdin.read()
+    raw = read_stdin()
     try:
         data = json.loads(raw) if raw.strip() else {}
     except json.JSONDecodeError:
