@@ -515,15 +515,18 @@ def test_superpi_keeps_an_explicit_agent_dir(home, fakebin, shell):
 
 @pytest.mark.parametrize("shell", ["bash", "zsh"])
 def test_superpi_makes_a_relative_path_entry_absolute_before_changing_directory(home, tmp_path, shell):
-    """PATH に相対の要素があって、そこで pi が見つかっても、cd / のあとに別の pi を探さない。"""
+    """PATH に相対の要素があって、そこで pi が見つかっても、cd / のあとに別の pi を探さない。
+
+    pi.sh は、読み込み時に外部の pi が PATH に見つかる機だけ関数を定義する。相対の要素 (rel) は
+    作業ディレクトリ次第なので、`rel/pi` が見える work の中で shellrc.sh を読み込む。
+    (HOME で読むと pi は見つからず、関数は定義されない。実物の pi が PATH にある機では、
+    別の pi で定義されて通ってしまうので、実物の pi が無い CI でだけ落ちる。)
+    """
     _stub(home / "work" / "rel", pi=_FAKE_PI)
     sudo_only = _stub(tmp_path / "sudo-only", sudo=_FAKE_SUDO)
-    done = run(
-        _source_shellrc(shell, 'cd "$HOME/work" && superpi'),
-        home,
-        PATH=f"rel:{sudo_only}:{os.environ['PATH']}",
-        PI_CODING_AGENT_DIR="",
-    )
+    argv = _source_shellrc(shell, "superpi")
+    argv[-1] = 'cd "$HOME/work" && ' + argv[-1]
+    done = run(argv, home, PATH=f"rel:{sudo_only}:{os.environ['PATH']}", PI_CODING_AGENT_DIR="")
     assert done.returncode == 0, done.stderr
     lines = done.stdout.splitlines()
     assert f"self={home}/work/rel/pi" in lines
