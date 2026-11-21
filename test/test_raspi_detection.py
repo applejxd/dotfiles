@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import tomllib
@@ -296,6 +297,37 @@ def test_mise_drops_gpu_tool_on_raspi():
     """NVIDIA GPU 前提のツールは Raspberry Pi で宣言しない。"""
     assert "nvitop" not in render(MISE_TEMPLATE, context(is_raspi=True))
     assert "nvitop" in render(MISE_TEMPLATE, context(is_raspi=False))
+
+
+GIT_FLOW_NEXT = "github:gittower/git-flow-next"
+
+
+@pytest.mark.parametrize(
+    ("os_name", "platform", "asset"),
+    [
+        ("linux", "linux-x64", "git-flow-next-v*-linux-amd64.tar.gz"),
+        ("linux", "linux-arm64", "git-flow-next-v*-linux-arm64.tar.gz"),
+        ("windows", "windows-x64", "git-flow-next-v*-windows-amd64.zip"),
+    ],
+)
+def test_mise_pins_git_flow_next_with_checksum(os_name, platform, asset):
+    """git flow (git-flow-next) は Linux・Windows で、版とチェックサムを固定して入れる。
+
+    チェックサムは公式の Releases の checksums.txt の値。platforms に載せ忘れると、
+    その OS では検証なしで入る (mise は platforms が無いと、チェックサムを見ない)。
+    """
+    config = tomllib.loads(render(MISE_TEMPLATE, context(os_name=os_name, is_raspi=False)))
+    tool = config["tools"][GIT_FLOW_NEXT]
+    assert tool["version"] == "2.1.0"
+    entry = tool["platforms"][platform]
+    assert entry["asset_pattern"] == asset
+    assert re.fullmatch(r"sha256:[0-9a-f]{64}", entry["checksum"])
+
+
+def test_mise_does_not_declare_git_flow_next_on_macos():
+    """macOS は未確認なので宣言しない (確認したら、この試験と宣言を足す)。"""
+    config = tomllib.loads(render(MISE_TEMPLATE, context(os_name="darwin", is_raspi=False)))
+    assert GIT_FLOW_NEXT not in config["tools"]
 
 
 # ---------------------------------------------------------------------------

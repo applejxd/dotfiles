@@ -111,9 +111,10 @@ mise 管理版が使われません**。削除後は `hash -r` を実行しま�
 
 ### git flow（git-flow-next）
 
-`github:gittower/git-flow-next` は、利用者が feature の起票・クローズを行う `git flow` の実体です（[CHG-0047](../change/0047-gitflow.md)。AI の `gitflow_*` 操作は CHG-0050 で撤去）。Linux / WSL だけに入れます。
+`github:gittower/git-flow-next` は、利用者が feature の起票・クローズを行う `git flow` の実体です（[CHG-0047](../change/0047-gitflow.md)。AI の `gitflow_*` 操作は CHG-0050 で撤去）。Linux / WSL / Windows に入れます（macOS は未確認なので入れない。Windows は 2026-11-21 に導入と `git flow init --help` の実行を確認した）。
 
-- **版とチェックサムを固定しています**。公式の Releases の `checksums.txt` の値を `platforms.<os>-<arch>.checksum` に写します（`linux-x64` と `linux-arm64`）。上げるときは、`git-flow` が `.git/config` に書く設定の意味が変わりうるので、`scripts/gitflow-setup.sh` と動作を見直す
+- **版とチェックサムを固定しています**。公式の Releases の `checksums.txt` の値を `platforms.<os>-<arch>.checksum` に写します（`linux-x64`・`linux-arm64`・`windows-x64`）。上げるときは、`git-flow` が `.git/config` に書く設定の意味が変わりうるので、`scripts/gitflow-setup.sh` と動作を見直す
+- **Windows**（2026-11-21 に確認）: `windows-x64` の zip（`git-flow.exe`）を mise が入れ、`git flow` として動く。入るのは `chezmoi apply`（`313_mise` が `mise install` と `reshim`。設定の hash が変わると走る）のあと。`config.toml.tmpl` では、Windows は先頭の `[tools]` と末尾のこのブロックだけが描画される（途中は `ne windows` の中）ので、宣言は末尾に置いている。`git flow init --preset=classic --defaults` と、`scripts/gitflow-setup.sh`（共有の `.gitflow` の取り込み）、`git flow feature start … --worktree` は、使い捨ての clone で動いた
 - 実体は `git-flow` 1 つ。PATH にあれば `git flow` として動く。利用者が自分のシェルで実行する（bash の `git flow` の拒否は撤去した）
 - リポジトリごとの設定は `.gitflow`（共有）。新しい clone では `git flow config sync` で有効にする。設定は、サンドボックスの外で、利用者が一度だけ行う（`.git/config` を書くため）
 

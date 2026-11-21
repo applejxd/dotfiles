@@ -80,18 +80,6 @@ yt-dlp = "latest"
 aws-cli = "latest"
 {{- end }}
 
-{{- if eq .chezmoi.os "linux" }}
-
-# git flow (git-flow-next)。利用者が feature を起票・クローズする道具。版とチェックサムを固定する
-# (docs/spec/cli-management.md#git-flowgit-flow-next, docs/change/0047-gitflow.md)
-[tools."github:gittower/git-flow-next"]
-version = "2.1.0"
-
-[tools."github:gittower/git-flow-next".platforms]
-linux-x64 = { asset_pattern = "git-flow-next-v*-linux-amd64.tar.gz", checksum = "sha256:e335b5818f2b2f820c17844c194030d0db78f3cdfa9bb999fcb9ce092ba9ecd2" }
-linux-arm64 = { asset_pattern = "git-flow-next-v*-linux-arm64.tar.gz", checksum = "sha256:aea866eb7f9287aedf65795251ef3f556b4c7b677d3aa201f2089ec8ee4166eb" }
-{{- end }}
-
 [settings]
 # for task runner
 experimental = true
@@ -111,4 +99,18 @@ compile = true
 [settings.ruby]
 compile = false
 {{- end }}
+{{- end }}
+
+{{- if or (eq .chezmoi.os "linux") (eq .chezmoi.os "windows") }}
+
+# Windows は先頭の [tools] と、この末尾のブロックだけを描画する (途中は ne windows の中)。macOS は未確認なので宣言しない
+# git flow (git-flow-next)。利用者が feature を起票・クローズする道具。版とチェックサムを固定する
+# (docs/spec/cli-management.md#git-flowgit-flow-next, docs/change/0047-gitflow.md)
+[tools."github:gittower/git-flow-next"]
+version = "2.1.0"
+
+[tools."github:gittower/git-flow-next".platforms]
+linux-x64 = { asset_pattern = "git-flow-next-v*-linux-amd64.tar.gz", checksum = "sha256:e335b5818f2b2f820c17844c194030d0db78f3cdfa9bb999fcb9ce092ba9ecd2" }
+linux-arm64 = { asset_pattern = "git-flow-next-v*-linux-arm64.tar.gz", checksum = "sha256:aea866eb7f9287aedf65795251ef3f556b4c7b677d3aa201f2089ec8ee4166eb" }
+windows-x64 = { asset_pattern = "git-flow-next-v*-windows-amd64.zip", checksum = "sha256:9bfbc2746ea647fe664e0a5be375f7d7e144412d5031064f60efb1f8fbe1b656" }
 {{- end }}
