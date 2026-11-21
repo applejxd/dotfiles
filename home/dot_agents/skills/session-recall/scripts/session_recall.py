@@ -269,17 +269,27 @@ def repo_scope(cwd: str) -> Scope:
     return Scope(roots, common)
 
 
+def _norm(path: str) -> str:
+    """比較用の正規形。区切りと大文字小文字は、OS の規則に合わせて揃える (Windows は `/` と `\\`・大小を区別しない。POSIX はそのまま)。"""
+    return os.path.normcase(os.path.normpath(path))
+
+
+def _same_path(a: str, b: str) -> bool:
+    return _norm(a) == _norm(b)
+
+
 def _too_broad(path: str) -> bool:
-    """ホームそのもの・ホームの親・`/` は、範囲が全リポジトリに及ぶので、cwd の範囲として認めない。"""
+    """ホームそのもの・ホームの親・ファイルシステムの根 (`/`・`C:\\`) は、範囲が全リポジトリに及ぶので、cwd の範囲として認めない。"""
     home = Path.home()
     homes = {os.path.normpath(str(home)), os.path.normpath(os.path.realpath(home))}
     candidates = {os.path.normpath(path), os.path.normpath(os.path.realpath(path))}
-    return any(c == os.sep or any(h == c or h.startswith(c.rstrip("/") + "/") for h in homes) for c in candidates)
+    return any(os.path.dirname(c) == c or any(_is_under(h, c) for h in homes) for c in candidates)
 
 
 def _is_under(child: str, parent: str) -> bool:
-    child, parent = os.path.normpath(child), os.path.normpath(parent)
-    return child == parent or child.startswith(parent.rstrip("/") + "/")
+    """child が parent と同じか、その配下か。区切りは os.sep に揃えて比べる (`/` 固定だと、Windows の `\\` の配下を見落とす)。"""
+    child, parent = _norm(child), _norm(parent)
+    return child == parent or child.startswith(parent if parent.endswith(os.sep) else parent + os.sep)
 
 
 class _CommonDirCache:
@@ -298,15 +308,13 @@ def owning_root(session_cwd: str, scope: Scope, common_dirs: _CommonDirCache) ->
         return None
     session_cwd = os.path.normpath(session_cwd)
     if scope.common_dir is None:
-        return scope.roots[0] if session_cwd == scope.roots[0] else None
-    if session_cwd in scope.roots:
-        exact = True
-    else:
-        exact = False
-        if not any(_is_under(session_cwd, r) for r in scope.roots):
-            return None
+        return scope.roots[0] if _same_path(session_cwd, scope.roots[0]) else None
+    exact = any(_same_path(session_cwd, r) for r in scope.roots)
+    if not exact and not any(_is_under(session_cwd, r) for r in scope.roots):
+        return None
     if os.path.isdir(session_cwd):
-        if common_dirs.get(session_cwd) != scope.common_dir:
+        found = common_dirs.get(session_cwd)
+        if found is None or not _same_path(found, scope.common_dir):
             return None
     elif not exact:
         return None  # 実在しない配下は、同じリポジトリか確かめられない
@@ -367,9 +375,10 @@ def discover_sessions(cwd: str, sessions_dir: Path) -> list[Session]:
     except OSError:
         return []
     for directory in dirs:
-        name = directory.name
+        name = os.path.normcase(directory.name)  # Windows は、ドライブ文字などの大小を区別しない
         if not any(
-            name.startswith(f"--{encode_path(r)}--") or (name.startswith(f"--{encode_path(r)}-") and name.endswith("--"))
+            name.startswith(f"--{os.path.normcase(encode_path(r))}--")
+            or (name.startswith(f"--{os.path.normcase(encode_path(r))}-") and name.endswith("--"))
             for r in scope.roots
         ):
             continue

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import ntpath
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tracemalloc
+import types
 from pathlib import Path
 
 import pytest
@@ -393,6 +395,7 @@ def test_cwd_at_home_or_above_is_refused(tmp_path, capsys, monkeypatch, where):
     home = tmp_path / "users" / "me"
     (home / "repo").mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))  # Windows の Path.home() は HOME を見ず、USERPROFILE を読む
     sessions = tmp_path / "sessions"
     write_session(sessions, str((home / "repo").resolve()), "2026-11-01T00:00:00.000Z", "aaaa1111", [msg("user", text("SECRET-TOPIC"))])
     cwd = {"home": home, "parent": home.parent, "root": Path("/")}[where]
@@ -402,6 +405,72 @@ def test_cwd_at_home_or_above_is_refused(tmp_path, capsys, monkeypatch, where):
     assert "ホーム" in err
     code, out, _ = run(capsys, ["list"], home / "repo", sessions)  # リポジトリの中なら読める
     assert code == 0 and "aaaa1111"[:8] in out
+
+
+# ---- 範囲: Windows のパスの規則 (区切りは `\` と `/` の両方・大小を区別しない)。POSIX の機でも ntpath の代役で検査する ----
+class _NtOs:
+    """session_recall が使う os の代役。path・sep だけを Windows (ntpath) にし、残りは本物の os に任せる。"""
+
+    path = ntpath
+    sep = "\\"
+
+    def __getattr__(self, name):
+        return getattr(os, name)
+
+
+@pytest.fixture
+def windows_paths(monkeypatch):
+    monkeypatch.setattr(sr, "os", _NtOs())
+    monkeypatch.setattr(sr, "Path", types.SimpleNamespace(home=lambda: r"C:\Users\me"))
+
+
+def test_is_under_follows_windows_path_rules(windows_paths):
+    assert sr._is_under(r"C:\Users\me\proj\src\deep", "C:/Users/me/proj")  # git は Windows でも `/` 区切りで出す
+    assert sr._is_under(r"c:\users\ME\PROJ", r"C:\Users\me\proj")  # 大小を区別しない
+    assert sr._is_under(r"C:\Users\me\proj", r"C:\Users\me\proj")
+    assert sr._is_under(r"C:\Users\me", "C:\\")  # ドライブの根の配下
+    assert not sr._is_under(r"C:\Users\me\proj-other", r"C:\Users\me\proj")  # 似た名前は配下ではない
+    assert not sr._is_under(r"C:\Users\me", r"C:\Users\me\proj")  # 親は配下ではない
+
+
+@pytest.mark.parametrize(
+    ("cwd", "refused"),
+    [
+        (r"C:\Users\me", True),  # ホーム
+        ("c:/users/ME", True),  # ホーム (区切りと大小が違う)
+        (r"C:\Users", True),  # ホームの親
+        ("C:\\", True),  # ドライブの根
+        (r"C:\Users\me\proj", False),
+        (r"C:\Users\other", False),  # ホームの隣
+    ],
+)
+def test_too_broad_follows_windows_path_rules(windows_paths, cwd, refused):
+    assert sr._too_broad(cwd) is refused
+
+
+class _FixedCommonDirs:
+    def __init__(self, common_dir):
+        self._common_dir = common_dir
+
+    def get(self, directory):
+        return self._common_dir
+
+
+def test_owning_root_follows_windows_path_rules(windows_paths, monkeypatch):
+    git_dir = r"C:\Users\me\proj\.git"
+    scope = sr.Scope([r"C:\Users\me\proj", r"C:\Users\me\proj\.tmp\worktrees\feat"], git_dir)
+    same_repo = _FixedCommonDirs("c:/users/me/proj/.git")
+    # 実在しない cwd: root そのもの (区切り・大小が違っても) だけを認め、配下は認めない
+    monkeypatch.setattr(sr.os.path, "isdir", lambda path: False)
+    assert sr.owning_root("c:/users/ME/proj", scope, same_repo) == r"C:\Users\me\proj"
+    assert sr.owning_root(r"C:\Users\me\proj\src", scope, same_repo) is None
+    # 実在する配下: 同じ common dir なら最長の root に入り、別の common dir なら入らない
+    monkeypatch.setattr(sr.os.path, "isdir", lambda path: True)
+    assert sr.owning_root(r"C:\Users\me\proj\src\deep", scope, same_repo) == r"C:\Users\me\proj"
+    assert sr.owning_root(r"C:\Users\me\proj\.tmp\worktrees\feat\src", scope, same_repo) == r"C:\Users\me\proj\.tmp\worktrees\feat"
+    assert sr.owning_root(r"C:\Users\me\proj\src\deep", scope, _FixedCommonDirs(r"C:\Users\me\other\.git")) is None
+    assert sr.owning_root(r"C:\Users\me\proj-other", scope, same_repo) is None
+    assert sr.owning_root(r"C:\Users\me\proj\src", scope, _FixedCommonDirs(None)) is None
 
 
 # ---- 範囲: 「配下」と「同じリポジトリ」の区別(指摘 1・2) ----
@@ -452,7 +521,7 @@ def test_deleted_worktree_matches_only_exactly(repo, capsys):
     write_session(sessions, str(gone), "2026-11-10T00:00:00.000Z", "gggg7777-gone", [msg("user", text("GONE-EXACT"))])
     write_session(sessions, str(gone / "sub"), "2026-11-11T00:00:00.000Z", "hhhh8888-gonesub", [msg("user", text("GONE-SUB"))])
     shutil.rmtree(gone)
-    assert str(gone) in _git(main, "worktree", "list", "--porcelain")
+    assert gone.as_posix() in _git(main, "worktree", "list", "--porcelain")  # git は Windows でも `C:/...` と `/` 区切りで出す
     _, out, _ = run(capsys, ["list"], main, sessions)
     assert "gggg7777" in out and "hhhh8888" not in out
     _, out, _ = run(capsys, ["grep", "GONE"], main, sessions)
@@ -485,6 +554,10 @@ def test_session_started_in_subdirectory_is_included(repo, capsys):
 
 
 @needs_git
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Win32 は名前の末尾の空白を除くので、`.git ` は `.git` と同じ名前になり、別のディレクトリにならない",
+)
 def test_nested_repository_whose_git_dir_has_trailing_space_is_excluded(repo, capsys):
     """common dir の末尾空白を strip すると、別の git ディレクトリ `<A>/.git ` が `<A>/.git` と同じになる。"""
     main, _, sessions = repo
@@ -499,9 +572,20 @@ def test_nested_repository_whose_git_dir_has_trailing_space_is_excluded(repo, ca
 
 ODD_PATH_CASES = {
     "non-ascii-and-spaces": ("日本語 proj ", "wt 日本 語 "),
+    "non-ascii-and-inner-spaces": ("日本語 proj", "wt 日本 語"),  # 末尾の空白が無い形。Windows でも作れる
     "newline": ("plain", "wt\nnewline x"),
     "all-together": ("日本語\n本体 ", "追加 wt\n日本 "),
 }
+
+
+def _unusable_on_windows(name: str) -> bool:
+    """Win32 のファイル名の規則 (Naming Files, Paths, and Namespaces) で作れない名前。
+
+    制御文字 (1〜31。改行を含む) は使えない。末尾の空白・ピリオドは、パスの正規化で除かれる。
+    Windows の CI では、改行を含む名前は mkdir の WinError 123 か `git worktree add` の 128 で、
+    末尾の空白つきの名前も `git worktree add` の 128 で落ちた。
+    """
+    return any(ord(char) < 32 for char in name) or name.endswith((" ", "."))
 
 
 @needs_git
@@ -509,6 +593,8 @@ ODD_PATH_CASES = {
 def test_worktree_paths_with_non_ascii_spaces_and_newlines(tmp_path, capsys, case):
     """`git worktree list` の引用符つきの表記ではなく、-z の生のパスで範囲を決める。"""
     main_name, wt_name = ODD_PATH_CASES[case]
+    if os.name == "nt" and (_unusable_on_windows(main_name) or _unusable_on_windows(wt_name)):
+        pytest.skip("Win32 のファイル名の規則で、この名前のディレクトリは作れない (制御文字・末尾の空白)")
     main = tmp_path / "work" / main_name
     _git_init(main)
     wt = main / ".tmp" / "worktrees" / wt_name
@@ -927,15 +1013,22 @@ def test_huge_counts_are_argument_errors(tmp_path, args):
     assert b"Traceback" not in proc.stderr
 
 
-def _deep_list(depth: int):
-    value: list = []
-    for _ in range(depth):
-        value = [value]
-    return value
+_DEEP_MARK = "@@DEEP@@"
+
+
+def _json_line_with_deep_array(entry: dict, depth: int) -> str:
+    """entry の中の `_DEEP_MARK` の文字列を、深さ depth の入れ子の配列に置き換えた JSON の 1 行。
+
+    json.dumps は入れ子の深さだけ再帰するので、深い値は組み立てられない (CPython 3.13 の C の再帰の上限は
+    Linux が 10000・Windows が 3000 で、Windows の CI は 3000 で RecursionError になった)。配列はテキストで作る。
+    """
+    return json.dumps(entry).replace(json.dumps(_DEEP_MARK), "[" * depth + "]" * depth)
 
 
 @needs_git
-@pytest.mark.parametrize("depth", [3000, 9000])
+# 2000: Windows の C の上限 (3000) の下。JSON として読めた深い値を、実装が扱える。3000・9000: Linux の上限 (10000) の下。
+# Windows ではこの 2 つは読み込みが RecursionError になり、壊れた行として読み飛ばす (どちらの経路でも落ちない)
+@pytest.mark.parametrize("depth", [2000, 3000, 9000])
 @pytest.mark.parametrize("role", ["user", "assistant"])
 def test_cli_survives_deeply_nested_string_fields(tmp_path, role, depth):
     """text・name などの文字列のフィールドに、JSON としては読める深い配列が入っていても落ちない。"""
@@ -943,13 +1036,14 @@ def test_cli_survives_deeply_nested_string_fields(tmp_path, role, depth):
     _git_init(repo_dir)
     repo_dir = repo_dir.resolve()
     agent = tmp_path / "agent"
-    deep = _deep_list(depth)
-    bad_lines = [
-        json.dumps({"type": "message", "id": "d1", "message": {"role": role, "content": [{"type": "text", "text": deep}]}}),
-        json.dumps(msg("assistant", [{"type": "toolCall", "name": deep, "arguments": {"command": deep}}], "d2")),
-        json.dumps({"type": "session_info", "id": "d3", "name": deep}),
-        json.dumps({"type": "compaction", "id": "d4", "summary": deep}),
+    deep = _DEEP_MARK
+    bad_entries = [
+        {"type": "message", "id": "d1", "message": {"role": role, "content": [{"type": "text", "text": deep}]}},
+        msg("assistant", [{"type": "toolCall", "name": deep, "arguments": {"command": deep}}], "d2"),
+        {"type": "session_info", "id": "d3", "name": deep},
+        {"type": "compaction", "id": "d4", "summary": deep},
     ]
+    bad_lines = [_json_line_with_deep_array(entry, depth) for entry in bad_entries]
     _write_raw_session(agent, repo_dir, [line.encode() for line in bad_lines] + [GOOD_LINE])
     for args in (["list"], ["grep", "."], ["grep", ".", "--tools"], ["show", "latest"], ["digest", "latest"]):
         proc = _cli(args, repo_dir, agent)
