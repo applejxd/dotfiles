@@ -330,7 +330,25 @@
       "t3-code:device_list": "allow",
       "t3-code:send_to_user": "allow",
       "t3-code:preview_wait_for": "allow",
-      "t3-code:t3_preview_close": "allow"
+      "t3-code:t3_preview_close": "allow",
+      "t3-code:preview_open": "allow",
+      "t3-code:preview_navigate": "allow",
+      "t3-code:preview_snapshot": "allow",
+      "t3-code:preview_recording_start": "allow",
+      "t3-code:preview_recording_stop": "allow",
+      "t3-code:preview_resize": "allow",
+      "t3-code:preview_set_appearance": "allow",
+      "t3-code:html_preview": "allow",
+      "t3-code:html_render": "allow",
+      "t3-code:t3_thread_update": "allow",
+      "t3-code:t3_thread_organize": "allow",
+      "t3-code:link_pull_request": "allow",
+      "t3-code:link_pull_requests": "allow",
+      "t3-code:unlink_pull_request": "allow",
+      "t3-code:unlink_pull_requests": "allow",
+      "t3-code:unwatch_pull_request": "allow",
+      "t3-code:delegate_task": "allow",
+      "t3-code:task_cancel": "allow"
     },
     "skill": {
       "*": "allow"
