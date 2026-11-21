@@ -154,7 +154,7 @@ def test_external_directory_read_keeps_denies_and_asks_after_every_allow():
 
 
 def test_t3_mcp_allow_list_matches_the_policy():
-    """T3 の MCP は、ツールごとに ``t3-code:<名前>`` で allow する (読み取り・表示だけ・無害な操作に限る)。
+    """T3 の MCP は、ツールごとに ``t3-code:<名前>`` で allow する (名前単位の規則。引数は区別できない。判定表と一致させる)。
 
     サーバ単位の ``t3-code`` の allow は、全ツールと将来の追加分まで通すので置かない。
     判定そのものは、``test_t3_mcp_decisions_match_the_table`` が確かめる。

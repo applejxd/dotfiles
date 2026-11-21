@@ -153,7 +153,7 @@ stock の確認画面は package `@gotgenes/pi-permission-system`。設定ファ
     - **この保護は既定の場所に固定**: `pib` は、設定の場所の環境変数が既定と違うと、制御ファイルがリンクで外を指していると、起動しない。 経緯・実測は [research](../research/agents/permission-policy-rationale-2026-11.md#囲いの保護の固定)。
   - **全 deny に理由をつける**（2026-11-11）: `deny` の値は `{ "action": "deny", "reason": "…" }` と書ける。理由は、拒否の文に付いてエージェントへ届く（「なぜ拒否され、代わりに何をすべきか」を読める）。すべての deny に理由がある（件数は書かない。試験 `test_every_deny_rule_carries_a_reason` が全件を検査する）。
     **ask には、理由を付ける仕組みが無い**（拡張の docs: 理由は deny の値にだけ書ける）。確認の画面には、コマンドとパスだけが出る。そのため、「子が絶対にやってはいけない」操作は、理由つきの deny にする（無人の確認は 5 分で拒否され、止まる）。人が在席して承認したい操作（`gh` の変更系・`git rebase` など）だけを、ask に残す。
-  - `mcp` は ask（検索の `websearch`・`agentcore-websearch`・`webfetch` と、T3 Code の読み取り・表示などの 21 本だけ allow。上の「MCP 設定」と [T3 Code の MCP ツールの権限](#t3-code-の-mcp-ツールの権限)）、`skill` は allow。入れる拡張の自分のツール（`todo`・`ask_user_question`・`subagent`・`subagents_enable`・`bg_wait`）は毎回の確認を出さないよう allow。上のどれにも当たらないツール（`*`）は ask。
+  - `mcp` は ask（検索の `websearch`・`agentcore-websearch`・`webfetch` と、T3 Code の読み取り・表示・閲覧・描画・整理・子の起動などの 39 本だけ allow。上の「MCP 設定」と [T3 Code の MCP ツールの権限](#t3-code-の-mcp-ツールの権限)）、`skill` は allow。入れる拡張の自分のツール（`todo`・`ask_user_question`・`subagent`・`subagents_enable`・`bg_wait`）は毎回の確認を出さないよう allow。上のどれにも当たらないツール（`*`）は ask。
   - **`subagent_launch` は allow**（2026-11-09。当面の運用）。workflow の子の起動ごとの確認を出さないため。`gate`・`acceptance.verify` のシェルはこの時点で検査されないので、運用では使わない。 経緯・実測は [research](../research/agents/permission-policy-rationale-2026-11.md#subagent_launch)。
   - 子と親の連絡用のツール（`contact_supervisor`・`intercom`・`structured_output`・`subagent_command`）も allow。YOLO を切ると、規則の無いツールは `*` の ask になり、子が進捗を連絡するたびに確認が出るため。
   - 追加の 4 つの package のツール（下の「追加の 4 つの package」）: `bg_status`・`bg_kill`・`plan_mode_question`・`plan_mode_complete`・`goal_complete`・`goal_blocked`・`goal_wait` も allow（状態を記録するだけ、または読み取りのツール）。`bg_run` は allow にしない（`shellTools` で bash と同じ判定に通す）。
@@ -219,22 +219,45 @@ package `cc-safety-net` は、破壊的なコマンド（`git reset --hard`・`r
 
 ### T3 Code の MCP ツールの権限
 
-2026-11-19。T3 Code の中で pi を動かすと、T3 が MCP のツール（71 本。pi では `mcp__t3-code__<名前>`）を足す。`mcp.json` に無いサーバなので、権限の判定は名前を最初の `__` で分け、`t3-code_<名前>`・`t3-code:<名前>`・`t3-code`・`<名前>`・完全名・`mcp_call` と、面全体の `mcp` の 7 つを照合する（拡張 42.0.0 の `createPiMcpToolTargets` と `normalizeMcpTargets`）。既定は ask（`"*": "ask"`）。
+2026-11-19（2026-11-21 に allow を 21 本から 39 本へ広げた）。T3 Code の中で pi を動かすと、T3 が MCP のツール（71 本。pi では `mcp__t3-code__<名前>`）を足す。`mcp.json` に無いサーバなので、権限の判定は名前を最初の `__` で分け、`t3-code_<名前>`・`t3-code:<名前>`・`t3-code`・`<名前>`・完全名・`mcp_call` と、面全体の `mcp` の 7 つを照合する（拡張 42.0.0 の `createPiMcpToolTargets` と `normalizeMcpTargets`）。既定は ask（`"*": "ask"`）。
 
-- **ツールごとに allow する**（`t3-code:<名前>`）。サーバ単位の `t3-code` の allow は、全ツールと将来の追加分まで通すので置かない（試験で固定）。
-- **allow は 21 本**。基準は、定義から読み取りだけ・表示だけと言えて、害の経路が見えないこと（承認された件数は根拠にしない）。**確実と言えないものは ask に残す**（例外は、下の受容した 3 本）。
+- **ツールごとに allow する**（`t3-code:<名前>`）。サーバ単位の `t3-code` の allow は、全ツールと将来の追加分まで通すので置かない（試験で固定）。名前単位の規則なので、**引数（対象のスレッド・URL・パス）は区別できない**。
+- **allow は 39 本**。基準は、読み取り・表示・ブラウザの閲覧・HTML の描画・元に戻せる整理・自分の子の起動と取消（承認された件数は根拠にしない）。**外への送信は防がない**（下の「プロンプトインジェクションによる外部送信」。利用者がリスクを受容した）。
   - 読み取り 18: `orchestrator_capabilities`・`task_status`・`t3_thread_list`・`t3_thread_search`・`t3_thread_read`・`t3_thread_wait`・`t3_worktree_list`・`t3_worktree_status`・`list_thread_pull_requests`・`read_pull_request_guide`・`t3_project_list`・`t3_project_read`・`t3_environment_read`・`list_scheduled_tasks`・`t3_preview_list`・`preview_status`・`t3_theme_read`・`device_list`
   - 表示だけ 1: `send_to_user`
   - ブラウザの付随操作 2: `preview_wait_for`（待つだけ）・`t3_preview_close`（このスレッドが持つタブを閉じるだけ）
+  - **ブラウザの閲覧 7**（2026-11-21。利用者の指示は「ブラウザ操作は閲覧系は allow で、操作系は ask」という分類。どのツールを閲覧系に入れるかは実装者の判断で、`preview_resize`・`preview_set_appearance` を含めた）。性質で 3 つに分けて、記録する:
+    - 閲覧: `preview_open`・`preview_navigate`（任意の URL を開く。開いた時点で、ページのスクリプトが動く）。`preview_open` の `profileId` の既定は利用者のプロファイルで、現在のタブを再利用できる。ログイン済みのページを読めるか、サーバ側のブラウザにログイン情報があるかは**未確認**（利用者は、これを受容して allow にした）。
+    - 取得・保存: `preview_snapshot`（ページの状態・要素を返す。利用者が操作中のタブにも使える。画像を保存できる）・`preview_recording_start`・`preview_recording_stop`（録画のファイルへの、ローカルのパスを返す。最大 50 MiB）。
+    - 表示状態の変更: `preview_resize`・`preview_set_appearance`。2026-11-19 に reviewer の指摘で ask に戻したが、実装者の判断で閲覧系に含めて戻した（利用者の個別の指定ではない）。開いたページのスクリプトを `resize`・`matchMedia` で動かし、通信につながりうるリスクは残る。
+    - 操作系 3（`preview_act`・`preview_evaluate`・`preview_dialog`）は ask。
+  - **HTML の描画 2**（同。利用者の指示は「描画のみでフォーム送信などを想定してないものであれば allow」。**この条件は強制されない**）: `html_preview`・`html_render`。モデルが書いた HTML は、外部へ要求を送れる（下の「T3 のソースで確かめたこと」と、「プロンプトインジェクションによる外部送信」）。ローカルの画像・`.html` の読み取りの範囲も、下に記録した。
+  - **元に戻せる整理 7**（同。利用者の指示）: `t3_thread_update`・`t3_thread_organize`・`link_pull_request`・`link_pull_requests`・`unlink_pull_request`・`unlink_pull_requests`・`unwatch_pull_request`。`threadId` を指定すれば、**ほかのスレッドにも効く**（`t3_thread_organize` の `archive`・`settle` など）。戻し方: `t3_thread_organize` は `unpin`・`unsnooze`・`unsettle`・`unarchive` で戻せる。link と unlink は対。**戻せないもの**: `t3_thread_update` の改名は、元のタイトルが失われる（事前に `t3_thread_list` などで読めるので、手で戻せる。「元に戻せるものは allow」の例外として、利用者が受容した。2026-11-21）。`unwatch_pull_request` は、`watch_pull_request`（ask）でしか戻せない。`link_pull_request` は、PR のマージでスレッドを settle する副作用がある（PR 自体をマージするツールではない）。
+  - **自分の子の起動と取消 2**（同。利用者の指示。オーケストレーションのため。費用は問わない）:
+    - `delegate_task`: 子を起動する。**別プロバイダのモデルも指定でき**、親が組み立てた `task` の文字列が、選んだプロバイダへ渡る（親の履歴は自動では継がない。「秘密を書かない」は指示で、検査ではない）。子の実行モードは、親より広くできない（`resolveRuntimeMode`。`runtime_mode_escalation_denied`。既定は親のモードを継ぐ。継いだモードを委譲先が提供しなければ、提供する最も広いモードに下がる。明示したモードは、提供しなければ拒否される。このスレッドは `full-access`）。狭いモードは、人の承認で止まるだけで、読み取り専用ではない。子が pi の方針・`pib` の囲いを継ぐかは、**未確認**（継ぐものとして扱わない）。
+    - `task_cancel`: **呼び手のスレッドが起動したタスクだけ**止められる（T3 のソース: `readTask` が `candidate.threadId === scope.thread.threadId` と `origin === "app_owned"` で絞り、無ければ `task_not_found`）。止める範囲は、そのタスクの子と、その下のすべてのタスク（子スレッドの後の実行・待ち行列・孫の委譲・PR の監視を含む）。停止の前に、子とその下のスレッドの実行モード・対話モードが、親より広くないかを検査する（`assertStoppable`）。
   - **確実とは言い切れないが、リスクを受容して allow にした例外 3 本**（2026-11-19。実装者の判断）:
     `t3_thread_read` は、子の最終結果を読むと「配信済み」になる（`task_status` も同じ）。任意のスレッドを読めるので、ほかのスレッドの子の結果を読んだとき、その親の完了の通知に影響するかが未確認。毎回使う読み取りで、ask にすると allow を足した意味が薄れるため残した。害は、通知が先に「配信済み」になる程度と見たが、裏付けは無い。最初の監査の reviewer は ask を勧めた。`t3_environment_read` は、返却項目と秘匿化が未確認（「identity と preferences の読み取り」という定義だけが根拠）。`send_to_user` は、Markdown が外部画像を取得するかが未確認（通常の返信と同じ表示の経路なら、新しい経路ではない）。いずれも、T3 側の改修後に確かめ、危ういと分かれば ask に戻す。
-- **ask のまま 50**: 起動・送信・停止（`delegate_task`・`t3_thread_launch`・`t3_thread_send` など。費用・自律実行・ほかのスレッドへの指示）、スケジュール、プロジェクトと環境の設定の変更、ブラウザ操作（`preview_open`・`preview_navigate`・`preview_act`・`preview_evaluate` など。任意の URL・スクリプトの実行・ローカルファイルのアップロード）、`request_secret` など利用者への問い、元に戻せる整理 7 本（`t3_thread_update`・`t3_thread_organize`・`link_pull_request`・`link_pull_requests`・`unlink_pull_request`・`unlink_pull_requests`・`unwatch_pull_request`）、`html_preview`・`html_render`。
-  - **`preview_resize`・`preview_set_appearance` も ask**（2026-11-19。reviewer の指摘）。タブの大きさ・`prefers-color-scheme` を変えると、開いているページの `resize`・`matchMedia` の処理が動く。ページが外部のものなら、その処理が通信を起こせる。表示を変えるだけとは言えないので、確実とは言えない。
-- **決めていないこと（利用者が T3 側を改修したあとに再判断。2026-11-19）**:
-  - `html_preview`・`html_render`: 外部 URL を読み、スクリプトが動く。家は allow、仕事は deny して代替を案内する案。
-  - 外へ情報を出せるツール（上の 2 本とブラウザ操作）と、T3 経由の委譲・スレッドの作成と送信（別のプロバイダのモデルへ文脈が送れる）を、仕事の機（`is-work`）で deny にするか。実装は、`is-work` のときだけ deny を足す重ね（未実装）。**deny にした MCP のツールは、モデルから隠れる**（対象のどれかに一致した最後の規則が deny なら隠す。拡張の `isToolFullyDenied`）ので、deny の理由に書いた代替の案内は、モデルに届かない。代替の案内（外部 URL を含まない HTML を `.tmp/` に書く、委譲は pi の `subagent`）は、仕事の機だけに足す指示文で行う。
-  - 元に戻せる整理 7 本と、`preview_resize`・`preview_set_appearance` を allow にするか。
-- **注意**: T3 のツールは pi の囲い（sandbox）の外で動く。ブラウザ系は外部ネットワークへ通信できる。
+- **ask は 32 本**:
+  - **起動・送信・停止 9**: `create_threads`・`t3_thread_launch`・`t3_thread_send`・`t3_thread_send_attachments`・`t3_thread_interrupt`・`t3_workflow_stop`・`t3_thread_transfer`・`t3_thread_configure`・`t3_queue`。**ほかのスレッドに触れる**（走行中のターンの中断・再開、待ち行列のメッセージの編集・取消、文脈への書き込み、モデルやプロバイダの変更）。名前単位の許可は、対象のスレッドを区別できず、呼び手が `full-access` だと、T3 の「呼び手より広い権限の相手へは送れない」歯止めも効かない。誤りやプロンプト注入で、走行中の別のスレッドを止める・再開できてしまう（中断は、`pi-rewind` の `index.lock` を残す原因にもなりうる。推測）。`create_threads`・`t3_thread_launch` は、T3 の指示で「利用者が頼んだときだけ」で、委譲は `delegate_task` で足りる。**迷うのは `t3_thread_send`**（子への追加指示。`restart` モードで、ほかのスレッドの走行中のターンを中断して再開もできる）。不便が出たら、受容して足す。
+  - **スケジュール 3**（`schedule_task`・`delete_scheduled_task`・`run_scheduled_task_now`）と、**設定・プロジェクトの変更 7**（`t3_project_create`・`t3_project_update`・`t3_project_delete`・`t3_project_clone`・`t3_environment_preferences_update`・`t3_theme_set`・`t3_worktree_handoff`）: オーケストレーションに要るものが無い。`t3_environment_preferences_update` は、全スレッドに効く常設の指示を書き換えられる。
+  - **ブラウザの操作系 3**（利用者の指示）: `preview_act`（クリック・入力・アップロードなど）・`preview_evaluate`（ページでスクリプトを実行）・`preview_dialog`（ダイアログの承認・却下）。
+  - **その他 10**（別途検討。利用者の指示）: `request_secret`・`t3_pending_request`・`write_pull_request_guides`・`watch_pull_request`・`t3_attachment_prepare_upload`・`t3_attachment_discard`・`device_open`・`device_close`・`device_screenshot`・`t3_background_wait`。危険と判断したのではなく、「読み取りだけ・表示だけ・元に戻せる整理」と言える根拠が無かった。オーケストレーションに関わる候補は、`t3_pending_request`（子の質問に答える。あなたへの質問にも答えられる）・`t3_background_wait`・`watch_pull_request`。
+- **T3 のソースで確かめたこと**（2026-11-21。利用者の fork の `apps/server`・`apps/web`。T3 の改修は入れていない前提で読んだ。読んだ範囲の記録で、全体の保証ではない）:
+  - **`html_render`** は、利用者のローカルのブラウザの iframe で描く（`BrowserDocumentFrame.tsx` の `HtmlRenderDocument`。`sandbox="allow-scripts allow-forms"`。`allow-same-origin` が無いので、ページは opaque origin になり、T3 の画面の cookie・保存領域へ直接は触れない）。ページは T3 のサーバが `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups allow-downloads` で配る（`http.ts`）。**`connect-src`・`img-src`・`form-action` の制限は無い**。外部の描画サービスへは委託しないが、描画の実行時に、ページが外部へ要求を送れる。
+  - **`html_preview`** は、T3 のホストの headless Chrome で描く（`htmlRender/headlessChrome.ts`）。要求は `publicProxy` を通り、**ループバック・プライベート・リンクローカルなどの宛先（`10/8`・`172.16/12`・`192.168/16`・`127/8`・`169.254/16`・`100.64/10` など）を拒否する**（DNS の細工への備えを含む。この宛先制限は維持される）。公開の宛先へは届く。メインのフレームを固定し、ポップアップは禁止。全通信がこのプロキシを通るかは、読んでいない（上の宛先制限が効くのは、プロキシを経由する要求）。
+  - **`preview_*`** のブラウザ: `apps/server/src/preview` を `proxy`・`blocklist`・`loopback` などで検索した範囲では、`publicProxy` のような宛先の制限は見つからなかった（開発サーバの確認が目的で、ローカルへ届く）。`t3_preview_list` の定義は、「自動化できるのは `runtime:'server'` のタブだけで、ほかは利用者のローカルのデスクトップのアプリにある」と述べる。実装は Playwright で Chrome を操作する（`preview/DesktopBrowserChannel.ts` の注釈）。サーバ側のタブとデスクトップ側のタブの経路の違いは、読んでいない。
+  - **ページ本体の `path`**（`htmlRender/HtmlRender.ts` の `readPageFile`）: 絶対パスで、ネットワークのパスでなく、実体が `/\.html?$/i` に一致し（`.html`・`.htm`）、T3 内部のパスでなく、リンクをたどらずに開いて、ハードリンクが 1 つだけの通常のファイルで、サイズの上限以下のものに限る。
+  - **埋め込まれるローカル画像**（同 `inlineLocalImages`。`html`・`path` どちらの入力にも `prepare` が適用される）: HTML 中の絶対パスの文字列で、拡張子が `png`・`jpg`・`jpeg`・`gif`・`webp`・`avif`・`svg`・`bmp`・`ico` のものを、ファイルの先頭のバイトで画像と確かめて（`isImageBytes`。確かめる形式は PNG・JPEG・GIF・ICO・BMP・WEBP・AVIF。拡張子の候補にある SVG の扱いは未確認。全部は読んでいない）、1 枚 10 MiB まで（事前の `stat` と、読み取り量の指定）を data URI に埋め込む。**`readPageFile` にある T3 内部のパス・ハードリンク・リンク先の検査は、この経路には無い**（`fileSystem.stat`・`stream` で読む）。T3 のサーバの権限で読める画像を、場所を絞らずに埋め込める。`html_render` の描画が同じ `prepare` を通るかは、未確認。pi の `path` の deny は、MCP の名前の判定には掛からない。
+  - したがって、T3 が内容を外部へ送るのではないが、**モデルが書いた HTML や URL は、外部のホストへ要求を送れる**。
+- **プロンプトインジェクションによる外部送信は、防がない（リスクを受容。2026-11-21。利用者の判断）**: ブラウザ・描画の 4 本（`preview_open`・`preview_navigate`・`html_preview`・`html_render`）は、モデルが書いた URL・HTML が、LLM プロバイダ以外の、各ツールから到達できるホストへ要求を送れる。悪意のあるページやファイルの指示に従ったモデルが、見た内容（会話・読んだファイル）を URL やフォームに載せて送る経路（プロンプトインジェクション）が成り立つ。利用者は、当初の条件（「描画のみでフォーム送信などを想定しないもの」）が強制されないこと、今回検討した追加の制限・監視が未実装であることを聞いたうえで、次のように述べ、4 本を allow に戻すことに「OK」と答えた（原文）: 「プロンプトインジェクション対策するとかなり制限することになる気がします。pi ハーネス側も対策するのを諦めました。」。
+  - **受容した範囲**: 4 本を、家も仕事の機も allow にし、今回検討した直接送信（各ツールから到達できる、LLM プロバイダ以外のホストへの送信）への、追加の制限・監視は導入しない。既存の保護（`html_preview` の `publicProxy` の宛先制限、`pib` の囲いなど）は変更しない。これを、4 本の外へ広げた一般方針とは扱わない。
+  - **変わらないもの**: 害を生む操作の deny（破壊的な操作など）と、秘密のファイル（`.env`・鍵・SSH の鍵など）の読み書きの deny（`permission.path`）は、プロンプトインジェクション対策とは別の理由（モデルの誤りを含む）で残す。この deny は、対象のファイル操作を、名前・パスの形で拒否する。環境変数、規則に一致しない秘密、T3 内部の読み取りや通信（`html_preview` の画像の埋め込みなど）は、この規則の対象外。外部送信の防止とは、結びつけない。
+  - 利用者の発言（原文。T3 の責務の整理）: 「LLMプロバイダーが更にどこに渡すかはT3codeの責務外ですよね？ならT3側は問題なし。LLMプロバイダーの読み取り側を制限するのではなく、送信側を制限・監視する方針で。この方針だと？」。T3 の責務外かと尋ねたのは、LLM プロバイダから先の転送。
+  - **見送った対策の候補**（未実施。効果は未検証。対象と、確かめる項目）は、`docs/research/agents/permission-policy-rationale-2026-11.md` の「見送った対策の候補」。
+  - **通信の遮断**（`pib --offline`・`/sandbox offline`）は、T3 のツールに及ばない。YOLO では、ask も自動承認される。遮断が要る作業では、T3 のツールを使わない（対象のツールを無効化する、または deny にする）。
+  - 未確認: 会社の方針が「T3 のブラウザ・描画」を禁じていないか（利用者が聞いた範囲は、内部の内容を外部へ送信しない、まで）。サーバ側のブラウザのプロファイルに、ログイン情報があるか。
+- **注意**: T3 のツールは pi の囲い（sandbox）の外で動く。**deny にした MCP のツールは、モデルから隠れる**（対象のどれかに一致した最後の規則が deny なら隠す。拡張の `isToolFullyDenied`）ので、deny の理由に書いた案内は、モデルに届かない。
 - 試験: 判定表の `t3_mcp`（71 本の分類）を、実ゲートの `normalizeInput`（対象の生成）と `evaluateAnyValue` に通して、規則が意図どおりに当たることを確かめる（駆動の `mcpTools`）。T3 のツールが増減したら、表と方針をそろえる。
 
 ### 追加の 4 つの package（background・plan mode・goal・rewind）
