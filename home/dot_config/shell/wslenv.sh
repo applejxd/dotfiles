@@ -12,6 +12,14 @@ _wsl_path_prepend() {
     esac
 }
 
+# ユーザーが書き込めるディレクトリは、Linux 側の実行ファイルを隠さないよう末尾へ足す
+_wsl_path_append() {
+    case ":${PATH}:" in
+    *":$1:"*) ;;
+    *) export PATH="${PATH:+${PATH}:}$1" ;;
+    esac
+}
+
 # Windows System
 _wsl_path_prepend "/mnt/c/Windows"          # for explorer.exe
 _wsl_path_prepend "/mnt/c/Windows/System32" # for clip.exe
@@ -39,7 +47,7 @@ else
     fi
     _vscode_path="/mnt/c/Users/${_win_user}/AppData/Local/Programs/Microsoft VS Code"
     if [[ -n "$_win_user" ]] && [[ -d "$_vscode_path" ]]; then
-        _wsl_path_prepend "$_vscode_path/bin"
+        _wsl_path_append "$_vscode_path/bin"
     fi
     unset _win_user _vscode_path
 fi
@@ -60,28 +68,8 @@ export BROWSER="wslview"
 # To prevent OpenGL error
 export LIBGL_ALWAYS_INDIRECT=0
 
-# use default value if DISPLAY is set (e.g. SSH X11Forwarding)
-if [[ -z "$DISPLAY" ]]; then
-    # for VcXsrv
-    read -r _osrelease </proc/sys/kernel/osrelease 2>/dev/null || _osrelease=""
-    if [[ "$_osrelease" == *WSL2 ]]; then
-        # for WSL2 (外部プロセスを起こさず resolv.conf の最初の nameserver を読む)
-        _ns=""
-        while read -r _key _val _; do
-            if [[ "$_key" == nameserver ]]; then
-                _ns="$_val"
-                break
-            fi
-        done </etc/resolv.conf
-        DISPLAY="${_ns}:0.0"
-        unset _ns _key _val
-    else
-        # for WSL1
-        DISPLAY=:0.0
-    fi
-    unset _osrelease
-    export DISPLAY
-fi
+# DISPLAY は WSLg が設定する。VcXsrv 向けの TCP の DISPLAY (<ホストの IP>:0.0) は設定しない
+# (認証なしの X11 をネットワークへ出さないため)。SSH の X11 転送が設定した DISPLAY もそのまま使う。
 
 #-----------#
 # Japansese #
@@ -102,8 +90,8 @@ export DefaultIMModule=fcitx
 if [[ -e /usr/lib/jvm/java-11-openjdk-amd64 ]]; then
     export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
     _wsl_path_prepend /usr/lib/jvm/java-11-openjdk-amd64/bin
-    export CLASSPATH=.:/usr/lib/jvm/java-11-openjdk-amd64/lib
+    export CLASSPATH=/usr/lib/jvm/java-11-openjdk-amd64/lib
 fi
 
 # 共通 env には関数を残さない (docs/spec/structure.md の起動契約)
-unset -f _wsl_path_prepend
+unset -f _wsl_path_prepend _wsl_path_append

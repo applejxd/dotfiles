@@ -20,7 +20,8 @@
 そのリポジトリの `.tmp` に向けるため、関数を 1 つ定義して `mkdir -p` を実行する
 （出力はしない）。`TMPDIR` が既に `<repo>/.tmp/s/` の配下（pi のセッションの置き場。
 CHG-0042）のときは、そのまま維持する（子の zsh が戻さない。試験は
-`test_zshenv_tmpdir.py`）。
+`test_zshenv_tmpdir.py`）。`.tmp` が書き込めない、または自分の所有でない
+（他のユーザーが先に作った）ときは、向けずに元の `TMPDIR` を保つ。
 
 `shellenv.sh` は mise の shims（`${MISE_DATA_DIR:-~/.local/share/mise}/shims`）を、
 存在するときだけ PATH の先頭へ 1 回置く（継承した PATH に既にあれば先頭へ移す。venv の

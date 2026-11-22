@@ -41,7 +41,8 @@ $GpuPowerLimitWanted = $false
 $GpuPowerLimitWatts = 150
 $GpuPowerModelPattern = 'RTX 3070'
 $GpuPowerTaskName = 'gpu-power-limit'
-$GpuPowerDir = Join-Path $env:ProgramData 'gpu-power-limit'
+# 昇格した子が使う場所は、環境変数ではなく既知のフォルダ API で決める (環境変数は通常権限のプロセスが書き換えられる)
+$GpuPowerDir = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'gpu-power-limit'
 $GpuPowerScript = Join-Path $GpuPowerDir 'set-power-limit.ps1'
 
 # winget packages whose only installers are machine-wide (or scope-unspecified MSI), so winget raises UAC for them.
@@ -96,7 +97,7 @@ function Get-ChocoPath {
   Update-PathFromEnvironment
   $cmd = Get-Command choco -CommandType Application -ErrorAction SilentlyContinue
   if ($cmd) { return $cmd.Source }
-  $roots = @($env:ChocolateyInstall, (Join-Path $env:ProgramData 'chocolatey')) | Where-Object { $_ }
+  $roots = @([Environment]::GetEnvironmentVariable('ChocolateyInstall', 'Machine'), (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'chocolatey')) | Where-Object { $_ }
   foreach ($root in $roots) {
     $exe = Join-Path $root 'bin\choco.exe'
     if (Test-Path -LiteralPath $exe -PathType Leaf) { return $exe }
@@ -119,7 +120,7 @@ function Get-InstalledChocoPackages {
 
 function Test-ProgramFilesFile {
   param([Parameter(Mandatory)][string]$Relative)
-  $roots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ }
+  $roots = @([Environment]::GetFolderPath('ProgramFiles'), [Environment]::GetFolderPath('ProgramFilesX86')) | Where-Object { $_ }
   foreach ($root in $roots) {
     if (Test-Path -LiteralPath (Join-Path $root $Relative) -PathType Leaf) { return $true }
   }
@@ -182,7 +183,7 @@ function Test-SshdConfigured {
 }
 
 function Get-SshDefaultShellPath {
-  return (Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe')
+  return (Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'PowerShell\7\pwsh.exe')
 }
 
 function Test-SshDefaultShell {
@@ -195,7 +196,7 @@ function Test-SshDefaultShell {
 
 function Test-SudoSupported {
   # Windows 11 24H2 以降 (System32 に sudo.exe がある)
-  return (Test-Path -LiteralPath (Join-Path $env:SystemRoot 'System32\sudo.exe') -PathType Leaf)
+  return (Test-Path -LiteralPath (Join-Path ([Environment]::GetFolderPath('System')) 'sudo.exe') -PathType Leaf)
 }
 
 function Test-SudoEnabled {
@@ -216,7 +217,7 @@ function Test-SudoAllowedByPolicy {
 
 function Enable-Sudo {
   # 公式の手順 (sudo config --enable)。既定の forceNewWindow (新しい窓で実行。sudo のたびに UAC の確認が出る)
-  & (Join-Path $env:SystemRoot 'System32\sudo.exe') config --enable forceNewWindow
+  & (Join-Path ([Environment]::GetFolderPath('System')) 'sudo.exe') config --enable forceNewWindow
   if ($LASTEXITCODE -ne 0) { throw "sudo config --enable forceNewWindow failed: $LASTEXITCODE" }
 }
 
@@ -288,7 +289,7 @@ exit $LASTEXITCODE
 }
 
 function Get-NvidiaSmiPath {
-  $path = Join-Path $env:SystemRoot 'System32\nvidia-smi.exe'
+  $path = Join-Path ([Environment]::GetFolderPath('System')) 'nvidia-smi.exe'
   if (Test-Path -LiteralPath $path -PathType Leaf) { return $path }
   return $null
 }

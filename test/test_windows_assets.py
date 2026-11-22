@@ -769,6 +769,28 @@ def test_authorized_keys_acl_discards_explicit_aces_before_removing_inheritance(
     assert script.index("'/reset'") < script.index("'/inheritance:r'")
 
 
+def test_elevated_scripts_do_not_trust_environment_variables_for_paths():
+    """昇格する 309・348 は、書き込み先・実行ファイルの場所を環境変数に任せない。
+
+    環境変数は通常権限のプロセスが書き換えられる。既知のフォルダ API で決め、昇格した子を PATH・cwd 探索に任せない。
+    試験用の ProgramData の差し替え (348) は、昇格していないときだけ効く。
+    """
+    key_script = ROOT / "home/.chezmoiscripts/300_windows/run_after_348_authorized_keys.ps1.tmpl"
+    admin = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
+    key = key_script.read_text(encoding="utf-8-sig")
+
+    for name, script in (("309", admin), ("348", key)):
+        for forbidden in ("$env:ProgramData", "$env:ProgramFiles", "$env:ChocolateyInstall"):
+            assert forbidden not in script, (name, forbidden)
+        assert "FilePath     = Join-Path ([Environment]::GetFolderPath('System'))" in script, name
+        assert "FilePath     = 'powershell.exe'" not in script, name
+    # SYSTEM のタスクが実行する here-string (nvidia-smi の探索) だけは、実行時の SYSTEM の環境を読む
+    assert admin.count("$env:SystemRoot") == 1
+    # 試験用の差し替えは、昇格していないときだけ読む
+    assert "$testProgramData = if ($isElevated) { $null } else { $env:CHEZMOI_348_TEST_PROGRAMDATA }" in key
+    assert key.count("$env:CHEZMOI_348_TEST_PROGRAMDATA") == 1
+
+
 def test_wsl_platform_is_installed_without_a_distribution_for_applejxd():
     admin = ADMIN_SCRIPT.read_text(encoding="utf-8-sig")
     winget = (
