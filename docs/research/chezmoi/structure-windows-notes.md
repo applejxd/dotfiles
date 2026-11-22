@@ -127,3 +127,35 @@
 元の節: `docs/spec/structure.md` の「シェルの既定値」
 
 - 検証: 一時キーに向けた複製で、1 回目に設定、2 回目は変更なし、`Bypass` は維持されることを確認した。実機の `HKCU` は、実行ポリシーが既に `RemoteSigned` で、既定のターミナルは未設定だった
+
+## Windows Sandbox の `wsb.exe` を WSL から動かした実測
+
+元の節: `docs/spec/development.md` の「Windows Sandbox でのクリーン導入の検証」
+
+（2026-11-23 実測。Windows 11 Pro 26300、Sandbox パッケージ 0.8.114.0。実行は WSL 経由の `powershell.exe`。利用者のセッションは `query user` が `Disc`＝切断中で、`LogonUI` が動作中）
+
+### 確かめた事実
+
+- `wsb.exe` は、アプリ実行エイリアス（`%LOCALAPPDATA%\Microsoft\WindowsApps\wsb.exe`）から起動する、パッケージ `MicrosoftWindows.WindowsSandbox` の `AppCli`。パッケージには `wsb.exe`・`WindowsSandboxServer.exe`・`WindowsSandboxRemoteSession.exe` が入り、`*.deps.json` の依存に `Grpc.Net.Client`（wsb）と `Grpc.AspNetCore.Server`（Server）がある。つまり wsb は、ローカルの Server への gRPC クライアント
+- `wsb list`・`wsb start --config …` はどちらも、**約 30 秒で `Status(StatusCode="Cancelled")`（`OperationCanceledException`）**で失敗した（31・30・31 秒の 3 回。終了コード `0x80131500`）。呼ぶたびに `AppCli` が起動され（`AppModel-Runtime` のイベント 201/210/211）、Server が居なければ `WindowsSandboxServer.exe` が立ち上がる。Server は生きたままで、TCP の待ち受けは無く、RPC に応答しなかった
+- `LogonCommand` 付きの `.wsb` を `Start-Process` で起動すると、`WindowsSandboxRemoteSession.exe` と Server は立ち上がったが、**ゲストの `LogonCommand` は走らず**、共有した結果フォルダは約 6 時間空のままだった
+- **`WindowsSandboxServer.exe` が `STATUS_STACK_OVERFLOW`（0xc00000fd、`ntdll.dll`）で 2 回異常終了した**（アプリケーションログ。01:42:55 と 02:26:06）。1 回目は、最初の `wsb list` が起動した Server。2 回目は、`.wsb` で起動した Server。Server が落ちたあとも `WindowsSandboxRemoteSession.exe` だけが残った
+- Sandbox 専用のイベントログのチャンネルは無い。パッケージの `LocalState` にもログは無かった
+
+### 出典（外部の報告。いずれも 2026-11-23 取得）
+
+- 公式（<https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-cli>）: `wsb exec` は終了コードだけを返し、出力は取れない。ユーザー側の実行（`-r ExistingLogin`）は、アクティブなセッションが要る（先に `wsb connect` する）
+- LOLBAS（<https://lolbas-project.github.io/lolbas/OtherMSBinaries/Wsb/>）: `<LogonCommand>` は、ゲストの `WDAGUtilityAccount` がログオンしたときに初めて走る。それは RDP のセッションがつながった後で、`wsb start` だけではつながらない。`wsb start` ＋ `wsb exec -r System` なら、画面なしでも実行できる（出力は共有フォルダ経由）
+- <https://github.com/curtisgalloway/oxbox/pull/34>（2026-09-05）: 非対話のセッション（SSH）から `wsb start` が約 30.6 秒で `Cancelled`、`wsb list` が gRPC のタイムアウトで失敗。「CLI は、対話的なデスクトップセッションを要るバックエンドへの薄いクライアント」と報告
+- <https://github.com/Exoridus/exosnap/pull/435>（2026-09-27）: `wsb start` はユーザーセッションを作らず、`wsb exec -r ExistingLogin` は `ERROR_NO_SUCH_LOGON_SESSION` で失敗する。`wsb connect` を動かし続けると準備が約 20 秒になる
+- 上の `STATUS_STACK_OVERFLOW` と同じ報告は、検索では見つからなかった（`microsoft/Windows-Sandbox` の issue #84・#101 は別の症状）
+
+### 解釈（推測。未検証）
+
+- 切断・ロック中のセッションでは、Server が応答しない（初期化が対話的なデスクトップを待つ）ため、wsb の呼び出しが期限（約 30 秒）で `Cancelled` になり、`.wsb` 方式でも RDP がつながらないので `LogonCommand` が走らない。Server の異常終了が、この状態と関係するかは不明
+- 無人で動かせる可能性があるのは、「`wsb start` ＋ `wsb share` ＋ `wsb exec -r System`」の経路だけ。ただしこの機では、最初の `wsb start` が通らなかったので試せていない。画面をつないだ状態では未実施
+
+### まだ試していないこと
+
+- 画面をつないだ状態での `wsb list` / `start` / `exec -r System` / `connect`、`-r ExistingLogin` の挙動
+- `STATUS_STACK_OVERFLOW` の再現条件（画面をつないでも起きるか）
