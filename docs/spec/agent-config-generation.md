@@ -340,7 +340,7 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
   - `defaults.instructions`: 続きの作業のための brief を作る指示（日本語 10 項目）。リポジトリの値に**強制**する（変えたら apply で更新される）。
   - `defaults.onError`: `"default"`（無いときだけ補う。要約に失敗したら本体の既定で圧縮する）。
   - `auto`・`model`・`effort`・`style` は配らない（利用者が `/compaction-settings` で足したキーは保つ。`models` など他のキーも保つ）。壊れた JSON は触らない。何度流しても同じ結果。
-- **`compaction.modelOverrides`（`~/.pi/agent/settings.json`）**: `modify_pi_stock_settings.py.tmpl` が、窓が 100 万のモデル（`github-copilot/` の `claude-sonnet-5.5`・`claude-opus-5.5`・`claude-sonnet-5`・`gpt-6-sol`・`gpt-5.3-codex`・`gemini-3.8-flash`）に `reserveTokens = 300000` を、**無いときだけ**補う（利用者が別の値を書いていれば保つ。`compaction` の他のキーも保つ）。`reserveTokens` = 窓 − 発動点なので、発動点は 70 万トークン（窓の 7 割）。
+- **`compaction.modelOverrides`（`~/.pi/agent/settings.json`）**: `modify_pi_stock_settings.py.tmpl` が、窓が約 100 万以上のモデル（`github-copilot/` の `claude-sonnet-5.5`・`claude-opus-5.5`・`claude-sonnet-5`・`gpt-6-sol`・`gpt-6.2-sol`・`gpt-5.3-codex`・`gemini-3.8-flash`・`gemini-4-carbon`）に `reserveTokens = 300000` を、**無いときだけ**補う（利用者が別の値を書いていれば保つ。`compaction` の他のキーも保つ）。`reserveTokens` = 窓 − 発動点なので、窓が 100 万なら発動点は 70 万トークン（窓の 7 割）、1.1M の `gpt-6.2-sol` なら約 80 万になる。`gpt-6-sol` もカタログに実在するので残す。
 - 試験は `test/test_pi_compaction_config.py`。
 
 ### プロンプトテンプレート（/fleet・/stepback）
@@ -390,18 +390,23 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
     - 同時数の上限に当たったことは無い（2026-11-10 に 4 本を同時に回して、上限に達しなかった）。先に詰まりやすいのは、全件検査の CPU（`feature-orchestration` の落とし穴に記録。**推測**）と、親の確認の手間。
   - 利用者が足した他のキーは保つ。壊れた JSON は触らない。何度流しても同じ。
 - **settings の `subagents.agentOverrides`**（`modify_pi_stock_settings.py.tmpl`）: 組み込みの `scout`（`read`・`grep`・`find`・`ls`・`contact_supervisor`）と `oracle`（`read`・`grep`・`find`・`ls`）の `tools` を読み取り専用に絞る（組み込みの既定は `bash`・`write` を持つ）。`reviewer`（読み取り専用）・`worker` は変えない。検索の子 `researcher`（`read`・`write`）・`evidence-auditor`（`read`）には、機の検索・取得の MCP を `mcp:websearch`（家）・`mcp:agentcore-websearch` と `mcp:webfetch`（会社 PC）で足し、組み込みの prompt の食い違いを直す `systemPrompt` を置く（[理由と会社 PC の設定](mcp-servers.md#子のエージェントへの検索-mcp-の渡し方)）。利用者が同じ役の `tools` を書いていれば保つ（無いときだけ補う）。`systemPrompt` だけは repo が管理し、毎回揃える。他の `subagents` のキー・他の役の上書きも保つ。
-- **役割ごとのモデル**（`modify_pi_stock_settings.py.tmpl` の `PROVIDER_AGENT_MODELS`。`subagents.agentOverridesByProvider.<プロバイダ>.<名>.model`。`:` の後ろは思考の深さ）: 以前の Copilot / Bedrock のカタログ（`common.toml.tmpl` の `[pi.model.tier.*]`・役割ごとのモデル）に合わせる。pi-subagents が、**親のセッションのモデルのプロバイダごとに層を重ねる**（`/model` で替えても追従する。apply 時の `defaultProvider` には依らない）ので、両方の表を常に置く。知らないプロバイダの子は、親のモデルを継ぐ。利用者が書いた `model` は保つ。
+- **役割ごとのモデル**（`modify_pi_stock_settings.py.tmpl` の `PROVIDER_AGENT_MODELS`。`subagents.agentOverridesByProvider.<プロバイダ>.<名>.model`。`:` の後ろは思考の深さ）: Copilot は書き手（writer）= Claude / コードレビュー = GPT / 判定・証拠監査 = Gemini の **3 系統**に分ける。pi-subagents が、**親のセッションのモデルのプロバイダごとに層を重ねる**（`/model` で替えても追従する。apply 時の `defaultProvider` には依らない）ので、両方の表を常に置く。知らないプロバイダの子は、親のモデルを継ぐ。利用者が書いた `model` は保つ。
 
   | 役割 | github-copilot | amazon-bedrock | 理由 |
   | --- | --- | --- | --- |
   | `worker` | `claude-sonnet-5.5:medium` | `us.anthropic.claude-sonnet-5-5:medium` | 実装は medium で足りる（opus と合格率が同じで sonnet が速い） |
-  | `reviewer`・`evidence-auditor` | `gpt-6.2-sol:high` | `us.openai.gpt-6.1-sol:high` | 実装（Claude）と**別系統**にして、独立した目で見る（second_opinion）。Copilot は 2026-11-21 に 6.1 から 6.2 へ上げた（利用者の指示） |
-  | `oracle` | `gpt-6.2-sol:high` | `us.openai.gpt-6.1-sol:high` | 二番目の意見。**親・worker の Claude と別系統**にし（同じモデルの自己点検はほとんど効かず、評価役は同系統の出力を好むため。根拠）、`reviewer` と同じにする。Bedrock の Opus 5.5 は、カタログでは plan 役の既定で、ほかは明示の指示のときだけ。自律に起動する子には使わない（高価）。`context: fork` で親の会話を引き継ぐので、別モデルでは読み込みの再利用が効かない（少し高い） |
+  | `reviewer` | `gpt-6.2-sol:high` | `us.openai.gpt-6.1-sol:high` | コードレビューは実装（Claude）と別系統の GPT に任せ、独立した目で見る（second_opinion） |
+  | `evidence-auditor` | `gemini-4-carbon:medium` | `us.openai.gpt-6.1-sol:high` | 証拠監査は「知らないと言える」ことを最優先にする。Carbon medium は AA-Omniscience のハルシネーション率が最も低い設定という根拠から選ぶ |
+  | `oracle` | `gemini-4-carbon:high` | `us.openai.gpt-6.1-sol:high` | 判定役を `worker` の Claude・`reviewer` の GPT のどちらとも別系統にし、使える範囲で最も推論が強い設定にする |
   | `scout` | `claude-sonnet-5.5:low` | `us.anthropic.claude-sonnet-5-5:low` | 速い調査（**新しい判断**。カタログに階層が無い。`explore` は計測が要るとされていた） |
   | `researcher` | `claude-sonnet-5.5:medium` | `us.anthropic.claude-sonnet-5-5:medium` | 調査の合成（**新しい判断**。カタログに階層が無い） |
 
   Haiku は使わない（利用者の方針。担当外の編集・書式崩れの実測）。Bedrock の `gpt-6.1-sol`・`opus-5-5` は `verified=false`（会社の機での pi のツール呼び出しは未確認）。`delegate` は設定せず、親のモデルを継ぐ。
-  **GPT sol の版（2026-11-21）**: Copilot の `gpt-6.2-sol` は、pi のカタログ（`pi --list-models sol`。コンテキスト 1.1M・思考あり）に在る。Bedrock の 6.2 の ID（`us.openai.gpt-6.2-sol`）はカタログに無く、実在を確かめていないので、Bedrock は 6.1 のまま（会社の機で使えると分かったら上げる）。前の既定（6.1 の high）のままの Copilot の 3 役は、`chezmoi apply` が 6.2 へ移す（`LEGACY_AGENT_MODELS`。利用者が別の値にしていれば保つ）。
+  **カタログと非対称な割り当て**: Copilot の `gpt-6.2-sol`（コンテキスト 1.1M・思考あり）と `gemini-4-carbon`（1.0M・思考あり）は、pi のカタログに実在する（利用者が確認済み）。Bedrock には Gemini が無いので、`reviewer`・`evidence-auditor`・`oracle` は GPT のままにし、3 系統への分離は Copilot だけに適用する。Bedrock の 6.2 の ID（`us.openai.gpt-6.2-sol`）もカタログに無く実在未確認なので、6.1 を保つ。Bedrock の Opus 5.5 は高価で、plan 役か明示の指示に限り、自律に起動する子には使わない。`oracle` は `context: fork` で親の会話を引き継ぐため、別モデルでは読み込みの再利用が効かない。
+
+  **既存値の移行**: `LEGACY_AGENT_MODELS` に登録した旧既定だけを `chezmoi apply` で移す。Copilot の `reviewer` は `gpt-6.1-sol:high` から `gpt-6.2-sol:high` へ、`evidence-auditor` は `gpt-6.1-sol:high`・`gpt-6.2-sol:high` から Carbon medium へ、`oracle` は同じ GPT の 2 値と `claude-sonnet-5.5:xhigh` から Carbon high へ移す。Bedrock の既存の移行登録は変えない。旧既定と異なる利用者のモデル・思考の深さは保つ。
+
+  **撤去条件**: Carbon を担当させた `oracle`・`evidence-auditor` の指摘の的中率が Sol 時代と変わらなければ、両役の割り当てを `github-copilot/gpt-6.2-sol:high` に戻す。ベンチマークの根拠だけで運用上の改善があったとはみなさない。
 - **agent 定義の写し**（`home/dot_pi/agent/agents/{worker,reviewer,scout,oracle,researcher,evidence-auditor}.md`。配備先は `~/.pi/agent/agents/`。）: 組み込みの agent を**そのまま写し**、frontmatter に `permission: { external_directory: deny }` だけを足した。
   - **理由（ADR-0031 の評価）**: 子が作業ツリーの外を読もうとすると、方針は確認（ask）になり、**親の画面へ転送される。離席中は誰も答えず、5 分止まる**（実例: 2026-11-10、`review` の worker が `cd ~/.pi/…` で 240 秒以上待った）。確認ではなく**即座の拒否**にしたい。agent ごとの `permission:` は、agent ファイルの frontmatter にしか書けない（settings の `agentOverrides` は `permission` を扱えない）。ほかの標準の手段は無い。
   - **実測**（2026-11-10。使い捨ての project agent で。審査ログの `permission_request.blocked`・`origin: project-agent` でも確認。記録は [権限の frontmatter の実測](../research/agents/subagent-permission-frontmatter-2026-11.md)。**user 配下に配備した写しでの実測は、反映後に一度確かめる（未確認）**）: `external_directory: deny` で、作業ツリーの外の `read` と bash のパス引数は即座に拒否された（`/etc/hostname`・`/etc`・`/tmp`・`~/.agents/skills/…`。pi 本体の `~/.pi/agent/npm/…` は読めた）。作業ツリーの中は通った。`skills: <名>` と `inheritSkills: false` で、子には指定した skill だけが見えた。
