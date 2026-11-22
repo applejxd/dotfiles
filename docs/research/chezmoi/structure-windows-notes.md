@@ -132,7 +132,7 @@
 
 元の節: `docs/spec/development.md` の「Windows Sandbox でのクリーン導入の検証」
 
-（2026-11-23 実測。Windows 11 Pro 26300、Sandbox パッケージ 0.8.114.0。実行は WSL 経由の `powershell.exe`。利用者のセッションは `query user` が `Disc`＝切断中で、`LogonUI` が動作中）
+（2026-11-23 実測。Windows 11 Pro 26300、Sandbox パッケージ 0.8.114.0。実行は WSL 経由の `powershell.exe`。最初の実測（1:25〜8:15）は、利用者のセッションが `query user` で `Disc`＝切断中。そのあと RDP で `Active` にして追試した）
 
 ### 確かめた事実
 
@@ -150,12 +150,28 @@
 - <https://github.com/Exoridus/exosnap/pull/435>（2026-09-27）: `wsb start` はユーザーセッションを作らず、`wsb exec -r ExistingLogin` は `ERROR_NO_SUCH_LOGON_SESSION` で失敗する。`wsb connect` を動かし続けると準備が約 20 秒になる
 - 上の `STATUS_STACK_OVERFLOW` と同じ報告は、検索では見つからなかった（`microsoft/Windows-Sandbox` の issue #84・#101 は別の症状）
 
+### 画面をつないだ状態（RDP で `Active`）の追加実測（同日 8:29〜8:45）
+
+- `wsb list` は、RDP で `Active` でも約 30 秒で `Cancelled`（切断中と同じ）。呼ぶたびに Server が立ち上がるが、応答しない
+- **Start メニューから設定なしで起動した Windows Sandbox も、`Windows サンドボックスを初期化できませんでした。アクセス許可で禁じられた方法でソケットにアクセスしようとしました。(0x8007271D)`（`WSAEACCES`）で失敗した**。私の設定や WSL 経由の問題ではなく、この機の Sandbox 自体が起動しない
+- `.wsb` 方式は、設定の書き間違い（`LogonCommand` に `&` を直接書いた。XML では `&amp;`）が先に「構成ファイルが無効です」になった。直したあとは、ネットワークの有効（`quick.wsb`）・無効（`netoff.wsb`）のどちらも `Windows サンドボックスを初期化できませんでした。Exception of type 'System.Exception' was thrown.`（番号なし）で失敗した。ネットワークの無効化では直らない
+- 失敗した間、Hyper-V の `Compute`・`Worker`・`VMMS`・`Hypervisor` のイベントは 1 件も無い。**VM が作られる前**の失敗
+- 環境の確認: `HTTP_PROXY` 等のプロキシ環境変数は、Process / User / Machine のどれにも無い。WinHTTP は直接接続、IE のプロキシも無効。TCP の除外ポート範囲は 5357 だけ。UDP 53/67/68 の占有は無い。`hns`・`vmcompute`・`SharedAccess`・`CmService`・`WinNat` は動作中。WSL は `networkingMode=mirrored`（Hyper-V ファイアウォールが有効で、既定の受信は Block）で、仮想アダプターは `vEthernet (FSE HostVnic)` と `vSwitch (FSE Switch)` だけ（`Default Switch` は無い）
+- 画面のスクリーンショットは、WSL 経由の `powershell.exe` からは取れない（`CopyFromScreen` が「ハンドルが無効」）。エラーは利用者の画面の確認に頼る
+
+### 出典の追加（取得 2026-11-23）
+
+- <https://github.com/microsoft/Windows-Sandbox/issues/117>: 同じ `Exception of type 'System.Exception' was thrown.` の報告。**原因は `HTTP_PROXY` / `HTTPS_PROXY` の環境変数で、消したら直った**（この機には無いので当てはまらない）。別の報告者は、Hyper-V の `Compute` で `0xC0370106`、`Worker` で「ゲストが起動した」を見ており、この機とは様子が違う
+- `0x8007271D` は `WSAEACCES`。Hyper-V のライブマイグレーションや WSL の登録でも出る。ポートの予約や排他的な占有が典型だが、この機の確認範囲では該当が無かった
+
 ### 解釈（推測。未検証）
 
-- 切断・ロック中のセッションでは、Server が応答しない（初期化が対話的なデスクトップを待つ）ため、wsb の呼び出しが期限（約 30 秒）で `Cancelled` になり、`.wsb` 方式でも RDP がつながらないので `LogonCommand` が走らない。Server の異常終了が、この状態と関係するかは不明
-- 無人で動かせる可能性があるのは、「`wsb start` ＋ `wsb share` ＋ `wsb exec -r System`」の経路だけ。ただしこの機では、最初の `wsb start` が通らなかったので試せていない。画面をつないだ状態では未実施
+- 「切断・ロック中のセッションが原因」という見立ては、**支持されない**。RDP で `Active` にしても、Start メニューの既定起動も失敗するため。この機では、セッションの状態に関わらず Sandbox が起動しない
+- 候補: ① WSL の `mirrored` ネットワークとの干渉（Sandbox の NAT 用の `Default Switch` が作れない）、② Windows Sandbox のパッケージ（0.8.114.0）と OS（26300）の組み合わせの不具合（`WindowsSandboxServer` の `STATUS_STACK_OVERFLOW` が 2 回あるのと整合する）。どちらも確かめていない
+- 無人で動かせる可能性があるのは、「`wsb start` ＋ `wsb share` ＋ `wsb exec -r System`」の経路だけ。この機では `wsb start` が通らず、試せていない
 
 ### まだ試していないこと
 
-- 画面をつないだ状態での `wsb list` / `start` / `exec -r System` / `connect`、`-r ExistingLogin` の挙動
-- `STATUS_STACK_OVERFLOW` の再現条件（画面をつないでも起きるか）
+- 管理者権限での `hnsdiag list networks`・Hyper-V のイベントの確認、Sandbox 機能の再インストール（`Disable` / `Enable-WindowsOptionalFeature -FeatureName Containers-DisposableClientVM`）、Windows の再起動後の再試行
+- WSL を `networkingMode=nat` に戻した場合、または `wsl --shutdown` の後で Sandbox が起動するか（この作業は WSL の中で動くセッションを止めるので、私は実行しない）
+- `STATUS_STACK_OVERFLOW` の再現条件
