@@ -207,6 +207,29 @@ def test_shellenv_defines_no_alias_or_function(home):
     assert done.stdout == "" and done.stderr == ""
 
 
+@pytest.mark.parametrize("shell", ["bash", "zsh"])
+def test_wsl_user_vscode_bin_goes_to_the_end_of_path_once(home, shell):
+    """ユーザーが書き込める VS Code の bin は、PATH の最後に 1 つだけ置く。
+
+    wslenv.sh は場所を決めるだけで、shellenv.sh が PATH の最後へ置く。前の版が先頭へ置いたものを引き継いだ PATH でも、
+    $GOPATH/bin など後から足す要素より後ろに回る (Linux 側のコマンドを隠さない)。
+    """
+    (home / ".go").mkdir()
+    vscode = "/x/vscode/bin"
+    script = f'_wsl_vscode_user_bin={vscode}; source "$HOME/.config/shell/shellenv.sh"; printf "%s" "$PATH"'
+    argv = (
+        [_zsh(), "-f", "-c", script]
+        if shell == "zsh"
+        else ["bash", "--noprofile", "--norc", "-c", script]
+    )
+    done = run(argv, home, PATH=f"{vscode}:/usr/bin:/bin")
+    assert done.returncode == 0, done.stderr
+    entries = done.stdout.split(":")
+    assert entries.count(vscode) == 1, done.stdout
+    assert entries[-1] == vscode, done.stdout
+    assert f"{home}/.go/bin" in entries and entries.index(f"{home}/.go/bin") < entries.index(vscode)
+
+
 _SPLIT = "extract zpack zunpack runcpp"
 
 

@@ -55,7 +55,13 @@
       "~/.vault-token": { "action": "deny", "reason": "公開・Vault の認証トークンは読まない・書かない。必要なら利用者に依頼する" },
       "~/.cache/huggingface/token": { "action": "deny", "reason": "Hugging Face の認証トークンは読まない・書かない（モデル・データセットのキャッシュは hub・datasets の下）。必要なら利用者に依頼する" },
       "~/.cache/huggingface/stored_tokens": { "action": "deny", "reason": "Hugging Face の認証トークンは読まない・書かない（モデル・データセットのキャッシュは hub・datasets の下）。必要なら利用者に依頼する" },
-      "~/.pi/agent/oauth.json": { "action": "deny", "reason": "pi の認証（OAuth）は読まない・書かない。必要なら利用者に依頼する" }
+      "~/.pi/agent/oauth.json": { "action": "deny", "reason": "pi の認証（OAuth）は読まない・書かない。必要なら利用者に依頼する" },
+      "~/.config/sops/age": { "action": "deny", "reason": "sops の age 秘密鍵は読まない・書かない。必要なら利用者に依頼する" },
+      "~/.config/sops/age/*": { "action": "deny", "reason": "sops の age 秘密鍵は読まない・書かない。必要なら利用者に依頼する" },
+      "~/.config/Bitwarden CLI": { "action": "deny", "reason": "Bitwarden CLI のデータ（保管庫の暗号文・トークン）は読まない・書かない。必要なら利用者に依頼する" },
+      "~/.config/Bitwarden CLI/*": { "action": "deny", "reason": "Bitwarden CLI のデータ（保管庫の暗号文・トークン）は読まない・書かない。必要なら利用者に依頼する" },
+      "~/.zsh_history": { "action": "deny", "reason": "シェルの履歴は読まない・書かない（直接打った秘密が残りうる）。必要なら利用者に依頼する" },
+      "~/.bash_history": { "action": "deny", "reason": "シェルの履歴は読まない・書かない（直接打った秘密が残りうる）。必要なら利用者に依頼する" }
     },
     "path_write": {
       "~/.pi/agent/bin": { "action": "deny", "reason": "pi の設定・拡張・agent 定義・package・本体・ツール（bin・git）・プロンプトは書き換えない。囲いの外で、次のコマンド・次の起動から実行・読み込みされる（囲いの起動も、権限の設定も含む）。変えるのは利用者（chezmoi）" },

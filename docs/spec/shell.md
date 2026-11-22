@@ -20,7 +20,9 @@
 そのリポジトリの `.tmp` に向けるため、関数を 1 つ定義して `mkdir -p` を実行する
 （出力はしない）。`TMPDIR` が既に `<repo>/.tmp/s/` の配下（pi のセッションの置き場。
 CHG-0042）のときは、そのまま維持する（子の zsh が戻さない。試験は
-`test_zshenv_tmpdir.py`）。
+`test_zshenv_tmpdir.py`）。`.tmp` が書き込めない、または自分の所有でない
+（他のユーザーが先に作った）ときは、向けずに元の `TMPDIR` を保つ。継承した `TMPDIR` が
+`<repo>/.tmp/s/` の配下のときは、親の pi が決めた値として、所有者を見ずに維持する。
 
 `shellenv.sh` は mise の shims（`${MISE_DATA_DIR:-~/.local/share/mise}/shims`）を、
 存在するときだけ PATH の先頭へ 1 回置く（継承した PATH に既にあれば先頭へ移す。venv の
@@ -30,11 +32,15 @@ CHG-0042）のときは、そのまま維持する（子の zsh が戻さない�
 
 WSL では `shellenv.sh` が `wslenv.sh` を読み、Windows 側のディレクトリ（`Windows` /
 `System32`、PowerShell 5.1、PowerShell 7（`C:\Program Files\PowerShell\7` があるとき
-だけ）、VS Code、Java）を PATH の先頭へ足す。`/etc/wsl.conf` の
+だけ）、システム全体に入れた VS Code、Java）を PATH の先頭へ足す。ユーザー別に入れた
+VS Code の `bin`（ユーザーが書き込める場所）は、Linux 側のコマンドを隠さないよう、
+`shellenv.sh` が PATH の最後へ 1 つだけ置く（継承した PATH に先頭のものがあれば、除いてから）。`/etc/wsl.conf` の
 `appendWindowsPath=false` で Windows の PATH は引き継がないため、`pwsh.exe` なども
 ここで足したものしか名前で呼べない。入れ子のシェルで読み直しても重複しないよう、
 PATH と `LD_LIBRARY_PATH`（`/usr/lib/wsl/lib`）は既にあれば足さない。足すための
-補助関数は読み終えたら `unset -f` で消す（方針 1）。
+補助関数は読み終えたら `unset -f` で消す（方針 1）。`DISPLAY` は WSLg か SSH の X11 転送が
+決める（`wslenv.sh` は補わない）。VcXsrv を使うときは、`userenv.sh` に `DISPLAY` を自分で書く
+（認証なしの TCP の X11 になるので、VcXsrv 側でアクセス制御を有効にする）。
 
 `.zshrc` の冒頭は `/etc/zsh/zshrc` の読み込みも含む（`.zshenv` の `no_global_rcs`
 で自動では読まれないため、対話のときだけ読む）。
@@ -96,7 +102,7 @@ Nix 化・`rm` の alias 差し替え・環境変数の列挙による人間判�
   - `cd /` はサブシェルの中だけで、呼んだシェルの作業ディレクトリは変わらない。
   - `HOME` と `PI_CODING_AGENT_DIR`（設定済みならそれ、無ければ `~/.pi/agent`）は、利用者のものを渡す（認証・設定を共有するため）。**root が `~/.pi/agent` に root 所有のファイルを作ると、あとで通常の pi が書けなくなる**。そのため、セッションを保存せず（`--no-session`）、起動時の自動の通信もしない（`--offline`）。認証の更新などで、root 所有のファイルが残りうる。直すには `sudo chown -R "$USER" ~/.pi/agent`。
   - sudo が落とす環境変数（プロキシ・`AWS_PROFILE` など）は渡さない。渡すのは `HOME`・`PATH`・`PI_CODING_AGENT_DIR` だけ（`TERM` は sudo が保つ）。必要なら `functions/pi.sh` の `env` に足す。
-  - `PATH` を丸ごと root へ渡す（利用者の例と同じ。sudo の `secure_path` は使わない）。利用者が書き込める場所の実行ファイルを、root が実行しうる。
+  - `PATH` を丸ごと root へ渡す（利用者の例と同じ。sudo の `secure_path` は使わない）。利用者が書き込める場所の実行ファイルを、root が実行しうる。**これは利用者の判断で変えない**（2026-11-22。`superpi` はシステム全体の更新・不具合対応を制限なしで行う用途で、固定の PATH にすると mise の node を使う pi が起動しない。この機で、固定の PATH では `node`・`rg`・`fd`・`uv` が見つからないことを確かめた）。
   - pi の実体は、外部の実行ファイルの絶対パス（bash は `type -P pi`、zsh は `whence -p pi`）。相対の `PATH` 要素で見つかったときは、`cd /` する前の作業ディレクトリで絶対にする。alias・関数の `pi` は使わない。`$HOME/.local/bin/pi` に固定しない（この機には無く、`~/.pi/agent/bin/pi` と `~/bin/pi` がある）。
   - sudo が無ければ `superpi: sudo が無い`、読み込んだあとで PATH から pi が消えたら `superpi: pi の実行ファイルが PATH に無い` と出して、sudo の前に失敗する。
 - **ADR-0037 との関係**: 撤去したのは、pi 以外の CLI の起動関数と `agent` の別名。pi を起動する別名は対象外（`test_shellrc_defines_no_agent_alias_or_copilot_function` は、そのまま通る）。
@@ -111,7 +117,7 @@ Nix 化・`rm` の alias 差し替え・環境変数の列挙による人間判�
 | --- | --- | --- | --- |
 | `~/.config/shell/userenv.sh`・`.bash`・`.zsh` | 環境変数・プロキシ。例: `export http_proxy=http://address:port` | シェルの起動ごと（`userenv.sh` は `shellenv.sh` が読む） | chezmoi の管理外。同じ場所の `.example` から作る |
 | `~/.config/mise/conf.d/*.toml` | `mise` の設定のマシン固有分 | `mise` が設定を読むとき | chezmoi の管理外。`[env]` は mise を有効化したシェルでしか効かない（**推測**。公式 docs では未確認） |
-| `~/.config/chezmoi/chezmoi.toml` の `[data]` | chezmoi のテンプレートに渡すマシン固有の値（例: `no_proxy`） | `chezmoi apply` のとき | chezmoi の管理外。値の使い道はテンプレートが決める |
+| `~/.config/chezmoi/chezmoi.toml` の `[data]` | chezmoi のテンプレートに渡すマシン固有の値（例: `no_proxy`） | `chezmoi apply` のとき | chezmoi の管理外。値の使い道はテンプレートが決める。`http_proxy`・`https_proxy` は写さない（認証情報を平文で残さないため）。以前の `init` で残った値は `chezmoi init`（または `chezmoi update --init`）で描き直すと消える |
 | `~/.config/git/config.local` | git の設定のマシン固有分 | git が設定を読むとき | chezmoi の管理外。`home/dot_config/git/config.tmpl` が、共有設定の後ろに `[include]` で読む（**共有設定を上書きもできる**） |
 | `~/.config/pi-sandbox/runner.local.toml` | pi の囲い（`pib`）で、隠す場所の追記 | `pib` の囲いでコマンドを実行するたび | chezmoi の管理外。追記のみで、`[gpu]`・`[docker]`・`[git]` は書けない。同じ場所の `runner.local.toml.example` から作る（[設定](sandbox/pi-sandbox-runner.md#設定runnertoml)）。Linux / WSL のみ |
 | `~/.pi/agent/extensions/permission-explain/config.local.json` | pi の説明（`Ctrl+E`）に使うモデルの上書き（`model` だけ。`key` は書いても無視される）。同じ場所の `config.local.json.example` から作る | 拡張の起動時（`/reload` か pi の再起動） | chezmoi の管理外。リポジトリの `config.json`（`is-work` でモデルを切り替える）に重ねて読む。詳細は [ローカル版の記録](../research/agents/ask-auto-judge-evaluation-2026-11.md#ローカル版への切り替え2026-11-15) |

@@ -122,6 +122,30 @@ def test_shipped_config_is_valid_and_hides_credentials():
     # store ヘルパーの認証 (git の push に使われる) は、ファイルが見える場所にあっても隠す
     assert "~/.git-credentials" in cfg.hide_files and "~/.config/git/credentials" in cfg.hide_files
     assert {"GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK"} <= set(cfg.env_unset)
+    # このリポジトリが環境変数で扱う秘密 (Bitwarden のセッション・Hugging Face・検索の鍵・sops の鍵) も内側へ渡さない
+    assert {
+        "BW_SESSION",
+        "BW_CLIENTID",
+        "BW_CLIENTSECRET",
+        "BW_PASSWORD",
+        "HF_TOKEN",
+        "HUGGING_FACE_HUB_TOKEN",
+        "BRAVE_API_KEY",
+        "EXA_API_KEY",
+        "TAVILY_API_KEY",
+        "OPENALEX_API_KEY",
+        "SEMANTICSCHOLAR_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "SOPS_AGE_KEY",
+        "AWS_BEARER_TOKEN_BEDROCK",
+    } <= set(cfg.env_unset)
+    # 名前の型でも消す (将来の新しい名前も拾う)。T3 Code の MCP のトークンは、型と名前の両方に入れてある
+    assert {"*_TOKEN", "*_KEY", "*_SECRET", "*PASSWORD*", "BW_*"} <= set(cfg.env_unset_patterns)
+    assert "T3_MCP_BEARER_TOKEN" in cfg.env_unset
+    # age 秘密鍵・Bitwarden CLI のデータ・シェルの履歴 (直接打った秘密が残りうる) も隠す
+    assert {"~/.config/sops/age", "~/.config/Bitwarden CLI"} <= set(cfg.hide_dirs)
+    assert {"~/.zsh_history", "~/.bash_history"} <= set(cfg.hide_files)
 
 
 @pytest.fixture(autouse=True)
@@ -266,6 +290,10 @@ def test_shipped_config_shows_git_settings_but_never_the_whole_git_directory():
         ("version = 1\n[gpu]\nextra = 1\n", "未知のキー"),
         ("version = 1\n[visible]\nextra = 1\n", "未知のキー"),
         ("version = 1\n[env]\nextra = 1\n", "未知のキー"),
+        ("version = 1\n[env]\nunset_patterns = ['a-b']\n", "名前の文字と"),
+        ("version = 1\n[env]\nunset_patterns = ['*']\n", "名前の文字を含まない"),
+        ("version = 1\n[env]\nunset_patterns = ['??']\n", "名前の文字を含まない"),
+        ("version = 1\n[env]\nunset_patterns = 'x'\n", "文字列の配列"),
         ("version = 1\n[hide]\ndirs = 'x'\n", "文字列の配列"),
         ("version = 1\n[hide]\ndirs = [1]\n", "文字列の配列"),
         ("version = 1\n[visible]\nread = 'x'\n", "文字列の配列"),
@@ -1081,6 +1109,54 @@ def test_build_command_lets_env_unset_path_win_over_the_original_path(tmp_path):
     assert "PIB_ORIG_PATH" in command  # 運び役は、どちらでも消す
 
 
+def test_build_command_unsets_the_variables_matching_the_name_patterns(tmp_path):
+    """名前の型 (*_TOKEN など) に当たる、いまの環境変数を消す。型に当たらない名前 (PATH・HOME・MONKEY) は渡る。"""
+    conf = tmp_path / "runner.toml"
+    conf.write_text(
+        'version = 1\n[env]\nunset = ["EXACT_NAME"]\n'
+        'unset_patterns = ["*_TOKEN", "*_KEY", "*PASSWORD*", "BW_*"]\n',
+        encoding="utf-8",
+    )
+    env = {
+        "PI_SANDBOX_RUNNER_CONFIG": str(conf),
+        "PATH": "/usr/bin",
+        "HOME": "/home/u",
+        "MONKEY": "x",  # *_KEY には当たらない (_ が無い)
+        "T3_MCP_BEARER_TOKEN": "x",
+        "my_api_key": "x",  # 小文字も拾う
+        "DB_PASSWORD_FILE": "x",
+        "BW_SESSION": "x",
+        "BWRAP_NOTE": "x",  # BW_ ではない
+    }
+    command, _ = runner.build_command(["-c", "true"], env, shell_fake().host(), "/w/ws")
+    unset = [command[i + 1] for i, a in enumerate(command) if a == "--unsetenv"]
+    assert unset[0] == "EXACT_NAME"  # 名前の一覧が先
+    assert set(unset) == {
+        "EXACT_NAME",
+        "T3_MCP_BEARER_TOKEN",
+        "my_api_key",
+        "DB_PASSWORD_FILE",
+        "BW_SESSION",
+    }
+
+
+def test_a_name_pattern_matching_path_beats_the_original_path_restore(tmp_path):
+    """PATH が環境に無く PIB_ORIG_PATH だけがあっても、PATH に当たる型 (PA?H) は、復元した PATH を消す。"""
+    conf = tmp_path / "runner.toml"
+    conf.write_text('version = 1\n[env]\nunset_patterns = ["PA?H"]\n', encoding="utf-8")
+    env = {"PI_SANDBOX_RUNNER_CONFIG": str(conf), "PIB_ORIG_PATH": "/usr/bin"}
+    command, _ = runner.build_command(["-c", "true"], env, shell_fake().host(), "/w/ws")
+    setenv_names = [command[i + 1] for i, a in enumerate(command) if a == "--setenv"]
+    unset = [command[i + 1] for i, a in enumerate(command) if a == "--unsetenv"]
+    assert "PATH" not in setenv_names and "PATH" in unset
+
+
+def test_matching_env_names_returns_names_only_and_sorted():
+    env = {"B_TOKEN": "secret-b", "A_TOKEN": "secret-a", "OTHER": "x"}
+    assert runner.matching_env_names(env, ["*_TOKEN"]) == ["A_TOKEN", "B_TOKEN"]
+    assert runner.matching_env_names(env, []) == []
+
+
 def test_build_command_removes_an_empty_carrier_variable_too(tmp_path):
     conf = tmp_path / "runner.toml"
     conf.write_text(MINIMAL, encoding="utf-8")
@@ -1150,12 +1226,12 @@ def test_local_example_is_valid_and_adds_nothing_until_edited():
 def test_local_config_adds_after_the_shared_entries_without_duplicates():
     shared = config(
         'version = 1\n[gpu]\ndevices = ["auto"]\n[hide]\ndirs = ["~/.ssh"]\n'
-        '[visible]\nread = ["~/.local/bin"]\n[env]\nunset = ["GH_TOKEN"]\n'
+        '[visible]\nread = ["~/.local/bin"]\n[env]\nunset = ["GH_TOKEN"]\nunset_patterns = ["*_TOKEN"]\n'
     )
     local = runner.parse_local(
         '[hide]\ndirs = ["~/notes", "~/.ssh"]\nfiles = ["~/.tok"]\n'
         '[visible]\nread = ["/mnt/d/data", "~/.local/bin"]\nwrite = ["/mnt/d/out"]\n'
-        '[env]\nunset = ["MY_TOKEN", "GH_TOKEN"]\n'
+        '[env]\nunset = ["MY_TOKEN", "GH_TOKEN"]\nunset_patterns = ["MYCORP_*", "*_TOKEN"]\n'
     )
     merged = runner.merge_local(shared, local)
     assert merged.gpu_devices == ("auto",)  # デバイスは local から増えない
@@ -1164,6 +1240,7 @@ def test_local_config_adds_after_the_shared_entries_without_duplicates():
     assert merged.visible_read == ("~/.local/bin", "/mnt/d/data")
     assert merged.visible_write == ("/mnt/d/out",)
     assert merged.env_unset == ("GH_TOKEN", "MY_TOKEN")
+    assert merged.env_unset_patterns == ("*_TOKEN", "MYCORP_*")  # 共有が先。重複は 1 つ
     assert merged.docker_block is shared.docker_block and merged.git_protect is shared.git_protect
 
 

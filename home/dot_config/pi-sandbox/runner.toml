@@ -57,6 +57,8 @@ dirs = [
   "~/.azure",
   "~/.password-store",
   "~/.pi/agent/ayu",
+  "~/.config/sops/age",
+  "~/.config/Bitwarden CLI",
 ]
 files = [
   "~/.netrc",
@@ -73,10 +75,12 @@ files = [
   "~/.pi/agent/trust.json",
   "~/.pi/agent/mcp.json",
   "~/.config/agents/websearch-keys.json",
+  "~/.zsh_history",
+  "~/.bash_history",
 ]
 
 [env]
-# 内側へ渡さない環境変数 (拒否リスト。一覧に無い名前は渡る。許可リストにはしていない)。
+# 内側へ渡さない環境変数 (拒否リスト。unset の名前と unset_patterns の型のどちらにも当たらない名前は渡る。許可リストにはしていない)。
 unset = [
   "GH_TOKEN",
   "GITHUB_TOKEN",
@@ -89,9 +93,28 @@ unset = [
   "AWS_SESSION_TOKEN",
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+  "AWS_BEARER_TOKEN_BEDROCK",
+  "HF_TOKEN",
+  "HUGGING_FACE_HUB_TOKEN",
+  "BRAVE_API_KEY",
+  "EXA_API_KEY",
+  "TAVILY_API_KEY",
+  "OPENALEX_API_KEY",
+  "SEMANTICSCHOLAR_API_KEY",
+  "BW_SESSION",
+  "BW_CLIENTID",
+  "BW_CLIENTSECRET",
+  "BW_PASSWORD",
+  "SOPS_AGE_KEY",
+  "T3_MCP_BEARER_TOKEN",
   "SSH_AUTH_SOCK",
   "DBUS_SESSION_BUS_ADDRESS",
 ]
+# 名前の型 (* と ? だけ。大文字小文字を区別しない)。起動のたびに、いまの環境変数のうち当たるものを消す。
+# 内側で消えた名前が要る作業は、コマンドの前に VAR=値 を付ける。
+unset_patterns = ["*_TOKEN", "*_KEY", "*_SECRET", "*PASSWORD*", "BW_*"]
 
 [docker]
 # true: docker のソケットを内側から塞ぐ (塞がないと docker 経由で書き込み制限を破れる)。

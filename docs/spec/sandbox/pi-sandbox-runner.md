@@ -89,7 +89,7 @@ pib-shell -c <コマンド>
 | 9 | 書き込み可で渡る git ディレクトリの、**存在する** `hooks`・`config`・`config.worktree` を `--ro-bind` | `git.protect` |
 | 10 | 隠す場所: ディレクトリは `--tmpfs`、ファイルは `--ro-bind /dev/null` | `hide.dirs` / `hide.files`。**`visible` の後**なので、見せた場所の中の秘密（例: `~/.config/git/credentials`）も隠せる。シンボリックリンクは解決した実体で覆う（リンクのままだと bwrap が失敗する） |
 | 11 | `/run/user/<uid>` を空にし、`/run/docker.sock`・`/var/run/docker.sock` を `/dev/null` で覆う | `docker.block` |
-| 12 | `--unshare-net`（`--offline` のときだけ）、`--unsetenv <名前>`、`--setenv MISE_STATE_DIR /tmp/pib-mise-state` | `env.unset`。`mise` の状態（信頼の記録）をホームの外の使い捨ての場所へ向け、ホームの状態を書き換えさせない |
+| 12 | `--unshare-net`（`--offline` のときだけ）、`--unsetenv <名前>`、`--setenv MISE_STATE_DIR /tmp/pib-mise-state` | `env.unset` の名前と、`env.unset_patterns` の型に当たるいまの環境変数。`mise` の状態（信頼の記録）をホームの外の使い捨ての場所へ向け、ホームの状態を書き換えさせない |
 | 13 | `--`、`/bin/bash -c <コマンド>` | |
 
 ホームは空の tmpfs なので、内側から `~/…` に書いても成功するが、外へは届かない（コマンドは終わると消える）。
@@ -119,6 +119,7 @@ dirs  = ["~/.ssh", "~/.config/gh"]   # 空の tmpfs で覆う
 files = ["~/.netrc", "~/.git-credentials", "~/.config/git/credentials"]   # /dev/null で覆う
 [env]
 unset = ["GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK"]   # 内側へ渡さない環境変数（拒否リスト）
+unset_patterns = ["*_TOKEN", "*_KEY", "*_SECRET", "*PASSWORD*", "BW_*"]   # 名前の型（* と ? だけ。大文字小文字を区別しない）
 [docker]
 block = true                # compose を内側で使うときだけ false
 [git]
@@ -127,7 +128,7 @@ protect = true
 
 - 設定にするのは、リストとオン・オフだけ。任意の追加引数（`extra_args`）は作らない（抜け道になる）。
 - **このマシンだけの追記（`runner.local.toml`）**: `runner.toml` と**同じ場所**に置く任意のファイルで、共有設定に**足す**。chezmoi の管理外なので、`chezmoi apply` で消えず、`chezmoi diff` にも出ない。見本（`runner.local.toml.example`）をコピーして作る。
-  - 書けるのは `[hide] dirs` / `files`、`[visible] read` / `write`、`[env] unset`。リストは共有設定の**後ろ**に足し、重複は 1 つにする。`version` は省略できる（書くなら 1）。**データセットなど、このマシンだけの見せたい場所は、ここに足す**（例: `read = ["/mnt/d/datasets"]`）。共有の `hide` は後から勝つので、見せた場所の中の秘密は隠れたまま。
+  - 書けるのは `[hide] dirs` / `files`、`[visible] read` / `write`、`[env] unset`・`unset_patterns`。リストは共有設定の**後ろ**に足し、重複は 1 つにする。`version` は省略できる（書くなら 1）。**データセットなど、このマシンだけの見せたい場所は、ここに足す**（例: `read = ["/mnt/d/datasets"]`）。共有の `hide` は後から勝つので、見せた場所の中の秘密は隠れたまま。
   - **共有設定を緩めるものは書けない**: `[gpu]`（デバイスの公開）・`[docker]`・`[git]`（共有側の `block = true`・`protect = true` を、このマシンだけ false にする抜け道）があれば、起動しない。共有のエントリを消すこともできない。
   - 検証は共有設定と同じ規則。**エントリがあるのに読めない**（壊れたシンボリックリンク・ディレクトリ・権限・UTF-8 でない・構文エラー）ときは、fail-closed（下）。無視するのは、エントリ自体が無いときだけ。有効なシンボリックリンクはたどる。
   - 反映は、次にコマンドを実行したとき（runner は毎回読む）。`chezmoi apply` は要らない。
@@ -223,7 +224,7 @@ protect = true
 | git の push（https。`credential.helper = store`） | `~/.git-credentials` は見えず、`~/.config/git/credentials` は `hide` で隠す。内側の `git credential fill` は認証を見つけない（終了コード 128。ホストでは 0） | 実測 |
 | ssh 鍵（`~/.ssh`）・ssh-agent | 見えない。agent のソケットは `/tmp`・`/run/user` が空で、`SSH_AUTH_SOCK` も消す | 設計・自己確認 |
 | aws・gcloud・kube・docker の設定 | 見えない（ホームは覆われ、`hide` にも入れてある） | 設計（この機は aws CLI が無く、動作は未確認） |
-| 環境変数のトークン（`GH_TOKEN`・`GITHUB_TOKEN`・`AWS_*`・`ANTHROPIC_API_KEY` など） | `env.unset` の一覧の名前は消える。**一覧に無い名前は渡る**（拒否リスト） | 自己確認（`GH_TOKEN`） |
+| 環境変数のトークン（`GH_TOKEN`・`GITHUB_TOKEN`・`AWS_*`・`ANTHROPIC_API_KEY`・`BW_SESSION`・`HF_TOKEN`・検索の API キー・`SOPS_AGE_KEY` など。一覧は `runner.toml` の `[env]`） | `env.unset` の一覧の名前と、`unset_patterns` の型（`*_TOKEN`・`*_KEY`・`*_SECRET`・`*PASSWORD*`・`BW_*`）に当たる名前は消える。**どちらにも当たらない名前は渡る**（拒否リスト） | 自己確認（`GH_TOKEN`） |
 | シェル履歴・Windows のドライブ | 見えない | 自己確認 |
 
 - **見えないのは、コマンドの内側だけ。** pi の `read` ツール（プロセス内）は囲いの外。秘密のパスを読ませない役は、`pi-permission-system` の path ルールが担う。**ファイルの道具が囲いの外にあることの帰結**（2026-11-12、YOLO を入れた `pib` で実測。無害なプローブファイルを使った）: ① `read` ツールが、囲いの `hide` にあるディレクトリのファイルを確認なしで読めた。② `write` ツールが、囲い自身の設定ディレクトリ `~/.config/pi-sandbox/` に確認なしで書けた（runner はコマンドごとに設定を読むので、緩められると次のコマンドから効く）。YOLO は `ask` をすべて `allow` に書き換える（`deny` は残る）ので、`external_directory` の確認には頼れない。**対策**: `path` の deny を `hide` と同じ集合に保ち（食い違いは試験で検出）、囲いと pi の制御ファイルを `path_write` で書き込み拒否にした（[設定](../agent-config-generation.md#permission-system-の設定)）。**残る限界**: ① このマシンの追記（`runner.local.toml`）の `hide` は、path の deny に入らない（権限の設定は apply で配る共有のもので、マシンごとの追記の仕組みが無い）。② シェルの起動ファイル（`~/.bashrc` など）への書き込みは、まだ拒否していない。ホストで後から実行されるため、囲いの外への持ち込み（永続化）になりうる（`~/.gitconfig`・`~/.local/bin/`・mise・uv の実行環境・`~/.pi/agent/` は、拒否済み。囲いが読み取り専用に見せるものと同じ集合）。③ 保護は既定の場所に固定。`pib` は、`PI_CODING_AGENT_DIR`・`PI_SANDBOX_RUNNER_CONFIG`・`XDG_CONFIG_HOME` が既定と違うと起動しない。④ YOLO を切ると、`external_directory` の確認が出るが、その確認は利用者の承認に依存する。ファイルの道具が作業ツリーの外を触るときの判定は、ソースで確認した: 外かどうかの判定は、**シンボリックリンクを解決した実体のパス**で行う（`external-directory` のゲート）。
@@ -236,7 +237,7 @@ protect = true
 - **`/sandbox off` の間は、囲いが無い**（フッターに `sandbox: off`）。切り替えは、利用者の操作。
 - **ルートは読み取り専用で見える。** 覆うのは、ホーム・`/tmp`・`/var/tmp`・`/mnt`・`/media`・`/run/user` だけ。それ以外の場所（`/etc`・`/opt`・`/srv`・他のユーザーのホームなど）は読める（書けない）。他のユーザーのホームは、ファイルの権限が守る。
 - **通信は無制限**（`--offline` で全遮断。ドメインの許可リストは作らない）。
-- **環境変数は拒否リスト。** `env.unset` に無い名前（独自のトークンなど）は渡る。
+- **環境変数は拒否リスト。** `env.unset` の名前にも `unset_patterns` の型にも当たらない名前（型に合わない独自の名前など）は渡る。型で消した変数が内側で要るときは、コマンドの前に `VAR=値` を付ける（このマシンだけの追記では、共有の型を外せない）。型は、名前の中の `_TOKEN` などにも当たるので、秘密でない変数が巻き込まれることがある（例: `DOTFILES_RESYNC_HF_TOKEN`。`chezmoi apply` は囲いの外で行うので影響しない）。`--status` に、いま型に当たる変数の名前（値は出さない）が出る。
 - **docker を塞ぐので、compose は内側で使えない。** docker 経由で書き込み制限を破れるため（[実測](../../research/agents/pi-gpu-sandbox-2026-11.md#発見)）。塞ぐのは `/run/user` と、`/run/docker.sock`・`/var/run/docker.sock` だけ。ほかの場所のソケット（rootful の podman・containerd など）と、ネットワーク越しの `DOCKER_HOST`（tcp）は塞げない。
 - **`/mnt` を覆うので、Windows 側の実行ファイル（`powershell.exe`・`code` など）は内側で呼べない。** `PATH` に `/mnt/c/...` があっても、内側では存在しない。
 - **WSL2 の名前解決は、`/mnt/wsl/resolv.conf` だけを見せて保つ。** WSL2 では `/etc/resolv.conf` がそのファイルへのリンクで、`/mnt` を覆うと内側の名前解決が壊れる（npm・pip・curl が `EAI_AGAIN`。2026-11-12 の配備後の確認で発見。`uv` はキャッシュで動くため、先の確認では見つからなかった）。共有設定の `visible.read` に、そのファイル 1 つだけを書いてある（`/mnt/wsl` 全体や Windows のドライブは見せない）。自己確認に「名前解決が内側でも動く」がある。

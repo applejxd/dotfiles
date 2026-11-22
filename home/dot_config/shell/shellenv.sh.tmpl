@@ -54,7 +54,7 @@ export QT_IM_MODULE=fcitx
 # QNAP NAS向け設定 (/tmp の容量が小さいため)
 export TMPDIR=/share/CACHEDEV1_DATA/.tmp
 if [[ ! -e $TMPDIR ]]; then
-  mkdir -p "$TMPDIR"
+  mkdir -p -m 700 "$TMPDIR"
 fi
 {{- end }}
 
@@ -105,6 +105,26 @@ if [ -d "${HOME}/.texlive" ]; then
     export MANPATH="${HOME}/.texlive/main/texmf-dist/doc/man${MANPATH:+:${MANPATH}}"
     export INFOPATH="${HOME}/.texlive/main/texmf-dist/doc/info${INFOPATH:+:${INFOPATH}}"
 fi
+{{- end }}
+
+{{- if eq .chezmoi.os "linux" }}
+# WSL: ユーザーが書き込める VS Code の bin (wslenv.sh が場所を決める) は、Linux 側のコマンドを隠さないよう PATH の最後へ置く。
+# 継承した PATH に前の版が先頭へ置いたものがあっても、除いてから足す
+if [[ -n "${_wsl_vscode_user_bin:-}" ]]; then
+  if [[ -n "${ZSH_VERSION:-}" ]]; then
+    eval 'path=(${path:#"${_wsl_vscode_user_bin}"} "${_wsl_vscode_user_bin}")'
+  else
+    __p=":${PATH}:"
+    while [[ "${__p}" == *":${_wsl_vscode_user_bin}:"* ]]; do
+      __p="${__p%%":${_wsl_vscode_user_bin}:"*}:${__p#*":${_wsl_vscode_user_bin}:"}"
+    done
+    __p="${__p#:}"
+    __p="${__p%:}"
+    export PATH="${__p:+${__p}:}${_wsl_vscode_user_bin}"
+    unset __p
+  fi
+fi
+unset _wsl_vscode_user_bin
 {{- end }}
 
 # mise の shims。他の PATH 要素より前へ 1 回だけ置く (activate 済みの親から継承した

@@ -6,6 +6,7 @@ pi のセッションの置き場 (`<repo>/.tmp/s/<ID>`) を TMPDIR にして起
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -83,3 +84,16 @@ def test_outside_a_repo_the_original_value_returns() -> None:
     # 作業ツリーの外 (/tmp)。tmp_path はこのリポジトリの .tmp の中なので、上に .git があり、使えない
     with tempfile.TemporaryDirectory(dir="/tmp") as d:
         assert _run(Path(d), "/somewhere") == "/orig-tmp"
+
+
+def test_a_repo_tmp_not_owned_by_the_user_is_not_used(repo: Path) -> None:
+    """他のユーザーが作った .tmp (自分の所有でない) へは TMPDIR を向けない。
+
+    root 所有で誰でも書ける /dev/shm へのリンクで、書けるが自分の所有でない .tmp を再現する。
+    """
+    shm = Path("/dev/shm")
+    if not shm.is_dir() or shm.stat().st_uid == os.geteuid():
+        pytest.skip("root 所有で書ける /dev/shm が無い")
+    (repo / ".tmp").rmdir()
+    (repo / ".tmp").symlink_to(shm)
+    assert _run(repo, "/tmp") == "/orig-tmp"
