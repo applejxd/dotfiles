@@ -22,6 +22,7 @@ pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 | pi を導入・更新する | [pi の導入](spec/cli-management.md#pi-の導入)・[Windows の pi](spec/cli-management.md#windows-の-pi) |
 | シェルの起動ファイルに何を置いてよいか知る | [シェルの起動契約](spec/shell.md#シェルの起動契約) |
 | マシンごとに違う設定（データセットの置き場など）を置く | [マシン固有の設定の置き場](spec/shell.md#マシン固有の設定の置き場) |
+| T3 Code から起動する pi に、環境変数（`HF_HOME` など）を渡す | [T3 Code から起動する pi の入口 pi-t3](spec/shell.md#t3-code-から起動する-pi-の入口-pi-t3) |
 | C++ の 1 ファイルを debug / release で実行する（`runcpp`） | [C++ の単一ファイル実行](spec/dev-environment.md#c-の単一ファイル実行runcpp) |
 | zsh プラグインの遅延読み込みの順序を変える | [zinit の遅延読み込みの順序](spec/shell.md#zinit-の遅延読み込みの順序) |
 | sops + age を導入・復旧する | [秘密情報の管理セットアップ（sops + age）](spec/sops-age.md) |

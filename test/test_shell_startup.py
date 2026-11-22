@@ -89,7 +89,9 @@ def _drop_host_locale_warning(stderr: str) -> str:
     return _HOST_LOCALE_WARNING.sub("", stderr)
 
 
-def run(argv: list[str], home: Path, **extra: str) -> subprocess.CompletedProcess[str]:
+def run(
+    argv: list[str], home: Path, *, stdin_text: str | None = None, **extra: str
+) -> subprocess.CompletedProcess[str]:
     env = {
         k: v
         for k, v in os.environ.items()
@@ -105,6 +107,7 @@ def run(argv: list[str], home: Path, **extra: str) -> subprocess.CompletedProces
         encoding="utf-8",
         check=False,
         env=env,
+        input=stdin_text,
         timeout=30,
     )
     done.stderr = _drop_host_locale_warning(done.stderr)
@@ -593,6 +596,173 @@ def test_superpi_refuses_when_pi_left_the_path_after_loading(home, tmp_path, she
     assert "rc=1" in done.stdout.splitlines()
     assert "pi の実行ファイルが PATH に無い" in done.stderr
     assert "sudo-first" not in done.stdout
+
+
+# ---- pi-t3 (T3 Code が login シェルを通らずに起動する pi の入口) ----
+
+PI_T3 = ROOT / "home" / "dot_local" / "bin" / "executable_pi-t3"
+# stdout (pi との RPC と同じ口) へ、親プロセス・環境変数の値・stdin の 1 行目・受け取った引数を出し、FAKE_PI_EXIT で終わる偽の pi
+_FAKE_PI_T3 = (
+    "#!/bin/sh\n"
+    'echo "ppid=$PPID"\necho "hf=${HF_HOME-unset}"\necho "lc=${LC_ALL-unset}"\n'
+    'IFS= read -r line; echo "stdin=[$line]"\n'
+    'for a in "$@"; do echo "arg=[$a]"; done\n'
+    'exit "${FAKE_PI_EXIT:-0}"\n'
+)
+
+
+def _pi_t3_copy(tmp_path: Path) -> Path:
+    """配布物の pi-t3 を、実行できる形で一時ディレクトリへ写す (git の実行ビットに依存しない)。"""
+    wrapper = tmp_path / "pi-t3"
+    wrapper.write_text(PI_T3.read_text(encoding="utf-8"), encoding="utf-8")
+    wrapper.chmod(0o755)
+    return wrapper
+
+
+def _skip_windows_interop(home: Path) -> None:
+    """WSL の機で描画した wslenv.sh が、実際の cmd.exe を呼ばないよう、Windows のユーザー名のキャッシュを先に置く。"""
+    (home / ".cache").mkdir(exist_ok=True)
+    (home / ".cache" / "win_user").write_text("x\n", encoding="utf-8")
+
+
+def _isolate_host_env(monkeypatch) -> None:
+    """利用者の端末の環境変数を、wrapper の試験へ混ぜない (偽の pi 以外の pi が PATH の先頭に出る・値が既に入る、を防ぐ)。"""
+    for name in ("HF_HOME", "MISE_DATA_DIR", "FAKE_PI_EXIT"):
+        monkeypatch.delenv(name, raising=False)
+
+
+def _userenv(home: Path, body: str) -> None:
+    (home / ".config" / "shell" / "userenv.sh").write_text(body, encoding="utf-8")
+
+
+@pytest.fixture
+def pi_t3(home, tmp_path, monkeypatch):
+    """pi-t3 を、偽の pi だけが見える PATH (偽の pi の置き場 + /usr/bin:/bin) で起動する関数。
+
+    stdin は既定で空 (偽の pi が読んでも EOF)。path= で PATH を、stdin_text= で stdin を替えられる。
+    """
+    _isolate_host_env(monkeypatch)
+    _skip_windows_interop(home)
+    bin_dir = _stub(tmp_path / "t3bin", pi=_FAKE_PI_T3)
+    wrapper = _pi_t3_copy(tmp_path)
+
+    def launch(
+        *args: str, stdin_text: str = "", path: str | None = None, **env: str
+    ) -> subprocess.CompletedProcess[str]:
+        return run(
+            [str(wrapper), *args],
+            home,
+            stdin_text=stdin_text,
+            PATH=path or f"{bin_dir}:/usr/bin:/bin",
+            **env,
+        )
+
+    launch.home = home
+    return launch
+
+
+def test_pi_t3_replaces_itself_with_pi_keeping_arguments_and_exit_code(pi_t3):
+    """pi-t3 は exec で pi に置き換わる。引数は素通しで、終了コードも pi のものになる。stdout は pi のものだけ。"""
+    done = pi_t3("--mode", "rpc", "hello world", FAKE_PI_EXIT="7")
+    assert done.returncode == 7, done.stderr
+    assert done.stderr == ""
+    assert _pi_args(done.stdout) == ["--mode", "rpc", "hello world"]
+    # wrapper の bash が親として残らない (exec)。pi が出すもの以外は stdout に無い
+    assert [ln for ln in done.stdout.splitlines() if not ln.startswith("arg=[")] == [
+        f"ppid={os.getpid()}",
+        "hf=unset",
+        "lc=ja_JP.UTF-8",
+        "stdin=[]",
+    ]
+
+
+def test_pi_t3_gives_pi_the_variables_of_shellenv_and_userenv(pi_t3):
+    """shellenv.sh の既定 (LC_ALL) と、shellenv.sh が読む userenv.sh の変数 (HF_HOME) が、pi に届く。"""
+    _userenv(pi_t3.home, "export HF_HOME=/x/hf\n")
+    lines = pi_t3().stdout.splitlines()
+    assert "hf=/x/hf" in lines
+    assert "lc=ja_JP.UTF-8" in lines
+
+
+def test_pi_t3_keeps_an_explicit_lc_all(pi_t3):
+    """呼び出し元 (T3 のインスタンスの環境変数など) が明示した LC_ALL は、shellenv.sh の既定で上書きしない。"""
+    assert "lc=C" in pi_t3(LC_ALL="C").stdout.splitlines()
+
+
+def test_pi_t3_sends_output_of_the_env_files_to_stderr_not_stdout(pi_t3):
+    """stdout は pi との RPC。userenv.sh が stdout へ出しても、pi の出力には混ざらず stderr へ回る。"""
+    _userenv(pi_t3.home, "echo noisy-out\necho noisy-err >&2\n")
+    done = pi_t3()
+    assert done.returncode == 0, done.stderr
+    assert "noisy" not in done.stdout
+    assert "noisy-out" in done.stderr and "noisy-err" in done.stderr
+
+
+def test_pi_t3_does_not_give_stdin_to_the_env_files(pi_t3):
+    """stdin も pi との RPC。userenv.sh が stdin を読んでも、pi 向けの入力は消費されず、pi に届く。"""
+    _userenv(pi_t3.home, "cat >/dev/null\n")
+    done = pi_t3(stdin_text="rpc-request\n")
+    assert done.returncode == 0, done.stderr
+    assert "stdin=[rpc-request]" in done.stdout.splitlines()
+
+
+def test_pi_t3_ignores_inherited_bash_env_and_shellopts(pi_t3, tmp_path):
+    """継承した BASH_ENV (stdout へ出しうる) と SHELLOPTS (errexit など) を無視する。#!/bin/bash -p の効き目。"""
+    bash_env = tmp_path / "bash_env.sh"
+    bash_env.write_text("echo bash-env-ran\n", encoding="utf-8")
+    _userenv(pi_t3.home, "false\nexport HF_HOME=/x/hf\n")  # errexit が効くと、ここで止まる
+    done = pi_t3(BASH_ENV=str(bash_env), SHELLOPTS="errexit")
+    assert done.returncode == 0, done.stderr
+    assert "bash-env-ran" not in done.stdout + done.stderr
+    assert "hf=/x/hf" in done.stdout.splitlines()
+
+
+def test_pi_t3_starts_pi_even_if_userenv_returns_nonzero(pi_t3):
+    """set -e を付けない。userenv.sh が非 0 を返しても、そこまでの変数を持って pi を起動する。"""
+    _userenv(pi_t3.home, "export HF_HOME=/x/hf\nreturn 3\n")
+    done = pi_t3()
+    assert done.returncode == 0, done.stderr
+    assert "hf=/x/hf" in done.stdout.splitlines()
+
+
+def test_pi_t3_starts_pi_without_shellenv(pi_t3):
+    """shellenv.sh が無い機 (Windows など) でも、何も足さずに pi を起動する。"""
+    (pi_t3.home / ".config" / "shell" / "shellenv.sh").unlink()
+    done = pi_t3("x")
+    assert done.returncode == 0, done.stderr
+    assert _pi_args(done.stdout) == ["x"]
+    assert "lc=unset" in done.stdout.splitlines()
+
+
+@pytest.mark.parametrize("bad_home", ["", "."])
+def test_pi_t3_reads_nothing_from_an_empty_or_relative_home(pi_t3, bad_home):
+    """HOME が空・相対のときは、`/.config/…` や作業ディレクトリの下のファイルを読まず、pi だけ起動する。
+
+    作業ディレクトリ (一時 HOME) には shellenv.sh があるので、相対の "." のまま読むと LC_ALL が入る。
+    """
+    done = pi_t3(HOME=bad_home)
+    assert done.returncode == 0, done.stderr
+    assert "lc=unset" in done.stdout.splitlines()
+
+
+def test_pi_t3_finds_pi_on_the_path_that_shellenv_builds(pi_t3):
+    """pi は、shellenv.sh を読んだ後の PATH で探す (~/bin は shellenv.sh が PATH の先頭へ足す)。"""
+    _stub(pi_t3.home / "bin", pi=_FAKE_PI_T3)
+    done = pi_t3("x", path="/usr/bin:/bin")
+    assert done.returncode == 0, done.stderr
+    assert _pi_args(done.stdout) == ["x"]
+
+
+def test_pi_t3_fails_with_127_and_empty_stdout_when_pi_is_missing(home, tmp_path, monkeypatch):
+    """PATH に pi が無いときは、stdout に何も出さず 127 で終わる (原因は stderr)。"""
+    _isolate_host_env(monkeypatch)
+    _skip_windows_interop(home)
+    empty = tmp_path / "emptybin"
+    empty.mkdir()
+    done = run([str(_pi_t3_copy(tmp_path))], home, PATH=str(empty))
+    assert done.returncode == 127
+    assert done.stdout == ""
+    assert "pi" in done.stderr
 
 
 # ---- ROS setup の選び方 ----

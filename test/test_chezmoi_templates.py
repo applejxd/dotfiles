@@ -173,6 +173,15 @@ def test_pi_sandbox_runner_is_linux_only(tmp_path, os_name, ignored):
         assert (target in rendered) is ignored, target
 
 
+@pytest.mark.parametrize(
+    ("os_name", "ignored"), [("linux", False), ("windows", True), ("darwin", True)]
+)
+def test_pi_t3_is_linux_only(tmp_path, os_name, ignored):
+    """pi-t3 は shellenv.sh を読む。T3 Code の WSL のサーバ用なので Linux 専用 (Windows は .config/* を配らない)。"""
+    rendered = render(home=str(tmp_path), os_name=os_name)
+    assert (".local/bin/pi-t3" in rendered) is ignored
+
+
 
 
 

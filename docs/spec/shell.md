@@ -15,6 +15,7 @@
 | `~/.config/shell/shellenv.sh` | `.zshenv` と `.bash_profile` から読まれる（素の `bash -c` や非 login の bash は読まない） | PATH と環境変数だけ |
 | `.bashrc` のガード前 | 対話 bash と、`.bash_profile` から読まれる login bash（素の `bash -c` は読まない） | `mise activate` と ROS の `setup.bash`（PATH のため） |
 | `.zshrc`（先頭の `[[ -o interactive ]] \|\| return 0` の後）、`.bashrc` のガード後、`shellrc.sh` | 対話シェル | alias・関数・キー設定・補完・プラグイン・出力 |
+| `~/.local/bin/pi-t3` | T3 Code が pi を起動するとき（login シェルを通らない非対話の bash。Linux / WSL のみ） | `shellenv.sh` を読むだけ。[詳細](#t3-code-から起動する-pi-の入口-pi-t3) |
 
 `.zshenv` には環境変数のほかに例外が 1 つある。リポジトリ内にいる間 `TMPDIR` を
 そのリポジトリの `.tmp` に向けるため、関数を 1 つ定義して `mkdir -p` を実行する
@@ -70,7 +71,7 @@ Nix 化・`rm` の alias 差し替え・環境変数の列挙による人間判�
 
 検査は `test/test_shell_startup.py`（非対話 zsh / login bash の alias・環境変数・
 出力、`.zshrc` の早期 return、`shellenv.sh` 単体、`functions/` の読み込み、`zpack`、
-`runcpp`、`drypi`・`superpi`）。一時 HOME に描画結果を
+`runcpp`、`drypi`・`superpi`、`pi-t3`）。一時 HOME に描画結果を
 置いて実行し、zinit・mise・fzf・ネットワークは使わない。実機の対話シェルの
 起動（プロンプトまで）は検査しない。
 
@@ -109,13 +110,46 @@ Nix 化・`rm` の alias 差し替え・環境変数の列挙による人間判�
 - **既存の評価（ADR-0031）**: pi の標準のフラグだけで足りる。自作は関数 2 つ（約 20 行）で、拡張・package は足さない。pi 1.5.2 の `pi --help` と docs に、一括で切る profile のようなフラグは無い（2026-11-20 に確認）。あれば置き換える。
 - **変え方**: 切る範囲は `_PI_DRY_ARGS`（`drypi` も `superpi` も共有）。試験は `test/test_shell_startup.py`（偽の `pi`・`sudo` を PATH に置いて、渡す引数・作業ディレクトリ・環境変数を、bash と zsh で確かめる。偽の sudo は環境を捨てるので、`HOME`・`PATH`・エージェントの置き場を明示して渡さないと、pi に届かない）。**未検証**: 実機の `sudo` と、実際の pi の起動（`--no-extensions` で、設定の package・権限の拡張・MCP が本当に読まれないこと）。
 
+## T3 Code から起動する pi の入口 pi-t3
+
+2026-11-22。T3 Code（WSL 内のサーバ）が起動する pi には、`userenv.sh` の変数（`HF_HOME` など）が届かない。そのため `~/.local/bin/pi-t3`（Linux / WSL のみ。`home/dot_local/bin/executable_pi-t3`）を足した。`shellenv.sh`（`wslenv.sh`・`userenv.sh` を含む）を読んでから `exec pi "$@"` するだけの bash の wrapper で、決めた理由と選ばなかった案は [ADR-0042](../adr/0042-t3-code-pi-wrapper-reads-shellenv.md)。
+
+- **原因**（t3code 側の調べ。この repo では未確認）: Windows のデスクトップは `wsl.exe --exec env PATH=… <t3> --bootstrap-fd 0` で WSL のサーバを起動し、login シェルを通らない。サーバが起動時に 1 回だけ `$SHELL -ilc` から取り込むのは `PATH`・`__MISE_DIFF`・`JAVA_HOME` だけ。Pi の起動・状態確認・text generation は、binary path（既定は `pi`）をシェルを介さず直接起動する。上の契約表のどの入口も通らないので、`shellenv.sh` が作る環境（`LC_ALL`・`LD_LIBRARY_PATH`・条件つきの `AWS_REGION`・`userenv.sh` の変数）が pi に届かない。
+  出典（2026-11-22 取得）: [pingdotgg/t3code#16703](https://github.com/pingdotgg/t3code/issues/16703)（Open。WSL のサーバに、シェルのプロファイルで export した `NODE_EXTRA_CA_CERTS` が届かない、という報告。同じ原因）、[#12494](https://github.com/pingdotgg/t3code/pull/12494)（Closed。login シェルの全環境を取り込む案）。メンテナの見解と、直った版は未確認。
+- **中身**: `#!/bin/bash -p`。`[ -r shellenv.sh ] && . shellenv.sh >&2 </dev/null` のあと `exec pi "$@"`。
+  - stdout・stdin は pi との RPC なので、読み込みの出力（`userenv.sh` が出すものを含む）は stderr へ回し、stdin は読み込みに渡さない（`userenv.sh` が stdin を読んでも、pi 向けの入力を消費しない）。
+  - `-p` で、継承した `BASH_ENV`（読まれると stdout へ出しうる）と `SHELLOPTS`（`errexit` など）を無視する（`pib-shell` と同じ。サンドボックスのためではなく、stdout の契約を守るため）。
+  - `HOME` が空・相対のときは、`shellenv.sh` を読まない。
+  - `set -e` は付けない（`userenv.sh` が非 0 を返しても、そこまでの変数で pi を起動する）。
+  - `shellenv.sh` が無い機でも、何も足さずに pi を起動する。pi が PATH に無ければ、stdout に何も出さず 127 で終わる。
+  - `pi` は、読み込み後の PATH で探す（`~/bin/pi`。mise の shim に `pi` は無い）。
+- **設定（利用者が行う。この repo は配るだけ）**: T3 の Pi インスタンスの binary path に、絶対パス（`$HOME/.local/bin/pi-t3` を展開したもの）を指定する。T3 の起動環境で `~/.local/bin` が PATH に入る保証は無い（この repo では `.profile` が足すが、zsh と、`.bash_profile` がある bash は読まない）ので、名前でなく絶対パスにする。戻すときは空にする。複数の機へ配るときは、T3 の managed policy の `providers.instances.pi.binaryPath`（`locked: false`。root 権限が要る。`t3 policy check` で確認）でも配れる（t3code 側の調べ。任意。この repo では未検証）。
+- **実測**（2026-11-22。この機は WSL2。`shellenv.sh` は `chezmoi verify` で source と一致）:
+
+  | 項目 | 結果 |
+  | --- | --- |
+  | 出力 | `env -i … bash -c '. shellenv.sh'`（非対話・stdin なし）で stdout・stderr とも 0 B。`set -eu` 下でも同じ |
+  | 所要時間 | `shellenv.sh` の読み込みは約 5 ms（`bash -c true` は 2 ms）。wrapper 全体は 6〜9 ms |
+  | 冷えた経路 | `~/.cache/win_user` が無く、システム全体の VS Code も無い機だけ、`wslenv.sh` が `cmd.exe` を 1 回呼び、結果が非空ならキャッシュを書く。77〜97 ms（偽の HOME で再現） |
+  | 増える変数 | `BROWSER`・`DefaultIMModule`・`EDITOR`・`GHQ_ROOT`・`GTK_IM_MODULE`・`HF_HOME`・`INFOPATH`・`LANG`・`LC_ALL`・`LD_LIBRARY_PATH`・`LIBGL_ALWAYS_INDIRECT`・`MANPATH`・`PATH`・`QT_IM_MODULE`・`VISUAL`・`XAUTHORITY`・`XMODIFIERS`。トークン・鍵・パスワードに見える名前は無い。`userenv.sh` が足すのは `HF_HOME` だけ |
+  | PATH | T3 が取り込み済みの PATH に対して、新しい要素は 0。重複が 4 要素（texlive・`/usr/local/cuda/bin`・`~/bin`・`/snap/bin`）と、mise の shims が先頭へ移る |
+
+- **限界・未確認**:
+  - **bash では `shellenv.sh` は冪等でない**（snap・`~/bin`・CUDA・go・cabal・texlive は読むたびに足される。zsh は `.zshenv` の `typeset -U path` で PATH だけ畳まれる）。pi の起動のたびにサーバの環境から作り直すので、累積はせず、実害は軽微。wrapper には重複の除去を足さない。恒久策は、別件として `shellenv.sh` 側を冪等にすること。
+  - **T3 のインスタンス環境変数との優先順位**（推論。実機では未確認）: T3 は、起動環境にインスタンス環境変数を上書きで合成し、その後で wrapper が `shellenv.sh` を読む。無条件に export する名前（`XAUTHORITY`・IME 系・`GHQ_ROOT`・`BROWSER`・`LIBGL_ALWAYS_INDIRECT`、条件を満たせば `JAVA_HOME`・`CLASSPATH`）は wrapper 側が勝ち、`${VAR:-既定}` の名前（`LC_ALL`・`LANG`・`EDITOR`・`VISUAL`。方針 4）は、すでに値があるインスタンス側が勝つ（ただし `userenv.sh` が同じ名前を再代入すると、最後に読まれる `userenv.sh` の値が、どちらにも勝つ）。同じ名前を両方に書く前に、実機で確かめる。
+  - **範囲は Pi だけ**。T3 経由で Claude Code や Codex を使うときは、同様の wrapper が別に要る（今回は対象外）。
+  - **T3 が wrapper を実際にどう起動するか**（`--version` の stdout の扱いなど）は未確認。次の「T3 での確認」で確かめる。
+  - **信頼するもの**: wrapper は、T3 が pi を起動するたびに `~/.config/shell/{shellenv,wslenv,userenv}.sh` を実行し、読み込み後の PATH（`~/bin`・mise の shims が先頭側）で `pi` を探す。対話シェルや agent のシェルがすでに読むファイルだが、T3 の起動の経路にも、同じ信頼が及ぶ。これらは pi の `path_write` の deny に無い（既存の穴。別件）。wrapper 自身は `~/.local/bin`（deny 済み）にある。
+- **T3 での確認**（利用者が行う）: Pi の状態確認（バージョン検出）が通る。1 ターン実行できる。pi に `HF_HOME` と `LC_ALL` を出力させる。text generation が通る。
+- **検査**: `test/test_shell_startup.py` の `test_pi_t3_*`（偽の pi で、exec・引数と終了コードの素通し・stdout が pi のものだけ・`HF_HOME`/`LC_ALL`・出力の stderr への退避・stdin を渡さない・継承した `BASH_ENV`/`SHELLOPTS` の無視・`userenv.sh` が非 0 でも起動・`shellenv.sh` 無し・空/相対の `HOME`・読み込み後の PATH で pi を探す・pi が PATH に無いとき 127。WSL の機で `cmd.exe` を呼ばないよう、Windows のユーザー名のキャッシュを先に置く）、`test/test_chezmoi_templates.py` の `test_pi_t3_is_linux_only`。実際の T3 からの起動は検査しない。
+
 ## マシン固有の設定の置き場
 
 マシンごとに違う値（データセットの置き場、プロキシなど）は、リポジトリに書かず次のどれかへ置く。
 
 | 置き場 | 何を置くか | いつ読まれるか | 注意 |
 | --- | --- | --- | --- |
-| `~/.config/shell/userenv.sh`・`.bash`・`.zsh` | 環境変数・プロキシ。例: `export http_proxy=http://address:port` | シェルの起動ごと（`userenv.sh` は `shellenv.sh` が読む） | chezmoi の管理外。同じ場所の `.example` から作る |
+| `~/.config/shell/userenv.sh`・`.bash`・`.zsh` | 環境変数・プロキシ。例: `export http_proxy=http://address:port` | シェルの起動ごと（`userenv.sh` は `shellenv.sh` が読む。T3 Code から起動する pi は `pi-t3` が読む） | chezmoi の管理外。同じ場所の `.example` から作る |
 | `~/.config/mise/conf.d/*.toml` | `mise` の設定のマシン固有分 | `mise` が設定を読むとき | chezmoi の管理外。`[env]` は mise を有効化したシェルでしか効かない（**推測**。公式 docs では未確認） |
 | `~/.config/chezmoi/chezmoi.toml` の `[data]` | chezmoi のテンプレートに渡すマシン固有の値（例: `no_proxy`） | `chezmoi apply` のとき | chezmoi の管理外。値の使い道はテンプレートが決める。`http_proxy`・`https_proxy` は写さない（認証情報を平文で残さないため）。以前の `init` で残った値は `chezmoi init`（または `chezmoi update --init`）で描き直すと消える |
 | `~/.config/git/config.local` | git の設定のマシン固有分 | git が設定を読むとき | chezmoi の管理外。`home/dot_config/git/config.tmpl` が、共有設定の後ろに `[include]` で読む（**共有設定を上書きもできる**） |
