@@ -12,14 +12,6 @@ _wsl_path_prepend() {
     esac
 }
 
-# ユーザーが書き込めるディレクトリは、Linux 側の実行ファイルを隠さないよう末尾へ足す
-_wsl_path_append() {
-    case ":${PATH}:" in
-    *":$1:"*) ;;
-    *) export PATH="${PATH:+${PATH}:}$1" ;;
-    esac
-}
-
 # Windows System
 _wsl_path_prepend "/mnt/c/Windows"          # for explorer.exe
 _wsl_path_prepend "/mnt/c/Windows/System32" # for clip.exe
@@ -47,7 +39,8 @@ else
     fi
     _vscode_path="/mnt/c/Users/${_win_user}/AppData/Local/Programs/Microsoft VS Code"
     if [[ -n "$_win_user" ]] && [[ -d "$_vscode_path" ]]; then
-        _wsl_path_append "$_vscode_path/bin"
+        # ユーザーが書き込める場所なので、ここでは PATH へ足さない。shellenv.sh が PATH の最後へ置く
+        _wsl_vscode_user_bin="$_vscode_path/bin"
     fi
     unset _win_user _vscode_path
 fi
@@ -94,4 +87,4 @@ if [[ -e /usr/lib/jvm/java-11-openjdk-amd64 ]]; then
 fi
 
 # 共通 env には関数を残さない (docs/spec/structure.md の起動契約)
-unset -f _wsl_path_prepend _wsl_path_append
+unset -f _wsl_path_prepend

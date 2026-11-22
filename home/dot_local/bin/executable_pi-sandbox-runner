@@ -9,6 +9,7 @@ see docs/spec/sandbox/pi-sandbox-runner.md, docs/adr/0036-pi-sandbox-shell-wrap-
 
 from __future__ import annotations
 
+import fnmatch
 import glob as _glob
 import json
 import os
@@ -52,13 +53,15 @@ ORIG_PATH_ENV = "PIB_ORIG_PATH"
 # そこに置かれた bwrap が、囲いの起動役として、囲いなしで実行されるのを避ける
 BWRAP_PATHS = ("/usr/bin/bwrap", "/bin/bwrap", "/usr/local/bin/bwrap")
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+# env.unset_patterns の書式。名前に使える文字と、ワイルドカードの * ? だけ (他の fnmatch の記法は不可)
+_ENV_PATTERN = re.compile(r"[A-Za-z0-9_*?]+\Z")
 
 _ALLOWED_KEYS: dict[str, set[str]] = {
     "": {"version", "gpu", "hide", "visible", "env", "docker", "git"},
     "gpu": {"devices"},
     "hide": {"dirs", "files"},
     "visible": {"read", "write"},
-    "env": {"unset"},
+    "env": {"unset", "unset_patterns"},
     "docker": {"block"},
     "git": {"protect"},
 }
@@ -83,6 +86,7 @@ class Config:
     visible_read: tuple[str, ...] = ()
     visible_write: tuple[str, ...] = ()
     env_unset: tuple[str, ...] = ()
+    env_unset_patterns: tuple[str, ...] = ()
     docker_block: bool = True
     git_protect: bool = True
 
@@ -96,6 +100,7 @@ class Additions:
     visible_read: tuple[str, ...] = ()
     visible_write: tuple[str, ...] = ()
     env_unset: tuple[str, ...] = ()
+    env_unset_patterns: tuple[str, ...] = ()
 
 
 def find_bwrap() -> str | None:
@@ -208,6 +213,25 @@ def _env_unset(root: Mapping[str, object]) -> tuple[str, ...]:
     return names
 
 
+def _env_unset_patterns(root: Mapping[str, object]) -> tuple[str, ...]:
+    patterns = _string_list(_table(root, "env"), "unset_patterns", "env")
+    for pattern in patterns:
+        if not _ENV_PATTERN.match(pattern):
+            raise RunnerError(f"env.unset_patterns は名前の文字と * ? だけで書く: {pattern!r}")
+        if pattern.strip("*?") == "":  # * だけ・?? だけは、全ての変数 (PATH など) を消してしまう
+            raise RunnerError(f"env.unset_patterns に、名前の文字を含まないパターンは書けない: {pattern!r}")
+    return patterns
+
+
+def matching_env_names(env: Mapping[str, str], patterns: Sequence[str]) -> list[str]:
+    """環境変数の名前のうち、パターンのどれかに一致するものを、名前順で返す。値は見ない。
+
+    大文字小文字は区別しない (小文字の github_token も拾う)。
+    """
+    upper = [pattern.upper() for pattern in patterns]
+    return sorted(name for name in env if any(fnmatch.fnmatchcase(name.upper(), p) for p in upper))
+
+
 def parse_config(text: str) -> Config:
     """runner.toml の本文を検証して Config にする。未知のキー・型の誤りは RunnerError。"""
     try:
@@ -228,6 +252,7 @@ def parse_config(text: str) -> Config:
         visible_read=read,
         visible_write=write,
         env_unset=_env_unset(root),
+        env_unset_patterns=_env_unset_patterns(root),
         docker_block=_bool(_table(root, "docker"), "block", True, "docker"),
         git_protect=_bool(_table(root, "git"), "protect", True, "git"),
     )
@@ -259,7 +284,7 @@ def parse_local(text: str) -> Additions:
         )
     dirs, files = _hide(root)
     read, write = _visible(root)
-    return Additions(dirs, files, read, write, _env_unset(root))
+    return Additions(dirs, files, read, write, _env_unset(root), _env_unset_patterns(root))
 
 
 def merge_local(cfg: Config, local: Additions) -> Config:
@@ -275,6 +300,7 @@ def merge_local(cfg: Config, local: Additions) -> Config:
         visible_read=union(cfg.visible_read, local.visible_read),
         visible_write=union(cfg.visible_write, local.visible_write),
         env_unset=union(cfg.env_unset, local.env_unset),
+        env_unset_patterns=union(cfg.env_unset_patterns, local.env_unset_patterns),
         docker_block=cfg.docker_block,
         git_protect=cfg.git_protect,
     )
@@ -598,6 +624,10 @@ def describe(env: Mapping[str, str], host: Host, cwd: str, offline: bool) -> tup
     lines += block("隠す場所 (ディレクトリ):", cfg.hide_dirs)
     lines += block("隠す場所 (ファイル):", cfg.hide_files)
     lines.append("消す環境変数: " + (", ".join(cfg.env_unset) or "(なし)"))
+    lines.append("消す環境変数 (名前の型): " + (", ".join(cfg.env_unset_patterns) or "(なし)"))
+    matched = [n for n in matching_env_names(env, cfg.env_unset_patterns) if n not in cfg.env_unset]
+    if matched:  # 名前だけ (値は出さない)。内側で必要な変数が消えていないかを見る手がかり
+        lines.append("  いま型に当たる変数: " + ", ".join(matched))
     lines.append(
         "凡例: ✓ ある / - この PC に無い (共有の既定。問題なし) / ✗ このマシンの追記なのに無い"
     )
@@ -617,14 +647,18 @@ def build_command(
     pre, notes = build_shell_pre(cfg, cwd, host)
     extra = build_extra(cfg, pre, host)
     flags: list[str] = ["--unshare-net"] if offline else []
-    for name in cfg.env_unset:
+    # 名前の一覧に、型 (*_TOKEN など) に当たる今の環境変数を足す (値は見ない)。一覧にも型にも無い名前は渡る
+    # PATH は、元の PATH の復元 (下) が先にあるため、環境に無くても型の判定に入れる (PA?H のような型で復元後の PATH を消せるように)
+    matched = matching_env_names({"PATH": "", **env}, cfg.env_unset_patterns)
+    unset_names = list(dict.fromkeys([*cfg.env_unset, *matched]))
+    for name in unset_names:
         flags += ["--unsetenv", name]
     for name, value in COMPAT_ENV:
         flags += ["--setenv", name, value]
     # pib が、囲いの外の PATH から作業ツリーの中を除いた (元の PATH はここ)。中のコマンドには元の PATH を渡す
     if ORIG_PATH_ENV in env:  # 運び役の変数は、空でも中へ渡さない
         if (
-            env[ORIG_PATH_ENV] and "PATH" not in cfg.env_unset
+            env[ORIG_PATH_ENV] and "PATH" not in unset_names
         ):  # 設定で PATH を消す指定があるなら、そちらが勝つ
             flags += ["--setenv", "PATH", env[ORIG_PATH_ENV]]
         flags += ["--unsetenv", ORIG_PATH_ENV]

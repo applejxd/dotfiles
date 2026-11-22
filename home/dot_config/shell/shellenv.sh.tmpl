@@ -107,6 +107,26 @@ if [ -d "${HOME}/.texlive" ]; then
 fi
 {{- end }}
 
+{{- if eq .chezmoi.os "linux" }}
+# WSL: ユーザーが書き込める VS Code の bin (wslenv.sh が場所を決める) は、Linux 側のコマンドを隠さないよう PATH の最後へ置く。
+# 継承した PATH に前の版が先頭へ置いたものがあっても、除いてから足す
+if [[ -n "${_wsl_vscode_user_bin:-}" ]]; then
+  if [[ -n "${ZSH_VERSION:-}" ]]; then
+    eval 'path=(${path:#"${_wsl_vscode_user_bin}"} "${_wsl_vscode_user_bin}")'
+  else
+    __p=":${PATH}:"
+    while [[ "${__p}" == *":${_wsl_vscode_user_bin}:"* ]]; do
+      __p="${__p%%":${_wsl_vscode_user_bin}:"*}:${__p#*":${_wsl_vscode_user_bin}:"}"
+    done
+    __p="${__p#:}"
+    __p="${__p%:}"
+    export PATH="${__p:+${__p}:}${_wsl_vscode_user_bin}"
+    unset __p
+  fi
+fi
+unset _wsl_vscode_user_bin
+{{- end }}
+
 # mise の shims。他の PATH 要素より前へ 1 回だけ置く (activate 済みの親から継承した
 # PATH でも cwd の mise.toml に従わせるため、既存の要素は除いて先頭へ移す)。
 # venv の bin が PATH にあるときは、それを隠さないよう直後へ置く。

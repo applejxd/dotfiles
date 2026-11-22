@@ -786,6 +786,12 @@ def test_elevated_scripts_do_not_trust_environment_variables_for_paths():
         assert "FilePath     = 'powershell.exe'" not in script, name
     # SYSTEM のタスクが実行する here-string (nvidia-smi の探索) だけは、実行時の SYSTEM の環境を読む
     assert admin.count("$env:SystemRoot") == 1
+    # 昇格している間の choco は、PATH (ユーザーが書き込める場所を含む) ではなく、マシン側の既知の場所だけから探す
+    choco = admin[admin.index("function Get-ChocoPath") :]
+    choco = choco[: choco.index("\n}\n")]
+    assert "if (-not (Test-IsElevated)) {" in choco
+    assert choco.index("Get-Command choco") > choco.index("if (-not (Test-IsElevated)) {")
+    assert choco.rindex("Get-Command choco") < choco.index("$roots =")
     # 試験用の差し替えは、昇格していないときだけ読む
     assert "$testProgramData = if ($isElevated) { $null } else { $env:CHEZMOI_348_TEST_PROGRAMDATA }" in key
     assert key.count("$env:CHEZMOI_348_TEST_PROGRAMDATA") == 1

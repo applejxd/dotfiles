@@ -80,7 +80,7 @@ files = [
 ]
 
 [env]
-# 内側へ渡さない環境変数 (拒否リスト。一覧に無い名前は渡る。許可リストにはしていない)。
+# 内側へ渡さない環境変数 (拒否リスト。unset の名前と unset_patterns の型のどちらにも当たらない名前は渡る。許可リストにはしていない)。
 unset = [
   "GH_TOKEN",
   "GITHUB_TOKEN",
@@ -108,9 +108,13 @@ unset = [
   "BW_CLIENTSECRET",
   "BW_PASSWORD",
   "SOPS_AGE_KEY",
+  "T3_MCP_BEARER_TOKEN",
   "SSH_AUTH_SOCK",
   "DBUS_SESSION_BUS_ADDRESS",
 ]
+# 名前の型 (* と ? だけ。大文字小文字を区別しない)。起動のたびに、いまの環境変数のうち当たるものを消す。
+# 内側で消えた名前が要る作業は、コマンドの前に VAR=値 を付ける。
+unset_patterns = ["*_TOKEN", "*_KEY", "*_SECRET", "*PASSWORD*", "BW_*"]
 
 [docker]
 # true: docker のソケットを内側から塞ぐ (塞がないと docker 経由で書き込み制限を破れる)。
