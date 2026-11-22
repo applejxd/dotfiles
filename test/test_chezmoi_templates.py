@@ -364,6 +364,16 @@ def test_interpreter_falls_back_to_shim_without_modern_python(tmp_path, availabl
     # test/agents/test_python_requirement.py が検査する (同じことを二度書かない)
 
 
+def test_config_does_not_persist_proxy_credentials(monkeypatch):
+    """プロキシの URL (認証情報を含みうる) を、chezmoi.toml の [data] へ平文で残さない。no_proxy は残る。"""
+    monkeypatch.setenv("http_proxy", "http://user:s3cret@proxy.example:8080")
+    monkeypatch.setenv("https_proxy", "http://user:s3cret@proxy.example:8080")
+    rendered = render_config()
+    assert "s3cret" not in rendered
+    assert "http_proxy =" not in rendered and "https_proxy =" not in rendered
+    assert "no_proxy =" in rendered
+
+
 @pytest.mark.parametrize(
     ("username", "ignored"),
     [("applejxd", False), (r"DOMAIN\applejxd", False), ("worker", True)],

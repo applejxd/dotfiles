@@ -589,7 +589,7 @@ if (Test-IsElevated) {
   ) -join ';'
   $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($bootstrap))
   $startArgs = @{
-    FilePath     = 'powershell.exe'
+    FilePath     = Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'  # PATH・cwd 探索に任せない (昇格する子)
     ArgumentList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded)
     Wait         = $true
     PassThru     = $true

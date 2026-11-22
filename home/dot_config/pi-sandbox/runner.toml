@@ -57,6 +57,8 @@ dirs = [
   "~/.azure",
   "~/.password-store",
   "~/.pi/agent/ayu",
+  "~/.config/sops/age",
+  "~/.config/Bitwarden CLI",
 ]
 files = [
   "~/.netrc",
@@ -73,6 +75,8 @@ files = [
   "~/.pi/agent/trust.json",
   "~/.pi/agent/mcp.json",
   "~/.config/agents/websearch-keys.json",
+  "~/.zsh_history",
+  "~/.bash_history",
 ]
 
 [env]
@@ -89,6 +93,21 @@ unset = [
   "AWS_SESSION_TOKEN",
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+  "AWS_BEARER_TOKEN_BEDROCK",
+  "HF_TOKEN",
+  "HUGGING_FACE_HUB_TOKEN",
+  "BRAVE_API_KEY",
+  "EXA_API_KEY",
+  "TAVILY_API_KEY",
+  "OPENALEX_API_KEY",
+  "SEMANTICSCHOLAR_API_KEY",
+  "BW_SESSION",
+  "BW_CLIENTID",
+  "BW_CLIENTSECRET",
+  "BW_PASSWORD",
+  "SOPS_AGE_KEY",
   "SSH_AUTH_SOCK",
   "DBUS_SESSION_BUS_ADDRESS",
 ]

@@ -127,7 +127,7 @@ Windows は `.config/*` を丸ごと除外しているので、`.chezmoiignore.t
   Out-String が作る ErrorRecord の体裁はトークンを途中省略して伏せ字を漏らすことが分かった。
   そのため外部コマンドは `Invoke-Native`（呼ぶ間だけ Continue、出力は行の文字列）を通す
 - **未検証**: 本物のトークンでのログイン、実際の Bitwarden の項目との組み合わせ、Windows での `uvx hf` の実行
-- **未対応**: `~/.cache/huggingface/token` は、エージェントの読み取り拒否（permission-system の規則と囲いの deny 一覧）にまだ入れていない
+- **エージェントの読み取り拒否**: `~/.cache/huggingface/token` と `stored_tokens` は、permission-system の規則と囲い（`pib`）の `hide` に入れてある
 
 ### 脅威と守らないもの
 
@@ -135,7 +135,7 @@ Windows は `.config/*` を丸ごと除外しているので、`.chezmoiignore.t
 | --- | --- |
 | 公開リポジトリからの個人情報・鍵の流出 | 侵害済みの PC からの読み出し（隔離する仕組みではない） |
 | 平文 `.env` の誤コミットと放置 | プロジェクト内で起動した子プロセスへの API キーの継承。**pi や他のエージェント CLI をプロジェクト内で起動すると、それらにも API キーが渡る** |
-| AI エージェントによる age 鍵の読み出し（`~/.config/sops/age` と `**/keys.txt` を permission-system の規則と囲い（`pib`）で拒否） | エージェント以外のプロセス（利用者のシェルなど）による読み出し |
+| AI エージェントによる age 鍵の読み出し（`~/.config/sops/age` を permission-system の規則と囲い（`pib`）で拒否。2026-11-22 に規則を足した） | エージェント以外のプロセス（利用者のシェルなど）による読み出し |
 
 ### ツールの役割
 

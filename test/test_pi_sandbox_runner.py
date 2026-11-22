@@ -122,6 +122,27 @@ def test_shipped_config_is_valid_and_hides_credentials():
     # store ヘルパーの認証 (git の push に使われる) は、ファイルが見える場所にあっても隠す
     assert "~/.git-credentials" in cfg.hide_files and "~/.config/git/credentials" in cfg.hide_files
     assert {"GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK"} <= set(cfg.env_unset)
+    # このリポジトリが環境変数で扱う秘密 (Bitwarden のセッション・Hugging Face・検索の鍵・sops の鍵) も内側へ渡さない
+    assert {
+        "BW_SESSION",
+        "BW_CLIENTID",
+        "BW_CLIENTSECRET",
+        "BW_PASSWORD",
+        "HF_TOKEN",
+        "HUGGING_FACE_HUB_TOKEN",
+        "BRAVE_API_KEY",
+        "EXA_API_KEY",
+        "TAVILY_API_KEY",
+        "OPENALEX_API_KEY",
+        "SEMANTICSCHOLAR_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "SOPS_AGE_KEY",
+        "AWS_BEARER_TOKEN_BEDROCK",
+    } <= set(cfg.env_unset)
+    # age 秘密鍵・Bitwarden CLI のデータ・シェルの履歴 (直接打った秘密が残りうる) も隠す
+    assert {"~/.config/sops/age", "~/.config/Bitwarden CLI"} <= set(cfg.hide_dirs)
+    assert {"~/.zsh_history", "~/.bash_history"} <= set(cfg.hide_files)
 
 
 @pytest.fixture(autouse=True)
