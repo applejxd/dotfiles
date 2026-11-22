@@ -27,7 +27,7 @@
 | [Windows の設定](windows-settings.md) | 電源・Tailscale の Unattended・7-Zip の関連付け・広告と推奨の抑止・シェルの既定値・Windows Terminal |
 | [Tailscale の導入](tailscale.md) | macOS（cask）と Linux（公式の apt。Raspberry Pi を含み WSL を除く）への導入。applejxd だけ・ログインはしない |
 | [CLI の導入と管理](cli-management.md) | mise による CLI 管理、pi の導入と更新、Herdr、external の取得 |
-| [シェル](shell.md) | シェルの起動契約、マシン固有の設定の置き場、zsh の起動時間とプラグイン、PowerShell プロファイル |
+| [シェル](shell.md) | シェルの起動契約、T3 Code から起動する pi の入口（`pi-t3`）、マシン固有の設定の置き場、zsh の起動時間とプラグイン、PowerShell プロファイル |
 | [開発環境](dev-environment.md) | C++ の単一ファイル実行（runcpp）、VS Code の拡張、code-exam |
 | [プロジェクト構造](structure.md) | ディレクトリ構成、chezmoi スクリプトの順序、対応 OS、話題別の文書の地図 |
 | [開発ガイド](development.md) | 環境の準備、変更の種類ごとの検証、Windows 実機での検証、スクリプトの追加 |

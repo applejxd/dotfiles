@@ -1,0 +1,12 @@
+#!/bin/bash -p
+# T3 Code が pi を起動する入口。shellenv.sh を読んでから pi に置き換わる (exec)。
+# stdout・stdin は pi との RPC: 読み込みの出力は stderr へ、stdin は読み込みに渡さない。set -e は付けない。
+# -p: 継承した BASH_ENV (stdout へ出しうる)・SHELLOPTS (errexit など) を無視する。
+# see docs/spec/shell.md#t3-code-から起動する-pi-の入口-pi-t3
+_f=
+case "${HOME:-}" in
+/*) _f="${HOME}/.config/shell/shellenv.sh" ;; # 空・相対の HOME からは読まない
+esac
+# shellcheck source=/dev/null
+[ -r "$_f" ] && . "$_f" >&2 </dev/null
+exec pi "$@"

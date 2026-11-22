@@ -14,7 +14,7 @@
 │   ├── .chezmoiscripts/       # `chezmoi apply` 時の自動実行
 │   ├── .chezmoitemplates/     # スクリプト・modify処理の共有テンプレート
 │   ├── dot_config/            # `~/.config/` 配下へ展開する設定
-│   └── dot_local/bin/         # `~/.local/bin/` へ展開する手元のコマンド（`pk`、`pib`・`pib-shell`・`pi-sandbox-runner`）
+│   └── dot_local/bin/         # `~/.local/bin/` へ展開する手元のコマンド（`pk`、`pib`・`pib-shell`・`pi-sandbox-runner`、`pi-t3`）
 ├── scripts/                   # 個別用途の導入・生成・検証・保守用スクリプト
 ├── test/                      # pytest・コンテナ検証
 ├── mise.toml                  # 開発ツールとタスク

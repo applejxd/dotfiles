@@ -282,7 +282,7 @@ RULES: tuple[Rule, ...] = (
     Rule("skill-lab のスキル同期", ("scripts/sync_skill_lab.py",), ("test_sync_skill_lab",)),
     Rule(
         "shell 設定",
-        ("home/dot_config/shell/**", "home/dot_zshenv"),
+        ("home/dot_config/shell/**", "home/dot_zshenv", "home/dot_local/bin/executable_pi-t3"),
         ("test_shell_functions", "test_shell_startup", "test_zshenv_tmpdir"),
     ),
     Rule(

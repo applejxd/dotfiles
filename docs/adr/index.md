@@ -23,6 +23,7 @@
 | [0039](0039-merge-to-develop.md) | `develop` への統合は merge、rebase は feature の追従だけ | `develop`・`main` は書き換えず merge。複数の feature は束ねて 1 回で統合。rebase は `git flow feature update --rebase` だけ。統合後の反映は `chezmoi apply` |
 | [0040](0040-pi-sandbox-session-toggle.md) | pi の囲いと YOLO を、セッションの途中で `/sandbox` で切り替える | 切り替えは利用者が打った `/sandbox` だけ（モデルが呼べる道具は登録しない）。囲いを入れたら YOLO も入れ、外したら YOLO も切る（外すときは YOLO が先）。素の `pi` でも使えるが、`pib` より弱い。ADR-0036 の「起動時に選ぶ」を改めた |
 | [0041](0041-claude-code-spare-harness-static-config.md) | Claude Code を予備のハーネスとして、静的な標準設定だけを chezmoi で管理する | `~/.claude` の `CLAUDE.md`（最低限）・`settings.json` の `permissions.deny/ask`・`commands/stepback.md`・スキル `commit`・`sdd-docs` の写しと、会社 PC だけ `~/.claude.json` の MCP 2 件（`allow` も）を配る。会社用の前提。pi とは共有せず、ほかのスキル・子・MCP・hook・`sandbox` は持ち込まない。導入は自動化しない。試験の対象外 |
+| [0042](0042-t3-code-pi-wrapper-reads-shellenv.md) | T3 Code が起動する pi には、`shellenv.sh` を読む wrapper（`pi-t3`）で環境変数を渡す | T3 のインスタンス環境変数（静的）・fork のパッチ・`userenv.sh` だけを読む案は採らない。wrapper は `shellenv.sh` を stderr へ逃がして読み、`exec pi` するだけ（set -e なし）。撤去条件は「T3 が login shell から任意の変数を取り込むようになったとき」。T3 での確認は未了 |
 
 撤去した決定（0001・0002・0004〜0009・0012〜0019・0021〜0028・0030・0034）は、[ADR-0037](0037-retire-custom-profile-and-other-harnesses.md) の「置き換えた決定と記録」にまとめた（本文はタグから読める）。
 

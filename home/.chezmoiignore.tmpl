@@ -71,6 +71,9 @@ Documents/**
 # 囲いと YOLO を実行中に切り替える /sandbox の拡張 (pi-stock-packages も Linux だけに入れる)
 .pi/agent/local-packages/pi-sandbox-toggle
 .pi/agent/local-packages/pi-sandbox-toggle/**
+# T3 Code (WSL のサーバ) が pi を起動する入口。shellenv.sh を読む (Windows は .config/* を配らない)
+# see docs/spec/shell.md#t3-code-から起動する-pi-の入口-pi-t3
+.local/bin/pi-t3
 {{- end }}
 
 {{- if eq .chezmoi.os "linux" }}
