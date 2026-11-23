@@ -31,6 +31,8 @@ WINDOW_1M_MODELS = (
     "github-copilot/claude-opus-5.5",
     "github-copilot/claude-sonnet-5",
     "github-copilot/gpt-6-sol",
+    "github-copilot/gpt-6.2-sol",
+    "github-copilot/gemini-4-carbon",
     "github-copilot/gpt-5.3-codex",
     "github-copilot/gemini-3.8-flash",
 )
@@ -208,14 +210,15 @@ def test_settings_does_not_touch_other_window_models(settings_script):
     assert "github-copilot/claude-haiku-4.5" not in overrides  # 窓 20 万
 
 
-def test_settings_keeps_user_reserve_tokens_and_other_compaction_keys(settings_script):
+@pytest.mark.parametrize("model", [SONNET, "github-copilot/gpt-6.2-sol", "github-copilot/gemini-4-carbon"])
+def test_settings_keeps_user_reserve_tokens_and_other_compaction_keys(settings_script, model):
     current = {
         "compaction": {
             "enabled": True,
             "reserveTokens": 20000,
             "keepRecentTokens": 30000,
             "modelOverrides": {
-                SONNET: {"reserveTokens": 500000, "keepRecentTokens": 1234},
+                model: {"reserveTokens": 500000, "keepRecentTokens": 1234},
                 "github-copilot/claude-opus-5.5": {"keepRecentTokens": 99},
                 "other/model": {"reserveTokens": 1},
             },
@@ -226,7 +229,7 @@ def test_settings_keeps_user_reserve_tokens_and_other_compaction_keys(settings_s
     assert out["reserveTokens"] == 20000
     assert out["keepRecentTokens"] == 30000
     ov = out["modelOverrides"]
-    assert ov[SONNET] == {"reserveTokens": 500000, "keepRecentTokens": 1234}  # 利用者の値を保つ
+    assert ov[model] == {"reserveTokens": 500000, "keepRecentTokens": 1234}  # 利用者の値を保つ
     assert ov["github-copilot/claude-opus-5.5"] == {
         "keepRecentTokens": 99,
         "reserveTokens": RESERVE,

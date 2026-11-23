@@ -335,18 +335,21 @@ def test_settings_assigns_models_by_role_for_copilot(settings_script):
     models = {n: e["model"] for n, e in by_provider(out)["github-copilot"].items()}
     assert models["worker"] == "github-copilot/claude-sonnet-5.5:medium"
     assert models["scout"] == "github-copilot/claude-sonnet-5.5:low"
-    # oracle は reviewer と同じ別系統 (親・worker の Claude と別の目。自己選好と自己点検の限界を避ける)
-    assert models["oracle"] == models["reviewer"] == "github-copilot/gpt-6.2-sol:high"
-    # 実装と監査は系統を分ける (worker は Claude、reviewer は GPT)
+    assert models["researcher"] == "github-copilot/claude-sonnet-5.5:medium"
+    # 書き手は Claude、コードレビューは GPT、判定・証拠監査は Gemini に分ける
     assert models["reviewer"] == "github-copilot/gpt-6.2-sol:high"
-    assert models["evidence-auditor"] == models["reviewer"]
+    assert models["oracle"] == "github-copilot/gemini-4-carbon:high"
+    assert models["evidence-auditor"] == "github-copilot/gemini-4-carbon:medium"
 
 
 def test_settings_assigns_models_by_role_for_bedrock(settings_script):
     out = json.loads(run(settings_script, "{}"))
     models = {n: e["model"] for n, e in by_provider(out)["amazon-bedrock"].items()}
     assert models["worker"] == "amazon-bedrock/us.anthropic.claude-sonnet-5-5:medium"
-    assert models["reviewer"].startswith("amazon-bedrock/us.openai.gpt-6.1-sol")
+    assert models["scout"] == "amazon-bedrock/us.anthropic.claude-sonnet-5-5:low"
+    assert models["researcher"] == "amazon-bedrock/us.anthropic.claude-sonnet-5-5:medium"
+    assert models["reviewer"] == "amazon-bedrock/us.openai.gpt-6.1-sol:high"
+    assert models["evidence-auditor"] == models["reviewer"]
     # Opus は高価でカタログでは plan 役の既定。指示なしに自律で起動する oracle には使わない
     assert "opus" not in models["oracle"]
     assert models["oracle"] == models["reviewer"]
@@ -363,7 +366,7 @@ def test_settings_layers_models_per_provider_not_per_apply_time_default(settings
 
 
 def test_settings_moves_the_old_oracle_default_but_keeps_a_users_choice(settings_script):
-    """前の既定 (Sonnet の xhigh) のままなら新しい既定 (sol の high) へ移す。利用者が別のモデルにしていれば保つ。"""
+    """前の既定 (Sonnet の xhigh) は Carbon の high へ移す。利用者が別のモデルにしていれば保つ。"""
     old = {
         "subagents": {
             "agentOverridesByProvider": {
@@ -373,12 +376,12 @@ def test_settings_moves_the_old_oracle_default_but_keeps_a_users_choice(settings
         }
     }
     out = json.loads(run(settings_script, json.dumps(old)))
-    assert by_provider(out)["github-copilot"]["oracle"]["model"] == "github-copilot/gpt-6.2-sol:high"
+    assert by_provider(out)["github-copilot"]["oracle"]["model"] == "github-copilot/gemini-4-carbon:high"
     assert by_provider(out)["amazon-bedrock"]["oracle"]["model"] == "amazon-bedrock/us.anthropic.claude-opus-5-5:high"
 
 
-def test_settings_moves_the_previous_gpt_default_to_6_2_for_copilot_only(settings_script):
-    """前の既定 (6.1 sol の high) のままの Copilot の 3 役は 6.2 sol へ移す。利用者が選んだ値と、Bedrock は触らない。"""
+def test_settings_moves_the_previous_gpt_default_for_copilot_only(settings_script):
+    """6.1 sol の high は役ごとの新既定へ移す。利用者が選んだ値と、Bedrock は触らない。"""
     old = {
         "subagents": {
             "agentOverridesByProvider": {
@@ -394,10 +397,53 @@ def test_settings_moves_the_previous_gpt_default_to_6_2_for_copilot_only(setting
     out = json.loads(run(settings_script, json.dumps(old)))
     copilot = by_provider(out)["github-copilot"]
     assert copilot["reviewer"]["model"] == "github-copilot/gpt-6.2-sol:high"
-    assert copilot["evidence-auditor"]["model"] == "github-copilot/gpt-6.2-sol:high"
+    assert copilot["evidence-auditor"]["model"] == "github-copilot/gemini-4-carbon:medium"
     assert copilot["oracle"]["model"] == "github-copilot/gpt-6.1-sol:xhigh"  # 利用者の選択を保つ
     # Bedrock は、6.2 の ID が未確認なので、6.1 のまま
     assert by_provider(out)["amazon-bedrock"]["reviewer"]["model"] == "amazon-bedrock/us.openai.gpt-6.1-sol:high"
+
+
+@pytest.mark.parametrize("role, effort", [("evidence-auditor", "medium"), ("oracle", "high")])
+@pytest.mark.parametrize("version", ["6.1", "6.2"])
+def test_settings_moves_gpt_audit_defaults_to_carbon(settings_script, role, effort, version):
+    """登録済みの旧既定だけ移し、同じ役の他のキーと Bedrock の値は保つ。再適用でも変わらない。"""
+    bedrock = {
+        name: {"model": "amazon-bedrock/us.openai.gpt-6.1-sol:high"}
+        for name in ("reviewer", "evidence-auditor", "oracle")
+    }
+    old = {
+        "subagents": {
+            "agentOverridesByProvider": {
+                "github-copilot": {
+                    role: {"model": f"github-copilot/gpt-{version}-sol:high", "description": "mine"},
+                },
+                "amazon-bedrock": bedrock,
+            }
+        }
+    }
+    first = run(settings_script, json.dumps(old))
+    layers = by_provider(json.loads(first))
+    assert layers["github-copilot"][role] == {
+        "model": f"github-copilot/gemini-4-carbon:{effort}",
+        "description": "mine",
+    }
+    for name, entry in bedrock.items():
+        assert layers["amazon-bedrock"][name] == entry
+    assert run(settings_script, first) == first
+
+
+@pytest.mark.parametrize("role", ["evidence-auditor", "oracle"])
+@pytest.mark.parametrize("model", ["github-copilot/gpt-6.2-sol:medium", "github-copilot/gemini-4-carbon:low", "other/model:high"])
+def test_settings_keeps_user_audit_models(settings_script, role, model):
+    """モデルや思考の深さを独自に選んだ値は旧既定とみなさない。"""
+    existing = {
+        "subagents": {
+            "agentOverridesByProvider": {"github-copilot": {role: {"model": model}}},
+        }
+    }
+    first = run(settings_script, json.dumps(existing))
+    assert by_provider(json.loads(first))["github-copilot"][role]["model"] == model
+    assert run(settings_script, first) == first
 
 
 def test_settings_keeps_a_users_model_and_other_providers(settings_script):
