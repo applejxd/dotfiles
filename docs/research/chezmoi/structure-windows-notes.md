@@ -157,6 +157,7 @@
 - `.wsb` 方式は、設定の書き間違い（`LogonCommand` に `&` を直接書いた。XML では `&amp;`）が先に「構成ファイルが無効です」になった。直したあとは、ネットワークの有効（`quick.wsb`）・無効（`netoff.wsb`）のどちらも `Windows サンドボックスを初期化できませんでした。Exception of type 'System.Exception' was thrown.`（番号なし）で失敗した。ネットワークの無効化では直らない
 - 失敗した間、Hyper-V の `Compute`・`Worker`・`VMMS`・`Hypervisor` のイベントは 1 件も無い。**VM が作られる前**の失敗
 - 環境の確認: `HTTP_PROXY` 等のプロキシ環境変数は、Process / User / Machine のどれにも無い。WinHTTP は直接接続、IE のプロキシも無効。TCP の除外ポート範囲は 5357 だけ。UDP 53/67/68 の占有は無い。`hns`・`vmcompute`・`SharedAccess`・`CmService`・`WinNat` は動作中。WSL は `networkingMode=mirrored`（Hyper-V ファイアウォールが有効で、既定の受信は Block）で、仮想アダプターは `vEthernet (FSE HostVnic)` と `vSwitch (FSE Switch)` だけ（`Default Switch` は無い）
+- **Windows の再起動後（8:49 起動、RDP で `Active`）も同じ**: `.wsb`（`quick.wsb`）は `System.Exception` で失敗した。`wsb list` の失敗だけ、`Status(StatusCode="Internal", Detail="Error starting gRPC call. HttpRequestException: The operation has timed out. (localhost:80)")` に変わった（oxbox の報告と同じ文面）。`127.0.0.1:80` への接続は、他の閉じたポートと同じく拒否され、待ち受けは Windows にも WSL にも無い。Server が待ち受けていない
 - 画面のスクリーンショットは、WSL 経由の `powershell.exe` からは取れない（`CopyFromScreen` が「ハンドルが無効」）。エラーは利用者の画面の確認に頼る
 
 ### 出典の追加（取得 2026-11-23）
@@ -172,6 +173,6 @@
 
 ### まだ試していないこと
 
-- 管理者権限での `hnsdiag list networks`・Hyper-V のイベントの確認、Sandbox 機能の再インストール（`Disable` / `Enable-WindowsOptionalFeature -FeatureName Containers-DisposableClientVM`）、Windows の再起動後の再試行
+- 管理者権限での `hnsdiag list networks`・Hyper-V のイベントの確認、Sandbox 機能の再インストール（`Disable` / `Enable-WindowsOptionalFeature -FeatureName Containers-DisposableClientVM`）、`Reset-AppxPackage`（アプリのデータの初期化）。`winget show --id 9NSMXC3NB0HN` は版が `Unknown` で、最新版の有無は確かめられなかった
 - WSL を `networkingMode=nat` に戻した場合、または `wsl --shutdown` の後で Sandbox が起動するか（この作業は WSL の中で動くセッションを止めるので、私は実行しない）
 - `STATUS_STACK_OVERFLOW` の再現条件
