@@ -17,7 +17,7 @@
 
 - **feature → `develop` と、`develop` → `main` は merge**（`--no-ff`）。公開された履歴は書き換えない。
 - **rebase は、feature の枝を最新の `develop` に追従させるときだけ**: `git flow feature update <名前> --rebase`（git-flow が親への rebase だけを行う。確認なしで通る）。feature の枝は未公開なので書き換えてよい。push・publish した feature は rebase しない。
-- **複数の feature は、束ね用の feature へ `git merge` で取り込んでから、1 回だけ `finish` する**（merge commit は 1 つ。ask は 1 回、検査は 1 回）。手順は [feature-orchestration](../../.agents/skills/feature-orchestration/SKILL.md) の「束ねる」。
+- **複数の feature は、束ね用の feature へ `git merge` で取り込んでから、1 回だけ `finish` する**（merge commit は 1 つ。ask は 1 回、検査は 1 回）。手順は [feature-orchestration の束ねる](../../.agents/skills/feature-orchestration/references/bundle-and-stack.md)。
 - **`git rebase` の直接の実行は ask のまま**（allow にしない）。
 - **統合後の実機への反映は `chezmoi apply`**（pull しない）。`chezmoi update` は、未 push のコミットが無いときだけ使う（未 push の merge commit を平らにするため）。
 

@@ -40,7 +40,7 @@ description: "chezmoi の dotfiles リポジトリのファイルを編集する
 
 - cwd が `.tmp/worktrees/<名前>/` のとき、本体（`~/.local/share/chezmoi`）と他の worktree は「作業ツリーの外」で、`cd`・`ls`・`cat` に確認が出る（権限の規則に本体を許可する項目は無い。判定エンジンで確認）。基本の枝は `develop`: `git show develop:<パス>`・`git diff develop...HEAD`・`git log develop`。他の feature の内容は `git show feature/<名前>:<パス>`。
 - `cd` は worktree の絶対パスだけにする（`cd ~/…`・`cd $VAR` は使わない。[上流の不具合](../../../docs/spec/temporary-workarounds.md#pi-permission-system-の-cd-先の誤判定)）。
-- **`.tmp/` は worktree と一緒に消える。** `git worktree remove` と `git flow feature finish` の自動削除は、git の対象外のファイル（`.tmp/`・`.venv`）を警告なしで消す。置く前に分類する: **再利用するもの（検証スクリプトなど）はコミットする**（`scripts/`）、**調査の結果は `docs/research/` に書く**、残したい資料は worktree の `.tmp/keep/`（消す前に親が本体の `.tmp/keep/<feature 名>/` へ写す）、**使い捨てだけを `.tmp/<話題>/` に置く**。置き場所を `TMPDIR` で本体へ向けない（worktree の子と囲い（`pib`）は、作業ツリーの外へ書けない）。`/tmp` に一本化しない（囲いの中の `/tmp` は空の tmpfs で、コマンドごとに消える。[仕様](../../../docs/spec/sandbox/pi-sandbox-runner.md)の記述。実測は未確認）。消す前の確認は [feature-orchestration](../feature-orchestration/SKILL.md) の工程 9。
+- **`.tmp/` は worktree と一緒に消える**: 再利用するものはコミット、残したい資料は `.tmp/keep/`、使い捨てだけ `.tmp/<話題>/`。置き場所を `TMPDIR` で本体へ向けず、`/tmp` に一本化もしない（子は作業ツリーの外へ書けず、囲いの中の `/tmp` は空の tmpfs）。消す前の確認は [feature-orchestration](../feature-orchestration/SKILL.md) の工程 9。
 - 本体へ触るのは、利用者が指示した統合（`git flow feature finish`・`git flow integrate`）と `chezmoi apply` だけ（どちらも確認が出る前提）。この PC の chezmoi のソースは本体（`develop`）なので、worktree の変更は、統合するまで実機へ反映されない。
 
 ## 公開情報に無いことをするとき

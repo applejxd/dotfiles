@@ -13,7 +13,7 @@
    **衝突したら止めて利用者に報告する**（子に直させない。docs の索引・`scripts/verify.py` の同じ位置は、両方の行を残す）。
 4. **束ねた先で全件検査**: `bg_run` で `mise run verify:all`（1 本だけ。積み重ねの検査を兼ねる）。落ちたら、どの feature が原因かを切り分ける。
 5. **利用者の指示で 1 回だけ統合**（ここだけ確認が出る。規則 `git flow * finish*` が ask。束ね用の作成・取り込み・コミット・`worktree list` は、確認なしで通る）: `git flow feature finish bundle-<…> --no-ff --no-squash -M "merge: <feature の一覧> を統合する" --keepremote --no-fetch --no-push --notag`（メッセージに取り込んだ feature の名前を並べる）。
-6. **後始末**: 取り込んだ各 feature の worktree を `git worktree remove .tmp/worktrees/<名前>`（`--force` なし）で消す。枝は `develop` から到達できるので、`git -C <develop の worktree> branch -d feature/<名前>` で消せる（`-D` は拒否される）。
+6. **後始末**: 取り込んだ各 feature の worktree は、`finish` の前に、[工程 9 の①](../SKILL.md)（git の対象外のファイルの確認と救出）を済ませる。そのあと `git worktree remove .tmp/worktrees/<名前>`（`--force` なし）で消す。枝は `develop` から到達できるので、`git -C <develop の worktree> branch -d feature/<名前>` で消せる（`-D` は拒否される）。
 
 1 件だけの統合は、これまでどおり工程 8 の `finish` を直接使う（束ねない）。
 
