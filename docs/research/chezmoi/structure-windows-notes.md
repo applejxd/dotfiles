@@ -165,14 +165,31 @@
 - <https://github.com/microsoft/Windows-Sandbox/issues/117>: 同じ `Exception of type 'System.Exception' was thrown.` の報告。**原因は `HTTP_PROXY` / `HTTPS_PROXY` の環境変数で、消したら直った**（この機には無いので当てはまらない）。別の報告者は、Hyper-V の `Compute` で `0xC0370106`、`Worker` で「ゲストが起動した」を見ており、この機とは様子が違う
 - `0x8007271D` は `WSAEACCES`。Hyper-V のライブマイグレーションや WSL の登録でも出る。ポートの予約や排他的な占有が典型だが、この機の確認範囲では該当が無かった
 
+### 修復の試行と結果（2026-11-23。いずれも直らなかった）
+
+- Windows の再起動 ×2、`Reset-AppxPackage`（Sandbox アプリのデータの初期化）、Sandbox 機能の無効化 → 再起動 → 有効化 → 再起動（`Containers-DisposableClientVM` は `Enabled` に戻った）。再インストール後も、`.wsb` は `System.Exception` で失敗した（VM は作られない）
+- 非管理者で `TcpListener` / `UdpClient` を、ポート 53・67・68・5300 の `0.0.0.0`・`127.0.0.1`・`127.0.0.53`・`127.0.0.54`・Tailscale の IP に束縛したところ、**すべて成功した**。ポート 53 の競合は無い
+- ビルドは `26300.9974`（26H2、`KB5132061` を 2026-11-11 に適用）。`C:\ProgramData\Microsoft\Windows\Containers\BaseImages` はあるが、更新日時は 2026-10-10。`ContainerStorages` には `sandbox.vhdx` / `sandbox.vmgs` が 3 組ある
+
+### Web 調査（取得 2026-11-23。`microsoft/Windows-Sandbox` の issue）
+
+- **#141**（<https://github.com/microsoft/Windows-Sandbox/issues/141>、open）: 26H2（26300.9711〜9818）で、ゲストのデスクトップに着く前に止まる。`Default Switch` のエンドポイント作成が完了しない。HNS と SharedAccess（`ipnathlp`）の待ち合わせの観測がある。コメントの別の報告者は、26300.9818・Sandbox 0.8.107.0・WSL2 が動く環境で、`Windows Sandbox failed to initialize`（`0x80370108`）。**機能の無効化 → 再起動 → 有効化 → 再起動でも直らず、`Hyper-V-VmSwitch` の Event 285 の警告が出る（この機でも同じ警告が出ていた）**。原因は未確定、修正は未報告
+- **#149**（open）: Sandbox 0.8.114.0・26300.9974 で、デスクトップに着く前に接続が切れる（別の症状。同じ版・同じビルド）
+- **#146**（open）: 26300.9974 で、Sandbox 機能の有効化が 94% で止まる（`0x800f0920`）。`TrustedInstaller` の `BlockTimeIncrement` を `2a30` にする回避策の報告がある（この機では有効化は成功した）
+- **#147**（open）: 26300.9974 で `ProtectedClient=Enable` の起動が失敗する（`CreateAppContainerProfile`、AppContainer 名が 51 文字）。この機の設定は `ProtectedClient` を使っていない
+- **#144**（open）: 26300 系の累積更新（`KB5127936`・`KB5132061`）が、Sandbox が有効だと `0x80070003` で失敗する。Sandbox を無効にして更新し、あとで有効に戻すと通る。次の更新が失敗したら、Sandbox の無効化を試す
+- **#70**（open）: `0x8007271D` は、ホストが 127.0.0.1:53/TCP で待ち受ける DNS プロキシ（Acrylic）と競合したときの報告。この機では、ポート 53 の束縛が成功したので当てはまらない
+- **#117**（closed）: `System.Exception` の原因は `HTTP_PROXY` の環境変数。この機には無い
+
 ### 解釈（推測。未検証）
 
-- 「切断・ロック中のセッションが原因」という見立ては、**支持されない**。RDP で `Active` にしても、Start メニューの既定起動も失敗するため。この機では、セッションの状態に関わらず Sandbox が起動しない
-- 候補: ① WSL の `mirrored` ネットワークとの干渉（Sandbox の NAT 用の `Default Switch` が作れない）、② Windows Sandbox のパッケージ（0.8.114.0）と OS（26300）の組み合わせの不具合（`WindowsSandboxServer` の `STATUS_STACK_OVERFLOW` が 2 回あるのと整合する）。どちらも確かめていない
+- この機の症状（26H2・26300.x・Sandbox 0.8.1xx・VM が作られる前の初期化失敗・`VmSwitch` の Event 285・再インストールで直らない）は、**#141 の別ホストの報告と最も近い**。ネットワークの準備（`Default Switch` の作成、HNS / SharedAccess）が完了しない問題の可能性がある。上流で原因・修正は未確定
+- 「切断・ロック中のセッションが原因」という見立ては、支持されない（RDP で `Active` でも同じ）。「WSL の `mirrored` との干渉」も、根拠は見つからなかった（`mirrored` の報告は Sandbox の issue に無い）
+- `0x8007271D`（Start メニューの設定なしの起動で 1 回だけ観測）と、番号なしの `System.Exception`（`.wsb`）が別の症状なのかは不明
 - 無人で動かせる可能性があるのは、「`wsb start` ＋ `wsb share` ＋ `wsb exec -r System`」の経路だけ。この機では `wsb start` が通らず、試せていない
 
 ### まだ試していないこと
 
-- 管理者権限での `hnsdiag list networks`・Hyper-V のイベントの確認、Sandbox 機能の再インストール（`Disable` / `Enable-WindowsOptionalFeature -FeatureName Containers-DisposableClientVM`）、`Reset-AppxPackage`（アプリのデータの初期化）。`winget show --id 9NSMXC3NB0HN` は版が `Unknown` で、最新版の有無は確かめられなかった
-- WSL を `networkingMode=nat` に戻した場合、または `wsl --shutdown` の後で Sandbox が起動するか（この作業は WSL の中で動くセッションを止めるので、私は実行しない）
+- `hnsdiag list networks`・HNS のログ・Hyper-V のイベントの確認（管理者権限が要る）、`HNS` / `SharedAccess` サービスの再起動（WSL のネットワークが切れるので、WSL の中で動くセッションからは実行しない）
+- 後続の Windows 更新（12 月以降）で直るか。`winget show --id 9NSMXC3NB0HN` は版が `Unknown` で、Sandbox パッケージの新版の有無は確かめられなかった
 - `STATUS_STACK_OVERFLOW` の再現条件

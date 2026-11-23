@@ -277,7 +277,7 @@ pwsh scripts/windows/sandbox/launch.ps1
 - 所要時間は約 1 時間。Python 3.12 のインストーラーだけで約 20 分かかる（固まっているわけではない）。途中経過は `chezmoi-apply.log`（UTF-16）と `winget-*.log` に随時出る。検証が終わると Sandbox は自動で終了する（起動中は `launch.ps1` が止める）
 - Sandbox では `msstore` ソースが Rest API エラーになるため、`guest.ps1` が外している
 - 制約のある環境の機のプロキシや制限は再現しない。WSL の機能有効化は再起動が要るので、警告で終わる想定
-- **この機（2026-11-23）では、Windows Sandbox 自体が起動しなかった**。Start メニューからの設定なしの起動も `0x8007271D`（`WSAEACCES`）で失敗し、`.wsb` は番号なしの `System.Exception` で失敗した。VM が作られる前の失敗で、RDP で接続中でも、切断中でも同じ。`wsb list` / `wsb start` も WSL からの呼び出しで約 30 秒で `Cancelled` になる。Sandbox が使えるかは、先に Start メニューから設定なしで起動して確かめる（[実測と出典](../research/chezmoi/structure-windows-notes.md#windows-sandbox-の-wsbexe-を-wsl-から動かした実測)）
+- **この機（2026-11-23）では、Windows Sandbox 自体が起動しなかった**。Start メニューからの設定なしの起動も `0x8007271D`（`WSAEACCES`）で失敗し、`.wsb` は番号なしの `System.Exception` で失敗した。VM が作られる前の失敗で、RDP で接続中でも、切断中でも同じ。`wsb list` / `wsb start` も WSL からの呼び出しで約 30 秒で `Cancelled` になる。再起動・アプリのデータの初期化・機能の再インストールでも直らず、上流の既知の報告（26H2・26300.x。`microsoft/Windows-Sandbox` の #141 など）と症状が近い。Sandbox が使えるかは、先に Start メニューから設定なしで起動して確かめる（[実測と出典](../research/chezmoi/structure-windows-notes.md#windows-sandbox-の-wsbexe-を-wsl-から動かした実測)）
 
 ## スクリプトを追加するとき
 
