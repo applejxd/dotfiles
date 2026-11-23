@@ -84,6 +84,8 @@
 | [web 検索スキル仕様の実測・経緯](agents/web-search-spec-notes.md) | 2026-10-11〜26 の実測と CHG-0032 の経緯（`web-search.md` から移設） |
 | [子エージェントの権限（agent ファイルの `permission:`）の実測](agents/subagent-permission-frontmatter-2026-11.md) | 2026-11-10。`external_directory: deny`（単一の値）は、作業ツリーの外の `read`・bash のパス引数を確認なしで即座に拒否した（審査ログでも確認）。入れ子の書式は agent 定義が無効になる。許可リストより `deny` が強い。user 配下の写しでの実測は未確認 |
 | [権限の方針の経緯・実測・決め直しの根拠（2026-11）](agents/permission-policy-rationale-2026-11.md) | 2026-11-10〜18。`agent-config-generation.md` から 2026-11-18 に分離（逐語）。許可リストの経緯・`..` を含む綴り・systemd の決め直し・`nohup` と `git config` の根拠・確認で待たせない方針の実測・`pi-rewind` の警告の調査・Tailscale の指示の経緯 |
+| [worktree の運用の記録（2026-11）](agents/worktree-lifecycle-2026-11.md) | 2026-11-23。worktree の削除で git の対象外のファイルを失った件、置き場所の案（`TMPDIR`・`/tmp`）を採らない理由、統合・反映で分かったこと |
+| [スキルを書き換えるときの原則（2026-11）](agents/skill-authoring-principles-2026-11.md) | 2026-11-23。簡潔さ・自由度・段階的な読み込み・時間依存の排除・単一責任・Diátaxis（公開されている原則と、このリポジトリでの適用） |
 
 ### テスト
 
