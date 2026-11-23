@@ -31,17 +31,18 @@ const mod = await import('./index.ts');
 const DATA = JSON.parse(fs.readFileSync('data.json', 'utf8'));
 const out = (o) => console.log(JSON.stringify(o));
 const nul = (v) => (v === undefined ? null : v);  // JSON は undefined を落とすので、null に写して区別する
-function setup(mode, entries, contextUsage) {
+function setup(mode, entries, contextUsage, modelWindow) {
   const handlers = {}, calls = [], usedApi = [];
   // contextUsage: undefined なら ctx.getContextUsage を持たない (古い pi)。
   // 'returns-undefined' なら API はあるが undefined を返す (最初の応答前の仮想モデル)
-  const state = { mode, entries, contextUsage };
+  const state = { mode, entries, contextUsage, modelWindow };  // modelWindow: ctx.model.contextWindow (窓の大きさの代わり)
   const on = (name, handler) => { (handlers[name] ??= []).push(handler); };
   // pi.on 以外 (registerTool・registerCommand など) を使ったら記録する。拡張は状態の表示だけを登録する
   const pi = new Proxy({ on }, { get: (target, key) => { if (!(key in target)) usedApi.push(String(key)); return target[key]; } });
   const ctx = {
     get mode() { return state.mode; },
     sessionManager: { getEntries: () => state.entries },
+    ...(state.modelWindow === undefined ? {} : { model: { contextWindow: state.modelWindow } }),
     ui: { setStatus: (key, text) => calls.push([key, nul(text)]) },
     ...(contextUsage === undefined ? {} : {
       getContextUsage: () => (state.contextUsage === 'returns-undefined' ? undefined : state.contextUsage),
@@ -293,24 +294,44 @@ out({ inTui, inRpc: t.calls });
 
 # computeStatusText の第 2 引数 (contextPercent)。undefined は出さず、null (不明) は ctx--、数は小数 1 桁。順序は CH → 費用 → ctx
 CTX_CASES = {
-    "ctx-after-hit-rate-and-cost": ([assistant(input=100, cache_read=700, cache_write=200, cost=0.4)], 41.234, "CH70.0% $0.400 ctx41.2%"),
-    "ctx-only-in-an-empty-session": ([], 0, "ctx0.0%"),
-    "ctx-unknown-after-compaction": ([], None, "ctx--"),
-    "ctx-unknown-keeps-the-other-parts": ([assistant(input=100, cache_read=900, cost=1)], None, "CH90.0% $1.000 ctx--"),
-    "ctx-full-window": ([assistant(input=100, cost=1)], 100, "$1.000 ctx100.0%"),
+    "ctx-after-hit-rate-and-cost": (
+        [assistant(input=100, cache_read=700, cache_write=200, cost=0.4)], 41.234, None, "CH70.0% $0.400 ctx41.2%",
+    ),
+    "ctx-only-in-an-empty-session": ([], 0, None, "ctx0.0%"),
+    "ctx-unknown-after-compaction": ([], None, None, "ctx--"),
+    "ctx-unknown-keeps-the-other-parts": ([assistant(input=100, cache_read=900, cost=1)], None, None, "CH90.0% $1.000 ctx--"),
+    "ctx-full-window": ([assistant(input=100, cost=1)], 100, None, "$1.000 ctx100.0%"),
     # 数でない値 (NaN・Infinity) は、出さない
-    "ctx-non-finite-is-ignored": ([assistant(input=100, cost=1)], "nan", "$1.000"),
+    "ctx-non-finite-is-ignored": ([assistant(input=100, cost=1)], "nan", None, "$1.000"),
+    # 分母 (窓の大きさ)。pi のフッターの formatTokens と同じ k・M 表記
+    "denominator-200k": ([], 41.2, 200000, "ctx41.2%/200k"),
+    "denominator-1m": ([], 8.2, 1000000, "ctx8.2%/1.0M"),
+    "denominator-one-decimal-below-10k": ([], 50, 8192, "ctx50.0%/8.2k"),
+    "denominator-below-1k": ([], 50, 512, "ctx50.0%/512"),
+    "denominator-10m": ([], 1, 12000000, "ctx1.0%/12M"),
+    "denominator-with-unknown-percent": ([], None, 200000, "ctx--/200k"),
+    "denominator-after-cost-and-hit-rate": ([assistant(input=100, cache_read=900, cost=1)], 41, 200000, "CH90.0% $1.000 ctx41.0%/200k"),
+    # 窓が 0・負・非数のときは、分母を出さない
+    "denominator-zero-is-omitted": ([], 41, 0, "ctx41.0%"),
+    "denominator-negative-is-omitted": ([], 41, -5, "ctx41.0%"),
+    "denominator-without-percent-is-not-printed": ([assistant(input=100, cost=1)], "absent", 200000, "$1.000"),
 }
 
 
-def test_compute_status_text_appends_the_context_percent(run_node):
+def test_compute_status_text_appends_the_context_percent_and_window(run_node):
     ids = list(CTX_CASES)
-    data = [[CTX_CASES[i][0], CTX_CASES[i][1]] for i in ids]
+    data = [[CTX_CASES[i][0], CTX_CASES[i][1], CTX_CASES[i][2]] for i in ids]
     got = run_node(
-        "out(DATA.map(([entries, pct]) => nul(mod.computeStatusText(entries, pct === 'nan' ? Number.NaN : pct))));",
+        """
+out(DATA.map(([entries, pct, win]) => nul(mod.computeStatusText(
+  entries,
+  pct === 'nan' ? Number.NaN : pct === 'absent' ? undefined : pct,
+  win === null ? undefined : win,
+))));
+""",
         data,
     )
-    assert dict(zip(ids, got, strict=True)) == {i: CTX_CASES[i][2] for i in ids}
+    assert dict(zip(ids, got, strict=True)) == {i: CTX_CASES[i][3] for i in ids}
 
 
 def test_rpc_publishes_the_context_percent_and_refreshes_on_model_change_compact_and_turn_end(run_node):
@@ -333,10 +354,10 @@ out({ afterStart, afterModel, afterCompact, afterNextTurn });
 """,
         {"entries": [assistant(input=100, cache_read=900, cost=0.5)], "next": [assistant(input=100, cache_read=900, cost=0.5)]},
     )
-    assert got["afterStart"] == [["usage", "CH90.0% $0.500 ctx41.0%"]]
-    assert got["afterModel"] == [["usage", "CH90.0% $0.500 ctx8.2%"]]
-    assert got["afterCompact"] == [["usage", "CH90.0% $0.500 ctx--"]]
-    assert got["afterNextTurn"] == [["usage", "CH90.0% $1.000 ctx2.0%"]]
+    assert got["afterStart"] == [["usage", "CH90.0% $0.500 ctx41.0%/200k"]]
+    assert got["afterModel"] == [["usage", "CH90.0% $0.500 ctx8.2%/1.0M"]]
+    assert got["afterCompact"] == [["usage", "CH90.0% $0.500 ctx--/1.0M"]]
+    assert got["afterNextTurn"] == [["usage", "CH90.0% $1.000 ctx2.0%/1.0M"]]
 
 
 def test_rpc_shows_the_context_percent_even_in_a_new_session(run_node):
@@ -349,7 +370,7 @@ out(t.calls);
 """,
         None,
     )
-    assert got == [["usage", "ctx--"]]
+    assert got == [["usage", "ctx--/200k"]]
 
 
 def test_without_the_context_usage_api_the_extension_behaves_as_before(run_node):
@@ -381,6 +402,27 @@ out({ empty: empty.calls, withEntries: withEntries.calls });
         {"entries": [assistant(input=100, cache_read=900, cost=0.5)]},
     )
     assert got == {"empty": [["usage", "ctx--"]], "withEntries": [["usage", "CH90.0% $0.500 ctx--"]]}
+
+
+def test_the_window_falls_back_to_the_current_model_when_the_usage_has_none(run_node):
+    """pi のフッターと同じ順: 使用量の contextWindow、なければ現在のモデルの contextWindow。両方無ければ分母を出さない。"""
+    got = run_node(
+        """
+const fromModel = setup('rpc', [], 'returns-undefined', 400000);
+await fire(fromModel, 'session_start');
+const preferUsage = setup('rpc', [], { tokens: 1, contextWindow: 200000, percent: 0.5 }, 400000);
+await fire(preferUsage, 'session_start');
+const neither = setup('rpc', [], 'returns-undefined');
+await fire(neither, 'session_start');
+out({ fromModel: fromModel.calls, preferUsage: preferUsage.calls, neither: neither.calls });
+""",
+        None,
+    )
+    assert got == {
+        "fromModel": [["usage", "ctx--/400k"]],
+        "preferUsage": [["usage", "ctx0.5%/200k"]],
+        "neither": [["usage", "ctx--"]],
+    }
 
 
 # --- package の形 (node を使わない) ---------------------------------------------------------------
