@@ -861,13 +861,14 @@ def test_permission_policy_matches_the_contract():
         "*.pem",
     ):
         assert action(path[denied]) == "deny", denied
-    # 入れる拡張の自分のツールは、毎回の確認を出さない (子の起動・ToDo・利用者への質問)
+    # 入れる拡張の自分のツールと、pi 組み込みの tool_search は、毎回の確認を出さない (子の起動・ToDo・利用者への質問・ツールの検索)
     for tool in (
         "todo",
         "ask_user_question",
         "subagent",
         "subagents_enable",
         "bg_wait",
+        "tool_search",  # pi 組み込み。tool を宣言するだけで、宣言された各ツールの呼び出しは個別の規則で判定される
         "bg_status",
         "bg_kill",
         "plan_mode_question",

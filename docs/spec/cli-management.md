@@ -126,12 +126,34 @@ Windows の pi は、mise の `aqua:earendil-works/pi`（ビルド済みバイ�
 `mise exec -- pi --version` で起動を確かめます。更新は版を書き換えて `chezmoi apply` です（`pi update` では更新しません）。
 
 - 選んだ理由: npm 版は node の解決順に左右される。Machine PATH に古い node があると、pi の導入も起動も失敗する
-  （Sandbox で再現）。バイナリ版は node を使わないので、この種の障害が起きない。WSL / Linux の `~/.pi/agent/bin/pi`
-  と同じバイナリでもある。公式の `install.ps1` は `Read-Host` で確認を聞き、apply では答えられない
+  （Sandbox で再現）。バイナリ版は node を使わないので、この種の障害が起きない。公式の `install.ps1` は
+  `Read-Host` で確認を聞き、apply では答えられない
+- Linux / WSL と同じ公式インストーラーに統一しない理由は、[下の表](#linux--wsl--macos-と-windows-の違い)。
+  Linux の `~/.pi/agent/bin/pi` は Node 製の launcher で、Windows のバイナリ版とは別物（以前ここに「同じバイナリ」と書いていたのは誤り）
 - バイナリ版は `process.argv[1]` が仮想パス（`B:/~BUN/root/pi.exe`）で、CLI ファイルではない。
   `subagents` はこれを子の引数に渡さないようにした（`childArgs`、試験あり）
 - 導入・起動の実測と未確認事項は [記録](../research/chezmoi/structure-windows-notes.md)
 - 旧 npm 版が残る PC は、`npm uninstall -g @earendil-works/pi-coding-agent` で外す（`314` が自動で行う）
+- 固定した版は、Linux / WSL の `pi --version` と揃える（2026-11-23 に、固定が 1.2.0・Linux が 1.5.2 とずれているのを見つけて 1.5.2 に上げた。ずれを検出する仕組みは無い）
+
+#### Linux / WSL / macOS と Windows の違い
+
+公式インストーラーの pi は Node 製で、実行時に PATH 上の `node` を使う。Linux ではそれが常に満たされ、Windows では満たされない場面がある。
+根拠は `install.sh` / `install.ps1`・`shellenv.sh` を読んだ結果（2026-11-23）。**Windows での失敗の再現は未実施**（Sandbox を試したが、利用者のセッションが切断・ロック中で、起動後の処理が走らなかった。Sandbox は画面がつながった状態で実行する）。
+
+| 観点 | Linux / WSL / macOS | Windows |
+| --- | --- | --- |
+| pi の実体 | Node 製。launcher が `~/.pi/agent/install/releases/<版>/node_modules/.bin/pi` を実行する | mise 経由の bun 製バイナリ（node 不要） |
+| 実行時の node | PATH 上の `node`。インストーラーが入れた独自 Node があれば先頭に足す | `pi.cmd` が `node=node`（PATH 上）。固定されるのは独自 Node を入れた場合だけ |
+| PATH の作り方 | `shellenv.sh` が mise の shims を先頭に置く（zsh は `.zshenv`、bash は `.bash_profile`）。優先順位は 1 本 | レジストリは Machine → User の順。shims は載らず、`mise activate` は PowerShell の profile だけ |
+| 古い node | 先頭の shims が勝つ | Machine PATH の古い node が先に勝つ（旧 npm 版で再現した失敗） |
+| node が見つからない場面 | ほぼ無い | profile を読まないシェルと、そこから起動するもの（例: `cmd`・Explorer） |
+| 導入時の確認入力 | `/dev/tty` が開けなければ飛ばす。node が無ければ失敗にして次の apply で再実行 | `Read-Host`。端末が無ければ多くは飛ばすが、PATH 追加の確認は条件なしで、`-NonInteractive` ではエラー |
+| bash | OS 標準 | Git Bash が必要（無ければインストーラーが聞く） |
+| 更新 | `pi update` | 版を書き換えて `chezmoi apply` |
+
+統一するなら、Windows の node を Machine PATH に置く、またはインストーラーの独自 Node（確認が要る）を使う必要がある。
+どちらも現状の設計（mise が node を管理し、PATH を触らない）と合わないので、バイナリ版のままにしている。
 
 ## pi の導入
 
