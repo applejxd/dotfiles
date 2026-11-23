@@ -30,6 +30,7 @@ subagent({
    `git reset --hard`・`git checkout -- <path>`・`git restore`・`git clean -f`・`git branch -D` は cc-safety-net が拒否するので、使わせない。
 7. **報告の形**: 結論を先頭 3 行以内。続けて、変更ファイル・各検査の出力（抜粋）・判断に迷った点・確かめられなかったこと・次への申し送り。
 8. **止まる条件**: 契約にない決定が要るとき、確認が出る操作に当たったとき（push・`chezmoi apply`・`git config`・`gh` の変更系。`git worktree remove` は `.tmp/worktrees/` の外の指定のとき）は、進めずに報告して止まる。
+9. **残すものの置き場**: worktree が消えると、git の対象外のファイル（`.tmp/` の中）も消える。**再利用するスクリプトは担当ファイルとして `scripts/` などに置いてコミットの対象にする**。残したい資料は worktree の `.tmp/keep/` に置かせる（親が worktree を消す前に、本体の `.tmp/keep/<feature 名>/` へ写す）。それ以外の `.tmp/<話題>/` は使い捨て。
 
 ## 時間と終了
 

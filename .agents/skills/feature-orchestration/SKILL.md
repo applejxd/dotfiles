@@ -50,7 +50,8 @@ description: "feature を起票して worker に実装を切り出し、成果�
 8. **統合**: 2 件以上は、下の「束ねる」で 1 回のマージにする。**利用者が自分から「統合して」と言ったときだけ**（AI が「統合してよいですか」と聞いて得た返事は数えない。許可を求める質問はしない）、`git flow feature finish <名前> --no-ff --no-squash -M "<メッセージ>" --keepremote --no-fetch --no-push --notag` を実行する（push はしない）。
    指示が無いときは、コミットと要約（統合メッセージの案・確かめた内容・未確認）までで止める。要約は「準備ができた」という報告で、「統合しましょうか」と問う形にしない。`finish` で確認が出るかは未確認（出たら利用者の承認を待つ）。
    docs の更新表や `Rule` の同じ位置の衝突は、両方の行を残す。
-9. **後始末の確認**: `git log --oneline -3`・`git worktree list`・`git status --short`。残った worktree は `git worktree remove .tmp/worktrees/<名前>`（`--force` なし）で消す。枝は残るので、統合済みなら統合先の worktree から `git -C <その worktree> branch -d <枝>` で消す（`-D` は拒否される。統合前の枝は消さない）。
+   **`finish` は worktree も自動で消す**（束ね用の worktree もこれで消える）ので、実行の前に、工程 9 の「消す前の確認と救出」を済ませる。
+9. **後始末の確認**: まず**消す前に**、(1) `git -C <worktree の絶対パス> clean -ndX`（実行せずに、git の対象外のファイルを一覧する）で、再生成できないものが無いか見る（`.venv`・`__pycache__`・`.pytest_cache` などは無視）。(2) `<worktree>/.tmp/keep/` に残したいものがあれば、本体の `.tmp/keep/<feature 名>/` へ写す。**`git worktree remove` は、git の対象外のファイルを警告なしで消す**（下の「落とし穴」）。そのあと、`git log --oneline -3`・`git worktree list`・`git status --short`。残った worktree は `git worktree remove .tmp/worktrees/<名前>`（`--force` なし）で消す。枝は残るので、統合済みなら統合先の worktree から `git -C <その worktree> branch -d <枝>` で消す（`-D` は拒否される。統合前の枝は消さない）。
 10. **止まらずに次へ**: コミットと要約を出したら、統合の指示を待たずに、他の feature・docs・検査へ進む。止まるのは、利用者の方針決定がないと進められる作業が無いときだけ。
 
 ## 束ねる (複数の feature を 1 回の merge で統合する)
@@ -63,6 +64,7 @@ B が、まだ develop に入っていない A の変更を要るときは、A �
 
 ## 落とし穴
 
+- **worktree の削除は、git の対象外のファイルを警告なしで消す**（`.tmp/` の中も、`.venv` も。`git worktree remove` が `--force` なしで成功し、`git flow feature finish` の自動削除も同じ。2026-11-23 に、Sandbox の検証用スクリプトを失った）。**再利用するもの（検証スクリプトなど）はコミットする**（`scripts/`）。調査の結果は `docs/research/` に書く。残したい資料は worktree の `.tmp/keep/` に置き、消す前に本体の `.tmp/keep/<feature 名>/` へ写す。`.tmp/<話題>/` は、worktree と一緒に消える使い捨て。置き場所を `TMPDIR` で本体へ向ける・`/tmp` に一本化する案は採らない（子は外へ書けない。囲いの中の `/tmp` は空の tmpfs。[理由](../dotfiles-conventions/SKILL.md#feature-の-worktree-で作業するとき本体のパスへ出ない)）。
 - **worktree の中だけで完結させる**: cwd が worktree のとき、本体と他の worktree は作業ツリーの外で、`cd`・`ls`・`cat` に確認が出る（子は確認なしで拒否される）。本体の内容は `git show develop:<パス>`、他の feature の内容は `git show feature/<名前>:<パス>` で読み、子へ渡す資料は worktree の中（`.tmp/keep/plan/` など）へ写す。詳細は [dotfiles-conventions](../dotfiles-conventions/SKILL.md#feature-の-worktree-で作業するとき本体のパスへ出ない)。
 - **整形 hook が書き込み直後にファイルを書き換える**。すぐ `git add` すると空のファイルをステージする。`git add -A` のあと `git diff --cached --numstat` で見る（必要なら少し待ってから）。
 - **全件検査は 1 本ずつ回す**。重なると負荷が上がり、時間に依存する試験が落ちる。落ちたら、負荷が下がってから**単独で再実行して確かめる**（再実行で通るなら負荷が原因）。
