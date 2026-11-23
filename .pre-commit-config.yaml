@@ -27,11 +27,13 @@ repos:
 
   - repo: local
     hooks:
+      # readme-writer の複製は対象外 (docs/spec/readme-writer.md#lint-の対象外)
       - id: yamllint-local
         name: YAML Lint via uvx
         entry: mise exec -- uvx yamllint
         language: system
         files: \.(yaml|yml)$
+        exclude: ^home/dot_agents/skills/readme-writer/
         args: [--strict]
 
       # --force-exclude が無いと、pre-commit がファイル名を明示的に渡すため
@@ -41,6 +43,8 @@ repos:
         entry: mise exec -- uvx ruff@0.16.5 check --force-exclude
         language: system
         types_or: [python, pyi]
+        # readme-writer の複製は対象外 (docs/spec/readme-writer.md#lint-の対象外)
+        exclude: ^home/dot_agents/skills/readme-writer/
 
       - id: markdownlint-local
         name: Markdown Lint via mise
