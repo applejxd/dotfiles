@@ -24,6 +24,12 @@
 - 評価用リポジトリの `.github/`（CI の定義）は、**配布先に出ない**（chezmoi は、source の先頭が `.` のディレクトリを配らない）。
   試験は、`.github` が無くても通るようにしてある（CI の抽出の確認は、あるときだけ行う）。
 - Python の整形・lint は、上流（skill-lab）の書き方のまま保つため、このリポジトリの `ruff` の対象から外す（`pyproject.toml` の `extend-exclude`）。
+
+### lint の対象外
+
+- `pyproject.toml` の `extend-exclude` だけでは足りない。評価用リポジトリ（`evals/files/taskboard/` など）は**自前の `pyproject.toml` を持ち**、ruff は一番近い設定を使うので、リポジトリ直下の `extend-exclude` が効かず、`RUF100`（不要な `# noqa: E402`）が出た（2026-11-23 に `mise run verify:all` で発見）。
+  そのため `.pre-commit-config.yaml` の `ruff-local` と `yamllint-local` に `exclude: ^home/dot_agents/skills/readme-writer/` を足した。評価用リポジトリの `.github/workflows/ci.yml` の `on:`（`truthy` の警告）も同じ理由で対象外。
+- 評価用リポジトリは、評価の入力なので、書き換えて lint を通さない（上流との差分も小さく保つ）。
 - `home/.chezmoiignore.tmpl` で、試験が作る `__pycache__` を配布・取り込みの対象から外す。
 - `SKILL.md` の frontmatter は `name` と `description` のほかは、手動起動の 1 行だけ（`allowed-tools` なし・`context: fork` なし）。理由は [スキルの frontmatter の方針](skill-frontmatter.md)。
 - ローカルの変更: `SKILL.md` の frontmatter に `disable-model-invocation: true` を 1 行足した（2026-11-18。利用者の決定。理由は skill-frontmatter の「[手動起動](skill-frontmatter.md#手動起動disable-model-invocation)」）。skill-lab 側にも同じ変更を入れて取り込み直すまで、`sync_skill_lab.py` の置き換えで消える（`--check` の差分に出る）。 あわせて、description の対象外案内の「AGENTS.md / CLAUDE.md の作成(onboarding)」は、`onboarding` を `agents-md` へ統合したので古い（skill-lab 側で直す。手動起動なので害は小さい）。
