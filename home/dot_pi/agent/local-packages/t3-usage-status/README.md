@@ -3,11 +3,11 @@
 T3 Code の中で動く pi に、キャッシュヒット率（CH%）・セッションの費用・コンテキスト使用率を出す。このリポジトリだけが配る自作で、OS を問わず入る。
 
 ```text
-Pi · CH97.2% $24.480 ctx41.2%/200k · sandbox: on · TPS 62 tok/s · TTFT 1.2s      T3 Code の入力欄のバナー (web・モバイル)
+Pi · CH97.2% $24.480 41.2%/200k · sandbox: on · TPS 62 tok/s · TTFT 1.2s      T3 Code の入力欄のバナー (web・モバイル)
 ```
 
-- **出すもの（この順）**: 最新の assistant のメッセージの CH%（`cacheRead / (input + cacheRead + cacheWrite)`）、セッションの費用の合計（`$X.XXX`）、コンテキスト使用率（`ctx41.2%/200k`。使用率と窓の大きさ（分母）を、pi のフッターと同じ「%/窓」の形と k・M 表記で。`ctx.getContextUsage()`。窓の大きさが取れなければ、現在のモデルの窓。圧縮の直後など不明なときは `ctx--/200k`）。CH% と費用は pi の TUI のフッターと同じ計算。セッションにキャッシュの読み書きが無いときは CH を、費用が 0 のときは費用を省く。コンテキスト使用率の API が無い古い pi では ctx を省く（API があって値が取れないときは `ctx--`）。
-- **並び順**: T3 は status を key ごとに、**最初に出した順**に並べ（`Pi · <text> · <text>`）、同じ key の更新は位置を保つ（[T3 の実装](https://github.com/pingdotgg/t3code/pull/23901)）。この拡張の key（`usage`）が先頭になるよう、空のセッションでも ctx を出す。`sandbox`（`pi-sandbox-toggle`。key は `sandbox`）と `TPS/TTFT`（stock の `pi-show-token-rate`。key は `token-rate`）は別の拡張の key で、この順（sandbox → TPS/TTFT）は変えていない。
+- **出すもの（この順）**: 最新の assistant のメッセージの CH%（`cacheRead / (input + cacheRead + cacheWrite)`）、セッションの費用の合計（`$X.XXX`）、コンテキスト使用率（`41.2%/200k`。使用率と窓の大きさ（分母）を、pi のフッターと同じ「%/窓」の形と k・M 表記で。「ctx」のような見出しは付けない（CH% の次、費用の次の 3 つ目が使用率）。`ctx.getContextUsage()`。窓の大きさが取れなければ、現在のモデルの窓。圧縮の直後など不明なときは pi のフッターと同じ `?/200k`）。CH% と費用は pi の TUI のフッターと同じ計算。セッションにキャッシュの読み書きが無いときは CH を、費用が 0 のときは費用を省く。コンテキスト使用率の API が無い古い pi では使用率を省く（API があって値が取れないときは `?`）。
+- **並び順**: T3 は status を key ごとに、**最初に出した順**に並べ（`Pi · <text> · <text>`）、同じ key の更新は位置を保つ（[T3 の実装](https://github.com/pingdotgg/t3code/pull/23901)）。この拡張の key（`usage`）が先頭になるよう、空のセッションでもコンテキスト使用率を出す。`sandbox`（`pi-sandbox-toggle`。key は `sandbox`）と `TPS/TTFT`（stock の `pi-show-token-rate`。key は `token-rate`）は別の拡張の key で、この順（sandbox → TPS/TTFT）は変えていない。
 - **RPC のときだけ出す**: `ctx.mode === "rpc"` のときだけ `ctx.ui.setStatus("usage", …)` を呼ぶ。T3 Code は常に RPC で pi を動かし、`setStatus` を入力欄のバナーにする。pi 自身の TUI では何も出さないので、フッターが唯一の表示のまま（二重にならない）。
 - **更新の時点**: `session_start`（再開したセッションの数を出す）・`turn_end`（毎ターンの終わり）・`session_compact`（圧縮で使用率が変わる）・`model_select`（窓の大きさが変わる）。`session_shutdown` で消す（RPC のときだけ）。
 - 登録するのは状態の表示だけ。コマンド・ツール・ファイル・ネットワーク・子プロセスは使わない。

@@ -292,28 +292,28 @@ out({ inTui, inRpc: t.calls });
 
 # --- コンテキスト使用率 (ctx) -------------------------------------------------------------------
 
-# computeStatusText の第 2 引数 (contextPercent)。undefined は出さず、null (不明) は ctx--、数は小数 1 桁。順序は CH → 費用 → ctx
+# computeStatusText の第 2 引数 (contextPercent)。undefined は出さず、null (不明) は ?、数は小数 1 桁。順序は CH → 費用 → ctx
 CTX_CASES = {
     "ctx-after-hit-rate-and-cost": (
-        [assistant(input=100, cache_read=700, cache_write=200, cost=0.4)], 41.234, None, "CH70.0% $0.400 ctx41.2%",
+        [assistant(input=100, cache_read=700, cache_write=200, cost=0.4)], 41.234, None, "CH70.0% $0.400 41.2%",
     ),
-    "ctx-only-in-an-empty-session": ([], 0, None, "ctx0.0%"),
-    "ctx-unknown-after-compaction": ([], None, None, "ctx--"),
-    "ctx-unknown-keeps-the-other-parts": ([assistant(input=100, cache_read=900, cost=1)], None, None, "CH90.0% $1.000 ctx--"),
-    "ctx-full-window": ([assistant(input=100, cost=1)], 100, None, "$1.000 ctx100.0%"),
+    "ctx-only-in-an-empty-session": ([], 0, None, "0.0%"),
+    "ctx-unknown-after-compaction": ([], None, None, "?"),
+    "ctx-unknown-keeps-the-other-parts": ([assistant(input=100, cache_read=900, cost=1)], None, None, "CH90.0% $1.000 ?"),
+    "ctx-full-window": ([assistant(input=100, cost=1)], 100, None, "$1.000 100.0%"),
     # 数でない値 (NaN・Infinity) は、出さない
     "ctx-non-finite-is-ignored": ([assistant(input=100, cost=1)], "nan", None, "$1.000"),
     # 分母 (窓の大きさ)。pi のフッターの formatTokens と同じ k・M 表記
-    "denominator-200k": ([], 41.2, 200000, "ctx41.2%/200k"),
-    "denominator-1m": ([], 8.2, 1000000, "ctx8.2%/1.0M"),
-    "denominator-one-decimal-below-10k": ([], 50, 8192, "ctx50.0%/8.2k"),
-    "denominator-below-1k": ([], 50, 512, "ctx50.0%/512"),
-    "denominator-10m": ([], 1, 12000000, "ctx1.0%/12M"),
-    "denominator-with-unknown-percent": ([], None, 200000, "ctx--/200k"),
-    "denominator-after-cost-and-hit-rate": ([assistant(input=100, cache_read=900, cost=1)], 41, 200000, "CH90.0% $1.000 ctx41.0%/200k"),
+    "denominator-200k": ([], 41.2, 200000, "41.2%/200k"),
+    "denominator-1m": ([], 8.2, 1000000, "8.2%/1.0M"),
+    "denominator-one-decimal-below-10k": ([], 50, 8192, "50.0%/8.2k"),
+    "denominator-below-1k": ([], 50, 512, "50.0%/512"),
+    "denominator-10m": ([], 1, 12000000, "1.0%/12M"),
+    "denominator-with-unknown-percent": ([], None, 200000, "?/200k"),
+    "denominator-after-cost-and-hit-rate": ([assistant(input=100, cache_read=900, cost=1)], 41, 200000, "CH90.0% $1.000 41.0%/200k"),
     # 窓が 0・負・非数のときは、分母を出さない
-    "denominator-zero-is-omitted": ([], 41, 0, "ctx41.0%"),
-    "denominator-negative-is-omitted": ([], 41, -5, "ctx41.0%"),
+    "denominator-zero-is-omitted": ([], 41, 0, "41.0%"),
+    "denominator-negative-is-omitted": ([], 41, -5, "41.0%"),
     "denominator-without-percent-is-not-printed": ([assistant(input=100, cost=1)], "absent", 200000, "$1.000"),
 }
 
@@ -354,14 +354,14 @@ out({ afterStart, afterModel, afterCompact, afterNextTurn });
 """,
         {"entries": [assistant(input=100, cache_read=900, cost=0.5)], "next": [assistant(input=100, cache_read=900, cost=0.5)]},
     )
-    assert got["afterStart"] == [["usage", "CH90.0% $0.500 ctx41.0%/200k"]]
-    assert got["afterModel"] == [["usage", "CH90.0% $0.500 ctx8.2%/1.0M"]]
-    assert got["afterCompact"] == [["usage", "CH90.0% $0.500 ctx--/1.0M"]]
-    assert got["afterNextTurn"] == [["usage", "CH90.0% $1.000 ctx2.0%/1.0M"]]
+    assert got["afterStart"] == [["usage", "CH90.0% $0.500 41.0%/200k"]]
+    assert got["afterModel"] == [["usage", "CH90.0% $0.500 8.2%/1.0M"]]
+    assert got["afterCompact"] == [["usage", "CH90.0% $0.500 ?/1.0M"]]
+    assert got["afterNextTurn"] == [["usage", "CH90.0% $1.000 2.0%/1.0M"]]
 
 
 def test_rpc_shows_the_context_percent_even_in_a_new_session(run_node):
-    """空のセッションでも ctx を出す。T3 は status を最初に出した順に並べるので、この拡張の表示を先頭にするため。"""
+    """空のセッションでもコンテキスト使用率を出す。T3 は status を最初に出した順に並べるので、この拡張の表示を先頭にするため。"""
     got = run_node(
         """
 const t = setup('rpc', [], { tokens: null, contextWindow: 200000, percent: null });
@@ -370,11 +370,11 @@ out(t.calls);
 """,
         None,
     )
-    assert got == [["usage", "ctx--/200k"]]
+    assert got == [["usage", "?/200k"]]
 
 
 def test_without_the_context_usage_api_the_extension_behaves_as_before(run_node):
-    """API (ctx.getContextUsage) が無い古い pi では、ctx を出さない (CH と費用だけ)。空のセッションは消す。"""
+    """API (ctx.getContextUsage) が無い古い pi では、コンテキスト使用率を出さない (CH と費用だけ)。空のセッションは消す。"""
     got = run_node(
         """
 const t = setup('rpc', DATA.entries);  // contextUsage を渡さない = API を持たない
@@ -390,7 +390,7 @@ out({ withEntries, empty: t.calls });
 
 
 def test_when_the_api_returns_undefined_the_context_percent_is_unknown_not_omitted(run_node):
-    """API はあるが undefined を返す (最初の応答前の仮想モデルなど) ときは ctx--。空のセッションでも usage が先頭に登録される。"""
+    """API はあるが undefined を返す (最初の応答前の仮想モデルなど) ときは ?。空のセッションでも usage が先頭に登録される。"""
     got = run_node(
         """
 const empty = setup('rpc', [], 'returns-undefined');
@@ -401,7 +401,7 @@ out({ empty: empty.calls, withEntries: withEntries.calls });
 """,
         {"entries": [assistant(input=100, cache_read=900, cost=0.5)]},
     )
-    assert got == {"empty": [["usage", "ctx--"]], "withEntries": [["usage", "CH90.0% $0.500 ctx--"]]}
+    assert got == {"empty": [["usage", "?"]], "withEntries": [["usage", "CH90.0% $0.500 ?"]]}
 
 
 def test_the_window_falls_back_to_the_current_model_when_the_usage_has_none(run_node):
@@ -419,9 +419,9 @@ out({ fromModel: fromModel.calls, preferUsage: preferUsage.calls, neither: neith
         None,
     )
     assert got == {
-        "fromModel": [["usage", "ctx--/400k"]],
-        "preferUsage": [["usage", "ctx0.5%/200k"]],
-        "neither": [["usage", "ctx--"]],
+        "fromModel": [["usage", "?/400k"]],
+        "preferUsage": [["usage", "0.5%/200k"]],
+        "neither": [["usage", "?"]],
     }
 
 

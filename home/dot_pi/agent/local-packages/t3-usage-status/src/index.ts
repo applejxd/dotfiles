@@ -4,11 +4,11 @@
  * pi の TUI のフッターは費用・最新の CH%・コンテキスト使用率を出すが、T3 Code の中で動く pi にはフッターが無い。
  * そこでセッションのエントリから CH% と費用を、pi 自身のフッター
  * (dist/modes/interactive/components/footer.js) と同じ計算で求め、コンテキスト使用率は ctx.getContextUsage() から得て、
- * ctx.ui.setStatus で出す。T3 は「Pi · CH97.2% $24.480 ctx41.2%/200k」という入力欄のバナーにする (web・モバイル)。
+ * ctx.ui.setStatus で出す。T3 は「Pi · CH97.2% $24.480 41.2%/200k」という入力欄のバナーにする (web・モバイル)。
  * コンテキスト使用率は、pi のフッターと同じ「使用率%/窓の大きさ」の形 (窓は formatTokens と同じ k・M 表記)。
  *
  * 並び順: T3 は status を key ごとに、最初に出した順に並べる (「Pi · <text> · <text>」)。この拡張の key (usage) が
- * 先頭になるよう、コンテキスト使用率は、空のセッションでも (不明なら ctx--) 出す。sandbox・TPS/TTFT は別の拡張の key。
+ * 先頭になるよう、コンテキスト使用率は、空のセッションでも (不明なら ?) 出す。sandbox・TPS/TTFT は別の拡張の key。
  *
  * 出すのは RPC モード (ctx.mode === "rpc") のときだけ。T3 は常に RPC で pi を動かす。
  * pi 自身の TUI では何も出さないので、フッターが唯一の表示のまま (二重にならない)。
@@ -51,8 +51,8 @@ function formatTokens(count: number): string {
  * toolResult・"usage" エントリ・compaction と branch_summary)。ヒット率は最新の assistant の
  * メッセージだけから cacheRead / (input + cacheRead + cacheWrite) で求め、セッションに
  * cacheRead か cacheWrite が 1 つでもあるときだけ出す。
- * contextPercent (コンテキスト使用率) は、undefined なら出さず、null (不明。圧縮の直後など) なら ctx--、数なら ctx41.2% と、
- * CH% と費用のあとに出す。contextWindow (窓の大きさ。正の数のとき) があれば、「/200k」と分母を足す (pi のフッターと同じ形)。
+ * contextPercent (コンテキスト使用率) は、undefined なら出さず、null (不明。圧縮の直後など) なら ?、数なら 41.2% と、
+ * CH% と費用のあとに出す (「ctx」のような見出しは付けない)。contextWindow (窓の大きさ。正の数のとき) があれば、「/200k」と分母を足す (pi のフッターと同じ形)。
  */
 export function computeStatusText(
   entries: readonly unknown[],
@@ -101,16 +101,16 @@ export function computeStatusText(
       ? `/${formatTokens(contextWindow)}`
       : "";
   if (contextPercent === null) {
-    parts.push(`ctx--${denominator}`);
+    parts.push(`?${denominator}`);
   } else if (typeof contextPercent === "number" && Number.isFinite(contextPercent)) {
-    parts.push(`ctx${contextPercent.toFixed(1)}%${denominator}`);
+    parts.push(`${contextPercent.toFixed(1)}%${denominator}`);
   }
   return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
 /**
  * コンテキスト使用率。API が無い (古い pi) ときだけ undefined (出さない)。API はあるが値が取れないとき
- * (圧縮の直後・最初の応答の前の仮想モデルなど。getContextUsage が undefined を返す) は null (ctx--)。
+ * (圧縮の直後・最初の応答の前の仮想モデルなど。getContextUsage が undefined を返す) は null (?)。
  * 後者でも出すのは、空のセッションで usage が最初に登録され、T3 の banner の先頭になるようにするため。
  */
 function contextOf(ctx: ExtensionContext): { percent: number | null; window: number | undefined } | undefined {
