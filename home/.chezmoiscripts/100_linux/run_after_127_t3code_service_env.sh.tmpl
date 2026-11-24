@@ -1,0 +1,72 @@
+{{- if and (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) (.chezmoi.kernel.osrelease | lower | contains "microsoft") -}}
+#!/usr/bin/env bash
+
+set -euo pipefail
+umask 077
+
+# T3 Code (WSL のバックグラウンドサービス) の待ち受けを 127.0.0.1:3776 に固定する。applejxd の WSL だけ。
+# 外へは Windows 側の Tailscale Serve (https 8443) が出す。see docs/spec/t3code-remote-access.md
+PORT=3776
+HOST=127.0.0.1
+
+t3_home="$HOME/.t3"
+if [[ ! -d "$t3_home" ]]; then
+    echo "T3 Code (WSL): ~/.t3 が無いので何もしません"
+    exit 0
+fi
+
+# symlink なら実体を書き換える (置き換えで symlink を壊さない)
+env_file="$(readlink -f "$t3_home/service.env")"
+if [[ -e "$env_file" && ! -f "$env_file" ]]; then
+    echo "⚠️ T3 Code (WSL): $env_file が通常のファイルではないので、何もしません" >&2
+    exit 0
+fi
+
+# 内容を含む一時ファイルは、本人だけが入れる同じディレクトリの中に置く (rename を同じ FS で行うため)
+tmp_dir="$(mktemp -d "$(dirname "$env_file")/.service-env.XXXXXX")"
+trap 'rm -rf "$tmp_dir"' EXIT
+orig="$tmp_dir/orig"
+work="$tmp_dir/work"
+
+if [[ -f "$env_file" ]]; then
+    cat "$env_file" > "$orig"
+else
+    : > "$orig"
+fi
+cp "$orig" "$work"
+
+# 指定のキーの行だけを置き換える (無ければ末尾へ足す)。ほかの行はそのまま残す
+set_entry() {
+    awk -v key="$1" -v value="$2" '
+        $0 ~ "^[ \t]*" key "[ \t]*=" {
+            if (!seen) { print key "=" value }
+            seen = 1
+            next
+        }
+        { print }
+        END { if (!seen) print key "=" value }
+    ' "$work" > "$work.next"
+    mv "$work.next" "$work"
+}
+
+set_entry T3CODE_PORT "$PORT"
+set_entry T3CODE_HOST "$HOST"
+
+if [[ -f "$env_file" ]] && cmp -s "$work" "$env_file"; then
+    echo "T3 Code (WSL): service.env は設定済みです (T3CODE_PORT=$PORT, T3CODE_HOST=$HOST)"
+    exit 0
+fi
+
+# 読んでから置き換えるまでの間に、t3 up などが書き換えていたら、上書きしない (次の apply でやり直す)
+if [[ -f "$env_file" ]]; then
+    if ! cmp -s "$orig" "$env_file"; then
+        echo "⚠️ T3 Code (WSL): $env_file が処理中に変わったので、書き換えずに終わります。もう一度 apply してください" >&2
+        exit 0
+    fi
+    chmod --reference="$env_file" "$work"
+fi
+mv -f "$work" "$env_file"
+
+echo "T3 Code (WSL): service.env に T3CODE_PORT=$PORT・T3CODE_HOST=$HOST を設定しました"
+echo "  反映には t3 service restart が要ります (実行中のエージェントの処理が止まるので、自動では再起動しません)"
+{{- end }}

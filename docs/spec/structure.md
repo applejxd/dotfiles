@@ -102,6 +102,7 @@ OSごとの差分は `.chezmoiignore.tmpl`、テンプレート条件、OS別ス
 | --- | --- |
 | Raspberry Pi への導入（ruby のプレビルド・clang・OOM・GUI の削除） | [Raspberry Pi](platform-raspberry-pi.md) |
 | WSL の時刻同期・リモートからの SSH（Tailscale） | [WSL](platform-wsl.md) |
+| T3 Code のリモートアクセス（Windows と WSL・Tailscale Serve・固定ポート） | [T3 Code のリモートアクセス](t3code-remote-access.md) |
 | Windows の管理者権限を 1 回の UAC に集約する仕組み | [Windows の管理者権限](windows-admin.md) |
 | Windows の設定（電源・Tailscale・7-Zip・広告・既定値・Windows Terminal） | [Windows の設定](windows-settings.md) |
 | mise・pi・Herdr の導入と更新 | [CLI の導入と管理](cli-management.md) |
