@@ -64,6 +64,7 @@ Windows の Tailscale が tailnet の 50022 を受けて、`localhost:50022`（m
   接続元での制限は効かない
 - 公開鍵は `400_unix/run_after_440_authorized_keys.sh.tmpl` が Bitwarden から追加する
   （[SSH 公開鍵の authorized_keys への追加](security.md#ssh-公開鍵の-authorized_keys-への追加)。`BW_SESSION` が必要）
+- WSL の T3 Code を出す Serve（https 8443）は別物で、`apply` が整える（[T3 Code のリモートアクセス](t3code-remote-access.md)）
 
 ### 手動の手順（初回・復旧後）
 

@@ -29,6 +29,7 @@ pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 | エラーを切り分ける | [トラブルシューティング](spec/troubleshooting.md) |
 | 入れてある一時対処と、その撤去の条件を知る | [一時対処の一覧](spec/temporary-workarounds.md) |
 | WSL にリモートから SSH する（Tailscale） | [リモートから WSL へ SSH する](spec/platform-wsl.md#リモートから-wsl-へ-ssh-する) |
+| T3 Code（Windows と WSL）を Tailscale で tailnet に公開する・ポートとペアリングを知る | [T3 Code のリモートアクセス](spec/t3code-remote-access.md) |
 | `run_once_` / `run_onchange_` を走らせ直す | [スクリプトを走らせ直す](spec/troubleshooting-bootstrap.md#スクリプトを走らせ直す) |
 
 ### 設定の変更・検証

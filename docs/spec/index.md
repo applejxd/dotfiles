@@ -26,6 +26,7 @@
 | [Windows の管理者権限](windows-admin.md) | 管理者権限が要る作業を 1 回の UAC に集約する仕組み（WSL 本体・GPU の電力上限・昇格・winget の scope・hostname） |
 | [Windows の設定](windows-settings.md) | 電源・Tailscale の Unattended・7-Zip の関連付け・広告と推奨の抑止・シェルの既定値・Windows Terminal |
 | [Tailscale の導入](tailscale.md) | macOS（cask）と Linux（公式の apt。Raspberry Pi を含み WSL を除く）への導入。applejxd だけ・ログインはしない |
+| [T3 Code のリモートアクセス](t3code-remote-access.md) | Windows 版と WSL の T3 Code を、Windows 側の Tailscale Serve だけで tailnet へ出す構成。ポート（3773/4433・3776/8443）・chezmoi が整えるもの・手動のもの（WSL backend・ペアリング）・確認・症状 |
 | [CLI の導入と管理](cli-management.md) | mise による CLI 管理、pi の導入と更新、Herdr、external の取得 |
 | [シェル](shell.md) | シェルの起動契約、T3 Code から起動する pi の入口（`pi-t3`）、マシン固有の設定の置き場、zsh の起動時間とプラグイン、PowerShell プロファイル |
 | [開発環境](dev-environment.md) | C++ の単一ファイル実行（runcpp）、VS Code の拡張、code-exam |

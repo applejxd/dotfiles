@@ -293,6 +293,7 @@ RULES: tuple[Rule, ...] = (
             "test_authorized_keys",
             "test_hf_login",
             "test_wsl_timesync_script",
+            "test_t3code_remote_access",
             "test_chezmoi_templates",
         ),
     ),

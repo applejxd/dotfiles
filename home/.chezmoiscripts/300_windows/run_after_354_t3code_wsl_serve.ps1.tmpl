@@ -1,0 +1,122 @@
+﻿{{- if eq (includeTemplate "is-work" .) "false" -}}
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# WSL の T3 Code (127.0.0.1:3776) を tailnet の https 8443 で公開する。Tailscale は Windows 側だけに置く。
+# 公開は tailnet だけ (funnel は使わない)。使われている https ポートは上書きしない。
+# 家の機 (is-work が false) だけ。会社 PC では Tailscale へ出さない。
+# 状態が確認できないときは何も変えず、警告して 0 で終わる (apply を止めない)。
+# see docs/spec/t3code-remote-access.md
+$httpsPort = '8443'
+$target = 'http://127.0.0.1:3776'
+
+# DOTFILES_TAILSCALE_EXE は、試験で偽の CLI へ差し替える入口 (PowerShell は ProgramFiles を起動時に上書きするため、それでは差し替えられない)
+$exe = if ($env:DOTFILES_TAILSCALE_EXE) { $env:DOTFILES_TAILSCALE_EXE } else { Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe' }
+if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+  Write-Host 'tailscale: 未導入のため何もしません'
+  exit 0
+}
+
+# tailscale を、時間を区切って実行する。時間内に終わらなければ止めて $null を返す。引数に空白は含めない
+function Invoke-Tailscale {
+  param([string[]]$Arguments, [int]$TimeoutSeconds = 20)
+  $info = New-Object System.Diagnostics.ProcessStartInfo
+  $info.FileName = $exe
+  $info.Arguments = $Arguments -join ' '
+  $info.UseShellExecute = $false
+  $info.CreateNoWindow = $true
+  $info.RedirectStandardOutput = $true
+  $info.RedirectStandardError = $true
+  $info.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+  $info.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+  $process = [System.Diagnostics.Process]::Start($info)
+  $stdout = $process.StandardOutput.ReadToEndAsync()
+  $stderr = $process.StandardError.ReadToEndAsync()
+  if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+    try { $process.Kill() } catch { Write-Verbose "kill failed: $($_.Exception.Message)" }
+    return $null
+  }
+  $process.WaitForExit()
+  return [pscustomobject]@{ ExitCode = $process.ExitCode; Output = $stdout.Result; Error = $stderr.Result }
+}
+
+function Get-Prop($object, $name) {
+  if ($null -eq $object) { return $null }
+  $property = $object.PSObject.Properties[$name]
+  if ($property) { return $property.Value }
+  return $null
+}
+
+# 指定の https ポートの現状を返す。Known=$false は確認できなかった (空きとは別)。
+# Target は公開先 (無ければ $null。proxy 以外は説明の文字列)。Funnel は、そのポートがインターネットへ公開されているか
+function Get-ServeState {
+  $unknown = [pscustomobject]@{ Known = $false; Target = $null; Funnel = $false }
+  $result = Invoke-Tailscale @('serve', 'status', '--json')
+  if ($null -eq $result -or $result.ExitCode -ne 0) { return $unknown }
+  $raw = $result.Output.Trim()
+  if (-not $raw) { return [pscustomobject]@{ Known = $true; Target = $null; Funnel = $false } }
+  try { $config = $raw | ConvertFrom-Json } catch { return $unknown }
+
+  $found = $null
+  $web = Get-Prop $config 'Web'
+  if ($web) {
+    foreach ($site in $web.PSObject.Properties) {
+      if ($site.Name -notmatch ":$httpsPort$") { continue }
+      $proxy = Get-Prop (Get-Prop (Get-Prop $site.Value 'Handlers') '/') 'Proxy'
+      $found = if ($proxy) { ([string]$proxy).TrimEnd('/') } else { '(proxy 以外)' }
+    }
+  }
+  if ($null -eq $found -and $null -ne (Get-Prop (Get-Prop $config 'TCP') $httpsPort)) { $found = '(TCP の公開)' }
+
+  $funnel = $false
+  $allow = Get-Prop $config 'AllowFunnel'
+  if ($allow) {
+    foreach ($site in $allow.PSObject.Properties) {
+      if ($site.Name -match ":$httpsPort$" -and $site.Value -eq $true) { $funnel = $true }
+    }
+  }
+  return [pscustomobject]@{ Known = $true; Target = $found; Funnel = $funnel }
+}
+
+try {
+  $status = Invoke-Tailscale @('status', '--json')
+  $backend = if ($null -ne $status -and $status.ExitCode -eq 0 -and $status.Output -match '"BackendState"\s*:\s*"([^"]+)"') { $Matches[1] } else { '' }
+  if ($backend -ne 'Running') {
+    Write-Host "T3 Code (WSL): tailscale が Running ではない (state=$backend) ので、serve を設定しません"
+    exit 0
+  }
+
+  $state = Get-ServeState
+  if (-not $state.Known) {
+    Write-Warning 'T3 Code (WSL): tailscale serve の現状を確認できないので、何も変えません'
+    exit 0
+  }
+  if ($state.Funnel) {
+    Write-Warning "T3 Code (WSL): https $httpsPort がインターネットへ公開 (funnel) されています。何も変えません。tailscale funnel status で確かめ、tailnet だけにするなら funnel を止めてください"
+    exit 0
+  }
+  if ($state.Target -eq $target) {
+    Write-Host "T3 Code (WSL): tailnet の https $httpsPort は設定済みです ($target)"
+    exit 0
+  }
+  if ($null -ne $state.Target) {
+    Write-Warning "T3 Code (WSL): https $httpsPort はすでに $($state.Target) へ公開されているので、上書きしません。手動で置き換えるなら: tailscale serve --bg --https=$httpsPort $target"
+    exit 0
+  }
+
+  # HTTPS の証明書が tailnet で未許可だと、serve は有効化を待ち続ける。待たずに諦める
+  $set = Invoke-Tailscale @('serve', '--bg', "--https=$httpsPort", $target) 60
+  if ($null -eq $set) {
+    Write-Warning 'T3 Code (WSL): tailscale serve が 60 秒で終わらないので諦めました (tailnet の HTTPS 証明書が有効か確認してください)'
+    exit 0
+  }
+  $after = Get-ServeState
+  if ($set.ExitCode -eq 0 -and $after.Known -and $after.Target -eq $target) {
+    Write-Host "T3 Code (WSL): tailnet の https $httpsPort で $target を公開しました"
+  } else {
+    Write-Warning "T3 Code (WSL): tailscale serve を設定できませんでした: $($set.Output.Trim()) $($set.Error.Trim())"
+  }
+} catch {
+  Write-Warning "T3 Code (WSL): serve の設定中にエラーが出ました。何も変えずに終わります: $($_.Exception.Message)"
+}
+{{- end }}
