@@ -1,5 +1,7 @@
 # 文書化 (B) の細則
 
+書式（長文を避ける・表・図・経緯の書き方）は `markdown-style.md`。ここは置き場と運用の規則。
+
 ## `docs/adr/` — 設計判断
 
 `references/adr-template.md` を使う。

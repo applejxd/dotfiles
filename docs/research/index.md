@@ -86,6 +86,7 @@
 | [権限の方針の経緯・実測・決め直しの根拠（2026-11）](agents/permission-policy-rationale-2026-11.md) | 2026-11-10〜18。`agent-config-generation.md` から 2026-11-18 に分離（逐語）。許可リストの経緯・`..` を含む綴り・systemd の決め直し・`nohup` と `git config` の根拠・確認で待たせない方針の実測・`pi-rewind` の警告の調査・Tailscale の指示の経緯 |
 | [worktree の運用の記録（2026-11）](agents/worktree-lifecycle-2026-11.md) | 2026-11-23。worktree の削除で git の対象外のファイルを失った件、置き場所の案（`TMPDIR`・`/tmp`）を採らない理由、統合・反映で分かったこと |
 | [スキルを書き換えるときの原則（2026-11）](agents/skill-authoring-principles-2026-11.md) | 2026-11-23。簡潔さ・自由度・段階的な読み込み・時間依存の排除・単一責任・Diátaxis（公開されている原則と、このリポジトリでの適用） |
+| [Markdown 文書の書き方の調査（2026-11）](agents/markdown-writing-best-practices-2026-11.md) | 2026-11-24。docs の読みにくさの実測と、表・強調・文章・構造・経緯・Mermaid の公開指針 |
 
 ### テスト
 
