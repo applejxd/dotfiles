@@ -169,6 +169,34 @@ def test_t3_mcp_allow_list_matches_the_policy():
     assert not set(table["allow"]) & set(table["ask"]), "判定表で、同じツールが allow と ask の両方にある"
 
 
+# pi 組み込みの MCP の資源・スクリプトのツール (拡張の分類は ``mcp`` ではなく「その他の拡張ツール」)。(ツール名, 期待)
+# 資源のツールは ``server`` などの引数に関わらず、名前だけで判定される (入力は対象の生成に使われない)。
+PI_BUILTIN_MCP_TOOLS = [
+    ("list_mcp_resources", "allow"),
+    ("list_mcp_resource_templates", "allow"),
+    ("read_mcp_resource", "ask"),
+    ("codemode", "ask"),
+]
+
+
+@needs_engine
+def test_builtin_mcp_resource_tools_are_classified_as_extension_tools(tmp_path):
+    """資源ツール 3 本と ``codemode`` は、実ゲートの ``normalizeInput`` で、``mcp`` の面ではなくツール名の面になる。
+
+    ``mcp`` の面になると、サーバ単位の allow (``websearch`` など) が、資源の本文を読むツールにも効いてしまう。
+    拡張の更新で分類が変わったら、ここで落ちる。対照として、``mcp__websearch__web_search`` は ``mcp`` の面で allow。
+    """
+    names = [name for name, _ in PI_BUILTIN_MCP_TOOLS] + ["mcp__websearch__web_search"]
+    result = run_engine(tmp_path, mcp_tools=names)["mcpTools"]
+    bad = []
+    for (name, want), got in zip(PI_BUILTIN_MCP_TOOLS, result, strict=False):
+        if (got["surface"], got["values"], got["action"]) != (name, ["*"], want):
+            bad.append(f"{name}: 期待 {name}/*/{want} / 実際 {got['surface']}/{got['values']}/{got['action']} ({got['pattern']})")
+    assert not bad, "\n".join(bad)
+    contrast = result[-1]
+    assert contrast["surface"] == "mcp" and contrast["action"] == "allow", contrast
+
+
 @needs_engine
 def test_child_agents_keep_nohup_denied(tmp_path):
     """定義ファイルに bash がある子 (``bg_run`` は持たない) の実際の定義に、グローバルの方針を重ねて判定する。

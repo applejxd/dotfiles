@@ -158,3 +158,26 @@
 - **利用者の判断（2026-11-21）の後**: 4 本を allow に戻した（allow 39・ask 32）。監査の MAJOR（文書の書き方）は、対策の効果・監視の可否・了承範囲を、根拠の範囲に直した（4 回目の監査で確認する）。
 - **監査（4 回目。BLOCK）**: 利用者の了承（4 本を家も仕事も allow）は確認できた。権限の JSON と判定表は、意図どおり。MAJOR は、了承の範囲を 4 本の外へ広げた記録・`permission.path` を外部送信の防止と結びつけた記述・当初の HTML の許可条件の取り違え・見送った対策の効果と責務の断定。いずれも文書の直しで解消した。
 - **監査（5 回目。BLOCK。最後の回）**: BLOCKER は無し。MAJOR は、判定表の説明が、39 本全体の外部送信のリスクを受容したように読めること（4 本に限定した）。MINOR は、「任意のホスト」「送信側の制限・監視が無い」と `html_preview` の既存の宛先制限の整合、対策の対象の書き方（直した）。判定値の変更は無く、文書の直しだけなので、6 回目は行わず、直したあとに pre-commit・試験・全件検証で確かめた。
+
+## pi 組み込みの MCP が足すツールの分類（2026-11-24）
+
+pi 1.5.2 の組み込み MCP（`dist/extensions/mcp`・`codemode`・`tool-search`）が足すツールを、方針の面ごとに分けた。現行の仕様は [spec](../../spec/agent-config-generation.md#permission-system-の設定)（`mcp` と `tool_search` の段落）。出典は pi 1.5.2 の docs の `mcp.md`・`codemode.md`・`dist/extensions/mcp/resources.js`・`dist/extensions/mcp/index.js`・`dist/extensions/codemode/tool.js`、permission-system 42.0.0 の `src/access-intent/tool-kind.ts`・`mcp-targets.ts`。
+
+| ツール | 面（拡張の分類） | 判定 | 理由 |
+| --- | --- | --- | --- |
+| `mcp__<server>__<tool>`（各サーバのツール） | `mcp`（`mcp-tool`） | サーバ・ツールごと。`*` は ask | 既存の方針（検索の 3 サーバ、T3 の 71 本の分類）。 |
+| `list_mcp_resources`・`list_mcp_resource_templates` | その他の拡張ツール（規則が無ければ `*` の ask） | **allow** | `readOnlyHint: true`。引数は `server`・`cursor` だけで、メタデータ（名前・URI・説明）の一覧。ツールの実行も本文の取得もしない。 |
+| `read_mcp_resource` | 同上 | ask | 資源の本文を読む。ファイル系のサーバが資源として `file://` を出すと、`path` の deny（`.env` など）を通らずに読める。 |
+| `codemode` | 同上 | ask（未使用） | 入れ子のツール呼び出しは `ctx.executeTool`（エージェントのツール処理）を通り、`tool_call` フックと権限の判定が直接の呼び出しと同じに効く（`codemode/execute.js`・`tool.js` の冒頭。実機では未確認）。一方、`models.classify`・`models.generateImages` は、モデルのレジストリを直接呼び、ツール処理を通らない（`execute.js` の `createModelGlobals`。スクリプトが指定した `baseUrl`・`headers` へ認証を渡さない作りで、モデルは provider と id だけで解決する）。セッションの認証で非 LLM のモデルへ送れるので、この呼び出しは権限の判定に載らない。この機の既定は、サーバが `direct` で、`codemode` は自動では入らない。入れるときに再判断する。 |
+| `tool_search` | 同上 | allow（2026-11-23） | spec の段落を参照。 |
+
+- **実測**（判定エンジン。2026-11-24）: 変更前、`list_mcp_resources`・`list_mcp_resource_templates`・`read_mcp_resource` は、すべて ask（`*`）。`mcp` 面の allow（`websearch` など）は、この 3 本には効かない（拡張の分類が `mcp-tool` ではなく `extension` のため）。
+- **審査ログ**: 承認の審査ログ（`friction_scan.py --approvals`）に、この 3 本の記録は無い（件数は根拠にならない）。
+- **受容した点**（reviewer の監査 2026-11-24 の MAJOR 2 件を反映）:
+  - `server` を省くと、資源を持つ全サーバ（有効かつ `hidden` でないもの）へ一覧を要求する（資源は `resources/list`、テンプレートは `resources/templates/list`）。指定すると、そのサーバの 1 ページだけを取る。`mcp` 面のサーバ単位の ask を通らない。
+  - `cursor` は、そのサーバが出した値かを照合せず、モデルが指定した文字列が（前後の空白を除いて）そのまま対象サーバへ渡る（`resources.js` の `stringArgument`・`list`、`runtime.js`）。対象は構成済みのサーバに限られ、接続先は変わらない。
+  - 結果の信頼境界: 資源の名前・URI・説明は、サーバ由来の信頼できない内容で、プロンプトインジェクションの入力になりうる。`readOnlyHint: true` は、クライアントが何をするか（読み取りだけ）の宣言で、結果の信頼性は保証しない。
+  - ファイル系のサーバが `file://` の URI を一覧に出すと、`path` の deny の対象のパスや存在が、本文を読まずにモデルへ届きうる。本文の取得は `read_mcp_resource` の ask で止まる（一覧の allow は、本文の取得を許すものではない）。
+  - 利用者が足した第三者サーバでは、資源のメタデータ（DB のテーブル名など）が確認なしにモデルへ届く。
+  - この機が配る検索・取得の MCP（`websearch`・`agentcore-websearch`・`webfetch`）が資源を持つかは**未確認**（機ごとに配るのは、家が `websearch`、会社 PC が `agentcore-websearch` と `webfetch`。1 台に 3 件を配るわけではない）。
+- **別件（未対応）**: pi 1.5.2 は OAuth の token を `~/.pi/agent/mcp-auth.json` に保存する（pi の docs の `mcp.md`）。この方針の `path` の deny と、囲いの `hide`（`runner.toml`）には、このファイルが無い（`oauth.json` はある）。この機の宣言に OAuth のサーバは無いので、ファイルは存在しない見込み（**未確認**）。

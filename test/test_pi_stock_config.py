@@ -869,6 +869,8 @@ def test_permission_policy_matches_the_contract():
         "subagents_enable",
         "bg_wait",
         "tool_search",  # pi 組み込み。tool を宣言するだけで、宣言された各ツールの呼び出しは個別の規則で判定される
+        "list_mcp_resources",  # pi 組み込み。読み取り専用の一覧 (資源のメタデータだけ)。本文を読む read_mcp_resource は ask のまま
+        "list_mcp_resource_templates",  # 同上
         "bg_status",
         "bg_kill",
         "plan_mode_question",
@@ -883,6 +885,10 @@ def test_permission_policy_matches_the_contract():
         "subagent_command",
     ):
         assert perm[tool] == "allow", tool
+    # 本文を読む・スクリプトを走らせる組み込みの MCP 周りのツールは、個別の規則を置かず、既定の ask に落とす
+    assert perm["*"] == "ask"
+    for ask_tool in ("read_mcp_resource", "codemode"):
+        assert ask_tool not in perm, ask_tool
     assert "bg_run" not in perm  # bg_run は shellTools で bash と同じ判定に通す (allow にしない)
     assert path["*.env.example"] == "allow"
     assert keys.index("*.env.example") > keys.index("*.env.*")  # 例外は deny より後
