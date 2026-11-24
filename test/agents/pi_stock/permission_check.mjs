@@ -11,7 +11,7 @@
 //   mcpTools   [MCP ツールのフルネーム (mcp__<server>__<tool>)...]。実ゲートの normalizeInput (対象の生成。面全体の mcp を含む) と
 //              evaluateAnyValue (対象のどれかに一致した最後の規則が勝つ) で判定する (任意)
 //   mcpServers  mcp.json に宣言されたサーバ名の一覧 (任意)。名前の分け方に効く
-// 標準出力へ JSON: { bash: [{state, pattern}...], surface: [{action, pattern}...], access: [[{path, effect, source}...]...], alias: [{action, pattern}...], agentBash: [{state, pattern}...], mcpTools: [{action, pattern, values}...] }
+// 標準出力へ JSON: { bash: [{state, pattern}...], surface: [{action, pattern}...], access: [[{path, effect, source}...]...], alias: [{action, pattern}...], agentBash: [{state, pattern}...], mcpTools: [{action, pattern, values, surface}...] }
 // bash は、実際のゲートと同じく複合コマンドを分解し、ラッパーの床 (opaque / indirection / unparsed) も含めて判定する。
 // access: [cmd...] は、bash のトークンの投影 (作業ツリーの外のパスと、commandEffects を含む向き) を返す。
 // surface の照合は規則の評価だけ (向きに応じた ask の判定は、access の向きと surface の判定を合わせて読む)。
@@ -92,6 +92,6 @@ for (const [surface, values] of input.alias ?? []) {
 for (const tool of input.mcpTools ?? []) {
   const { surface, values } = normalizeInput(tool, undefined, input.mcpServers ?? []);
   const { rule } = evaluateAnyValue(surface, values, rules, posixPathFlavor);
-  out.mcpTools.push({ action: rule.action, pattern: rule.pattern, values });
+  out.mcpTools.push({ action: rule.action, pattern: rule.pattern, values, surface });
 }
 console.log(JSON.stringify(out));
