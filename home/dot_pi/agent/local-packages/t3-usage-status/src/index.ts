@@ -4,7 +4,7 @@
  * pi の TUI のフッターは費用・最新の CH%・コンテキスト使用率を出すが、T3 Code の中で動く pi にはフッターが無い。
  * そこでセッションのエントリから CH% と費用を、pi 自身のフッター
  * (dist/modes/interactive/components/footer.js) と同じ計算で求め、コンテキスト使用率は ctx.getContextUsage() から得て、
- * ctx.ui.setStatus で出す。T3 は「Pi · CH97.2% $24.480 41.2%/200k」という入力欄のバナーにする (web・モバイル)。
+ * ctx.ui.setStatus で出す。T3 は「Pi · CH97.2% $24.480 · 41.2%/200k」という入力欄のバナーにする (web・モバイル)。
  * コンテキスト使用率は、pi のフッターと同じ「使用率%/窓の大きさ」の形 (窓は formatTokens と同じ k・M 表記)。
  *
  * 並び順: T3 は status を key ごとに、最初に出した順に並べる (「Pi · <text> · <text>」)。この拡張の key (usage) が
@@ -52,7 +52,7 @@ function formatTokens(count: number): string {
  * メッセージだけから cacheRead / (input + cacheRead + cacheWrite) で求め、セッションに
  * cacheRead か cacheWrite が 1 つでもあるときだけ出す。
  * contextPercent (コンテキスト使用率) は、undefined なら出さず、null (不明。圧縮の直後など) なら ?、数なら 41.2% と、
- * CH% と費用のあとに出す (「ctx」のような見出しは付けない)。contextWindow (窓の大きさ。正の数のとき) があれば、「/200k」と分母を足す (pi のフッターと同じ形)。
+ * CH% と費用のあとに、中黒 (「 · 」) を挟んで出す (「ctx」のような見出しは付けない)。CH% と費用の両方が無いときは、中黒を付けない。contextWindow (窓の大きさ。正の数のとき) があれば、「/200k」と分母を足す (pi のフッターと同じ形)。
  */
 export function computeStatusText(
   entries: readonly unknown[],
@@ -100,12 +100,16 @@ export function computeStatusText(
     typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0
       ? `/${formatTokens(contextWindow)}`
       : "";
+  let context: string | undefined;
   if (contextPercent === null) {
-    parts.push(`?${denominator}`);
+    context = `?${denominator}`;
   } else if (typeof contextPercent === "number" && Number.isFinite(contextPercent)) {
-    parts.push(`${contextPercent.toFixed(1)}%${denominator}`);
+    context = `${contextPercent.toFixed(1)}%${denominator}`;
   }
-  return parts.length > 0 ? parts.join(" ") : undefined;
+  // CH%・費用 (空白区切り) とコンテキスト使用率の間に中黒を入れる。どちらかが無いときは入れない
+  const head = parts.join(" ");
+  if (head && context) return `${head} · ${context}`;
+  return head || context || undefined;
 }
 
 /**
