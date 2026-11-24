@@ -257,9 +257,44 @@ def _windows(path: Path) -> str:
     return raw.decode("utf-8-sig")
 
 
-@pytest.mark.parametrize("path", [WIN_PORT, WIN_SERVE])
-def test_windows_scripts_are_personal_only(path):
-    assert APPLEJXD_GATE in _windows(path)
+def test_windows_port_script_is_personal_only():
+    assert APPLEJXD_GATE in _windows(WIN_PORT)
+
+
+def _render_template(path: Path, data: dict) -> str:
+    """`.` を指定のデータに差し替えて描画する (`is-work` も同じ `.` を見る)。"""
+    template = (
+        "{{ with " + json.dumps(json.dumps(data)) + " | fromJson }}\n"
+        + path.read_text(encoding="utf-8-sig")
+        + "\n{{ end }}"
+    )
+    result = subprocess.run(
+        [_chezmoi(), "--source", str(ROOT), "execute-template"],
+        input=template,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
+
+
+@pytest.mark.parametrize(
+    ("data", "deployed"),
+    [
+        ({"chezmoi": {"username": "applejxd"}}, True),  # 家の機 (個人のユーザー名)
+        ({"chezmoi": {"username": "applejxd"}, "work": True}, False),  # 個人のユーザー名でも、会社 PC と明示した機
+        ({"chezmoi": {"username": "other-user"}}, False),  # 会社 PC とみなす
+        ({"chezmoi": {"username": "other-user"}, "work": False}, True),  # 家の機と明示した機
+    ],
+)
+def test_windows_serve_script_is_only_for_home_machines(data, deployed):
+    # Tailscale へ出すのは家の機だけ。判定は is-work (会社 PC の判定の単一ソース) に揃える
+    rendered = _render_template(WIN_SERVE, data).replace("\ufeff", "").strip()
+    assert bool(rendered) is deployed
+    if deployed:
+        assert "tailscale" in rendered.lower()
 
 
 def test_windows_port_script_pins_the_user_variable_only_when_it_differs():
@@ -358,21 +393,9 @@ def fake_tailscale(tmp_path_factory) -> Path:
 
 
 def _render_windows_serve(tmp_path: Path) -> Path:
-    context = json.dumps({"chezmoi": {"username": "applejxd"}})
-    template = (
-        "{{ with " + json.dumps(context) + " | fromJson }}\n" + WIN_SERVE.read_text(encoding="utf-8-sig") + "\n{{ end }}"
-    )
-    result = subprocess.run(
-        [_chezmoi(), "--source", str(ROOT), "execute-template"],
-        input=template,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
+    rendered = _render_template(WIN_SERVE, {"chezmoi": {"username": "applejxd"}})
     script = tmp_path / "serve.ps1"
-    script.write_bytes(b"\xef\xbb\xbf" + result.stdout.lstrip("\ufeff").encode("utf-8"))
+    script.write_bytes(b"\xef\xbb\xbf" + rendered.lstrip("\ufeff").encode("utf-8"))
     return script
 
 

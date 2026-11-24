@@ -2,7 +2,7 @@
 
 Windows 版と WSL の T3 Code を、Windows 側の Tailscale Serve だけで tailnet（利用者の Tailscale 網）へ出す。
 ポートは固定し、chezmoi がその固定と Serve の公開を整える。UI の設定とペアリングは手動である。
-対象は `applejxd` の機械だけである。
+対象は `applejxd` の機械だけである。Tailscale へ出す Serve は、そのうち家の機（`is-work` が false）だけである。
 
 ## 構成
 
@@ -40,13 +40,13 @@ flowchart TD
 
 ## chezmoi が整えるもの
 
-どれも `applejxd` の機械だけで、冪等である。
+どれも冪等である。対象の機械は、Serve だけが家の機（`is-work` が false。判定は [Web 検索の配る範囲](web-search.md#配る範囲) と同じ）、ほかの 2 つは `applejxd` である。
 
 | 対象 | スクリプト | 内容 |
 | --- | --- | --- |
 | WSL の `~/.t3/service.env` | `100_linux/run_after_127_t3code_service_env.sh.tmpl` | `T3CODE_PORT=3776` と `T3CODE_HOST=127.0.0.1` を書く |
 | Windows のユーザー環境変数 | `300_windows/run_after_353_t3code_port.ps1.tmpl` | `T3CODE_PORT=3773` を書く |
-| Windows の Tailscale Serve | `300_windows/run_after_354_t3code_wsl_serve.ps1.tmpl` | https `8443` を `http://127.0.0.1:3776` へ公開する |
+| Windows の Tailscale Serve（家の機だけ） | `300_windows/run_after_354_t3code_wsl_serve.ps1.tmpl` | https `8443` を `http://127.0.0.1:3776` へ公開する |
 
 - **`service.env` は該当のキーだけを書き換える。** ほかの行とコメントは残す。ファイルが無ければ権限 `600` で作る。`~/.t3` が無ければ何もしない
 - **`service.env` は、別のファイルを作って置き換える。** 一時ファイルは、同じ場所の本人だけが入れるディレクトリに置く。元の権限を引き継ぎ、symlink なら実体を書き換える

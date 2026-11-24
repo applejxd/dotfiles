@@ -1,9 +1,10 @@
-﻿{{- if regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username -}}
+﻿{{- if eq (includeTemplate "is-work" .) "false" -}}
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # WSL の T3 Code (127.0.0.1:3776) を tailnet の https 8443 で公開する。Tailscale は Windows 側だけに置く。
 # 公開は tailnet だけ (funnel は使わない)。使われている https ポートは上書きしない。
+# 家の機 (is-work が false) だけ。会社 PC では Tailscale へ出さない。
 # 状態が確認できないときは何も変えず、警告して 0 で終わる (apply を止めない)。
 # see docs/spec/t3code-remote-access.md
 $httpsPort = '8443'

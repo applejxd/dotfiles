@@ -83,7 +83,7 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 | `300_windows/run_after_345_powershell_profile.ps1.tmpl` | `MyDocuments` の実体の下の `PowerShell\profile.ps1`・`WindowsPowerShell\profile.ps1` | 生成物（OneDrive の既知フォルダー移動時だけ置く、BOM 付きのローダー） | 内容が違うときだけ上書き |
 | `300_windows/run_after_352_hf_login.ps1.tmpl` | `~\.cache\huggingface\token`（と `stored_tokens`。保存先は `HF_TOKEN_PATH` 等で変わる。作るのは `uvx hf auth login`） | 生成物（認証情報。スクリプト自身は書かない） | 消すと未ログインに戻り、次の apply（`BW_SESSION` あり）でログインし直す。実トークンでの動作は未検証。[仕様](security.md#hugging-face-のトークンの-login) |
 | `300_windows/run_after_353_t3code_port.ps1.tmpl` | ユーザー環境変数 `T3CODE_PORT=3773`（レジストリの `HKCU:\Environment`） | 状態（違うときだけ書く） | `applejxd` のみ。消すと次の apply で戻す。Windows 版 T3 Code の次の起動から効く。[仕様](t3code-remote-access.md#chezmoi-が整えるもの) |
-| `300_windows/run_after_354_t3code_wsl_serve.ps1.tmpl` | Tailscale の Serve の設定（https 8443 → `http://127.0.0.1:3776`）。ファイルは作らず、Tailscale の状態に保存される | 状態（`tailscale serve --bg`） | `applejxd` のみ。使われている 8443 は上書きしない。Tailscale の再導入・`serve reset` で消え、次の apply で戻す。[仕様](t3code-remote-access.md#chezmoi-が整えるもの) |
+| `300_windows/run_after_354_t3code_wsl_serve.ps1.tmpl` | Tailscale の Serve の設定（https 8443 → `http://127.0.0.1:3776`）。ファイルは作らず、Tailscale の状態に保存される | 状態（`tailscale serve --bg`） | 家の機（`is-work` が false）のみ。使われている 8443 は上書きしない。Tailscale の再導入・`serve reset` で消え、次の apply で戻す。[仕様](t3code-remote-access.md#chezmoi-が整えるもの) |
 
 `320_regkey/` と `331_power`（毎回走る `run_after_`）はレジストリと `powercfg` の設定だけで、ファイルを作らない。
 
