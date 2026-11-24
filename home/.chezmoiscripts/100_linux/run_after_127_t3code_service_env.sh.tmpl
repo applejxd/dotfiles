@@ -1,10 +1,10 @@
-{{- if and (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) (.chezmoi.kernel.osrelease | lower | contains "microsoft") -}}
+{{- if and (eq (includeTemplate "is-work" .) "false") (.chezmoi.kernel.osrelease | lower | contains "microsoft") -}}
 #!/usr/bin/env bash
 
 set -euo pipefail
 umask 077
 
-# T3 Code (WSL のバックグラウンドサービス) の待ち受けを 127.0.0.1:3776 に固定する。applejxd の WSL だけ。
+# T3 Code (WSL のバックグラウンドサービス) の待ち受けを 127.0.0.1:3776 に固定する。家の機 (is-work が false) の WSL だけ。
 # 外へは Windows 側の Tailscale Serve (https 8443) が出す。see docs/spec/t3code-remote-access.md
 PORT=3776
 HOST=127.0.0.1

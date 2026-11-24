@@ -22,8 +22,6 @@ SERVICE_ENV = ROOT / "home/.chezmoiscripts/100_linux/run_after_127_t3code_servic
 WIN_PORT = ROOT / "home/.chezmoiscripts/300_windows/run_after_353_t3code_port.ps1.tmpl"
 WIN_SERVE = ROOT / "home/.chezmoiscripts/300_windows/run_after_354_t3code_wsl_serve.ps1.tmpl"
 BACKSLASH = chr(92)
-# テンプレートの Go 文字列では、正規表現のバックスラッシュ 1 文字を 4 文字で書く
-APPLEJXD_GATE = 'regexMatch "(?i)(^|' + BACKSLASH * 4 + ')applejxd$" .chezmoi.username'
 WSL_KERNEL = "5.15.167.4-microsoft-standard-WSL2"
 
 
@@ -41,26 +39,12 @@ def _bash() -> str:
     return bash
 
 
-def _render(username: str, osrelease: str) -> str:
-    """`.chezmoi.username` と `.chezmoi.kernel.osrelease` だけを差し替えて描画する。"""
-    context = json.dumps({"chezmoi": {"username": username, "kernel": {"osrelease": osrelease}}})
-    template = (
-        "{{ with "
-        + json.dumps(context)
-        + " | fromJson }}\n"
-        + SERVICE_ENV.read_text(encoding="utf-8")
-        + "\n{{ end }}"
-    )
-    result = subprocess.run(
-        [_chezmoi(), "--source", str(ROOT), "execute-template"],
-        input=template,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    return result.stdout
+def _render(username: str, osrelease: str, work: bool | None = None) -> str:
+    """ユーザー名・カーネル・work (is-work の上書き) だけを差し替えて、WSL のスクリプトを描画する。"""
+    data: dict = {"chezmoi": {"username": username, "kernel": {"osrelease": osrelease}}}
+    if work is not None:
+        data["work"] = work
+    return _render_template(SERVICE_ENV, data)
 
 
 class Home:
@@ -112,19 +96,19 @@ def _script() -> str:
 
 
 @pytest.mark.parametrize(
-    ("username", "osrelease"),
+    ("username", "osrelease", "work", "deployed"),
     [
-        ("other-user", WSL_KERNEL),  # 個人の機械ではない
-        ("applejxd", "6.8.0-45-generic"),  # WSL ではない
-        ("HOST" + BACKSLASH + "applejxd", "6.8.0-45-generic"),
+        ("applejxd", WSL_KERNEL, None, True),  # 家の機 (個人のユーザー名)
+        ("HOST" + BACKSLASH + "applejxd", WSL_KERNEL, None, True),  # Windows 形式のドメイン付き
+        ("applejxd", WSL_KERNEL, True, False),  # 個人のユーザー名でも、会社 PC と明示した機
+        ("other-user", WSL_KERNEL, None, False),  # 会社 PC とみなす
+        ("other-user", WSL_KERNEL, False, True),  # 家の機と明示した機
+        ("applejxd", "6.8.0-45-generic", None, False),  # WSL ではない
     ],
 )
-def test_service_env_script_is_only_for_applejxd_on_wsl(username, osrelease):
-    assert _render(username, osrelease).strip() == ""
-
-
-def test_service_env_script_renders_for_applejxd_on_wsl_with_domain_prefix():
-    assert "T3CODE_PORT" in _render("HOST" + BACKSLASH + "applejxd", WSL_KERNEL)
+def test_service_env_script_is_only_for_home_machines_on_wsl(username, osrelease, work, deployed):
+    # 判定は is-work (会社 PC の判定の単一ソース)。WSL かどうかはカーネルの名前で見る
+    assert bool(_render(username, osrelease, work).strip()) is deployed
 
 
 def test_service_env_is_left_alone_when_t3_home_is_missing(home):
@@ -257,10 +241,6 @@ def _windows(path: Path) -> str:
     return raw.decode("utf-8-sig")
 
 
-def test_windows_port_script_is_personal_only():
-    assert APPLEJXD_GATE in _windows(WIN_PORT)
-
-
 def _render_template(path: Path, data: dict) -> str:
     """`.` を指定のデータに差し替えて描画する (`is-work` も同じ `.` を見る)。"""
     template = (
@@ -289,12 +269,13 @@ def _render_template(path: Path, data: dict) -> str:
         ({"chezmoi": {"username": "other-user"}, "work": False}, True),  # 家の機と明示した機
     ],
 )
-def test_windows_serve_script_is_only_for_home_machines(data, deployed):
-    # Tailscale へ出すのは家の機だけ。判定は is-work (会社 PC の判定の単一ソース) に揃える
-    rendered = _render_template(WIN_SERVE, data).replace("\ufeff", "").strip()
+@pytest.mark.parametrize(("path", "word"), [(WIN_PORT, "T3CODE_PORT"), (WIN_SERVE, "tailscale")])
+def test_windows_scripts_are_only_for_home_machines(path, word, data, deployed):
+    # T3 Code の設定は、家の機だけ。判定は is-work (会社 PC の判定の単一ソース) に揃える
+    rendered = _render_template(path, data).replace("\ufeff", "").strip()
     assert bool(rendered) is deployed
     if deployed:
-        assert "tailscale" in rendered.lower()
+        assert word in rendered
 
 
 def test_windows_port_script_pins_the_user_variable_only_when_it_differs():
