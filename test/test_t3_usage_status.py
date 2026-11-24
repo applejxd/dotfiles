@@ -292,15 +292,17 @@ out({ inTui, inRpc: t.calls });
 
 # --- コンテキスト使用率 (ctx) -------------------------------------------------------------------
 
-# computeStatusText の第 2 引数 (contextPercent)。undefined は出さず、null (不明) は ?、数は小数 1 桁。順序は CH → 費用 → ctx
+# computeStatusText の第 2 引数 (contextPercent)。undefined は出さず、null (不明) は ?、数は小数 1 桁。順序は CH → 費用 → (中黒) → ctx
 CTX_CASES = {
     "ctx-after-hit-rate-and-cost": (
-        [assistant(input=100, cache_read=700, cache_write=200, cost=0.4)], 41.234, None, "CH70.0% $0.400 41.2%",
+        [assistant(input=100, cache_read=700, cache_write=200, cost=0.4)], 41.234, None, "CH70.0% $0.400 · 41.2%",
     ),
     "ctx-only-in-an-empty-session": ([], 0, None, "0.0%"),
+    # 中黒は、CH% か費用のどちらかと、コンテキスト使用率が並ぶときだけ入る (使用率だけ・CH% と費用だけなら入らない)
+    "dot-between-hit-rate-and-ctx-without-cost": ([assistant(input=100, cache_read=900, cost=0)], 41, None, "CH90.0% · 41.0%"),
     "ctx-unknown-after-compaction": ([], None, None, "?"),
-    "ctx-unknown-keeps-the-other-parts": ([assistant(input=100, cache_read=900, cost=1)], None, None, "CH90.0% $1.000 ?"),
-    "ctx-full-window": ([assistant(input=100, cost=1)], 100, None, "$1.000 100.0%"),
+    "ctx-unknown-keeps-the-other-parts": ([assistant(input=100, cache_read=900, cost=1)], None, None, "CH90.0% $1.000 · ?"),
+    "ctx-full-window": ([assistant(input=100, cost=1)], 100, None, "$1.000 · 100.0%"),
     # 数でない値 (NaN・Infinity) は、出さない
     "ctx-non-finite-is-ignored": ([assistant(input=100, cost=1)], "nan", None, "$1.000"),
     # 分母 (窓の大きさ)。pi のフッターの formatTokens と同じ k・M 表記
@@ -310,7 +312,7 @@ CTX_CASES = {
     "denominator-below-1k": ([], 50, 512, "50.0%/512"),
     "denominator-10m": ([], 1, 12000000, "1.0%/12M"),
     "denominator-with-unknown-percent": ([], None, 200000, "?/200k"),
-    "denominator-after-cost-and-hit-rate": ([assistant(input=100, cache_read=900, cost=1)], 41, 200000, "CH90.0% $1.000 41.0%/200k"),
+    "denominator-after-cost-and-hit-rate": ([assistant(input=100, cache_read=900, cost=1)], 41, 200000, "CH90.0% $1.000 · 41.0%/200k"),
     # 窓が 0・負・非数のときは、分母を出さない
     "denominator-zero-is-omitted": ([], 41, 0, "41.0%"),
     "denominator-negative-is-omitted": ([], 41, -5, "41.0%"),
@@ -354,10 +356,10 @@ out({ afterStart, afterModel, afterCompact, afterNextTurn });
 """,
         {"entries": [assistant(input=100, cache_read=900, cost=0.5)], "next": [assistant(input=100, cache_read=900, cost=0.5)]},
     )
-    assert got["afterStart"] == [["usage", "CH90.0% $0.500 41.0%/200k"]]
-    assert got["afterModel"] == [["usage", "CH90.0% $0.500 8.2%/1.0M"]]
-    assert got["afterCompact"] == [["usage", "CH90.0% $0.500 ?/1.0M"]]
-    assert got["afterNextTurn"] == [["usage", "CH90.0% $1.000 2.0%/1.0M"]]
+    assert got["afterStart"] == [["usage", "CH90.0% $0.500 · 41.0%/200k"]]
+    assert got["afterModel"] == [["usage", "CH90.0% $0.500 · 8.2%/1.0M"]]
+    assert got["afterCompact"] == [["usage", "CH90.0% $0.500 · ?/1.0M"]]
+    assert got["afterNextTurn"] == [["usage", "CH90.0% $1.000 · 2.0%/1.0M"]]
 
 
 def test_rpc_shows_the_context_percent_even_in_a_new_session(run_node):
@@ -401,7 +403,7 @@ out({ empty: empty.calls, withEntries: withEntries.calls });
 """,
         {"entries": [assistant(input=100, cache_read=900, cost=0.5)]},
     )
-    assert got == {"empty": [["usage", "?"]], "withEntries": [["usage", "CH90.0% $0.500 ?"]]}
+    assert got == {"empty": [["usage", "?"]], "withEntries": [["usage", "CH90.0% $0.500 · ?"]]}
 
 
 def test_the_window_falls_back_to_the_current_model_when_the_usage_has_none(run_node):
