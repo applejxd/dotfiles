@@ -9,6 +9,9 @@ Gateway の URL はアカウント固有なので環境変数 ``AGENTCORE_GATEWA
 
 - ``AGENTCORE_GATEWAY_URL`` が無い・``https://`` で始まらない
 
+空のサーバが話す MCP の版は **2025-11-25 に統一**している (proxy も pi の組み込みの MCP クライアントも、この版が上限)。
+2026-07-28 (握手なし) には答えない。理由と再開の条件は docs/spec/mcp-servers.md#mcp-のプロトコルの版。
+
 see docs/spec/mcp-servers.md#agentcore-web-search
 """
 
@@ -21,7 +24,9 @@ import sys
 
 PROXY = "mcp-proxy-for-aws-cli==1.7.0"
 URL_ENV = "AGENTCORE_GATEWAY_URL"
-DEFAULT_PROTOCOL = "2025-06-18"
+PROTOCOL = "2025-11-25"  # 統一する版。クライアントの要求が知らない版 (新しすぎる版を含む) のときに返す
+ACCEPTED_PROTOCOLS = ("2024-11-05", "2025-03-26", "2025-06-18", PROTOCOL)  # 要求どおりに返してよい版 (空の応答は同じ)
+SERVER_INFO = {"name": "agentcore-websearch-idle", "version": "1"}
 EMPTY_LISTS = {
     "tools/list": {"tools": []},
     "resources/list": {"resources": []},
@@ -52,14 +57,16 @@ def serve_empty(reason: str) -> int:
         if not isinstance(message, dict) or "id" not in message:
             continue  # 通知 (initialized など) には答えない
         method = message.get("method")
+        params = message.get("params") if isinstance(message.get("params"), dict) else {}
         if method == "initialize":
-            params = message.get("params") or {}
+            # 知っている版は要求どおりに、知らない版は統一する版を返す (spec: 対応する別の版のうち最新を返す)
+            requested = params.get("protocolVersion")
             reply(
                 message,
                 {
-                    "protocolVersion": params.get("protocolVersion") or DEFAULT_PROTOCOL,
+                    "protocolVersion": requested if requested in ACCEPTED_PROTOCOLS else PROTOCOL,
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "agentcore-websearch-idle", "version": "1"},
+                    "serverInfo": SERVER_INFO,
                 },
             )
         elif method in EMPTY_LISTS:

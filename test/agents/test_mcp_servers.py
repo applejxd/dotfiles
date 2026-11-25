@@ -293,6 +293,34 @@ def test_wrapper_answers_unknown_methods_with_an_error_and_ignores_garbage():
     assert reply["id"] == 5 and reply["error"]["code"] == -32601
 
 
+def _initialize(version):
+    params = {} if version is None else {"protocolVersion": version}
+    done = _run_wrapper([{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": params}])
+    (reply,) = [json.loads(line) for line in done.stdout.splitlines()]
+    return reply["result"]["protocolVersion"]
+
+
+@pytest.mark.parametrize("version", ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"])
+def test_wrapper_answers_a_known_version_as_requested(version):
+    assert _initialize(version) == version
+
+
+@pytest.mark.parametrize("version", [None, "2026-07-28", "2099-01-01", 1])
+def test_wrapper_unifies_on_2025_11_25_for_versions_it_does_not_know(version):
+    # MCP の版は 2025-11-25 に統一する (pi・proxy の上限)。版が無い・知らない・新しすぎる版には、統一した版を返す
+    assert _initialize(version) == "2025-11-25"
+
+
+def test_wrapper_does_not_speak_2026_07_28_and_a_modern_client_falls_back_to_initialize():
+    meta = {"io.modelcontextprotocol/protocolVersion": "2026-07-28"}
+    done = _run_wrapper(
+        [{"jsonrpc": "2.0", "id": 1, "method": "server/discover", "params": {"_meta": meta}}]
+    )
+    (reply,) = [json.loads(line) for line in done.stdout.splitlines()]
+    # 「新式でない」エラー。spec の stdio の探りは、これを旧式のサーバとみなして initialize へ戻る
+    assert reply["error"]["code"] == -32601
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="execvp の経路は Unix だけ")
 def test_wrapper_with_a_gateway_runs_the_pinned_proxy(tmp_path):
     fake = tmp_path / "uvx"
