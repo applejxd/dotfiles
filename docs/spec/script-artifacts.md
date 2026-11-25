@@ -57,7 +57,7 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 | `100_linux/run_once_after_120_wsl.sh.tmpl` | `/etc/wsl.conf` と、内容が変わるときの退避 `/etc/wsl.conf.bak.<日時>.<乱数>`。比較用の `mktemp` は `trap` で削除 | 生成物（`sudo install`）・バックアップ | 消すと systemd の有効化などが失われる。退避は世代を消さないので増える（不要なら手で消す） |
 | `100_linux/run_once_after_121_ubuntu.sh.tmpl` | `/etc/default/zramswap`・`/etc/sysctl.d/99-zram.conf`・`/etc/default/earlyoom` | 生成物（`sudo tee`） | Raspberry Pi のみ。消すと zram と earlyoom の設定が既定に戻る |
 | `100_linux/run_once_after_123_tailscale.sh.tmpl` | `/usr/share/keyrings/tailscale-archive-keyring.gpg`・`/etc/apt/sources.list.d/tailscale.list` | 生成物（`sudo install`。内容が変わったときだけ更新） | `applejxd` かつ WSL 以外（Raspberry Pi を含む）。消すと apt が tailscale を更新できない |
-| `100_linux/run_after_127_t3code_service_env.sh.tmpl` | `~/.t3/service.env`（`T3CODE_PORT`・`T3CODE_HOST` の 2 行だけ。ほかの行は残す）と、書き換え用の `mktemp` の一時ファイル（`trap` で削除） | 生成物（無いときは権限 600 で作る） | 家の機（`is-work` が false）かつ WSL で、`~/.t3` があるとき。消すと次の apply で 2 行を書き直す。サービスは再起動しない。[仕様](t3code-remote-access.md#chezmoi-が整えるもの) |
+| `100_linux/run_after_127_t3code_service_env.sh.tmpl` | `~/.t3/service.env`（`T3CODE_PORT`・`T3CODE_HOST` の 2 行だけ。ほかの行は残す）と、書き換え用の `mktemp` の一時ファイル（`trap` で削除） | 生成物（無いときは権限 600 で作る） | WSL で、`~/.t3` があるとき（自宅・会社 PC を問わない）。消すと次の apply で 2 行を書き直す。サービスは再起動しない。[仕様](t3code-remote-access.md#chezmoi-が整えるもの) |
 | `100_linux/110_native/run_once_after_111_microsoft.sh.tmpl` | `/usr/share/keyrings/microsoft.gpg`・`/etc/apt/sources.list.d/vscode.list` | 生成物 | Raspberry Pi 以外。`vscode.sources` があるときは `vscode.list` を作らない |
 
 ## macOS
@@ -82,7 +82,7 @@ OS ごとに分けた。スクリプトの順序と役割は [プロジェクト
 | `300_windows/310_packages/run_once_after_315_keypirinha_extensions.ps1` | `%APPDATA%\Keypirinha\InstalledPackages\*.keypirinha-package.download` と、成果の `*.keypirinha-package` | 一時・生成物 | 未導入のものだけ。`.download` は `Move-Item` で本体へ置き、`finally` で削除。既存ファイルは上書きしない |
 | `300_windows/run_after_345_powershell_profile.ps1.tmpl` | `MyDocuments` の実体の下の `PowerShell\profile.ps1`・`WindowsPowerShell\profile.ps1` | 生成物（OneDrive の既知フォルダー移動時だけ置く、BOM 付きのローダー） | 内容が違うときだけ上書き |
 | `300_windows/run_after_352_hf_login.ps1.tmpl` | `~\.cache\huggingface\token`（と `stored_tokens`。保存先は `HF_TOKEN_PATH` 等で変わる。作るのは `uvx hf auth login`） | 生成物（認証情報。スクリプト自身は書かない） | 消すと未ログインに戻り、次の apply（`BW_SESSION` あり）でログインし直す。実トークンでの動作は未検証。[仕様](security.md#hugging-face-のトークンの-login) |
-| `300_windows/run_after_353_t3code_port.ps1.tmpl` | ユーザー環境変数 `T3CODE_PORT=3773`（レジストリの `HKCU:\Environment`） | 状態（違うときだけ書く） | 家の機（`is-work` が false）のみ。消すと次の apply で戻す。Windows 版 T3 Code の次の起動から効く。[仕様](t3code-remote-access.md#chezmoi-が整えるもの) |
+| `300_windows/run_after_353_t3code_port.ps1` | ユーザー環境変数 `T3CODE_PORT=3773`（レジストリの `HKCU:\Environment`） | 状態（違うときだけ書く） | 自宅・会社 PC を問わない。消すと次の apply で戻す。Windows 版 T3 Code の次の起動から効く。[仕様](t3code-remote-access.md#chezmoi-が整えるもの) |
 | `300_windows/run_after_354_t3code_wsl_serve.ps1.tmpl` | Tailscale の Serve の設定（https 8443 → `http://127.0.0.1:3776`）。ファイルは作らず、Tailscale の状態に保存される | 状態（`tailscale serve --bg`） | 家の機（`is-work` が false）のみ。使われている 8443 は上書きしない。Tailscale の再導入・`serve reset` で消え、次の apply で戻す。[仕様](t3code-remote-access.md#chezmoi-が整えるもの) |
 
 `320_regkey/` と `331_power`（毎回走る `run_after_`）はレジストリと `powercfg` の設定だけで、ファイルを作らない。

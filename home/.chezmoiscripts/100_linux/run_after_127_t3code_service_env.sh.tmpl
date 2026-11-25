@@ -1,11 +1,11 @@
-{{- if and (eq (includeTemplate "is-work" .) "false") (.chezmoi.kernel.osrelease | lower | contains "microsoft") -}}
+{{- if (.chezmoi.kernel.osrelease | lower | contains "microsoft") -}}
 #!/usr/bin/env bash
 
 set -euo pipefail
 umask 077
 
-# T3 Code (WSL のバックグラウンドサービス) の待ち受けを 127.0.0.1:3776 に固定する。家の機 (is-work が false) の WSL だけ。
-# 外へは Windows 側の Tailscale Serve (https 8443) が出す。see docs/spec/t3code-remote-access.md
+# T3 Code (WSL のバックグラウンドサービス) の待ち受けを 127.0.0.1:3776 に固定する。WSL だけ。自宅・会社 PC を問わない。
+# Tailscale Serve (https 8443) で外へ出すのは、家の機だけ (354)。see docs/spec/t3code-remote-access.md
 PORT=3776
 HOST=127.0.0.1
 
@@ -28,9 +28,12 @@ trap 'rm -rf "$tmp_dir"' EXIT
 orig="$tmp_dir/orig"
 work="$tmp_dir/work"
 
+# 読んだ時点で在ったかを覚える (処理中に消された・作られたことを、置き換えの前に見つけるため)
 if [[ -f "$env_file" ]]; then
+    existed=1
     cat "$env_file" > "$orig"
 else
+    existed=0
     : > "$orig"
 fi
 cp "$orig" "$work"
@@ -57,13 +60,16 @@ if [[ -f "$env_file" ]] && cmp -s "$work" "$env_file"; then
     exit 0
 fi
 
-# 読んでから置き換えるまでの間に、t3 up などが書き換えていたら、上書きしない (次の apply でやり直す)
-if [[ -f "$env_file" ]]; then
-    if ! cmp -s "$orig" "$env_file"; then
+# 読んでから置き換えるまでの間に、t3 up などが書き換え・削除・作成していたら、上書きしない (次の apply でやり直す)
+if (( existed )); then
+    if [[ ! -f "$env_file" ]] || ! cmp -s "$orig" "$env_file"; then
         echo "⚠️ T3 Code (WSL): $env_file が処理中に変わったので、書き換えずに終わります。もう一度 apply してください" >&2
         exit 0
     fi
     chmod --reference="$env_file" "$work"
+elif [[ -e "$env_file" ]]; then
+    echo "⚠️ T3 Code (WSL): $env_file が処理中にできたので、書き換えずに終わります。もう一度 apply してください" >&2
+    exit 0
 fi
 mv -f "$work" "$env_file"
 

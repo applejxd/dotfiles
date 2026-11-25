@@ -221,7 +221,8 @@ A. Tailscale 経由で、Windows で `tailscale serve --bg --tcp 50022 tcp://loc
 ### Q. iPhone などから、Windows と WSL の T3 Code を使いたい
 
 A. Windows 側の Tailscale Serve で出す（https 4433 が Windows 版、8443 が WSL。WSL には Tailscale を入れない）。
-ポートの固定と Serve は `chezmoi apply` が整える（家の機だけ）。WSL backend を切る設定とペアリングは手動。
+ポートの固定は `chezmoi apply` が全機に入れ、Serve は家の機だけが整える。WSL backend を切る設定とペアリングは手動。
+会社 PC（Tailscale なし）は、Windows から WSL の `127.0.0.1` に届く環境なら、Windows 版から WSL のサービスへ `http://127.0.0.1:3776/` で直接つなげる（実機は未確認）。
 手順・確認・症状は[T3 Code のリモートアクセス](docs/spec/t3code-remote-access.md)。
 
 ## ライセンス

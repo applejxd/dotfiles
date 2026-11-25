@@ -19,7 +19,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVICE_ENV = ROOT / "home/.chezmoiscripts/100_linux/run_after_127_t3code_service_env.sh.tmpl"
-WIN_PORT = ROOT / "home/.chezmoiscripts/300_windows/run_after_353_t3code_port.ps1.tmpl"
+WIN_PORT = ROOT / "home/.chezmoiscripts/300_windows/run_after_353_t3code_port.ps1"
 WIN_SERVE = ROOT / "home/.chezmoiscripts/300_windows/run_after_354_t3code_wsl_serve.ps1.tmpl"
 BACKSLASH = chr(92)
 WSL_KERNEL = "5.15.167.4-microsoft-standard-WSL2"
@@ -100,14 +100,15 @@ def _script() -> str:
     [
         ("applejxd", WSL_KERNEL, None, True),  # 家の機 (個人のユーザー名)
         ("HOST" + BACKSLASH + "applejxd", WSL_KERNEL, None, True),  # Windows 形式のドメイン付き
-        ("applejxd", WSL_KERNEL, True, False),  # 個人のユーザー名でも、会社 PC と明示した機
-        ("other-user", WSL_KERNEL, None, False),  # 会社 PC とみなす
-        ("other-user", WSL_KERNEL, False, True),  # 家の機と明示した機
+        ("applejxd", WSL_KERNEL, True, True),  # 会社 PC と明示した機にも入れる (is-work で出し分けない)
+        ("other-user", WSL_KERNEL, None, True),  # 会社 PC とみなす機にも入れる
+        ("other-user", WSL_KERNEL, False, True),
         ("applejxd", "6.8.0-45-generic", None, False),  # WSL ではない
+        ("other-user", "6.8.0-45-generic", None, False),
     ],
 )
-def test_service_env_script_is_only_for_home_machines_on_wsl(username, osrelease, work, deployed):
-    # 判定は is-work (会社 PC の判定の単一ソース)。WSL かどうかはカーネルの名前で見る
+def test_service_env_script_is_for_every_wsl_regardless_of_is_work(username, osrelease, work, deployed):
+    # 自宅・会社 PC を問わず、WSL だけ。WSL かどうかはカーネルの名前で見る (is-work では出し分けない)
     assert bool(_render(username, osrelease, work).strip()) is deployed
 
 
@@ -232,6 +233,38 @@ def test_service_env_is_not_overwritten_when_it_changes_during_processing(home):
     assert "処理中に変わった" in result.stderr
 
 
+def _fake_awk_that_then_runs(home: Home, command: str) -> None:
+    """本物の awk を実行したあとに command を実行する偽の awk (読んでから置き換えるまでの間の変化を作る)。"""
+    real_awk = shutil.which("awk")
+    if os.name != "posix" or real_awk is None:
+        pytest.skip("偽の awk は POSIX と awk が要る")
+    fake = home.bin / "awk"
+    fake.write_text(
+        f'#!/bin/bash\n"{real_awk}" "$@"\nstatus=$?\n{command}\nexit $status\n', encoding="utf-8"
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+
+
+def test_service_env_is_not_recreated_when_it_is_deleted_during_processing(home):
+    (home.home / ".t3").mkdir()
+    home.env_file.write_text("OTHER=1\n", encoding="utf-8")
+    _fake_awk_that_then_runs(home, 'rm -f "$HOME/.t3/service.env"')
+    result = home.run(_script())
+    assert result.returncode == 0, result.stderr
+    assert not home.env_file.exists()
+    assert "処理中に変わった" in result.stderr
+
+
+def test_service_env_is_not_overwritten_when_it_is_created_during_processing(home):
+    (home.home / ".t3").mkdir()
+    _fake_awk_that_then_runs(home, 'echo "CREATED_BY_T3_UP=1" > "$HOME/.t3/service.env"')
+    result = home.run(_script())
+    assert result.returncode == 0, result.stderr
+    text = home.env_file.read_text(encoding="utf-8")
+    assert text == "CREATED_BY_T3_UP=1\n"
+    assert "処理中にできた" in result.stderr
+
+
 # ---- Windows ----
 
 
@@ -269,13 +302,21 @@ def _render_template(path: Path, data: dict) -> str:
         ({"chezmoi": {"username": "other-user"}, "work": False}, True),  # 家の機と明示した機
     ],
 )
-@pytest.mark.parametrize(("path", "word"), [(WIN_PORT, "T3CODE_PORT"), (WIN_SERVE, "tailscale")])
-def test_windows_scripts_are_only_for_home_machines(path, word, data, deployed):
-    # T3 Code の設定は、家の機だけ。判定は is-work (会社 PC の判定の単一ソース) に揃える
-    rendered = _render_template(path, data).replace("\ufeff", "").strip()
+def test_windows_serve_script_is_only_for_home_machines(data, deployed):
+    # Tailscale Serve は、家の機だけ。判定は is-work (会社 PC の判定の単一ソース)。会社 PC は Tailscale を使わない
+    rendered = _render_template(WIN_SERVE, data).replace("\ufeff", "").strip()
     assert bool(rendered) is deployed
     if deployed:
-        assert word in rendered
+        assert "tailscale" in rendered
+
+
+def test_windows_port_script_is_for_every_machine_and_never_touches_tailscale():
+    # ポートの固定は、自宅・会社 PC を問わない。is-work で出し分けず、Tailscale も呼ばない
+    source = WIN_PORT.read_text(encoding="utf-8-sig")
+    assert "{{" not in source, "テンプレートの分岐を持たない (だから .tmpl ではない)"
+    assert "is-work" not in source
+    assert "tailscale" not in source.lower()
+    assert "T3CODE_PORT" in _windows(WIN_PORT)
 
 
 def test_windows_port_script_pins_the_user_variable_only_when_it_differs():
