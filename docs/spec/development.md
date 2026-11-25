@@ -244,7 +244,7 @@ Windows 側は未検証である。静的テストが拾えるのは
 UTF-8 BOM、winget の記法、プロファイルの字面までで、次は拾えない。
 
 - 起動エラーと OnIdle ジョブのエラー（どちらもコンソールに出ない）
-- 対話時だけ実行するブロック（PSReadLine / oh-my-posh / PSFzf / ZLocation、
+- 対話時だけ実行するブロック（PSReadLine / oh-my-posh（streaming・Enter のハンドラ）/ PSFzf の仮のキーバインド / ZLocation、
   `pbcopy` などの補助関数）
 - oh-my-posh の init をキャッシュすると pure テーマが既定の powerline へ戻る問題、
   `mise activate` の PATH 重複、`Ctrl+d` の既定バインドが端末を閉じる問題

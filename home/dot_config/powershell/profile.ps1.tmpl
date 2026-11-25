@@ -165,6 +165,17 @@ function ccd { Set-Location {{ .chezmoi.workingTree | squote }} }
 . "$PSScriptRoot/commands/pwgen.ps1"
 . "$PSScriptRoot/commands/docker.ps1"
 . "$PSScriptRoot/commands/fzf.ps1"
+. "$PSScriptRoot/commands/chocolatey.ps1"
+
+# キーバインド。oh-my-posh の init より前に置く: -EditMode は割り当てを初期化するため、
+# 後に置くと init が足した Enter / Ctrl+c のハンドラが消える。Enter のハンドラは
+# transient prompt と streaming の再描画の切り替えに要り、消えるとプロンプトが更新されない。
+if (Get-Module PSReadLine) {
+  Set-PSReadLineOption -EditMode Emacs
+  Set-PSReadLineOption -BellStyle None
+  # 標準だと Ctrl+d は DeleteCharOrExit のため、うっかり端末が終了することを防ぐ
+  Set-PSReadLineKeyHandler -Chord 'Ctrl+d' -Function DeleteChar
+}
 
 # テーマ。winget の MSIX 版 (ohmyposh.cli) は POSH_THEMES_PATH を設定しないので、同梱の複製を使う
 # see docs/spec/shell.md#powershellプロファイル
@@ -179,46 +190,52 @@ if ($poshTheme -and [System.IO.File]::Exists($poshTheme)) {
   # テーマに戻ってしまう (実測: 同じ init スクリプトでも ID が違うと別テーマ)。
   $poshCommand = @(Get-Command oh-my-posh -ErrorAction Ignore -CommandType Application)[0]
   if ($poshCommand) {
-    $poshActivation = (@(& $poshCommand.Path init pwsh --config $poshTheme) -join "`n")
-    # Invoke-Expression は空文字を受け付けない (ValidateNotNullOrEmpty)
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($poshActivation)) {
-      Invoke-Expression $poshActivation
-    } else {
-      Write-Warning "oh-my-posh init failed with exit code $LASTEXITCODE"
+    # テーマの "streaming" は、プロンプトごとのプロセス起動を省く常駐プロセスを使う。
+    # PowerShell 6+ の ConsoleHost (Windows Terminal・conhost・VS Code の統合ターミナル) だけで
+    # 使う。5.1 (常駐でなくプロンプトごとの起動になり、遅い) と、PSES (VS Code の PowerShell 拡張。
+    # idle の処理が並行して走り不具合になる)・ISE では切る。
+    # 変数は init の間だけ立て、子プロセスへ漏らさない (利用者が自分で立てている場合は触らない)。
+    # see docs/spec/shell.md#powershellプロファイル
+    $poshStreamingOff = $null -eq [Environment]::GetEnvironmentVariable('POSH_DISABLE_STREAMING') -and (
+      $PSVersionTable.PSVersion.Major -lt 6 -or $Host.Name -ne 'ConsoleHost'
+    )
+    if ($poshStreamingOff) {
+      [Environment]::SetEnvironmentVariable('POSH_DISABLE_STREAMING', '1')
+    }
+    try {
+      $poshActivation = (@(& $poshCommand.Path init pwsh --config $poshTheme) -join "`n")
+      # Invoke-Expression は空文字を受け付けない (ValidateNotNullOrEmpty)
+      if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($poshActivation)) {
+        Invoke-Expression $poshActivation
+      } else {
+        Write-Warning "oh-my-posh init failed with exit code $LASTEXITCODE"
+      }
+    } finally {
+      if ($poshStreamingOff) {
+        [Environment]::SetEnvironmentVariable('POSH_DISABLE_STREAMING', [NullString]::Value)
+      }
+    }
+    # transient prompt (theme の transient_prompt) は streaming で先に描いておく。
+    # そうでないと Enter ごとに oh-my-posh を起動し、コマンドの実行が 0.1 秒遅れる。
+    # (init が失敗して変数が無いときも、StrictMode で落ちないよう Get-Variable で読む)
+    if (-not (Get-Variable -Name _ompStreaming -Scope Global -ValueOnly -ErrorAction Ignore)) {
+      $global:_ompTransientPrompt = $false
     }
   }
 }
 
-# キーバインド
-if (Get-Module PSReadLine) {
-  Set-PSReadLineOption -EditMode Emacs
-  Set-PSReadLineOption -BellStyle None
-  # 標準だと Ctrl+d は DeleteCharOrExit のため、うっかり端末が終了することを防ぐ
-  Set-PSReadLineKeyHandler -Chord 'Ctrl+d' -Function DeleteChar
+# 読み込みに 0.2〜0.3 秒かかるモジュールは、使う時まで読み込まない (仮の定義だけ置く)。
+# 起動後の idle で読む処理は、入力ループと同じスレッドで走って打鍵を止める。
+# see docs/spec/shell.md#powershellプロファイル
+# PSFzf の PSReadLine 連携は Windows PowerShell 5.1 では安定しないため Core のみ
+if ($PSVersionTable.PSEdition -eq 'Core') {
+  Register-PsFzfLazyKeyHandler
 }
+Register-ChocolateyLazyProfile
 
-# 起動を遅らせてよいモジュールは最初のプロンプト表示後にまとめて読み込む。
-# PSFzf と ZLocation だけで 1 秒ほどかかるため、登録はこの 1 箇所に集約する。
+# 起動を遅らせてよいモジュールは最初のプロンプト表示後に読み込む。
+# 登録はこの 1 箇所に集約する。
 Register-EngineEvent -SourceIdentifier PowerShell.OnIdle -Action {
-  $chocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-  if ([System.IO.File]::Exists($chocolateyProfile)) {
-    try {
-      Import-Module $chocolateyProfile -Scope Global -ErrorAction Stop
-    } catch {
-      Write-Warning "Failed to import the Chocolatey profile: $_"
-    }
-  }
-
-  # PSFzf の PSReadLine 連携は Windows PowerShell 5.1 では安定しないため Core のみ
-  if ($PSVersionTable.PSEdition -eq 'Core') {
-    try {
-      Import-Module PSFzf -Scope Global -ErrorAction Stop
-      Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
-    } catch {
-      Write-Warning "Failed to set up PSFzf: $_"
-    }
-  }
-
   try {
     Import-Module ZLocation -Scope Global -ErrorAction Stop
   } catch {

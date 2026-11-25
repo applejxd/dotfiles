@@ -102,6 +102,7 @@
 
 | 文書 | 内容 |
 | --- | --- |
+| [PowerShell が遅いことがある件の原因分析と対策](shell/powershell-slow-2026-11.md) | 2026-11-25。ConPTY での実測。起動後の idle の読み込みが打鍵を 0.3〜1.1 秒止める（676→364 ms）、プロンプトごとの oh-my-posh 起動（146→48 ms、git で 269→142 ms）、起動の約 1.2 秒は不変で oh-my-posh が約 0.33 秒。`-EditMode` が Enter ハンドラを消していた不具合。MSIX の別名は 1 起動あたり 35〜50 ms 遅い。残った候補 |
 | [PowerShell プロファイルの起動時間](shell/powershell-profile-startup.md) | pwsh 1420→510 ms などの中央値、cmdlet の初回呼び出しの遅さ、oh-my-posh キャッシュを外した後は未計測 |
 | [zsh の起動時間](shell/zsh-startup-time.md) | 2026-10-18。WSL2 で 0.37〜0.40 s → 0.24〜0.25 s、区間別の時間、`/mnt/*` を走査する `command -v` が約 10 ms、`${__p#*…}` が 37 ms。macOS / Windows / 別マシンは未検証 |
 | [Windows PowerShell 5.1 / 7 での実機確認](shell/windows-powershell-live-check.md) | 2026-10-05。`copilot` 関数の環境変数・終了コード・finally・パイプ、非対話でのプロファイル、Windows の Python での読み取り判定の大小文字。5.1 はネイティブ引数（`"`・空文字・末尾 `\`）が欠ける。pwsh 7 は `finally` が変数を空文字で残す不具合（修正済み・再確認済み）、未確認は対話シェル |

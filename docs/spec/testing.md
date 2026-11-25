@@ -14,7 +14,8 @@ GitHub Actions で見ている範囲を書く。
 範囲は [Windows 実機での検証](development.md#windows-実機での検証) を参照。
 
 対話テストがプロンプト到達後に確認するのは、起動エラー、OnIdle ジョブのエラー、
-PSReadLine / PSFzf / ZLocation と基本コマンドである。
+PSReadLine / ZLocation / oh-my-posh（streaming と Enter のハンドラ）と基本コマンド、
+PSFzf の仮のキーバインド（Ctrl+r で読み込まれること）である。
 `chezmoi update` / `chezmoi apply` はテスト内で実行しないため、変更した設定は事前に適用する。
 Windows 以外、または `pywinpty` 未指定の場合は対話テストをスキップする。
 

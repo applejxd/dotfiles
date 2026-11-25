@@ -251,7 +251,7 @@ macOS では同じです。
 | --- | --- |
 | `home/dot_config/powershell/profile.ps1.tmpl` | PowerShell 7 / 5.1 共通の本体 |
 | `home/dot_config/powershell/cache.ps1` | init 出力のキャッシュ（`Get-CachedInitScript`）。本体がトップレベルで dot-source する |
-| `home/dot_config/powershell/commands/*.ps1` | 用途別の関数（wsl、docker、fzf、pwgen） |
+| `home/dot_config/powershell/commands/*.ps1` | 用途別の関数（wsl、docker、fzf、pwgen、chocolatey）。fzf と chocolatey は、遅いモジュールを使うときまで読み込まない仮の定義も持つ |
 | `home/Documents/*/profile.ps1.tmpl` | `$PROFILE` から本体を呼ぶローダー |
 | `home/.chezmoitemplates/powershell/profile-loader.ps1` | `$PROFILE` ローダーの本文。Documents 配下と `run_after_345` が共有する |
 | `home/.chezmoitemplates/powershell/git-config-env.ps1` | プロファイルとScoopスクリプトで共有する `GIT_CONFIG_*` の正規化 |
@@ -305,6 +305,34 @@ macOS では同じです。
 - **oh-my-posh のテーマ**: `POSH_THEMES_PATH` の `pure.omp.json` があればそれを、無ければ `~/.config/powershell/themes/pure.omp.json`
   （同梱の複製）を使います。winget の MSIX 版（`ohmyposh.cli`）は `POSH_THEMES_PATH` を設定せず、
   従来はテーマが見つからないまま既定のプロンプトで起動していました（[観測](../research/chezmoi/structure-windows-notes.md)）。
+- **oh-my-posh は streaming で動かす（pwsh のみ）**: テーマ（`themes/pure.omp.json`）の `"streaming": 100` が、
+  プロンプトごとの `oh-my-posh.exe` の起動（MSIX の別名経由で約 65 ms）を、常駐の `oh-my-posh serve` に置き換える。
+  遅い区画（git）は 100 ms で打ち切って `...` を出し、結果が出たらその場で描き直す。`Enter`→次のプロンプトは
+  非 git で 146→48 ms、git で 269→142 ms（[実測](../research/shell/powershell-slow-2026-11.md)）。
+  - **5.1・PSES・ISE では切る**: 5.1 は常駐でなくプロンプトごとの `stream` の起動になり、実測で遅かった。
+    プロファイルは、ConsoleHost 以外と 5.1 のとき、`POSH_DISABLE_STREAMING` を init の間だけ立てる
+    （init が `Enable-PoshStreaming` を呼ぶ時点で読まれる。子プロセスへ漏らさない。利用者が自分で立てていれば触らない）。
+    5.1 は `$env:X = ''` が変数を削除するので、値は `'1'`、戻すときは `[NullString]::Value`。
+  - **streaming が無いときは transient prompt を切る**: transient prompt は streaming が先に描いておく。
+    無いと Enter ごとに `oh-my-posh` を起動し、5.1 で 143→295 ms（git で 270→393 ms）に遅くなる。
+    `POSH_THEMES_PATH` のテーマ（`streaming` を持たない）のときも同じで、これまでの見た目と速さを保つ。
+  - **テーマへの設定は `streaming` だけが効く**: 環境変数 `POSH_STREAMING` は、oh-my-posh が書き出す init スクリプトが
+    設定の変更でしか作り直されないので、一度作られた後は反映されない（実測）。
+- **キーバインドの設定は oh-my-posh の init より前に置く**: `Set-PSReadLineOption -EditMode` は割り当てを初期化する。
+  init の後に置くと、init が足した Enter / Ctrl+c のハンドラが消え、transient prompt が出ず、streaming の
+  プロンプトが更新されなくなる（`Get-PSReadLineKeyHandler -Bound` で Enter が `AcceptLine` なら消えている。
+  試験は `test_deployed_profile_in_interactive_terminal`）。
+- **起動後の idle の処理は最小にする**: `PowerShell.OnIdle` の action は PSReadLine の入力ループと同じスレッドで走り、
+  その間は打った文字が画面に出ない（実測: Chocolatey・PSFzf・ZLocation を読むと、プロンプトの後 0.3〜1.1 秒）。
+  登録は 1 箇所に集約し、中身は ZLocation の読み込みと `Register-FzfKeyHandler` だけにする。
+  - PSFzf の Ctrl+t / Ctrl+r は、仮のハンドラ（`PSFzf (lazy)`）を置き、初めて押されたときに読み込んで本物へ差し替える（約 0.25 秒）。
+    読み込めないとき（未導入・壊れている）は警告し、標準の割り当て（Ctrl+r は履歴の逆方向の検索、Ctrl+t は文字の入れ替え）へ戻す。
+  - Chocolatey のプロファイル（`refreshenv`・`choco` の補完）は、仮の関数と補完を置き、使われたときに読み込む（約 0.3 秒）。
+    読み込み済みのとき（プロファイルの再読み込み）は仮の定義を置かない。仮の補完が本物を上書きした状態で自分自身へ戻らないよう、仮の補完の `Import-Module` は `-Force`。
+  - ZLocation は、プロンプトごとに `prompt` を包んで重みを書くので、使うときまで遅らせられない。起動後に 1 回、約 0.37 秒止まる。
+- **遅さを測る**: `scripts/windows/measure_pwsh_latency.py`（ConPTY。起動・打鍵の反映・Enter→プロンプト）。
+  結果と、原因でなかったもの・残った候補は [調査記録](../research/shell/powershell-slow-2026-11.md)。
+
 - **PATHを冪等に更新する**: `mise activate` は毎回PATHの先頭へ追加するため、
   追加後に重複を畳みます。
   あわせて未展開の `%VAR%`（例: `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps`）を展開します。
