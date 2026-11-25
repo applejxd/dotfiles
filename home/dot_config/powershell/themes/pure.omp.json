@@ -76,6 +76,7 @@
     }
   ],
   "console_title_template": "{{if .Root}}(Admin){{end}} {{.PWD}}",
+  "streaming": 100,
   "transient_prompt": {
     "foreground": "#B48EAD",
     "foreground_templates": [

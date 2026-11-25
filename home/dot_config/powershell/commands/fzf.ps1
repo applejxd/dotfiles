@@ -49,3 +49,37 @@ function Register-FzfKeyHandler {
     Set-PSReadLineKeyHandler -Chord 'Ctrl+x,Ctrl+f' -ScriptBlock { xf }
   }
 }
+
+# PSFzf (Ctrl+t / Ctrl+r) は読み込みに 0.2 秒かかり、起動の idle に置くと打鍵が止まる。
+# 仮のキーハンドラを置き、初めて押されたときに読み込んで本物の割り当てへ差し替える。
+# 読み込めないとき (未導入・壊れている) は、警告して標準の割り当て (Emacs モード) に戻す。
+# see docs/spec/shell.md#powershellプロファイル
+function Initialize-PsFzfOnDemand {
+  try {
+    Import-Module PSFzf -Scope Global -ErrorAction Stop
+    Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
+    $true
+  } catch {
+    Write-Warning "Failed to set up PSFzf: $_"
+    Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -Function ReverseSearchHistory
+    Set-PSReadLineKeyHandler -Chord 'Ctrl+t' -Function SwapCharacters
+    $false
+  }
+}
+
+function Register-PsFzfLazyKeyHandler {
+  Set-PSReadLineKeyHandler -Chord 'Ctrl+t' -BriefDescription 'PSFzf (lazy)' -ScriptBlock {
+    if (Initialize-PsFzfOnDemand) {
+      Invoke-FzfPsReadlineHandlerProvider
+    } else {
+      [Microsoft.PowerShell.PSConsoleReadLine]::SwapCharacters()
+    }
+  }
+  Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -BriefDescription 'PSFzf (lazy)' -ScriptBlock {
+    if (Initialize-PsFzfOnDemand) {
+      Invoke-FzfPsReadlineHandlerHistory
+    } else {
+      [Microsoft.PowerShell.PSConsoleReadLine]::ReverseSearchHistory()
+    }
+  }
+}

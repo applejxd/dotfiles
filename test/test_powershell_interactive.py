@@ -23,7 +23,7 @@ $jobErrors = @(Get-Job | ForEach-Object {
 $commands = @(Get-Command chezmoi, mise, uv, fzf -ErrorAction Stop |
     ForEach-Object { $_.Name })
 $modules = @(Get-Module | ForEach-Object { $_.Name })
-$wantedChords = @('Ctrl+d', 'Ctrl+x,Ctrl+g', 'Ctrl+x,Ctrl+f')
+$wantedChords = @('Enter', 'Ctrl+d', 'Ctrl+r', 'Ctrl+t', 'Ctrl+x,Ctrl+g', 'Ctrl+x,Ctrl+f')
 $chords = @{}
 Get-PSReadLineKeyHandler -Bound |
     Where-Object { $wantedChords -contains $_.Key } |
@@ -37,7 +37,17 @@ $optional = @{}
 foreach ($tool in 'ghq', 'z') {
     $optional[$tool] = [bool](Get-Command $tool -ErrorAction Ignore)
 }
+$chocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
 $result = @{
+    streaming = [bool]$global:_ompStreaming
+    transientPrompt = [bool]$global:_ompTransientPrompt
+    themeFromEnvironment = [bool](
+        $env:POSH_THEMES_PATH -and
+        [System.IO.File]::Exists([System.IO.Path]::Combine($env:POSH_THEMES_PATH, 'pure.omp.json'))
+    )
+    disableStreamingLeaked = $null -ne [Environment]::GetEnvironmentVariable('POSH_DISABLE_STREAMING')
+    chocolateyInstalled = [bool]($env:ChocolateyInstall -and [System.IO.File]::Exists($chocolateyProfile))
+    refreshenvType = [string](Get-Command refreshenv -ErrorAction Ignore).CommandType
     startupErrors = $startupErrors
     jobErrors = $jobErrors
     inputRedirected = [Console]::IsInputRedirected
@@ -56,6 +66,17 @@ $result = @{
 Write-Output ('CONPTY_RESULT:' + ($result | ConvertTo-Json -Compress))
 Write-Output 'CONPTY_DONE'
 """
+
+
+def spawn_env(**extra: str) -> dict[str, str]:
+    """oh-my-posh の streaming を左右する変数を、実行者の環境から遮断した環境を返す。"""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ("POSH_DISABLE_STREAMING", "POSH_STREAMING")
+    }
+    env.update(extra)
+    return env
 
 
 class PtyTimeout(Exception):
@@ -122,6 +143,7 @@ def test_deployed_profile_in_interactive_terminal(shell: str, tmp_path: Path):
             "Write-Output 'CONPTY_READY'",
         ],
         dimensions=(40, 240),
+        env=spawn_env(),
         backend=1,
     )
     process.fileobj.settimeout(0.25)
@@ -142,6 +164,19 @@ def test_deployed_profile_in_interactive_terminal(shell: str, tmp_path: Path):
         assert result["outputRedirected"] is False
         assert {"chezmoi.exe", "mise.exe", "uv.exe", "fzf.exe"} <= set(result["commands"])
         assert {"PSReadLine", "ZLocation"} <= set(result["modules"])
+        # 読み込みに 0.2〜0.3 秒かかるモジュールは起動の idle で読まない
+        # (idle の処理は打鍵を止める)。使うときまで仮の定義だけを置く。
+        assert "PSFzf" not in result["modules"]
+        assert "chocolateyProfile" not in result["modules"]
+        if result["chocolateyInstalled"]:
+            assert result["refreshenvType"] == "Function"
+        # streaming (oh-my-posh の常駐プロセス) は PowerShell 6+ だけで有効にし、
+        # init のための環境変数を子プロセスへ漏らさない
+        assert result["disableStreamingLeaked"] is False
+        # transient prompt は streaming のときだけ有効 (無いと Enter ごとに oh-my-posh を起動して遅い)
+        assert result["transientPrompt"] is result["streaming"]
+        if not result["themeFromEnvironment"]:
+            assert result["streaming"] is (shell == "pwsh")
         # プロファイルが定義する補助コマンドが対話セッションに揃っていること
         # (分割したファイルを dot-source しても、定義がグローバルに残ること)
         assert {
@@ -158,19 +193,118 @@ def test_deployed_profile_in_interactive_terminal(shell: str, tmp_path: Path):
         chords = result["chords"]
         # 既定の Ctrl+d は DeleteCharOrExit で、端末が閉じてしまうため上書きしている
         assert chords.get("Ctrl+d") == "DeleteChar"
+        # oh-my-posh の Enter ハンドラ。-EditMode を init の後で設定すると割り当てごと消え、
+        # transient prompt が出ず、streaming のプロンプトが更新されなくなる
+        assert chords.get("Enter") == "OhMyPoshEnterKeyHandler"
+        if shell == "pwsh":
+            # PSFzf の割り当ては、初めて押されたときに本物へ差し替わる仮のもの
+            assert chords.get("Ctrl+r") == "PSFzf (lazy)"
+            assert chords.get("Ctrl+t") == "PSFzf (lazy)"
         # Register-FzfKeyHandler が OnIdle から呼ばれ、実際に登録されていること
         if result["optional"]["ghq"]:
             assert "Ctrl+x,Ctrl+g" in chords
         if result["optional"]["z"]:
             assert "Ctrl+x,Ctrl+f" in chords
-        if shell == "pwsh":
-            assert "PSFzf" in result["modules"]
         process.write("exit\r")
         deadline = time.monotonic() + 10
         while process.isalive() and time.monotonic() < deadline:
             time.sleep(0.1)
         assert not process.isalive(), "PowerShell did not exit"
         assert process.exitstatus == 0
+    finally:
+        if process.isalive():
+            process.terminate(force=True)
+
+
+LAZY_PROBE = (
+    "$psfzf = [bool](Get-Module PSFzf); "
+    "$ctrlR = (Get-PSReadLineKeyHandler -Bound | Where-Object Key -eq 'Ctrl+r').Function; "
+    "$ctrlT = (Get-PSReadLineKeyHandler -Bound | Where-Object Key -eq 'Ctrl+t').Function; "
+    "Write-Output ('LAZY_RESULT:' + (@{ psfzf = $psfzf; ctrlR = $ctrlR; ctrlT = $ctrlT } "
+    "| ConvertTo-Json -Compress)); Write-Output 'LAZY_DONE'"
+)
+
+
+def test_psfzf_is_loaded_when_ctrl_r_is_first_pressed():
+    """PSFzf は起動時に読まず、Ctrl+r を押したときに読み込んで本物の割り当てへ差し替える。"""
+    winpty = pytest.importorskip("winpty", reason="Run with uv --with pywinpty")
+    executable = shutil.which("pwsh")
+    assert executable, "pwsh is not installed"
+    process = winpty.PtyProcess.spawn(
+        [
+            executable, "-NoLogo", "-NoExit", "-Command",
+            "Set-PSReadLineOption -HistorySaveStyle SaveNothing; "
+            "Write-Output 'CONPTY_READY'",
+        ],
+        dimensions=(40, 240),
+        env=spawn_env(),
+        backend=1,
+    )
+    process.fileobj.settimeout(0.25)
+    reader = PtyReader(process)
+    try:
+        reader.read_until("CONPTY_READY\n")
+        time.sleep(3)
+        # 履歴に 1 件入れてから Ctrl+r を押す (fzf の件数表示 `1/1` で起動を確かめる)
+        reader.send_until("Write-Output 'SEED_DONE'", "\nSEED_DONE\n")
+        before = len(reader.text)
+        process.write("\x12")
+        deadline = time.monotonic() + 20
+        while not re.search(r"\d+/\d+", reader.text[before:]):
+            assert time.monotonic() < deadline, f"fzf did not start: {reader.text[before:]!r}"
+            try:
+                reader.raw += process.read(65536)
+            except TimeoutError:
+                continue
+        process.write("\x1b")  # fzf を閉じる
+        time.sleep(1)
+        output = reader.send_until(LAZY_PROBE, "\nLAZY_DONE\n")
+        match = re.search(r"LAZY_RESULT:(\{.*?\})\s*LAZY_DONE", output, re.DOTALL)
+        assert match, output
+        result = json.loads(match[1].replace("\n", ""))
+        assert result["psfzf"] is True
+        # 仮の割り当てが PSFzf のものへ差し替わっている
+        assert result["ctrlR"] and result["ctrlR"] != "PSFzf (lazy)"
+        assert result["ctrlT"] and result["ctrlT"] != "PSFzf (lazy)"
+    finally:
+        if process.isalive():
+            process.terminate(force=True)
+
+
+STREAMING_PROBE = (
+    "Write-Output ('STREAM_RESULT:' + (@{ "
+    "streaming = [bool]$global:_ompStreaming; "
+    "transient = [bool]$global:_ompTransientPrompt; "
+    "disable = [Environment]::GetEnvironmentVariable('POSH_DISABLE_STREAMING') "
+    "} | ConvertTo-Json -Compress)); Write-Output 'STREAM_DONE'"
+)
+
+
+def test_inherited_disable_streaming_is_kept_and_turns_streaming_off():
+    """利用者が自分で立てた POSH_DISABLE_STREAMING は、プロファイルが消さず、streaming も transient も切れる。"""
+    winpty = pytest.importorskip("winpty", reason="Run with uv --with pywinpty")
+    executable = shutil.which("pwsh")
+    assert executable, "pwsh is not installed"
+    process = winpty.PtyProcess.spawn(
+        [
+            executable, "-NoLogo", "-NoExit", "-Command",
+            "Set-PSReadLineOption -HistorySaveStyle SaveNothing; "
+            "Write-Output 'CONPTY_READY'",
+        ],
+        dimensions=(40, 240),
+        env=spawn_env(POSH_DISABLE_STREAMING="keep"),
+        backend=1,
+    )
+    process.fileobj.settimeout(0.25)
+    reader = PtyReader(process)
+    try:
+        reader.read_until("CONPTY_READY\n")
+        time.sleep(3)
+        output = reader.send_until(STREAMING_PROBE, "\nSTREAM_DONE\n")
+        match = re.search(r"STREAM_RESULT:(\{.*?\})\s*STREAM_DONE", output, re.DOTALL)
+        assert match, output
+        result = json.loads(match[1].replace("\n", ""))
+        assert result == {"streaming": False, "transient": False, "disable": "keep"}
     finally:
         if process.isalive():
             process.terminate(force=True)

@@ -1,4 +1,5 @@
 import ast
+import json
 import re
 from pathlib import Path
 
@@ -356,6 +357,85 @@ def test_fzf_key_handlers_are_registered_from_a_single_place():
     assert "Register-FzfKeyHandler" in profile
     # 失敗を握り潰さない
     assert "-ErrorAction SilentlyContinue" not in profile + cache
+
+
+def test_slow_modules_are_not_imported_from_the_startup_idle_event():
+    """OnIdle の action は PSReadLine の入力ループと同じスレッドで走り、その間は打鍵が反映されない。
+
+    実測 (docs/research/shell/powershell-slow-2026-11.md): PSFzf・Chocolatey・ZLocation を
+    まとめて読むと、最初のプロンプトの後に約 0.8 秒、打鍵が止まった。0.2 秒以上かかる
+    PSFzf と Chocolatey は、使うときまで読み込まない仮の定義にする。
+    """
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
+    fzf = (ROOT / "home/dot_config/powershell/commands/fzf.ps1").read_text(encoding="utf-8-sig")
+    choco = (ROOT / "home/dot_config/powershell/commands/chocolatey.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+
+    action = strip_comments(profile.split("Register-EngineEvent", 1)[1])
+    assert "Import-Module ZLocation" in action
+    for slow in ("PSFzf", "hocolatey"):
+        assert slow not in action, slow
+    # 仮の定義は、起動時 (idle の前) に登録する
+    assert profile.index("Register-PsFzfLazyKeyHandler") < profile.index("Register-EngineEvent")
+    assert profile.index("Register-ChocolateyLazyProfile") < profile.index("Register-EngineEvent")
+    assert '. "$PSScriptRoot/commands/chocolatey.ps1"' in profile
+
+    # PSFzf: 初めて押されたときに読み込み、本物の割り当てへ差し替えてから処理を続ける
+    assert profile.count("Register-PsFzfLazyKeyHandler") == 1
+    assert "-BriefDescription 'PSFzf (lazy)'" in fzf
+    assert "Invoke-FzfPsReadlineHandlerProvider" in fzf
+    assert "Invoke-FzfPsReadlineHandlerHistory" in fzf
+    assert "Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'" in fzf
+    # Chocolatey: refreshenv と choco の補完を、使われたときに読み込む
+    assert "function global:refreshenv" in choco
+    assert "Register-ArgumentCompleter -Native -CommandName choco" in choco
+    assert "Update-SessionEnvironment" in choco
+    assert "CompleteInput" in choco
+    # プロファイルの再読み込みで、読み込み済みの本物の補完を仮の補完で上書きしない。
+    # 仮の補完は -Force で本物を登録し直す (無いと自分自身へ戻って止まらなくなる)
+    assert "if (Get-Module chocolateyProfile) {" in choco
+    assert "chocolateyProfile.psm1\" -Scope Global -Force -ErrorAction Stop" in choco
+    # PSFzf を読み込めないときは、警告して標準の割り当てへ戻す
+    assert "-Chord 'Ctrl+r' -Function ReverseSearchHistory" in fzf
+    assert "-Chord 'Ctrl+t' -Function SwapCharacters" in fzf
+
+
+def test_oh_my_posh_streaming_is_enabled_by_the_theme_for_powershell_core_only():
+    """streaming は常駐の oh-my-posh serve を使い、プロンプトごとのプロセス起動を省く。
+
+    対応は PowerShell 6+ の ConsoleHost だけ。5.1 は常駐でなくプロンプトごとの起動になり遅く
+    (実測: docs/research/shell/powershell-slow-2026-11.md)、PSES (VS Code の PowerShell 拡張) は
+    idle の処理が並行して走り不具合になる (公式 docs)。無効化の環境変数は init の間だけ立てる。
+    """
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
+    theme = json.loads(
+        (ROOT / "home/dot_config/powershell/themes/pure.omp.json").read_text(encoding="utf-8-sig")
+    )
+
+    assert theme["streaming"] == 100
+    code = strip_comments(profile)
+    assert "$PSVersionTable.PSVersion.Major -lt 6" in code
+    assert "$Host.Name -ne 'ConsoleHost'" in code
+    assert "SetEnvironmentVariable('POSH_DISABLE_STREAMING', '1')" in code
+    # Windows PowerShell 5.1 は `$env:X = ''` で変数を削除してしまうため、値は '1' にする。
+    # 戻すときは 7 でも変数が消える [NullString]::Value を使う (`$null` は空文字になる)
+    assert "SetEnvironmentVariable('POSH_DISABLE_STREAMING', [NullString]::Value)" in code
+    # 利用者が自分で立てている変数には触れない
+    assert "$null -eq [Environment]::GetEnvironmentVariable('POSH_DISABLE_STREAMING')" in code
+    assert code.index("SetEnvironmentVariable('POSH_DISABLE_STREAMING', '1')") < code.index(
+        "init pwsh --config"
+    )
+    # streaming が無いと transient prompt は Enter ごとに oh-my-posh を起動して遅いので、切る。
+    # Enter のハンドラは init が足すもので、-EditMode は割り当てを初期化するため、
+    # キーバインドの設定は init より前に置く (後だとハンドラが消え、streaming の再描画が止まる)
+    # init が途中で失敗しても無効化の変数を子へ残さない。変数が無くても StrictMode で落ちない
+    assert "} finally {" in code
+    assert code.index("init pwsh --config") < code.index("} finally {")
+    assert "-not (Get-Variable -Name _ompStreaming -Scope Global -ValueOnly -ErrorAction Ignore)" in code
+    assert "$global:_ompStreaming" not in code
+    assert "$global:_ompTransientPrompt = $false" in code
+    assert code.index("Set-PSReadLineOption -EditMode Emacs") < code.index("init pwsh --config")
 
 
 def test_profile_loader_is_redeployed_when_documents_is_redirected():
