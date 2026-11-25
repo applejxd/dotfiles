@@ -353,8 +353,11 @@ Linux / WSL / Raspberry Pi / macOS では、表の 5 項目すべてを取得し
   - **`vim` は Git for Windows の実体を直接呼ぶ**（対話時だけの関数。実体が無い機では定義しない）: gow の `vim` は 7.4（2013 年）で、
     この `.vimrc` の `signcolumn` や `fixendofline` を解釈できず、構文の runtime も無い。ssh でなくても、Git の vim を使う意味がある。
     パイプの入力は `$MyInvocation.ExpectingInput` で明示的に渡す。
-  - **足りないもの**: uv が管理する Python の junction（`uv run`・`uvx`・pre-commit の ruff など）は、ssh では同じ理由で動かない。
-    `UV_PYTHON_PREFERENCE=only-system` で動くことを確かめたが、profile にはまだ入れていない（[調査記録](../research/shell/redirectionguard-ssh-2026-11.md#対処)）。
+  - **uv は システムの Python だけを使わせる**: uv が管理する Python は、`%APPDATA%\uv\python\cpython-3.14-…` の junction 経由なので、ssh では
+    `uv run`・`uvx`・pre-commit の ruff などが `Failed to inspect Python interpreter` で動かない。ssh のとき（`SSH_CONNECTION`）だけ
+    `UV_PYTHON_PREFERENCE=only-system` を設定する（利用者が指定していれば尊重）。システムに無い版を求めると `No interpreter found` になる。
+    uv の管理 Python で作った既存の `.venv`（`pyvenv.cfg` の `home` が junction）は、この設定でも ssh では動かない。作り直す
+    （[調査記録](../research/shell/redirectionguard-ssh-2026-11.md#対処)）。
 - **PATHを冪等に更新する**: `mise activate` は毎回PATHの先頭へ追加するため、
   追加後に重複を畳みます。
   あわせて未展開の `%VAR%`（例: `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps`）を展開します。
