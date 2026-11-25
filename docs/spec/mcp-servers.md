@@ -187,25 +187,25 @@ URL が未設定だとラッパーは、理由を stderr に出して、ツー�
 - 利用条件として、結果を表示するときは出典リンクを残す
 - Target 単位でドメインの許可・除外リストを強制できる（エージェント側から解除できない）
 
-#### MCP のプロトコルの版（2026-07-28 への対応。2026-11-25 に確認）
+#### MCP のプロトコルの版（2025-11-25 に統一。2026-11-25 に利用者が決めた）
 
-MCP の仕様 **2026-07-28**（2026-07-28 公開）は、`initialize` の握手とプロトコルのセッションを廃止し、リクエストごとに版・クライアントの情報・能力を `_meta` で運ぶ（`server/discover` は任意の事前の問い合わせ。stdio では旧式のサーバを見分ける探りにも使う）。
-**旧式（2025-11-25 以前）との共存が仕様にある**ので、更新は区間ごとに独立して進められる。
+この経路の MCP の版は **2025-11-25 に統一する**。MCP の仕様 **2026-07-28**（2026-07-28 公開）は、`initialize` の握手とプロトコルのセッションを廃止し、リクエストごとに版・クライアントの情報・能力を `_meta` で運ぶ（`server/discover` は任意の事前の問い合わせ）。
+旧式（2025-11-25 以前）との共存が仕様にあるが、今は**この経路の全区間が 2025-11-25 で揃い、2026-07-28 に上げられるのは proxy だけ**で、利点が小さい。そのため採らない。
 
-| 区間 | 今の版 | 2026-07-28 |
+| 区間 | 版 | 根拠 |
 | --- | --- | --- |
-| pi ⇔ ラッパー（stdio） | pi 1.6.0 の組み込みの MCP クライアントは**最大 2025-11-25**（実体の `LATEST_PROTOCOL_VERSION` で確認。`server/discover` を送らず、`initialize` で始める） | **pi 側が未対応**。Issue [#10416](https://github.com/earendil-works/pi/issues/10416)・PR [#12479](https://github.com/earendil-works/pi/pull/12479)（2026-11-24 に open。未マージ）。対応した pi は、まず `server/discover` で探り、旧式なら `initialize` へ戻る |
-| ラッパーの空のサーバ | 旧式（`initialize`）と新式の**両方に答える**（2026-11-25 に追加） | 対応済み。`server/discover`・`_meta` に版を持つ `tools/list` などに、握手なしで答える（`resultType`・`ttlMs`・`cacheScope` を付ける）。知らない版は `-32022` で、対応する版の一覧を返す |
-| proxy ⇔ AgentCore Gateway（HTTPS） | `mcp-proxy-for-aws-cli==1.7.0`（fastmcp 3 系）。Gateway へは 2025 系で話す | proxy **2.0.0**（2026-11-18）が MCP Python SDK v2（2026-07-28 対応。旧式にも同じ実装で答える）へ移った。**据え置き**（下の「上げる条件」） |
-| AgentCore Gateway | 既定は 2025 系（版ヘッダが無いリクエストは 2025-03-26） | アカウント側の設定。`UpdateGateway` の `supportedVersions` に `2026-07-28` を足すと、その版を要求したクライアントだけが新式になる。旧式のクライアントは、そのまま使える |
+| pi ⇔ ラッパー（stdio） | 2025-11-25 | pi 1.6.0 の組み込みの MCP クライアントは**最大 2025-11-25**（実体の `LATEST_PROTOCOL_VERSION` で確認。`server/discover` を送らず、`initialize` で始める） |
+| ラッパーの空のサーバ | 2025-11-25（要求が 2024-11-05・2025-03-26・2025-06-18 ならその版。知らない版・新しすぎる版は 2025-11-25） | ラッパーの `PROTOCOL`・`ACCEPTED_PROTOCOLS`。2026-07-28 の `server/discover` と新式のリクエストには答えない（旧式の「知らないメソッド」のエラー `-32601` を返す。2026-07-28 に対応したクライアントは、これを旧式のサーバとみなして `initialize` へ戻る） |
+| proxy ⇔ AgentCore Gateway（HTTPS） | 2025-11-25 | `mcp-proxy-for-aws-cli==1.7.0` は mcp 1.28.1（最新の版は 2025-11-25）。2.0.0（2026-11-18）は mcp 2.3.0（最新の版は 2026-07-28）なので、**上げない** |
+| AgentCore Gateway | 2025 系（既定。版ヘッダが無いリクエストは 2025-03-26） | アカウント側の設定。`UpdateGateway` の `supportedVersions` に **`2026-07-28` を足さない**（足しても、2025-11-25 を要求する 1.7.0 の proxy には影響しない） |
 
-**proxy を 2.0.0 に上げる条件**（会社 PC の実機が要る。この repo の機では確かめられない）:
+**2026-07-28 を採る条件**（どれも満たしたとき、新しい feature で改めて決める）:
 
-1. 2.0.0 は大きな版の更新（fastmcp 4・MCP Python SDK v2。Python 3.11 以上）。コマンドの引数（`--service`・`--region`・`--disable-telemetry`）は 2.0.0 の `--help` で残っていることを確かめた。**Gateway との通信（Gateway が 2025 系だけのとき・2026-07-28 も足したとき）と、pi の旧式の stdio への応答は未確認**。
-2. 会社 PC で `PROXY` を 2.0.0 にして、pi の `/mcp` で検索が通ることを、Gateway の 2 つの状態（2025 系だけ・2026-07-28 を足した）で確かめる。
-3. 通ったら、ラッパーの `PROXY` と試験（`test_wrapper_with_a_gateway_runs_the_pinned_proxy`）の版を上げる。Claude Code の写し（`claude-mcp-servers.json`）はラッパーを呼ぶだけで、版を持たない。
+1. pi が対応する（Issue [#10416](https://github.com/earendil-works/pi/issues/10416)・PR [#12479](https://github.com/earendil-works/pi/pull/12479)。2026-11-24 に open で未マージ）。対応した pi は、まず `server/discover` で探り、旧式なら `initialize` へ戻る。
+2. 会社 PC の実機で、proxy 2.0.0（fastmcp 4・MCP Python SDK v2。Python 3.11 以上。引数 `--service`・`--region`・`--disable-telemetry` は `--help` で残っていることを確認済み）が、Gateway が 2025 系だけのときと 2026-07-28 も足したときの両方で、pi の `/mcp` から検索を通す。**これは未確認**。
+3. 上げるときは、ラッパーの `PROXY` と試験（`test_wrapper_with_a_gateway_runs_the_pinned_proxy`）の版、空のサーバの新式への応答（`server/discover`・`_meta` に版を持つ `tools/list`。`resultType`・`ttlMs`・`cacheScope` が要る）を足す。
 
-**得るもの（推測）**: 検索 1 本を stdio のラッパー越しに呼ぶ使い方では、2026-07-28 の利点（水平に増やせる・キャッシュ・ヘッダでの振り分け）はほぼ効かない。上げる理由は、1.7.0 → 2.0.0 の間の依存の脆弱性の修正（proxy の CHANGELOG の 1.8.0 の記載）が主になる。
+**得るもの（推測）**: 検索 1 本を stdio のラッパー越しに呼ぶ使い方では、2026-07-28 の利点（水平に増やせる・キャッシュ・ヘッダでの振り分け）はほぼ効かない。proxy の版を上げる理由は、依存の脆弱性の修正（proxy の CHANGELOG の 1.8.0 の記載）が主になる。それは 1.x のまま 1.8.0 へ上げて得られる（1.8.0 が使う mcp の版は未確認）。
 
 出典（2026-11-25 に取得）: [MCP 仕様 2026-07-28 の変更点](https://modelcontextprotocol.io/specification/2026-07-28/changelog)・[版の互換](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning)・[stdio](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio)・[server/discover](https://modelcontextprotocol.io/specification/2026-07-28/server/discover)、
 [AWS: AgentCore Gateway と MCP 2026-07-28](https://aws.amazon.com/blogs/machine-learning/how-agentcore-gateway-supports-the-mcp-2026-07-28-spec/)（2026-07-28）、
