@@ -27,6 +27,7 @@ Windows に既にあったもの: `z`（ZLocation）・`xf` / `xg` / `sshf`・fz
 - **`LocationChangedAction`** は PowerShell 7 にあり、5.1 には無い（プロパティが無い）。5.1 の PSReadLine 2.0.0 は `-PredictionSource` を持たない。**無いパラメーターを `try` / `catch` で受けても、`$Error` に 1 件残る**（起動エラーの検査が落ちた）ので、PSReadLine の版（2.1.0 以上）で判定する。
 - **`CommandNotFoundAction` と `LocationChangedAction` は、読み戻すと、代入したスクリプトブロックではなく、変換されたデリゲート**（`EventHandler<…>`）が返る。スクリプトブロックと `ReferenceEquals` で比べても一致しないので、同じファイルを 2 回読み込む（プロファイルの再読み込み）と、前のハンドラとして自分自身を保持し、**スタックオーバーフロー**になった（試験で再現）。登録したあとに読み戻したデリゲートを控えて比べる。
 - **`CommandNotFoundAction` のハンドラは、入力の引数を見られない**。差し替えた `CommandScriptBlock` が受け取る `$args` で、引数つきかどうかを判定し、引数があれば `CommandNotFoundException` を投げる（`build --help` が、同名のディレクトリへの移動にならない）。
+- **mise の cache は、Windows では `%TEMP%` の下の `mise`**（`mise cache path` が `…\AppData\Local\Temp\mise` を返す。2026-11-25、mise 2026.11.13）。TEMP をリポジトリの `.tmp` へ向けた対話シェルで mise を動かすと、`<repo>/.tmp/mise/<ツール>/<版>` と `metadata-*.msgpack.z` が作られた（配備後の ConPTY で確認）。Linux の cache は `~/.cache/mise` で、TMPDIR の影響を受けない。対策として、`MISE_CACHE_DIR` が未指定なら、向ける前の TEMP の `mise` に固定した。
 - `Set-Content` などの `-Path` はワイルドカード（`[ab].txt` は `a.txt` に一致する）。git の pathspec も同じ。`git --literal-pathspecs` と `-LiteralPath` を使う。
 - **場所のスタック**（`Push-Location`・`Get-Location -Stack`）は SessionState ごと。モジュールの関数の中の `Get-Location -Stack` は、呼び出し元のスタックを見ない。
 - **PSReadLine の `-Chord 'Space'` は不正**（`Unrecognized key 'Space'`）。`Spacebar` を使う。Space のハンドラが例外を出すと、空白が入らなくなる（キーボードが使えなくなる）ので、`try` / `catch` で、失敗しても空白を入れる。
