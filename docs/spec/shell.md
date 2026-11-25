@@ -213,8 +213,10 @@ zinit が管理するプラグイン（`yuki-yano/zeno.zsh`、`zsh-users/zsh-com
 | `~/.tmux/plugins/tpm` | tmux-plugins/tpm | git-repo（`--depth 1`） |
 | `~/.vim/colors/iceberg.vim` | cocopon/iceberg.vim | file |
 
-Windows native では rc を配らないため対象外です。Linux / WSL / Raspberry Pi /
-macOS では同じです。
+Windows native では rc を配らないため、`iceberg.vim` 以外は対象外です。`~/.vimrc` は Windows にも
+配り、`colorscheme iceberg` が読むので、`iceberg.vim` だけは Windows でも取得します（Git for Windows の vim は
+`~/.vim/colors`、ネイティブ版の vim は `~/vimfiles` を見るため、`.vimrc` が `runtimepath` へ `~/.vim` を足します）。
+Linux / WSL / Raspberry Pi / macOS では、表の 5 項目すべてを取得します。
 
 ## zinit の遅延読み込みの順序
 
@@ -333,6 +335,16 @@ macOS では同じです。
 - **遅さを測る**: `scripts/windows/measure_pwsh_latency.py`（ConPTY。起動・打鍵の反映・Enter→プロンプト）。
   結果と、原因でなかったもの・残った候補は [調査記録](../research/shell/powershell-slow-2026-11.md)。
 
+- **`vim` は Git for Windows の実体を直接呼ぶ**（対話時だけの関数。実体が無い機では定義しない）: scoop の shim は
+  `current` の junction を通る。ssh では sshd が RedirectionGuard（信頼されない junction を辿らせない保護）を有効にしていて、
+  `Shim: Could not create process` で起動できない（scoop の
+  [Issue #6594](https://github.com/ScoopInstaller/Scoop/issues/6594)・[#6612](https://github.com/ScoopInstaller/Scoop/issues/6612)。
+  2026-11-25 取得。同じ症状の報告で、この機の ssh では再現していない（localhost へ入れない）ので、原因は**推測**）。
+  この機の scoop のアプリ（`7zip`・`ghq`・`gow`・`mingw-winlibs`・`pdftk`・`sudo`）は、すべて `current` が junction。
+  gow の `vim` は 7.4（2013 年）で、この `.vimrc` の `signcolumn` や `fixendofline` を解釈できず、構文の runtime も無い。
+  パイプの入力は `$MyInvocation.ExpectingInput` で明示的に渡す。
+  vim 以外の scoop のコマンド（`ghq` など）も ssh では同じ理由で動かない。管理者の `scoop reset <アプリ>` で junction を
+  作り直すと信頼されるが、更新のたびに戻る（上の Issue の報告。未検証）。
 - **PATHを冪等に更新する**: `mise activate` は毎回PATHの先頭へ追加するため、
   追加後に重複を畳みます。
   あわせて未展開の `%VAR%`（例: `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps`）を展開します。

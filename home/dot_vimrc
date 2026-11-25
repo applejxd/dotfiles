@@ -1,9 +1,21 @@
+"=== エンコード（最初に置く） ================================================
+
+" 以降の多バイト文字（listchars など）を、既定の文字コード（Windows では cp932）で読まない
+set encoding=utf-8
+scriptencoding utf-8
+
+" listchars の » · ␣ は曖昧幅の文字。Windows の ConPTY (日本語ロケール) はこれを倍幅と報告し、
+" vim が 'ambiwidth' を double に自動で変えて E834 (listchars と衝突) を出すので、single に固定する
+set ambiwidth=single
+
 "=== 表示/配色 ================================================================
 
 " 端末が真の24bit色対応なら有効化（vim8以降/GUI/多くの端末で有効）
 if has('termguicolors') | set termguicolors | endif
 
 " ダーク背景前提のテーマ
+" Windows のネイティブ版 vim は ~/vimfiles を見る。iceberg.vim は ~/.vim/colors に置くので探索先へ足す
+if has('win32') | set runtimepath^=~/.vim | endif
 set background=dark
 colorscheme iceberg
 
@@ -101,8 +113,7 @@ set fixendofline
 
 "=== ファイル/エンコード/永続化 ==============================================
 
-" エンコードと改行コードの優先度（UTF-8最優先）
-set encoding=utf-8
+" エンコードと改行コードの優先度（UTF-8最優先。encoding は先頭で設定済み）
 set fileencodings=utf-8,ucs-bom,euc-jp,cp932,latin1
 set fileformats=unix,dos,mac
 

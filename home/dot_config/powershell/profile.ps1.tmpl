@@ -157,6 +157,20 @@ function pbpaste { Get-Clipboard @args }
 function relogin { & (Get-Process -Id $PID).Path -NoExit }
 function explorer-restart { Stop-Process -Name explorer -Force; Start-Process explorer }
 
+# scoop の shim は `current` の junction を通る。ssh (sshd は RedirectionGuard で junction を辿らせない) では
+# `Shim: Could not create process` で vim が起動できないので、Git for Windows 同梱の vim を直接呼ぶ。
+# 関数は既定では標準入力を子プロセスへ引き継がないので、パイプの入力は明示する。
+# see docs/spec/shell.md#powershellプロファイル
+if ([System.IO.File]::Exists("$env:ProgramFiles\Git\usr\bin\vim.exe")) {
+  function vim {
+    if ($MyInvocation.ExpectingInput) {
+      $input | & "$env:ProgramFiles\Git\usr\bin\vim.exe" @args
+    } else {
+      & "$env:ProgramFiles\Git\usr\bin\vim.exe" @args
+    }
+  }
+}
+
 # `chezmoi cd` that keeps the current shell session
 function ccd { Set-Location {{ .chezmoi.workingTree | squote }} }
 

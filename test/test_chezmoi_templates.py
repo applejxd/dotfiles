@@ -243,8 +243,19 @@ def test_shell_plugins_are_cloned_by_apply(tmp_path, os_name):
         assert externals[target]["url"] == url
 
 
-def test_shell_plugins_are_not_fetched_on_windows(tmp_path):
-    """Windows native には zsh / bash / tmux の rc を配らない。"""
+def test_only_vim_colorscheme_is_fetched_on_windows(tmp_path):
+    """Windows native には zsh / bash / tmux の rc を配らない。~/.vimrc は配るので iceberg.vim だけ取得する。"""
+    externals = render_external(home=tmp_path, os_name="windows")
+    kind, url = SHELL_PLUGINS[".vim/colors/iceberg.vim"]
+    assert set(externals) == {".vim/colors/iceberg.vim"}
+    assert externals[".vim/colors/iceberg.vim"]["type"] == kind
+    assert externals[".vim/colors/iceberg.vim"]["url"] == url
+
+
+def test_existing_vim_colorscheme_is_left_alone_on_windows(tmp_path):
+    colorscheme = tmp_path / ".vim/colors/iceberg.vim"
+    colorscheme.parent.mkdir(parents=True)
+    colorscheme.write_text("", encoding="utf-8")
     assert render_external(home=tmp_path, os_name="windows") == {}
 
 
