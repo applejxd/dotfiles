@@ -179,6 +179,15 @@ function Update-RepoLocalTemp {
   }
 }
 Update-RepoLocalTemp
+# mise の cache は、Windows では既定で `%TEMP%\mise`。TEMP をリポジトリの `.tmp` へ向けると、リポジトリごとに
+# cache が冷えて (`<repo>\.tmp\mise` が増える)、プロンプトが遅くなりうる。利用者が指定していなければ、
+# 元の TEMP の `mise` に固定する (向ける前の場所。これまでと同じ)。
+if (-not $env:MISE_CACHE_DIR) {
+  $miseCacheBase = [Environment]::GetEnvironmentVariable('_TMPDIR_REPO_LOCAL_ORIG')
+  if ($miseCacheBase -and $miseCacheBase -ne '<unset>') {
+    $env:MISE_CACHE_DIR = [System.IO.Path]::Combine($miseCacheBase, 'mise')
+  }
+}
 # cd のたびに追従する (LocationChangedAction は PowerShell 6 以降。5.1 は起動時だけ)。
 # (PSObject.Properties で有無を調べると、初回に約 10 ms かかるので、版で判定する)
 # 別の拡張が登録済みのハンドラは、残して後に呼ぶ。このファイルや interactive.ps1 が登録した古いもの

@@ -929,6 +929,37 @@ def test_temp_ignores_a_junction_as_the_repository_tmp(tmp_path: Path):
     assert f"TEMP={system_temp}\n" in result and f"TMP={system_temp}\n" in result
 
 
+def test_mise_cache_stays_in_the_original_temp_when_temp_follows_the_repository(tmp_path: Path):
+    """mise の cache は既定で %TEMP% の mise。TEMP を向けても、リポジトリごとに冷えないよう元の場所へ固定する。"""
+    text = (POWERSHELL_DIR / "profile.ps1.tmpl").read_text(encoding="utf-8-sig")
+    start = text.index("if (-not $env:MISE_CACHE_DIR) {")
+    closing = "\n  }\n}\n"
+    block = text[start : text.index(closing, start) + len(closing)]
+    original = str(tmp_path / "SystemTemp")
+
+    def run(setup: str) -> str:
+        body = f"{setup}\n{block}\n'MISE=' + $(if ($null -eq $env:MISE_CACHE_DIR) {{ '<none>' }} else {{ $env:MISE_CACHE_DIR }})\n"
+        script = tmp_path / f"mise-{abs(hash(setup))}.ps1"
+        script.write_text(body, encoding="utf-8-sig")
+        completed = subprocess.run(
+            [PWSH, "-NoLogo", "-NoProfile", "-File", str(script)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+        assert completed.returncode == 0, completed.stderr
+        return completed.stdout.strip()
+
+    unset_cache = "Remove-Item Env:MISE_CACHE_DIR -ErrorAction Ignore"
+    assert run(f"{unset_cache}; $env:_TMPDIR_REPO_LOCAL_ORIG = '{original}'") == f"MISE={original}\\mise"
+    # 利用者の指定は上書きしない。控えが無い・<unset> のときは何もしない
+    assert run(rf"$env:MISE_CACHE_DIR = 'D:\cache'; $env:_TMPDIR_REPO_LOCAL_ORIG = '{original}'") == r"MISE=D:\cache"
+    assert run(f"{unset_cache}; $env:_TMPDIR_REPO_LOCAL_ORIG = '<unset>'") == "MISE=<none>"
+    assert run(f"{unset_cache}; Remove-Item Env:_TMPDIR_REPO_LOCAL_ORIG -ErrorAction Ignore") == "MISE=<none>"
+
+
 def test_auto_cd_changes_into_directories_typed_as_commands(tmp_path: Path):
     work = tmp_path / "work"
     (work / "sub1" / "inner").mkdir(parents=True)
