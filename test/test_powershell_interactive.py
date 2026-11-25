@@ -392,3 +392,156 @@ def test_git_config_environment_is_sanitized(shell: str):
     assert empty_fsmonitor["count"] == "2"
     assert empty_fsmonitor["value0"] == "false"
     assert empty_fsmonitor["value1"] == "explicit"
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCOOP_PATH_SCRIPT = REPO_ROOT / "home/dot_config/powershell/scoop-path.ps1"
+GUARD_SCRIPT = REPO_ROOT / "scripts/windows/run-with-redirection-guard.ps1"
+GUARD_UNSUPPORTED = 125
+
+# 偽の scoop を作り、Add-ScoopRealPathEntry の結果を出す。
+#   foo: current -> 1.0 (bin あり)・旧版 0.9 の bin・shim あり   bar: current 無し・shim あり
+#   baz: current が壊れた junction (実体が無い)             tools: current の PATH 項目だけ (shim 無し)
+# $args[0] は偽の scoop の根、$args[1] は PATH の形、$args[2] は scoop-path.ps1
+SCOOP_PATH_PROBE = r"""
+$root = $args[0]
+$shape = $args[1]
+$scoopPathScript = $args[2]
+$directories = "$root\apps\foo\1.0\bin", "$root\apps\foo\0.9\bin", "$root\apps\bar\2.0\bin"
+$directories += "$root\apps\tools\3.0\bin", "$root\apps\baz\4.0", "$root\shims"
+$null = New-Item -ItemType Directory -Force $directories
+$null = New-Item -ItemType Junction -Path "$root\apps\foo\current" -Target "$root\apps\foo\1.0"
+$null = New-Item -ItemType Junction -Path "$root\apps\tools\current" -Target "$root\apps\tools\3.0"
+$null = New-Item -ItemType Junction -Path "$root\apps\baz\current" -Target "$root\apps\baz\4.0"
+Remove-Item "$root\apps\baz\4.0"
+Set-Content "$root\shims\foo.shim" "path = `"$root\apps\foo\current\bin\foo.exe`""
+Set-Content "$root\shims\bar.shim" "path = `"$root\apps\bar\2.0\bin\bar.exe`""
+Set-Content "$root\shims\baz.shim" "path = `"$root\apps\baz\current\baz.exe`""
+$env:SCOOP = $root
+$env:SCOOP_PROBE_ROOT = $root
+$env:Path = switch ($shape) {
+    'shims' { "C:\Windows\System32;$root\shims;C:\Windows" }
+    'unexpanded' { '%SCOOP_PROBE_ROOT%\shims;C:\Windows' }
+    'noshims' { 'C:\Windows\System32;C:\Windows' }
+    'order' { "$root\shims;C:\Other;$root\apps\tools\current\bin;C:\Windows" }
+    'stale' { "C:\Windows\System32;$root\apps\foo\0.9\bin;$root\shims" }
+    'empty' { '' }
+}
+. $scoopPathScript
+Add-ScoopRealPathEntry
+Write-Output ('PATH=' + $env:Path)
+Write-Output ('JUNCTION_BIN_VISIBLE=' + [System.IO.Directory]::Exists("$root\apps\foo\current\bin"))
+Write-Output ('REAL_BIN_VISIBLE=' + [System.IO.Directory]::Exists("$root\apps\foo\1.0\bin"))
+"""
+
+
+def elevated() -> bool:
+    """昇格したシェルが作った junction は信頼されるので、保護下で辿れない前提が成り立たない。"""
+    if os.name != "nt":
+        return False
+    import ctypes
+
+    return bool(ctypes.windll.shell32.IsUserAnAdmin())
+
+
+def run_scoop_path_probe(tmp_path: Path, shape: str, *, guarded: bool = False) -> dict[str, str]:
+    """pwsh 7 で probe を実行し、`PATH=` などの出力を辞書で返す。標準エラーは空であること。"""
+    executable = shutil.which("pwsh")
+    assert executable, "pwsh is not installed"
+    probe = tmp_path / "scoop-path-probe.ps1"
+    probe.write_text(SCOOP_PATH_PROBE, encoding="utf-8")
+    # 形ごとに別の偽の scoop を作る (同じ場所へ junction を作り直すと失敗する)
+    root = tmp_path / f"scoop-{shape}{'-guarded' if guarded else ''}"
+    command = [executable, "-NoProfile", "-File"]
+    if guarded:
+        command += [str(GUARD_SCRIPT), executable, "-NoProfile", "-File"]
+    command += [str(probe), str(root), shape, str(SCOOP_PATH_SCRIPT)]
+    completed = subprocess.run(
+        command, capture_output=True, text=True, errors="replace", timeout=120
+    )
+    if guarded and completed.returncode == GUARD_UNSUPPORTED:
+        pytest.skip("この Windows は RedirectionGuard の設定を受け付けない")
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stderr == ""
+    values = {}
+    for line in completed.stdout.splitlines():
+        name, separator, value = line.partition("=")
+        if separator:
+            values[name] = value
+    values["root"] = str(root)
+    return values
+
+
+def test_scoop_shim_directories_are_inserted_just_before_the_shims(tmp_path: Path):
+    """shim の指す先のディレクトリだけを、shims の直前へ足す。"""
+    values = run_scoop_path_probe(tmp_path, "shims")
+    root = values["root"]
+    # foo だけ (bin)。bar は current が無い、baz は current が壊れている、tools は shim が無いので足さない
+    assert values["PATH"] == rf"C:\Windows\System32;{root}\apps\foo\1.0\bin;{root}\shims;C:\Windows"
+
+
+def test_scoop_path_handles_unexpanded_variables_and_missing_shims(tmp_path: Path):
+    # ssh のセッションは、ユーザー PATH の未展開の %VAR% をそのまま渡すことがある
+    values = run_scoop_path_probe(tmp_path, "unexpanded")
+    assert values["PATH"] == rf"{values['root']}\apps\foo\1.0\bin;%SCOOP_PROBE_ROOT%\shims;C:\Windows"
+    # shims が PATH に無い機は、shim の分を足さない。空の PATH でも何も起きない
+    assert run_scoop_path_probe(tmp_path, "noshims")["PATH"] == r"C:\Windows\System32;C:\Windows"
+    assert run_scoop_path_probe(tmp_path, "empty")["PATH"] == ""
+
+
+def test_scoop_current_entries_are_replaced_in_place(tmp_path: Path):
+    """PATH の `current` の項目は、その位置で実体にする。別のツールの前後関係 (解決の順) を変えない。"""
+    values = run_scoop_path_probe(tmp_path, "order")
+    root = values["root"]
+    # shims より後ろの tools の位置はそのまま。foo の実体は shims の直前へ
+    assert values["PATH"] == (
+        rf"{root}\apps\foo\1.0\bin;{root}\shims;C:\Other;{root}\apps\tools\3.0\bin;C:\Windows"
+    )
+
+
+def test_stale_version_entries_from_a_parent_shell_are_refreshed(tmp_path: Path):
+    """入れ子のシェルは、親が足した前の版の実体を引き継ぐ。scoop の更新後に、旧版が先に解決されない。"""
+    values = run_scoop_path_probe(tmp_path, "stale")
+    root = values["root"]
+    # 0.9 の項目は、その位置で現行の 1.0 になる。shim の分は重複して足さない
+    assert values["PATH"] == rf"C:\Windows\System32;{root}\apps\foo\1.0\bin;{root}\shims"
+
+
+@pytest.mark.skipif(elevated(), reason="昇格したシェルが作った junction は保護下でも信頼される")
+def test_scoop_real_directories_stay_reachable_under_redirection_guard(tmp_path: Path):
+    """RedirectionGuard を有効にしたプロセス (ssh の再現) でも、実体のディレクトリは辿れる。
+
+    試験が作った junction は管理者でない作成なので、保護下では辿れない。実体のディレクトリを足す理由そのもの。
+    """
+    values = run_scoop_path_probe(tmp_path, "shims", guarded=True)
+    root = values["root"]
+    assert values["JUNCTION_BIN_VISIBLE"] == "False"
+    assert values["REAL_BIN_VISIBLE"] == "True"
+    # junction の実体は、保護下でも読み取れる (リンク自体を開かずに対象を返す)
+    assert rf"{root}\apps\foo\1.0\bin" in values["PATH"].split(";")
+
+
+def test_redirection_guard_helper_passes_arguments_and_exit_codes_through():
+    executable = shutil.which("pwsh")
+    assert executable, "pwsh is not installed"
+
+    def run(*arguments: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [executable, "-NoProfile", "-File", str(GUARD_SCRIPT), *arguments],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+    unsupported = run("pwsh", "-NoProfile", "-Command", "exit 0")
+    if unsupported.returncode == GUARD_UNSUPPORTED:
+        pytest.skip("この Windows は RedirectionGuard の設定を受け付けない")
+    assert unsupported.returncode == 0, unsupported.stderr
+    # 子のコマンドの終了コードを返す。-Command は子の引数で、ラッパーに奪われない
+    assert run("pwsh", "-NoProfile", "-Command", "exit 37").returncode == 37
+    # -Verbose などの共通パラメーターの名前も、子へそのまま渡す
+    echoed = run("cmd.exe", "/c", "echo", "-Verbose", "-Debug")
+    assert echoed.returncode == 0, echoed.stderr
+    assert echoed.stdout.split() == ["-Verbose", "-Debug"]
+    # 引数が無ければ使い方を出して 2
+    assert run().returncode == 2

@@ -102,6 +102,12 @@ Add-EnvPathEntry "$env:USERPROFILE\.local\bin"
 # see https://github.com/JanDeDobbeleer/oh-my-posh/discussions/2089#discussioncomment-2569096
 Add-EnvPathEntry "$env:LocalAppData\Programs\oh-my-posh\bin"
 
+# ssh (RedirectionGuard) では scoop の `current` の junction を辿れない。実体のディレクトリを足す
+if ($env:SSH_CONNECTION) {
+  . "$PSScriptRoot/scoop-path.ps1"
+  Add-ScoopRealPathEntry
+}
+
 Remove-DuplicateEnvPathEntry
 
 # see https://github.com/junegunn/fzf/wiki/Windows

@@ -223,7 +223,8 @@ def test_powershell_profile_avoids_slow_cmdlets_before_the_interactive_guard():
         encoding="utf-8-sig"
     )
     cache = (ROOT / "home/dot_config/powershell/cache.ps1").read_text(encoding="utf-8-sig")
-    head = strip_comments(split_at_interactive_guard(profile)[0] + template + cache)
+    scoop_path = (ROOT / "home/dot_config/powershell/scoop-path.ps1").read_text(encoding="utf-8-sig")
+    head = strip_comments(split_at_interactive_guard(profile)[0] + template + cache + scoop_path)
 
     for slow in ("New-Object", "Join-Path", "Set-Alias", "Test-Path", "Get-Item ", "Get-Content"):
         assert slow not in head, slow
@@ -346,6 +347,50 @@ def test_vim_calls_the_git_for_windows_binary_directly():
     # 関数は既定では標準入力を子プロセスへ引き継がない
     assert "$MyInvocation.ExpectingInput" in code
     assert f"$input | & {git_vim} @args" in code
+
+
+def test_scoop_junctions_are_replaced_by_their_targets_only_over_ssh():
+    """sshd は RedirectionGuard を有効にし、scoop の `current` (junction) を辿れない。
+
+    実体のバージョンのディレクトリを PATH の shims の直前へ足す。ssh のときだけ読み込み、
+    ローカルの起動の時間を増やさない。挙動は test_powershell_interactive.py が検証する。
+    """
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
+    scoop_path = strip_comments(
+        (ROOT / "home/dot_config/powershell/scoop-path.ps1").read_text(encoding="utf-8-sig")
+    )
+
+    head = split_at_interactive_guard(profile)[0]
+    assert "if ($env:SSH_CONNECTION) {" in head
+    assert '. "$PSScriptRoot/scoop-path.ps1"' in head
+    assert "Add-ScoopRealPathEntry" in head
+    assert head.index("Add-ScoopRealPathEntry") < head.index("\nRemove-DuplicateEnvPathEntry\n")
+    # 定義はローカルの起動では読まない (dot-source は ssh のときだけ)
+    assert "function Add-ScoopRealPathEntry" not in profile
+    # ResolveLinkTarget は .NET 6+ (PowerShell 7.2 以降)。無ければ何もしない
+    assert "[System.IO.Directory].GetMethod('ResolveLinkTarget')" in scoop_path
+    # PATH の `current` は、その位置で実体へ置き換える (解決の順を変えない)。
+    # shim の指す先だけを、shims の直前へ足す。壊れた junction (実体が無い) は対象にしない
+    assert "$entries.InsertRange($shimsIndex, $shimDirectories)" in scoop_path
+    assert "[System.IO.Directory]::Exists($target.FullName)" in scoop_path
+    assert "*.shim" in scoop_path
+    assert "ExpandEnvironmentVariables" in scoop_path
+    # 失敗しても起動を止めない (PATH は変えず警告する)
+    assert "Failed to resolve the scoop junctions" in scoop_path
+
+
+def test_redirection_guard_helper_enables_the_policy_in_its_own_process():
+    script = (ROOT / "scripts/windows/run-with-redirection-guard.ps1").read_text(encoding="utf-8-sig")
+    code = strip_comments(script)
+
+    assert "SetProcessMitigationPolicy(16, ref flags" in code
+    assert "[RedirectionGuard]::Enable()" in code
+    # 子の引数 (-Command・-Verbose など) を奪わないよう、param を持たず $args で受ける
+    assert "param(" not in code
+    assert "$args" in code
+    assert "exit $LASTEXITCODE" in code
+    # 保護を有効にできない OS は、明示的な終了コードで知らせる (試験はこれで skip する)
+    assert "exit 125" in code
 
 
 def test_pbcopy_forwards_pipeline_input():
