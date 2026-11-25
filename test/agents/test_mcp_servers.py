@@ -293,6 +293,52 @@ def test_wrapper_answers_unknown_methods_with_an_error_and_ignores_garbage():
     assert reply["id"] == 5 and reply["error"]["code"] == -32601
 
 
+# 2026-07-28 (握手なし。リクエストごとに _meta で版を運ぶ) に、握手なしで答える
+MODERN_META = {
+    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+    "io.modelcontextprotocol/clientInfo": {"name": "t", "version": "1"},
+    "io.modelcontextprotocol/clientCapabilities": {},
+}
+
+
+def test_wrapper_without_a_gateway_answers_the_2026_07_28_discover_probe_and_requests():
+    done = _run_wrapper(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "server/discover", "params": {"_meta": MODERN_META}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {"_meta": MODERN_META}},
+            {"jsonrpc": "2.0", "id": 3, "method": "ping", "params": {"_meta": MODERN_META}},
+        ]
+    )
+    assert done.returncode == 0, done.stderr
+    discover, tools, ping = [json.loads(line) for line in done.stdout.splitlines()]
+    result = discover["result"]
+    assert result["resultType"] == "complete"
+    assert result["supportedVersions"] == ["2026-07-28"]
+    assert result["capabilities"] == {"tools": {}}
+    assert result["_meta"]["io.modelcontextprotocol/serverInfo"]["name"] == "agentcore-websearch-idle"
+    # server/discover と一覧の結果は ttlMs・cacheScope が必須 (CacheableResult)
+    assert isinstance(result["ttlMs"], int) and result["cacheScope"] in ("public", "private")
+    assert tools["result"]["tools"] == [] and tools["result"]["resultType"] == "complete"
+    assert isinstance(tools["result"]["ttlMs"], int) and tools["result"]["cacheScope"] == "private"
+    assert ping["error"]["code"] == -32601  # ping は 2026-07-28 で廃止
+
+
+def test_wrapper_rejects_an_unsupported_modern_version_with_the_supported_list():
+    meta = {**MODERN_META, "io.modelcontextprotocol/protocolVersion": "2099-01-01"}
+    done = _run_wrapper(
+        [{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {"_meta": meta}}]
+    )
+    (reply,) = [json.loads(line) for line in done.stdout.splitlines()]
+    assert reply["error"]["code"] == -32022
+    assert reply["error"]["data"] == {"supported": ["2026-07-28"], "requested": "2099-01-01"}
+
+
+def test_wrapper_initialize_without_a_version_falls_back_to_a_known_legacy_version():
+    done = _run_wrapper([{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}])
+    (reply,) = [json.loads(line) for line in done.stdout.splitlines()]
+    assert reply["result"]["protocolVersion"] == "2025-11-25"
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="execvp の経路は Unix だけ")
 def test_wrapper_with_a_gateway_runs_the_pinned_proxy(tmp_path):
     fake = tmp_path / "uvx"
