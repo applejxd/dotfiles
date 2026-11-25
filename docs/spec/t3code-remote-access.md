@@ -2,7 +2,10 @@
 
 Windows 版と WSL の T3 Code を、Windows 側の Tailscale Serve だけで tailnet（利用者の Tailscale 網）へ出す。
 ポートは固定し、chezmoi がその固定と Serve の公開を整える。UI の設定とペアリングは手動である。
-対象は家の機（`is-work` が false）だけである。会社 PC には、T3 Code の設定を何も入れない。
+
+- **ポートの固定は、自宅・会社 PC を問わず入れる**（WSL の `service.env`・Windows の `T3CODE_PORT`）
+- **Tailscale Serve は、家の機（`is-work` が false）だけ**である。会社 PC は Tailscale を使わない
+- 会社 PC は、Windows 版から WSL のサービスへ `http://127.0.0.1:3776/` で直接つなぐ。WSL backend は使わない（[会社 PC](#会社-pctailscale-なし)）
 
 ## 構成
 
@@ -40,13 +43,13 @@ flowchart TD
 
 ## chezmoi が整えるもの
 
-どれも冪等で、家の機だけに入る。判定は `is-work`（[Web 検索の配る範囲](web-search.md#配る範囲) と同じ）である。
+どれも冪等である。ポートの 2 本は全機に入り、Serve は家の機だけに入る。Serve の判定は `is-work`（[Web 検索の配る範囲](web-search.md#配る範囲) と同じ）である。
 
-| 対象 | スクリプト | 内容 |
-| --- | --- | --- |
-| WSL の `~/.t3/service.env` | `100_linux/run_after_127_t3code_service_env.sh.tmpl` | `T3CODE_PORT=3776` と `T3CODE_HOST=127.0.0.1` を書く |
-| Windows のユーザー環境変数 | `300_windows/run_after_353_t3code_port.ps1.tmpl` | `T3CODE_PORT=3773` を書く |
-| Windows の Tailscale Serve | `300_windows/run_after_354_t3code_wsl_serve.ps1.tmpl` | https `8443` を `http://127.0.0.1:3776` へ公開する |
+| 対象 | スクリプト | 内容 | 入る機 |
+| --- | --- | --- | --- |
+| WSL の `~/.t3/service.env` | `100_linux/run_after_127_t3code_service_env.sh.tmpl` | `T3CODE_PORT=3776` と `T3CODE_HOST=127.0.0.1` を書く | 全機の WSL |
+| Windows のユーザー環境変数 | `300_windows/run_after_353_t3code_port.ps1` | `T3CODE_PORT=3773` を書く | 全機の Windows |
+| Windows の Tailscale Serve | `300_windows/run_after_354_t3code_wsl_serve.ps1.tmpl` | https `8443` を `http://127.0.0.1:3776` へ公開する | 家の機だけ |
 
 - **`service.env` は該当のキーだけを書き換える。** ほかの行とコメントは残す。ファイルが無ければ権限 `600` で作る。`~/.t3` が無ければ何もしない
 - **`service.env` は、別のファイルを作って置き換える。** 一時ファイルは、同じ場所の本人だけが入れるディレクトリに置く。元の権限を引き継ぎ、symlink なら実体を書き換える
@@ -81,22 +84,55 @@ Windows 版の設定は `~/.t3/userdata/desktop-settings.json` に保存され�
 | WSL → iPhone | WSL で `t3 pair` を実行し、URL の接続先だけを `https://<Windows の MagicDNS 名>:8443/` に差し替える。`--tailscale` は付けない |
 | WSL → Windows 版 | WSL で `t3 pair` を実行し、Windows 版の `Settings → Environments → Add environment` に登録する。接続先は `http://127.0.0.1:3776/` |
 
+## 会社 PC（Tailscale なし）
+
+Tailscale と Serve を使わず、WSL の T3 Code のサービスへ、Windows 版から WSL backend を使わずにつなぐ。
+
+```mermaid
+flowchart LR
+    desktop["T3 Code Desktop<br/>(Windows)"] -->|"http://127.0.0.1:3776"| server["T3 Code サービス<br/>127.0.0.1:3776<br/>(WSL, mirrored)"]
+```
+
+| 手順 | 場所 | 内容 |
+| --- | --- | --- |
+| 1 | Windows | `chezmoi apply`（`T3CODE_PORT=3773` が入る。`.wslconfig` が変わったときは、`wsl --shutdown` で WSL を止めてから、WSL を起動し直す） |
+| 2 | WSL | `curl -fsSL https://t3.codes/install.sh \| sh` → `t3 service install`（`~/.t3` ができる） |
+| 3 | WSL | `chezmoi apply`（`service.env` に 3776・`127.0.0.1` が入る。`~/.t3` が無いうちは何もしない） |
+| 4 | WSL | `t3 service restart`（実行中のエージェントの処理が止まる） |
+| 5 | 下の[確認](#確認) | WSL で `127.0.0.1:3776` だけが、`t3code.service` のプロセスで LISTEN。Windows の `curl.exe` が届く |
+| 6 | Windows 版 | WSL backend が OFF か確かめる（`Settings → Sharing & access` で distro の選択を解除）。WSL で `t3 pair` → `Settings → Environments → Add environment` に登録（接続先 `http://127.0.0.1:3776/`）。Windows 版 T3 Code は、更新した環境から起動し直す（古いシェルやランチャーから開くと、`T3CODE_PORT` が古いまま。再ログインで確実） |
+
+- Windows 版の `Network access`・Tailscale HTTPS・T3 Connect は、**OFF であることを確かめる**（`Network access` が ON だと `0.0.0.0:3773` で LAN に出る。[限界](#限界)）。`apply` はこの設定を触らない
+- **Tailscale は入らない**: 導入（`309_admin`・`350_tailscale`）は、ユーザー名が `applejxd` の機だけで、`is-work` では判定しない。会社 PC の別のユーザー名では入らない。個人のユーザー名のまま `work = true` で上書きした機は、この判定の対象外である（既存の仕様。この変更では変えない）
+- **WSL backend を使わない理由（上流で報告された原因候補）**: [#13738](https://github.com/pingdotgg/t3code/issues/13738)（2026-09-26）によると、WSL backend は NAT モードで distro の IP へ接続する。通信を検査するセキュリティ製品などで、その IP へ Windows から届かない環境では、接続中のまま進まない。その報告の環境では、localhost への転送は届いた
+- **前提**: Windows から WSL の `127.0.0.1` に届くこと（mirrored、または NAT の localhost 転送）。届かない環境では、この方式は使えない
+- **未確認**: 会社 PC の実機のすべて
+
 ## 確認
 
-Windows の PowerShell で確かめる。
+### 全機（会社 PC を含む）
 
 ```powershell
-tailscale serve status                     # 4433 → 127.0.0.1:3773、8443 → 127.0.0.1:3776
-Get-NetTCPConnection -State Listen -LocalPort 3773   # Network access が ON なら 0.0.0.0（下の限界を参照）
+# Windows の PowerShell
 curl.exe http://127.0.0.1:3776/            # WSL のサービスに届くこと
-curl.exe -s -o NUL -w "%{http_code}\n" https://<Windows の MagicDNS 名>:8443/
+Get-NetTCPConnection -State Listen -LocalPort 3773   # Network access が ON なら 0.0.0.0（下の限界を参照）
 ```
 
 ```sh
 # WSL
-ss -ltn | grep 3776                        # 127.0.0.1:3776 だけが LISTEN
+ss -ltnp | grep 3776                       # 1 行だけ。127.0.0.1:3776 で、t3code.service の node
 t3 status                                  # Local network が overridden · T3CODE_HOST=127.0.0.1
-systemctl is-active tailscaled             # inactive
+```
+
+### 家の機だけ（Tailscale Serve）
+
+```powershell
+tailscale serve status                     # 4433 → 127.0.0.1:3773、8443 → 127.0.0.1:3776
+curl.exe -s -o NUL -w "%{http_code}\n" https://<Windows の MagicDNS 名>:8443/
+```
+
+```sh
+systemctl is-active tailscaled             # inactive（WSL には Tailscale を入れない）
 ```
 
 ## 症状と対応
@@ -107,7 +143,8 @@ systemctl is-active tailscaled             # inactive
 | WSL の URL が 503 | サービスの起動直後 | 数秒後にやり直す。続くなら `~/.t3/userdata/logs/boot-service.log` を見る |
 | WSL のポートが変わらない | `service.env` を変えただけで、サービスが古い設定のまま | `t3 service restart` |
 | `127.0.0.1:3776` が Windows から届かない | WSL が止まっている、または mirrored でない | `wsl.exe -l -v` と `.wslconfig` を確かめる。常駐は `sandbox-keepalive`（[WSL](platform-wsl.md#リモートから-wsl-へ-ssh-する)） |
-| Windows の認証が通らない | Windows と WSL が同じポートを使い、WSL の localhost 転送と競合した | ポートを分ける（この構成の理由）。WSL backend も切る |
+| WSL backend が `Connecting to WSL` のまま | 上流で報告された原因候補 #13738（[会社 PC](#会社-pctailscale-なし)。この repo の実機では未確認） | WSL backend を切り、`http://127.0.0.1:3776/` を `Add environment` に登録する |
+| Windows の認証が通らない | Windows と WSL が同じポートを使い、WSL の localhost 転送と競合した（上流 #16826 の報告） | ポートを分ける（この構成の理由）。WSL backend も切る |
 
 ## 限界
 
@@ -118,6 +155,7 @@ systemctl is-active tailscaled             # inactive
 
 ## 判断の理由
 
+- **ポートの固定を会社 PC にも入れる理由**: 会社 PC でも、Windows 版から WSL のサービスへ直接つなぐのに、決まったポートが要る。Windows のデスクトップは既定の 3773 から空きを探すので、WSL のサービスが同じポートだと、認証を取り違える（上流 [#16826](https://github.com/pingdotgg/t3code/issues/16826)）。Serve だけを家の機に残すのは、会社 PC で Tailscale を使わないためである
 - **公開の手段**: T3 Code の `t3 pair --tailscale` は、サーバのある機で `tailscale` を呼ぶ。WSL に Tailscale を入れない方針と合わない。Windows 側の `tailscale serve` を使う
 - **自作を足さない理由**: 足したのは、既存の chezmoi スクリプトの型（`350_tailscale` と同じ）だけである（[ADR-0031](../adr/0031-evaluate-existing-extensions-first.md)）
 - **`service.env` を丸ごと配らない理由**: T3 Code の `t3 up` も、このファイルへ書く。丸ごと配ると、ほかのキーを消す

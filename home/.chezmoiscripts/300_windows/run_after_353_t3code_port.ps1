@@ -1,12 +1,10 @@
-﻿{{- if eq (includeTemplate "is-work" .) "false" -}}
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # T3 Code (Windows 版) の待ち受けポートを 3773 に固定する。WSL 側 (3776) と分け、ペアリングの前に決めておく。
-# 家の機 (is-work が false) だけ。反映は Windows 版 T3 Code の次の起動から。see docs/spec/t3code-remote-access.md
+# 自宅・会社 PC を問わない。反映は Windows 版 T3 Code の次の起動から。see docs/spec/t3code-remote-access.md
 $port = '3773'
 if ([Environment]::GetEnvironmentVariable('T3CODE_PORT', 'User') -ne $port) {
   [Environment]::SetEnvironmentVariable('T3CODE_PORT', $port, 'User')
   Write-Host "T3 Code: ユーザー環境変数 T3CODE_PORT=$port を設定しました。Windows 版 T3 Code を再起動すると反映されます"
 }
-{{- end }}

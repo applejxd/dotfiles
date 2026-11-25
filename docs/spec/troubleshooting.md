@@ -29,7 +29,7 @@ chezmoi status --include=scripts   # 次の apply で走るスクリプト（R�
 | `tomllib` や Python のエラー | Windows | [Windows で tomllib や Python のエラーが出る](troubleshooting-bootstrap.md#windows-で-tomllib-や-python-のエラーが出る) |
 | `You are not logged in.`、`error calling bitwarden`、`bw: command not found` | 全 OS | [chezmoi update が Bitwarden で止まる](troubleshooting-bootstrap.md#chezmoi-update-が-bitwarden-で止まる) |
 | WSL にリモートから SSH できない（タイムアウト、`Connection refused`、`Permission denied`） | Windows + WSL（mirrored） | [リモートから WSL へ SSH する](platform-wsl.md#リモートから-wsl-へ-ssh-する)（[接続できないときの切り分け](platform-wsl.md#接続できないときの切り分け)） |
-| T3 Code（Windows・WSL）が tailnet から届かない、`8443` の警告が出る | Windows + WSL（mirrored） | [症状と対応](t3code-remote-access.md#症状と対応) |
+| T3 Code（Windows・WSL）が tailnet から届かない、`8443` の警告が出る。WSL backend が `Connecting to WSL` のまま | Windows + WSL（mirrored） | [症状と対応](t3code-remote-access.md#症状と対応)（[会社 PC](t3code-remote-access.md#会社-pctailscale-なし)） |
 | age 鍵が無い、sops で復号できない | 全 OS | [秘密情報の管理セットアップ: 鍵が見つからない](sops-age.md#鍵が展開されない) |
 | `bw` などの npm 由来のツールが `Cannot find module` / `node: not found` | Linux / WSL / macOS | [mise の npm ツールが突然動かなくなる](troubleshooting-bootstrap.md#mise-の-npm-ツールが突然動かなくなる) |
 | VS Code の拡張が入っていない | 全環境（Settings Sync で同期） | [VS Code の拡張が入っていない](troubleshooting-bootstrap.md#vs-code-の拡張が入っていない) |
