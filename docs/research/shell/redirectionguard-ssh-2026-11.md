@@ -16,7 +16,8 @@
   Windows の `sudo`、`tailscale`、`wsl`、`code`、`herdr`（単体の呼び出し）、`oh-my-posh`、`winget`。
 - **直した**: scoop（profile が ssh のときだけ、`current` を実体のディレクトリで置き換える）と、`vim`（Git for Windows の実体を直接呼ぶ）。
   確認したのは、保護を有効にしたプロセスでの `ghq`・`gcc`・`make`・`7z`・`pdftk` の起動まで。shim 119 個は影響の範囲で、すべての実行はしていない。
-- **残っている**: uv が管理する Python。`UV_PYTHON_PREFERENCE=only-system` で動くことは確かめたが、profile には入れていない。
+- **直した（uv）**: ssh のときだけ `UV_PYTHON_PREFERENCE=only-system`（利用者の指定があれば尊重）。システムの Python（この機は 3.12.10）だけを使う。
+  既存の `.venv` が uv の管理 Python で作られていると、`pyvenv.cfg` の `home` が junction のため、ssh では**直らない**（作り直しが要る）。
   実際の ssh 経由での確認は、この機から localhost へ入れないので**していない**（保護を有効にしたプロセスでの再現だけ）。
 
 ## 仕組み（出典）
@@ -87,7 +88,7 @@ junction を持ちうる場所（`~` 直下、`scoop\apps`、`%APPDATA%\uv`、`m
 | --- | --- | --- |
 | scoop: `current` を実体で置き換える | **実装済み**（`scoop-path.ps1`） | ssh のときだけ。PATH の `current` の項目はその位置で実体へ、shim の指す先は shims の直前へ。保護下で `ghq`・`gcc`・`make`・`7z`・`pdftk` が動くことを確認。約 50 ms |
 | `vim` は Git for Windows の実体を直接呼ぶ | **実装済み** | gow の 7.4 より新しく、junction を通らない |
-| uv: `UV_PYTHON_PREFERENCE=only-system` | 動作確認済み・**未実装** | 保護下で `uvx ruff@0.16.5`・`uv run --no-project python`・`mise exec -- uvx ruff`・`uv run --with pytest` が動いた（Python 3.12.10 の `Programs\Python\Python312`）。uv が管理する Python を使わなくなる |
+| uv: `UV_PYTHON_PREFERENCE=only-system` | **実装済み**（profile。ssh のときだけ） | 保護下で `uvx ruff@0.16.5`・`uv run --no-project python`・`mise exec -- uvx ruff`・`uv run --with pytest` が動いた（Python 3.12.10 の `Programs\Python\Python312`）。uv が管理する Python は使わない（システムに無い版は `No interpreter found`）。`system`（無ければ管理 Python）は、版が足りないときに junction を検査して `Failed to inspect` になり、`managed`（既定）では保護下でも新しい版を**ダウンロードして入れてしまう**ので、`only-system` を選んだ。既存の `.venv` は、`pyvenv.cfg` の `home` が junction だと、この設定でも動かない（作り直す） |
 | 管理者で junction を作り直す（`scoop reset`、`uv python install`） | 未検証 | 管理者が作ると信頼される。更新のたびに戻るという報告がある |
 | sshd の RedirectionGuard を切る（`Image File Execution Options` の `MitigationOptions`） | 非推奨・未検証 | 管理者権限が要り、sshd の保護を弱める。公開の手順があるが（gist）、この機では試していない |
 | scoop の gow をやめる | 未検討 | 古いツール（vim 7.4・awk 2008 年など）。Git の `usr\bin` と Windows 標準で足りるかは未確認 |

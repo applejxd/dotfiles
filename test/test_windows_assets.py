@@ -364,6 +364,9 @@ def test_scoop_junctions_are_replaced_by_their_targets_only_over_ssh():
     assert "if ($env:SSH_CONNECTION) {" in head
     assert '. "$PSScriptRoot/scoop-path.ps1"' in head
     assert "Add-ScoopRealPathEntry" in head
+    # uv の管理 Python (junction 経由) は ssh で動かないので、システムの Python だけを使う。利用者の指定は上書きしない
+    assert "if (-not $env:UV_PYTHON_PREFERENCE) {" in head
+    assert "$env:UV_PYTHON_PREFERENCE = 'only-system'" in head
     assert head.index("Add-ScoopRealPathEntry") < head.index("\nRemove-DuplicateEnvPathEntry\n")
     # 定義はローカルの起動では読まない (dot-source は ssh のときだけ)
     assert "function Add-ScoopRealPathEntry" not in profile

@@ -545,3 +545,38 @@ def test_redirection_guard_helper_passes_arguments_and_exit_codes_through():
     assert echoed.stdout.split() == ["-Verbose", "-Debug"]
     # 引数が無ければ使い方を出して 2
     assert run().returncode == 2
+
+
+UV_PREFERENCE_PROBE = '"uv=[" + $env:UV_PYTHON_PREFERENCE + "]"'
+
+
+def run_uv_preference_probe(**environment: str) -> str:
+    """配備済みプロファイルを読み込ませた上で UV_PYTHON_PREFERENCE の最終値を返す (pwsh 7)。"""
+    executable = shutil.which("pwsh")
+    assert executable, "pwsh is not installed"
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ("SSH_CONNECTION", "UV_PYTHON_PREFERENCE")
+    }
+    env.update(environment)
+    completed = subprocess.run(
+        [executable, "-NoLogo", "-Command", UV_PREFERENCE_PROBE],
+        capture_output=True,
+        text=True,
+        errors="replace",
+        env=env,
+        timeout=120,
+    )
+    assert completed.returncode == 0, completed.stderr
+    return completed.stdout.strip().rsplit("uv=[", 1)[1].removesuffix("]")
+
+
+def test_uv_uses_only_the_system_python_over_ssh():
+    """ssh では uv の管理 Python (junction 経由) が動かないので、システムの Python だけを使わせる。"""
+    ssh = {"SSH_CONNECTION": "1.2.3.4 5 6.7.8.9 22"}
+    # ローカルの uv は管理 Python を使うままにする
+    assert run_uv_preference_probe() == ""
+    assert run_uv_preference_probe(**ssh) == "only-system"
+    # 利用者が指定しているときは、それを尊重する
+    assert run_uv_preference_probe(**ssh, UV_PYTHON_PREFERENCE="system") == "system"
