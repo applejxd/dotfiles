@@ -335,16 +335,26 @@ Linux / WSL / Raspberry Pi / macOS では、表の 5 項目すべてを取得し
 - **遅さを測る**: `scripts/windows/measure_pwsh_latency.py`（ConPTY。起動・打鍵の反映・Enter→プロンプト）。
   結果と、原因でなかったもの・残った候補は [調査記録](../research/shell/powershell-slow-2026-11.md)。
 
-- **`vim` は Git for Windows の実体を直接呼ぶ**（対話時だけの関数。実体が無い機では定義しない）: scoop の shim は
-  `current` の junction を通る。ssh では sshd が RedirectionGuard（信頼されない junction を辿らせない保護）を有効にしていて、
-  `Shim: Could not create process` で起動できない（scoop の
-  [Issue #6594](https://github.com/ScoopInstaller/Scoop/issues/6594)・[#6612](https://github.com/ScoopInstaller/Scoop/issues/6612)。
-  2026-11-25 取得。同じ症状の報告で、この機の ssh では再現していない（localhost へ入れない）ので、原因は**推測**）。
-  この機の scoop のアプリ（`7zip`・`ghq`・`gow`・`mingw-winlibs`・`pdftk`・`sudo`）は、すべて `current` が junction。
-  gow の `vim` は 7.4（2013 年）で、この `.vimrc` の `signcolumn` や `fixendofline` を解釈できず、構文の runtime も無い。
-  パイプの入力は `$MyInvocation.ExpectingInput` で明示的に渡す。
-  vim 以外の scoop のコマンド（`ghq` など）も ssh では同じ理由で動かない。管理者の `scoop reset <アプリ>` で junction を
-  作り直すと信頼されるが、更新のたびに戻る（上の Issue の報告。未検証）。
+- **ssh では RedirectionGuard が junction を止める**: sshd は RedirectionGuard（管理者でないユーザーが作った junction を
+  辿らせない保護）を有効にして動き、子のシェルも引き継ぐ（scoop の
+  [Issue #6594](https://github.com/ScoopInstaller/Scoop/issues/6594)。2026-11-25 取得）。この機で、保護を有効にしたプロセスから
+  scoop の shim を呼ぶと、報告と同じ `Shim: Could not create process` を再現した
+  （`scripts/windows/run-with-redirection-guard.ps1`。再現の記録と、ほかの影響は
+  [調査記録](../research/shell/redirectionguard-ssh-2026-11.md)）。
+  - **scoop の `current`（junction）は実体のバージョンのディレクトリで置き換える**: 環境変数 `SSH_CONNECTION` がある
+    （ssh のセッションと、その子孫が継承する。保護が効いているかの判定ではない）ときだけ `scoop-path.ps1` を読み、
+    `Add-ScoopRealPathEntry` が PATH を次のとおりにする（PowerShell 7.2 以降の `ResolveLinkTarget`。sshd の既定シェルは pwsh 7）。
+    1. PATH の `apps/<app>/current/…` の項目は、**その位置で**実体へ置き換える（`gcc` など、別のツールとの解決の順を変えない）。
+       入れ子のシェルが引き継いだ前の版の実体の項目（`apps/<app>/<版>/…`）も、最新の実体へ置き換える（scoop の更新後に旧版が先に解決されない）。
+    2. shim（`shims/*.shim`）の指す先のディレクトリを、shims の直前へ足す。ローカルと同じ優先順位（shims より前の Windows 標準のコマンドが先）を保つ。
+       shim の無いディレクトリと、`current` が壊れている・無いアプリは対象にしない。失敗しても PATH は変えず、警告だけ出す。
+    ローカルの起動の時間は増えない。確認したのは、保護を有効にしたプロセスでの `ghq`・`gcc`・`make`・`7z`・`pdftk` の起動まで
+    （shim 119 個すべてを実行したわけではない。実際の ssh は未確認）。
+  - **`vim` は Git for Windows の実体を直接呼ぶ**（対話時だけの関数。実体が無い機では定義しない）: gow の `vim` は 7.4（2013 年）で、
+    この `.vimrc` の `signcolumn` や `fixendofline` を解釈できず、構文の runtime も無い。ssh でなくても、Git の vim を使う意味がある。
+    パイプの入力は `$MyInvocation.ExpectingInput` で明示的に渡す。
+  - **足りないもの**: uv が管理する Python の junction（`uv run`・`uvx`・pre-commit の ruff など）は、ssh では同じ理由で動かない。
+    `UV_PYTHON_PREFERENCE=only-system` で動くことを確かめたが、profile にはまだ入れていない（[調査記録](../research/shell/redirectionguard-ssh-2026-11.md#対処)）。
 - **PATHを冪等に更新する**: `mise activate` は毎回PATHの先頭へ追加するため、
   追加後に重複を畳みます。
   あわせて未展開の `%VAR%`（例: `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps`）を展開します。
