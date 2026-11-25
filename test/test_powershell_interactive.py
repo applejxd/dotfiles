@@ -580,3 +580,138 @@ def test_uv_uses_only_the_system_python_over_ssh():
     assert run_uv_preference_probe(**ssh) == "only-system"
     # 利用者が指定しているときは、それを尊重する
     assert run_uv_preference_probe(**ssh, UV_PYTHON_PREFERENCE="system") == "system"
+
+
+# --- bash / zsh の機能の PowerShell 版 (docs/spec/shell.md#bashzsh-と-powershell-の対応) --------------------------
+# 配備済みのプロファイルを使う。配備前に試すときは、PWSH_TEST_PROFILE に描画済みの profile.ps1 のパスを渡す
+# (`chezmoi execute-template` で描画したものを、commands/ ・ modules/ ・ cache.ps1 の隣に置く。snippet の試験には、
+# 描画した snippets.json (snippets.json.tmpl の出力) も同じ場所へ置く)。
+
+
+def spawn_session(shell: str, cwd: Path):
+    winpty = pytest.importorskip("winpty", reason="Run with uv --with pywinpty")
+    executable = shutil.which(shell)
+    assert executable, f"{shell} is not installed"
+    override = os.environ.get("PWSH_TEST_PROFILE")
+    if override:
+        arguments = [
+            executable, "-NoLogo", "-NoProfile", "-NoExit", "-Command",
+            f". '{override}'; Set-PSReadLineOption -HistorySaveStyle SaveNothing; Write-Output 'CONPTY_READY'",
+        ]
+    else:
+        arguments = [
+            executable, "-NoLogo", "-NoExit", "-Command",
+            "Set-PSReadLineOption -HistorySaveStyle SaveNothing; Write-Output 'CONPTY_READY'",
+        ]
+    process = winpty.PtyProcess.spawn(arguments, dimensions=(40, 240), env=spawn_env(), backend=1, cwd=str(cwd))
+    process.fileobj.settimeout(0.25)
+    return process, PtyReader(process)
+
+
+def make_session_repo(tmp_path: Path) -> Path:
+    work = tmp_path / "work"
+    (work / "sub1" / "inner").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True, capture_output=True)
+    return work
+
+
+def test_helpers_snippets_auto_cd_and_completion_in_an_interactive_session(tmp_path: Path):
+    work = make_session_repo(tmp_path)
+    process, reader = spawn_session("pwsh", work)
+    try:
+        reader.read_until("CONPTY_READY\n")
+        time.sleep(3)
+        # 関数のモジュールは、使うまで読み込まれない (起動を遅らせない)
+        reader.send_until(
+            "'MODS0=' + @(Get-Module ShellShortcuts, ShellGit, ShellArchive, ShellCpp, ShellPi, ShellPk, PersonalShell).Count",
+            "MODS0=0",
+        )
+        output = reader.send_until("'SHA=' + (sha1 abc)", "SHA=a9993e36")
+        assert "SHA=a9993e364706816aba3e25717850c26c9cd0d89d" in output
+        output = reader.send_until("'MODS1=' + ((Get-Module Shell*).Name -join ',')", "MODS1=Shell")
+        assert "ShellShortcuts" in output
+
+        # snippet: `gs,` + Space で展開して実行する (zeno の gs,)
+        process.write("gs, \r")
+        reader.read_until("No commits yet")
+        # auto_cd + chpwd: ディレクトリ名だけで cd し、一覧 (inner) を出す
+        reader.send_until("Write-Output 'CHECK0'", "\nCHECK0\n")
+        before = len(reader.text)
+        process.write("sub1\r")
+        deadline = time.monotonic() + 20
+        while "inner" not in reader.text[before:]:
+            assert time.monotonic() < deadline, f"no listing after cd: {reader.text[before:]!r}"
+            try:
+                reader.raw += process.read(65536)
+            except TimeoutError:
+                continue
+        output = reader.send_until("'CWD=' + (Split-Path -Leaf (Get-Location))", "CWD=sub1")
+        process.write("..\r")
+        time.sleep(1)
+        reader.send_until("'CWD2=' + (Split-Path -Leaf (Get-Location))", "CWD2=work")
+
+        # placeholder: `gcim, ` は `git commit -m ''` へ展開し、引用符の中へカーソルを置く
+        process.write("gcim, MSG")
+        reader.read_until("git commit -m 'MSG'")
+        process.write("\r")
+        reader.send_until("Write-Output 'CHECK1'", "\nCHECK1\n")
+
+        # Tab: 1 つだけの補完はそのまま入る (PSFzf は初めて押したときに読み込まれる)
+        process.write("Get-Chi\t")
+        time.sleep(2)  # 初めての Tab は PSFzf を読み込む
+        process.write(" -Name | Where-Object { $_ -like 'sub*' } | ForEach-Object { 'FIRST=' + $_ }\r")
+        reader.read_until("FIRST=sub1")
+
+        # キー割り当て・履歴・TEMP
+        output = reader.send_until(
+            "Write-Output ('CHORDS_RESULT:' + ((Get-PSReadLineKeyHandler -Bound | Where-Object "
+            "{ $_.Key -in 'Spacebar', 'Ctrl+x,Ctrl+s', 'Alt+c', 'Tab' } "
+            "| ForEach-Object { $_.Key + '=' + $_.Function }) -join ';')); Write-Output 'CHORDS_DONE'",
+            "\nCHORDS_DONE\n",
+        )
+        chords = dict(item.split("=", 1) for item in re.search(r"CHORDS_RESULT:([^\s'][^\n]*)", output)[1].split(";"))
+        assert chords["Spacebar"] == "ExpandSnippet"
+        assert chords["Ctrl+x,Ctrl+s"] == "InsertSnippet"
+        # Alt+c と Tab は、最初に押されるまで PSFzf を読まない仮の割り当て。Tab を押した後は PSFzf のものに替わる
+        assert "Alt+c" in chords and "Tab" in chords
+        output = reader.send_until("'HIST=' + ((Get-PSReadLineOption).AddToHistoryHandler.Invoke(' leading-space'))", "HIST=False")
+        assert "HIST=False" in output
+        output = reader.send_until("'HISTNORMAL=' + ((Get-PSReadLineOption).AddToHistoryHandler.Invoke('git status'))", "HISTNORMAL=True")
+        assert "HISTNORMAL=True" in output
+        reader.send_until("'TEMP=' + $env:TEMP", f"TEMP={work}\\.tmp")
+
+        process.write("exit\r")
+        deadline = time.monotonic() + 10
+        while process.isalive() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert not process.isalive(), "PowerShell did not exit"
+    finally:
+        if process.isalive():
+            process.terminate(force=True)
+
+
+def test_windows_powershell_loads_the_helpers_without_errors_and_skips_powershell_7_features(tmp_path: Path):
+    work = make_session_repo(tmp_path)
+    process, reader = spawn_session("powershell", work)
+    try:
+        reader.read_until("CONPTY_READY\n")
+        time.sleep(3)
+        reader.send_until("'ERRS=' + $Error.Count", "ERRS=0")
+        # 関数のモジュールは 5.1 でも自動で読み込まれる。auto_cd も使える
+        output = reader.send_until("'SHA=' + (sha1 abc)", "SHA=a9993e36")
+        assert "SHA=a9993e364706816aba3e25717850c26c9cd0d89d" in output
+        process.write("sub1\r")
+        output = reader.send_until("'CWD=' + (Split-Path -Leaf (Get-Location))", "CWD=sub1")
+        # TEMP は起動時にリポジトリの .tmp へ向く。cd への追従 (LocationChangedAction) は 6 以降だけ
+        reader.send_until("'TEMP=' + $env:TEMP", f"TEMP={work}\\.tmp")
+        # snippet のキー (PSReadLine 2.1 以降が前提) は、5.1 では登録しない
+        output = reader.send_until(
+            "Write-Output ('SPACE_RESULT:[' + ((Get-PSReadLineKeyHandler -Bound "
+            "| Where-Object { $_.Key -eq 'Spacebar' }).Function) + ']'); Write-Output 'SPACE_DONE'",
+            "\nSPACE_DONE\n",
+        )
+        assert "SPACE_RESULT:[" in output and "ExpandSnippet" not in output.split("SPACE_RESULT:[")[-1]
+        process.write("exit\r")
+    finally:
+        if process.isalive():
+            process.terminate(force=True)

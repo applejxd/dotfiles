@@ -22,7 +22,7 @@
 （出力はしない）。`TMPDIR` が既に `<repo>/.tmp/s/` の配下（pi のセッションの置き場。
 CHG-0042）のときは、そのまま維持する（子の zsh が戻さない。試験は
 `test_zshenv_tmpdir.py`）。`.tmp` が書き込めない、または自分の所有でない
-（他のユーザーが先に作った）ときは、向けずに元の `TMPDIR` を保つ。継承した `TMPDIR` が
+（他のユーザーが先に作った）ときは、向けずに元の `TMPDIR` を保つ。 Windows の PowerShell は、`TEMP` / `TMP` で同じことをする（[リポジトリごとの TEMP](#仕組みと制約)）。継承した `TMPDIR` が
 `<repo>/.tmp/s/` の配下のときは、親の pi が決めた値として、所有者を見ずに維持する。
 
 `shellenv.sh` は mise の shims（`${MISE_DATA_DIR:-~/.local/share/mise}/shims`）を、
@@ -77,7 +77,7 @@ Nix 化・`rm` の alias 差し替え・環境変数の列挙による人間判�
 
 ## pi の特殊な起動 drypi と superpi
 
-2026-11-20。外部の `pi`（alias・関数ではない実行ファイル）が PATH にある機だけ、対話シェルに 2 つの関数を定義する（`functions/pi.sh`。bash・zsh。Windows の PowerShell は対象外）。引数は pi へそのまま渡す。
+2026-11-20。外部の `pi`（alias・関数ではない実行ファイル）が PATH にある機だけ、対話シェルに 2 つの関数を定義する（`functions/pi.sh`。bash・zsh。Windows の PowerShell にも同名の関数がある: [対応表](#bashzsh-と-powershell-の対応)。`superpi` は Windows の `sudo`）。引数は pi へそのまま渡す。
 
 | 名前 | 中身 |
 | --- | --- |
@@ -243,6 +243,76 @@ Linux / WSL / Raspberry Pi / macOS では、表の 5 項目すべてを取得し
 各ファイルの関数は、対応するコマンドがある場合だけ定義されます。Windows では
 `.chezmoiignore` の `.config/*` によって `fzf/` ごと配られません。
 
+## bash/zsh と PowerShell の対応
+
+2026-11-25。Ubuntu（bash / zsh）にあって Windows の PowerShell に無かった機能のうち、PowerShell の標準の仕組みで自然に再現できるものを足した。
+Linux 側の定義（`shellrc.sh`・`fzf/*.sh`・`functions/*.sh`・`.zshrc.d/`・`.zshenv`・zeno）は変えない。調査と実測は [記録](../research/shell/powershell-linux-parity-2026-11.md)。
+
+### 対応表
+
+| bash / zsh | PowerShell | 置き場・仕組み |
+| --- | --- | --- |
+| `up` / `upp` / `uppp`・`jcd`・`cleanup`・`sha1`・`wcc`・`fcr`・`search`・`y`（yazi） | 同名の関数 | モジュール `ShellShortcuts`。`search` は `find \| grep -n` の代わりに `Select-String`（`パス:行:内容`） |
+| `ll` / `la` / `lla` / `lal` / `lt` / `ltl`（`ls=eza`） | 同名の関数。eza があれば eza、無ければ `Get-ChildItem` と、`.git` などを除く簡易の木 | `ShellShortcuts`。標準の `ls`（`Get-ChildItem`）は、パイプラインへオブジェクトを流すので上書きしない |
+| `alias cat='bat --paging=never -p'` | `cat`。bat があり、オプション・パイプラインの入力が無いときだけ bat。それ以外は `Get-Content` | `interactive.ps1` が標準のエイリアスを外し、`ShellShortcuts` の `Invoke-ShellCat` を呼ぶ関数を定義 |
+| `dirs -v` | `dirs`（`Get-Location -Stack`） | `interactive.ps1`（場所のスタックは SessionState ごとなので、モジュールに置けない） |
+| `v`・`shellf`・`mise-select` | 同名の関数（`v` は `~/.viminfo` か `~/_viminfo`。`shellf` は入っているシェルから選ぶ） | `ShellShortcuts` |
+| `fbr` / `fbrm` / `fshow` / `cdworktree` / `fadd` / `xgw` / `gwcode` | 同名の関数 | モジュール `ShellGit`。`fshow` は Enter で内容を見て、閉じると一覧へ戻る（Esc で終わる）。`fadd` は Ctrl-D で差分 |
+| `extract` / `zpack` / `zunpack` | 同名の関数。GNU tar（Git for Windows）と bsdtar（Windows 標準）の両方で動く | `ShellArchive`。zstd は scoop。パイプを使わず tar に圧縮を任せる |
+| `runcpp` | 同名の関数（フラグ・環境変数 `RUNCPP_*` は同じ） | `ShellCpp`。差は下の「差が出るもの」 |
+| `drypi` / `superpi` | 同名の関数。`superpi` は Windows の `sudo` で、ドライブの根から起動 | `ShellPi`（[詳細](#pi-の特殊な起動-drypi-と-superpi)） |
+| `pk` | `pk`（Python の `~/.local/bin/pk` を python で呼び、`sh` は Git for Windows のものを使う） | `ShellPk`。`pk` は `interactive.ps1` が定義する薄い関数 |
+| `code-exam`・`audio-dl`・`video-dl`（個人 PC） | 同名の関数 | モジュール `PersonalShell`（個人 PC だけに配る） |
+| `setopt auto_cd` / `shopt -s autocd`・`cdpath=(.. ~)` | ディレクトリ名だけの入力で cd（カレント → 親 → `~` の順。`..`・`...`・`~`・`./x` も） | `CommandNotFoundAction`（`interactive.ps1`）。**入力された**コマンド（`CommandOrigin` が Runspace）の、**引数なしの 1 語**だけ（`build --help` は移動せず、通常のコマンドの未検出のエラー）。関数・スクリプトの中と、ファイルシステム以外の場所は何もしない |
+| `chpwd()`（cd のたびに `ls`） | cd のたびに一覧（eza の格子、無ければ名前の格子）。標準出力が端末のときだけ | `LocationChangedAction`（PowerShell 6 以降） |
+| `HISTSIZE`・`hist_ignore_space`・`hist_ignore_all_dups` | `-MaximumHistoryCount 100000`・先頭が空白の行は残さない・重複なし | PSReadLine（`interactive.ps1`）。秘密らしい語を含む行は、既定どおりメモリだけ |
+| zsh-autosuggestions | 履歴からの候補を入力の右に薄く出す（右矢印・Ctrl+f・End で確定） | PSReadLine 2.1 以降（PowerShell 7）。5.1 は飛ばす |
+| fast-syntax-highlighting | PSReadLine の色づけ | 標準 |
+| fzf-tab・fzf の Alt+C | Tab の候補を fzf で絞る。Alt+C は fzf で cd（割り当てだけ確認。実際の選択画面は未確認） | PSFzf。**初めて押したときに** PSFzf を読み込む（`commands/fzf.ps1`）。Tab は、候補が 1 つならそのまま入り、複数なら fzf（確認済み） |
+| zeno の snippet（`gs,` + Space） | 同じ定義で、Space で展開。`{{名前}}` は最初のものを消してカーソルを置く。`evaluate: true` は実行した出力で置き換える。Ctrl+x, Ctrl+s で fzf から選ぶ | `snippets.json`（zeno の YAML から chezmoi が生成）と `ShellSnippets` |
+| compinit・zsh-completions・`_mise`・docker の補完 | gh・chezmoi・docker・mise・uv・uvx・rg・fd・herdr は各ツールの PowerShell 用の補完、git は posh-git、winget は公式、ssh/scp/sftp は `~/.ssh/config` の Host | `interactive.ps1` のスタブ。**初めて Tab を押したときに**生成してキャッシュする |
+| `LESS`・`FZF_*`（`rg --files`・bat / eza のプレビュー） | 同じ値（fzf は cmd.exe で実行するので、道具が無いときは `\|\|` で標準のコマンドへ落ちる） | `interactive.ps1` |
+| `.zshenv` の `TMPDIR`（リポジトリの `.tmp`） | `TEMP` / `TMP` | `profile.ps1.tmpl` の `Update-RepoLocalTemp`（非対話でも効く。下の「リポジトリごとの TEMP」） |
+
+### 仕組みと制約
+
+- **起動時間**: `.ps1` を 1 つ dot-source するたびに約 16〜20 ms かかる（実測。原因は未調査。既存の小さい `commands/*.ps1` でも同じだった）。関数は `commands/` ではなく、`home/dot_config/powershell/modules/<名前>/` の小さなモジュールにして、`interactive.ps1` が `PSModulePath` へ足す。**関数を初めて呼んだときに** PowerShell が自動で `Import-Module` する（manifest の `FunctionsToExport` が一覧。ワイルドカードにしない）。起動で読むのは `commands/interactive.ps1` の 1 ファイルだけ。この構成での、プロンプトまでの時間の増加は、基準（1255〜1282 ms）に対して約 +25〜60 ms（中央値 約 +40 ms。[内訳と測り方](../research/shell/powershell-linux-parity-2026-11.md#起動時間の内訳)）。Management / Utility モジュールの読み込みを伴う cmdlet（`Test-Path`・`Remove-Item` など）と `GetNewClosure()` は、`interactive.ps1` の最上位では使わない（`$ExecutionContext.InvokeProvider` などを直接呼ぶ）。
+- **外部の実行ファイルが先に解決される**: 自動読み込みは、PATH の実行ファイルより**後**に解決される。`cat`（Git・gow の `cat.exe`）と `pk`（`~/.local/bin/pk` という拡張子の無いファイル）は負けるので、`interactive.ps1` が薄い関数（`cat` / `pk`）を定義して、モジュールの関数（`Invoke-ShellCat` / `Invoke-ShellPk`）を呼ぶ。同じ名前の実行ファイルが PATH に入ると、他の関数も隠れうる（見つけたら同じ形にする）。
+- **外部コマンドの有無**は、`Get-Command`（初回に 0.25 秒前後。[既存の計測](#powershellプロファイル)。見つからないコマンドは PATH 全体を走査する）ではなく、`Find-Executable`（.NET で PATH を探す）で調べる。起動時には調べず、使う時点で決める。
+- **場所のスタック**（`Push-Location`）はモジュールごとの SessionState なので、`dirs` はグローバルの関数にする。
+- **補完のスタブ**: ツールの補完スクリプトは大きい（uv は 750 KB）ので、起動では登録だけ（`Register-ArgumentCompleter -Native`）。初めて Tab を押したときに、`Get-CachedInitScript`（[cache.ps1](#powershellプロファイル)）で生成・キャッシュ（`%LOCALAPPDATA%\PowerShellProfileCache\completion-<名前>.ps1`。実行ファイルが変わるまで再生成しない）し、スクリプトの `Register-ArgumentCompleter` を**横取り**して、そのスクリプトブロックを呼ぶ。本物の登録でスタブを置き換える方式は、cobra 製（gh・chezmoi）で効かなかった。cobra の補助の `function`・`filter` はグローバルへ定義し直す。補完の登録を含まない出力（使い方の表示）はキャッシュしない。
+- **snippet**: `home/dot_config/powershell/snippets.json.tmpl` が、zeno の YAML（`home/dot_config/zeno/*.yml`）のうち Windows で通じるもの（`01_git`・`02_docker`・`05_gh`・`10_cpp` と、`00_config` の `null,`（`*> $null` へ書き換え）・`b,`・`kgen,`・`pgen,`・`sha2,`）を `include | fromYaml | toJson` で JSON にする。YAML を二重に持たない。Space のハンドラは、左の語が `,` で終わるときだけモジュールを読む（ふつうの空白でモジュールを読み込まない）。Enter での展開は、oh-my-posh が Enter のハンドラを持つので足さない。
+- **リポジトリごとの TEMP**: `Update-RepoLocalTemp` が、git のリポジトリ（`.git` がディレクトリでもファイルでも）の中にいる間、`TEMP` / `TMP` を `<repo>\.tmp` へ向ける。外では、最初に読まれた時点の値へ戻す。`TEMP` と `TMP` は、別の値でも別々に控える（`_TMPDIR_REPO_LOCAL_ORIG` が `TEMP`、`_TMPDIR_REPO_LOCAL_ORIG_TMP` が `TMP`。未設定は `<unset>`）。`TEMP` が `<repo>\.tmp\s\`（pi のセッションの置き場）の配下なら維持する。次のときは向けず、元の値を保つ: `.tmp` が作れない・ディレクトリでない（ファイルがある）、`.tmp` が再解析ポイント（ジャンクションなど。行き先がリポジトリの外かもしれない）、リポジトリが UNC（`\\wsl.localhost\…` など）。cd への追従は `LocationChangedAction`（PowerShell 6 以降。5.1 は起動時だけ）。別の拡張が登録済みのハンドラは残して呼び、プロファイルや `interactive.ps1` の再読み込みでは、自分の古いハンドラを置き換える（登録したデリゲートを読み戻して見分ける）。**書き込みの試しはしない**（ファイルの作成はウイルス対策の走査で起動が遅れる。Linux の `-w` / `-O` の確認の代わりに、作れるかだけを見る）。Windows の所有者の確認はしない。
+- **クロスプラットフォームの Python**: `home/dot_local/bin/executable_pk` は、Windows では `os.execvp` が子の終了を待たずに親が終わる（終了コードも失う）ので、`subprocess.call` で待つ。
+
+### 差が出るもの
+
+- **`runcpp`**: MinGW（scoop の `mingw-winlibs`）は AddressSanitizer / UBSan を持たないので、debug は警告と STL のデバッグモード（`-D_GLIBCXX_DEBUG`）だけ。sanitizer が使えるコンパイラなら足す（初回にコンパイルを 1 回試して覚える）。`ulimit -s` の代わりに、リンク時に `-Wl,--stack,1073741824`。標準入力は `<` が無いので、パイプで渡す（`Get-Content in.txt | runcpp a.cpp`）。キャッシュは `%LOCALAPPDATA%\runcpp`。
+- **`extract`**: `.bz2` は `bzip2 -dk`（Linux の `-dc` は標準出力へ出すだけだった）。`.zip` は `unzip`（Git for Windows）、無ければ `Expand-Archive`。`.lzh` / `.arj` / `.7z` / `.rar` は `7z`。
+- **`superpi`**: Windows には root が無いので、`sudo`（Windows 11 24H2 以降の組み込み）で昇格する。昇格しても同じユーザーなので `HOME` の受け渡しは要らない。`sudo` の既定は新しいウィンドウで起動する（`sudo config` で変える）。**この機では sudo を実行していない（実機の昇格は未検証）。**
+- **fzf**: `FZF_DEFAULT_OPTS` は `--reverse --border` のまま（Linux の `--height 60%` は、Windows の fzf では未確認なので入れていない。[wiki](https://github.com/junegunn/fzf/wiki/Windows)）。
+
+### 再現していないもの
+
+| 機能 | 理由 |
+| --- | --- |
+| `fgg`・Ctrl+z（`fancy-ctrl-z`） | PowerShell に、ジョブの中断・再開（`fg`）が無い |
+| 拡張子による suffix alias（`alias -s`） | 拡張子での起動は Windows の関連付けに委ねる。`extract` と `runcpp` は関数で呼べる |
+| `auto_pushd`・`pushd_ignore_dups` | `cd` の意味を変える。標準の `cd -` / `cd +`（場所の履歴）で足りる |
+| `share_history`・`hist_reduce_blanks` | PSReadLine は他のセッションの履歴を即時には取り込まない。空白の圧縮は無い |
+| `diff=colordiff -u`・`hub alias` | `diff` は `Compare-Object` のエイリアス。colordiff・hub は Windows に無い |
+| `EDITOR` / `VISUAL` | Git for Windows が、自前の vim を既定のエディタにする（`vim` 関数も同じ実体を呼ぶ） |
+| zeno の補完（`kill`・`docker stop` の fzf 補完など） | 各ツールの補完スクリプト（docker・gh など）と PSFzf の Tab で足りる。シェルのパイプに依存した定義は移せない |
+| zeno の snippet のうち ros2・tmux、`find,`・`grep,`・`relogin,` | Windows に無い道具・Unix のコマンド |
+| ROS・Modules・iTerm2・NAS・bash-it・Cline の shell integration | Linux / macOS 専用。VS Code の統合は pwsh では自動で入る |
+| singularity・Homebrew・`unmount` の fzf 関数 | Linux / macOS 専用 |
+
+### 検査
+
+- `test/test_windows_assets.py`: モジュールの manifest と実体の一致、起動で読むファイルが 1 つ、`Get-Command` を起動で呼ばない、`Update-RepoLocalTemp` の位置と形、snippet の生成元、道具の宣言（mise・scoop・PSGallery）、個人用モジュールを他の機へ配らない、`pk` の Windows 分岐。
+- `test/test_powershell_functions.py`（新規）: 各関数を、本物と同じ経路（`interactive.ps1` を読み、モジュールを自動読み込み）で実行する。外部の道具（fzf・gwq・pi・sudo・bat・eza）は PATH の先頭に置く偽物で、渡した引数・標準入力・終了コードを確かめる。tar は GNU と bsd の両方。補完のスタブ、`TEMP`、auto_cd（入力された場合と、スクリプトからの場合）。
+- `test/test_powershell_interactive.py`: 実際の対話セッション（ConPTY）で、snippet の展開（`gs,` と `gcim,` に Space）・auto_cd + chpwd・Tab・キー割り当て・履歴・`TEMP`、5.1 では 7 専用の機能を飛ばして起動エラーが無いこと。配備前は、描画した profile を `PWSH_TEST_PROFILE` で渡して試せる。
+
 ## PowerShellプロファイル
 
 設定の実体は `home/dot_config/powershell/` に置き、`$PROFILE`
@@ -254,6 +324,9 @@ Linux / WSL / Raspberry Pi / macOS では、表の 5 項目すべてを取得し
 | `home/dot_config/powershell/profile.ps1.tmpl` | PowerShell 7 / 5.1 共通の本体 |
 | `home/dot_config/powershell/cache.ps1` | init 出力のキャッシュ（`Get-CachedInitScript`）。本体がトップレベルで dot-source する |
 | `home/dot_config/powershell/commands/*.ps1` | 用途別の関数（wsl、docker、fzf、pwgen、chocolatey）。fzf と chocolatey は、遅いモジュールを使うときまで読み込まない仮の定義も持つ |
+| `home/dot_config/powershell/commands/interactive.ps1` | 対話だけで読む 1 ファイル。環境変数・履歴・auto_cd・chpwd・snippet のキー・補完のスタブ・`cat` / `pk` / `dirs`・`PSModulePath` への `modules/` の追加（[対応表](#bashzsh-と-powershell-の対応)） |
+| `home/dot_config/powershell/modules/<名前>/` | bash / zsh の関数に相当する小さなモジュール（`ShellShortcuts`・`ShellGit`・`ShellArchive`・`ShellCpp`・`ShellPi`・`ShellPk`・`ShellSnippets`、個人 PC だけ `PersonalShell`）。使うときに自動で読み込まれる |
+| `home/dot_config/powershell/snippets.json.tmpl` | zeno の YAML から生成する snippet の定義 |
 | `home/Documents/*/profile.ps1.tmpl` | `$PROFILE` から本体を呼ぶローダー |
 | `home/.chezmoitemplates/powershell/profile-loader.ps1` | `$PROFILE` ローダーの本文。Documents 配下と `run_after_345` が共有する |
 | `home/.chezmoitemplates/powershell/git-config-env.ps1` | プロファイルとScoopスクリプトで共有する `GIT_CONFIG_*` の正規化 |

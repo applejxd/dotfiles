@@ -17,6 +17,7 @@
 ```powershell
 uv run --with pytest --with pyyaml --no-project pytest test\agents\ -q
 uv run --with pytest --with pywinpty --no-project pytest test\test_windows_assets.py test\test_powershell_interactive.py -q
+uv run --with pytest --no-project pytest test\test_powershell_functions.py -q   # bash/zsh 相当の関数・TEMP・補完・auto_cd (偉の fzf などを使う)
 uv run pre-commit run --all-files
 ```
 

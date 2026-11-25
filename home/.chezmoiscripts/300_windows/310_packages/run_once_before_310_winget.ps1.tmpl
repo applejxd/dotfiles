@@ -39,6 +39,8 @@ function Install-ModuleIfMissing {
 Install-ModuleIfMissing PowerShellGet
 Install-ModuleIfMissing PSFzf
 Install-ModuleIfMissing ZLocation
+# git の Tab 補完だけに使う (プロンプトは oh-my-posh)。初めて Tab を押したときに読み込む
+Install-ModuleIfMissing posh-git
 
 # ------ #
 # winget #

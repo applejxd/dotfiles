@@ -26,8 +26,10 @@ def test_winget_installer_uses_supported_detection_and_package_ids():
     for moved in ("OpenJS.NodeJS", "astral-sh.uv", "junegunn.fzf", "jqlang.jq"):
         assert moved not in script, moved
     assert "winst Bitwarden.CLI" in script
-    # プロファイルから参照していないモジュールは導入しない
-    assert "posh-git" not in script
+    # プロファイルから参照していないモジュールは導入しない。posh-git は、interactive.ps1 の git の Tab 補完が読む
+    interactive = (ROOT / "home/dot_config/powershell/commands/interactive.ps1").read_text(encoding="utf-8-sig")
+    assert "Install-ModuleIfMissing posh-git" in script
+    assert "Import-Module posh-git" in interactive
 
 
 def test_zero_byte_windows_targets_use_empty_attribute():
@@ -627,7 +629,7 @@ def test_powershell_sources_start_with_a_utf8_bom():
     sources = [
         path
         for directory in ("home", "scripts")
-        for pattern in ("**/*.ps1", "**/*.ps1.tmpl")
+        for pattern in ("**/*.ps1", "**/*.ps1.tmpl", "**/*.psm1", "**/*.psd1")
         for path in (ROOT / directory).glob(pattern)
         if ".chezmoitemplates" not in path.parts
     ]
@@ -1073,3 +1075,163 @@ def test_windows_scripts_share_the_env_path_helpers():
 def include_before_first_use(source: str) -> bool:
     head = source.split('includeTemplate "powershell/env-path.ps1"')[0]
     return "Update-PathFromEnvironment" not in head and "Add-UserPathEntry" not in head
+
+
+# --- bash / zsh の機能の PowerShell 版 (docs/spec/shell.md#bashzsh-と-powershell-の対応) -------------------------
+
+POWERSHELL_DIR = ROOT / "home/dot_config/powershell"
+MODULES_DIR = POWERSHELL_DIR / "modules"
+# モジュールの外から呼ばない補助関数 (manifest の FunctionsToExport には載せない)
+INTERNAL_MODULE_FUNCTIONS = {
+    "ShellShortcuts": {"Show-DirectoryTree"},
+    "ShellGit": {"Test-GitRepository"},
+    "ShellArchive": {"Get-TarFlavor", "ConvertTo-TarPath", "Get-TarExtractOption"},
+    "ShellCpp": {"Test-RuncppSanitizer"},
+    "ShellPi": {"Get-PiDryArgument", "Get-PiExecutable"},
+    "ShellSnippets": {"Get-SnippetTable", "Resolve-SnippetText"},
+}
+
+
+def module_names() -> list[str]:
+    return sorted(path.name for path in MODULES_DIR.iterdir() if path.is_dir())
+
+
+def test_linux_parity_functions_are_autoloaded_modules_whose_manifests_list_every_function():
+    """関数は起動時に dot-source せず、小さなモジュールにして使うときに自動で読み込む。
+
+    ファイルを 1 つ読むごとに起動が約 16 ms 遅くなるため。PowerShell の自動読み込みは、manifest の
+    FunctionsToExport を見て、その関数を初めて呼んだときにモジュールを読む。一覧が実体とずれると、
+    関数が呼べない (載せ忘れ) か、補助関数が外へ出る (載せすぎ) ので、一致を固定する。
+    """
+    assert {
+        "PersonalShell", "ShellArchive", "ShellCpp", "ShellGit", "ShellPi", "ShellPk", "ShellShortcuts", "ShellSnippets",
+    } <= set(module_names())
+    for name in module_names():
+        module = MODULES_DIR / name
+        manifest = (module / f"{name}.psd1").read_text(encoding="utf-8-sig")
+        body = (module / f"{name}.psm1").read_text(encoding="utf-8-sig")
+        assert f"RootModule = '{name}.psm1'" in manifest
+        exported = set(re.findall(r"'([^']+)'", re.search(r"FunctionsToExport = @\((.*?)\)", manifest, re.S).group(1)))
+        # 関数の定義は行頭の `function 名 {` だけ (入れ子の関数・文字列の中は数えない)
+        defined = set(re.findall(r"^function ([\w-]+) \{", body, re.M))
+        assert exported == defined - INTERNAL_MODULE_FUNCTIONS.get(name, set()), name
+        assert INTERNAL_MODULE_FUNCTIONS.get(name, set()) <= defined, name
+        # ワイルドカードの一覧は、自動読み込みが関数を見つけられなくなる
+        assert "*" not in re.search(r"FunctionsToExport = @\((.*?)\)", manifest, re.S).group(1)
+
+
+def test_profile_loads_one_interactive_file_and_no_function_files_at_startup():
+    profile = (POWERSHELL_DIR / "profile.ps1.tmpl").read_text(encoding="utf-8-sig")
+    tail = split_at_interactive_guard(profile)[1]
+
+    # 新しい関数のファイルを増やすと起動が遅くなる。読むのは interactive.ps1 の 1 つだけ
+    assert '. "$PSScriptRoot/commands/interactive.ps1"' in tail
+    for name in ("shortcuts", "git", "archive", "cpp", "pi", "pk", "snippets", "completion", "readline", "environment", "personal"):
+        assert f"commands/{name}.ps1" not in profile, name
+    interactive = (POWERSHELL_DIR / "commands/interactive.ps1").read_text(encoding="utf-8-sig")
+    # PSModulePath に modules/ を足す (自動読み込みの前提)
+    assert "'..', 'modules'" in interactive
+    assert "$env:PSModulePath" in interactive
+    # -EditMode は割り当てを初期化するので、interactive.ps1 はその後に読む
+    assert tail.index("-EditMode Emacs") < tail.index("commands/interactive.ps1")
+    assert "-EditMode" not in strip_comments(interactive)
+
+
+def test_interactive_setup_does_not_scan_the_path_at_startup():
+    """Get-Command は PATH 全体を走査して 0.1 秒以上かかる。トップレベルでは呼ばない (関数・スクリプトブロックの中は使うときだけ)。"""
+    interactive = strip_comments((POWERSHELL_DIR / "commands/interactive.ps1").read_text(encoding="utf-8-sig"))
+    top_level = []
+    depth = 0
+    for line in interactive.splitlines():
+        if depth == 0 and not line.startswith("function "):
+            top_level.append(line)
+        depth += line.count("{") - line.count("}")
+    top_level_code = "\n".join(top_level)
+    assert "Get-Command" not in top_level_code
+    assert "Find-Executable" not in top_level_code
+    # Management / Utility モジュールを読み込む cmdlet も、トップレベルでは呼ばない (初回に数十 ms。プロバイダーを直接呼ぶ)
+    for cmdlet in ("Test-Path", "Remove-Item", "Get-ChildItem", "Join-Path", "Split-Path", "Get-Item", "Set-Alias", "New-Alias"):
+        assert cmdlet not in top_level_code, cmdlet
+    # fzf の既定のコマンドは、道具が無ければ標準のコマンドへ落ちる形にする (起動時に有無を調べない)
+    assert "||" in interactive
+
+
+def test_repo_local_temp_is_set_before_the_interactive_guard_without_cmdlets():
+    """Linux の .zshenv の _tmpdir_repo_local_update に相当する。非対話 (エージェント) でも効く。"""
+    profile = (POWERSHELL_DIR / "profile.ps1.tmpl").read_text(encoding="utf-8-sig")
+    head = split_at_interactive_guard(profile)[0]
+
+    assert "function Update-RepoLocalTemp {" in head
+    assert head.index("function Update-RepoLocalTemp {") < head.index("\nUpdate-RepoLocalTemp\n")
+    # cd のたびの追従 (PowerShell 6 以降。5.1 は起動時だけ)
+    assert "$global:RepoLocalTempHook = { Update-RepoLocalTemp }" in head
+    assert "LocationChangedAction = $global:RepoLocalTempHook" in head
+    # 再読み込みで自分のハンドラを前のハンドラにしない (読み戻すのはデリゲートなので、登録後に控えて比べる)
+    assert "$global:RepoLocalTempInstalled" in head and "$global:ChpwdInstalled" in head
+    # pi のセッションの置き場と、元の値の控えは Linux 版と同じ名前・形
+    assert "_TMPDIR_REPO_LOCAL_ORIG" in head and "_TMPDIR_REPO_LOCAL_ORIG_TMP" in head
+    assert "'\\s\\'" in head
+    # 書き込みの試しはしない (ファイルの作成はウイルス対策の走査で起動が遅れる)
+    function = head[head.index("function Update-RepoLocalTemp {"):head.index("\nUpdate-RepoLocalTemp\n")]
+    assert "WriteAllText" not in function
+    assert "CreateDirectory" in function
+    # ジャンクションと UNC のリポジトリでは、向けない
+    assert "ReparsePoint" in function and "StartsWith('\\\\')" in function
+
+
+def test_snippets_are_generated_from_the_zeno_yaml_for_windows():
+    template = (POWERSHELL_DIR / "snippets.json.tmpl").read_text(encoding="utf-8-sig")
+    # 先頭の説明 (テンプレートのコメント) は検査の対象にしない
+    template = re.sub(r"\{\{-\s*/\*.*?\*/\s*-\}\}", "", template, flags=re.S)
+
+    # Unix のコマンドが中心の ros2・tmux は読まない。00_config.yml は通じるものだけを選ぶ
+    for name in ("01_git", "02_docker", "05_gh", "10_cpp"):
+        assert f'"{name}"' in template
+    assert "03_ros2" not in template and "04_tmux" not in template
+    assert '"null," "*> $null"' in template
+    for unix_only in ("find,", "grep,", "relogin,"):
+        assert unix_only not in template
+    # 展開は Space のキー。Enter は oh-my-posh のハンドラがあるので置き換えない
+    interactive = (POWERSHELL_DIR / "commands/interactive.ps1").read_text(encoding="utf-8-sig")
+    assert "-Chord 'Spacebar'" in interactive
+    assert "Expand-Snippet" in interactive
+    assert "-Chord 'Enter'" not in interactive
+
+
+def test_cli_tools_behind_the_powershell_helpers_are_declared_for_windows():
+    mise = (ROOT / "home/dot_config/mise/config.toml.tmpl").read_text(encoding="utf-8-sig")
+    windows_tools = mise.split("{{- if ne .chezmoi.os \"windows\" }}", 1)[0]
+    # cat=bat・ll/lt=eza・fzf の既定のコマンド=rg・y=yazi。Windows の [tools] (ne windows の外) に宣言する
+    for tool in ('bat = "latest"', 'eza = "latest"', 'ripgrep = "latest"', 'yazi = "latest"'):
+        assert tool in windows_tools, tool
+    # yt-dlp は個人 PC だけ (audio-dl / video-dl)
+    assert 'yt-dlp = "latest"' in windows_tools
+    assert windows_tools.index("applejxd") < windows_tools.index('yt-dlp = "latest"')
+
+    scoop = (ROOT / "home/.chezmoiscripts/300_windows/310_packages/run_once_before_311_scoop.ps1.tmpl").read_text(
+        encoding="utf-8-sig"
+    )
+    # zstd は mise の registry に無いので scoop (zpack / zunpack が使う)
+    assert re.search(r"^sinst .*\bzstd\b", scoop, re.M)
+    winget = (ROOT / "home/.chezmoiscripts/300_windows/310_packages/run_once_before_310_winget.ps1.tmpl").read_text(
+        encoding="utf-8-sig"
+    )
+    assert "Install-ModuleIfMissing posh-git" in winget
+
+
+def test_personal_powershell_functions_are_not_deployed_to_other_machines():
+    ignore = (ROOT / "home/.chezmoiignore.tmpl").read_text(encoding="utf-8-sig")
+    personal = ignore.split('{{- if not (regexMatch "(?i)(^|\\\\\\\\)applejxd$" .chezmoi.username) }}', 1)[1]
+
+    assert ".config/powershell/modules/PersonalShell/**" in personal.split("{{- end }}", 1)[0]
+    # 個人用の関数は、プロファイルへの dot-source を持たず、他の機では配られない (自動読み込みなので参照も無い)
+    assert "PersonalShell" not in (POWERSHELL_DIR / "profile.ps1.tmpl").read_text(encoding="utf-8-sig")
+
+
+def test_pk_waits_for_the_child_on_windows():
+    """Windows の os.execvp は、子の終了を待たずに親が終わり、終了コードも失う。"""
+    pk = (ROOT / "home/dot_local/bin/executable_pk").read_text(encoding="utf-8")
+
+    assert 'if os.name == "nt":' in pk
+    assert 'return subprocess.call(["sh", str(entry), *args[1:]])' in pk
+    assert 'os.execvp("sh"' in pk

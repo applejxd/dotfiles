@@ -57,12 +57,16 @@ function Register-FzfKeyHandler {
 function Initialize-PsFzfOnDemand {
   try {
     Import-Module PSFzf -Scope Global -ErrorAction Stop
-    Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
+    # Ctrl+t (ファイル)・Ctrl+r (履歴)・Alt+c (ディレクトリへ cd)・Tab (fzf-tab のような候補の絞り込み)
+    Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r' `
+      -PSReadlineChordSetLocation 'Alt+c' -TabExpansion
     $true
   } catch {
     Write-Warning "Failed to set up PSFzf: $_"
     Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -Function ReverseSearchHistory
     Set-PSReadLineKeyHandler -Chord 'Ctrl+t' -Function SwapCharacters
+    Set-PSReadLineKeyHandler -Chord 'Alt+c' -Function CapitalizeWord
+    Set-PSReadLineKeyHandler -Chord 'Tab' -Function Complete
     $false
   }
 }
@@ -80,6 +84,20 @@ function Register-PsFzfLazyKeyHandler {
       Invoke-FzfPsReadlineHandlerHistory
     } else {
       [Microsoft.PowerShell.PSConsoleReadLine]::ReverseSearchHistory()
+    }
+  }
+  Set-PSReadLineKeyHandler -Chord 'Alt+c' -BriefDescription 'PSFzf (lazy)' -ScriptBlock {
+    if (Initialize-PsFzfOnDemand) {
+      Invoke-FzfPsReadlineHandlerSetLocation
+    } else {
+      [Microsoft.PowerShell.PSConsoleReadLine]::CapitalizeWord()
+    }
+  }
+  Set-PSReadLineKeyHandler -Chord 'Tab' -BriefDescription 'PSFzf (lazy)' -ScriptBlock {
+    if (Initialize-PsFzfOnDemand) {
+      Invoke-FzfTabCompletion
+    } else {
+      [Microsoft.PowerShell.PSConsoleReadLine]::Complete()
     }
   }
 }
