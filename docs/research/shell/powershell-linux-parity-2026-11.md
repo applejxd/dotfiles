@@ -87,10 +87,19 @@ Windows に既にあったもの: `z`（ZLocation）・`xf` / `xg` / `sshf`・fz
 - 効かなかった実験: 全行コメントを除いた版（`profile.ps1` と `commands/*.ps1` すべて）は、むしろ 50 ms ほど遅かった（原因は未確認。内容の違うファイルの AMSI の結果が、まだ記憶されていなかった可能性）。コメントを減らす対策は採らない。
 - 起動時間の目標は置かず、実測を docs に残す。重くなったと感じる場合は、`commands/interactive.ps1` の区画ごとに外して測る（手順は [スクリプト](../../../scripts/windows/measure_pwsh_latency.py) の `startup --profile-file`）。
 
+## 配備後の確認
+
+2026-11-25、`chezmoi apply --exclude=scripts` のあと、配備した実プロファイルで確認した。
+
+- 試験（配備済みのプロファイルを使う。`test_windows_assets`・`test_powershell_functions`・`test_powershell_interactive`・`test_chezmoi_templates`・`test_verify`）: 237 件が通過。
+- ConPTY の対話セッション（pwsh 7）: `ll`・`lt`・chpwd の一覧は eza、`cat README.md` は bat、`cat` の型は Function、ディレクトリ名だけの入力で移動（auto_cd）、`gs,` + Space が `git status --short --branch` へ展開、`TEMP` はリポジトリの `.tmp`、`MISE_CACHE_DIR` は元の TEMP の `mise`（リポジトリの `.tmp` に `mise` が増えない）。
+- `git statu` + Tab → `git status`（posh-git 1.1.0 が読み込まれた）。
+- この機への導入は、スクリプトを実行する代わりに、同じコマンドを手で実行した: `mise -C ~ install`（bat・eza・ripgrep・yazi・yt-dlp）、`Install-Module posh-git -Scope CurrentUser`、`scoop install zstd`。
+
 ## 未確認
 
 - `superpi`（Windows の `sudo`）の実機の昇格。この機では `sudo` を実行していない（権限の方針で拒否される）。`sudo` の既定は新しいウィンドウで起動する（[Sudo for Windows](https://learn.microsoft.com/en-us/windows/advanced-settings/sudo/)。取得 2026-11-25）。
 - Alt+C の fzf の選択画面。割り当てだけ確認した。Tab は、1 つだけの補完は挿入、複数は fzf の選択画面が出ることを確認した。
-- posh-git による git の Tab 補完（この機に posh-git は未導入）。
 - 実際の ssh 経由での動作。
-- `chezmoi apply` による配備（`313_mise` の `mise install`、`311_scoop` の zstd、`310_winget` の posh-git）。
+- chezmoi のスクリプト（`313_mise`・`311_scoop`・`310_winget`）そのものの実行。上のとおり、同じコマンドは手で実行して確かめた。
+- Windows PowerShell 5.1 の実際の対話セッション（試験は、起動エラーが無いことと、7 専用の機能を飛ばすことだけ）。
