@@ -31,14 +31,16 @@ Get-PSReadLineKeyHandler -Bound |
 # pure テーマは前景色だけを使う。既定テーマは背景色 (48;2;) の powerline になる。
 $promptUsesBackgroundColor = (prompt) -match "$([char]27)\[[0-9;]*48;2;"
 $functions = @(
-    'pbcopy', 'pwgen', 'ccd', 'xg', 'xf', 'sshf', 'wslls', 'dls', 'Get-CachedInitScript' |
+    'pbcopy', 'pwgen', 'ccd', 'xg', 'xf', 'sshf', 'wslls', 'dls', 'vim', 'Get-CachedInitScript' |
     Where-Object { Get-Command $_ -CommandType Function -ErrorAction Ignore })
 $optional = @{}
 foreach ($tool in 'ghq', 'z') {
     $optional[$tool] = [bool](Get-Command $tool -ErrorAction Ignore)
 }
 $chocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+$gitVimExists = [System.IO.File]::Exists("$env:ProgramFiles\Git\usr\bin\vim.exe")
 $result = @{
+    gitVimExists = [bool]$gitVimExists
     streaming = [bool]$global:_ompStreaming
     transientPrompt = [bool]$global:_ompTransientPrompt
     themeFromEnvironment = [bool](
@@ -182,6 +184,8 @@ def test_deployed_profile_in_interactive_terminal(shell: str, tmp_path: Path):
         assert {
             "pbcopy", "pwgen", "ccd", "xg", "xf", "sshf", "wslls", "dls", "Get-CachedInitScript"
         } <= set(result["functions"])
+        # vim は Git for Windows の実体を直接呼ぶ関数 (scoop の shim は ssh で動かない)。無い機では定義しない
+        assert ("vim" in result["functions"]) is result["gitVimExists"]
         # oh-my-posh がプロンプトを差し替えていること
         # (prompt 関数自体は ZLocation が更に包むため、モジュールの有無で確認する)
         assert "oh-my-posh-core" in set(result["modules"])

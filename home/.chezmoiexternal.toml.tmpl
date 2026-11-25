@@ -1,6 +1,6 @@
 {{- /* see docs/spec/shell.md#シェルプラグインの取得 */ -}}
+{{- $home := .chezmoi.homeDir }}
 {{- if ne .chezmoi.os "windows" }}
-{{-   $home := .chezmoi.homeDir }}
 # 既に在るパスは宣言しない。宣言すると既存の clone へ git pull が走り、
 # 失敗 (detached HEAD など) すると apply が毎回止まる
 {{-   if not (stat (joinPath $home ".z")) }}
@@ -30,10 +30,11 @@
     url = "https://github.com/tmux-plugins/tpm.git"
     clone.args = ["--depth", "1"]
 {{-   end }}
-{{-   if not (stat (joinPath $home ".vim/colors/iceberg.vim")) }}
+{{- end }}
+{{- /* iceberg.vim は ~/.vimrc が colorscheme で読むので、.vimrc を配る Windows でも取得する */}}
+{{- if not (stat (joinPath $home ".vim/colors/iceberg.vim")) }}
 
 [".vim/colors/iceberg.vim"]
     type = "file"
     url = "https://raw.githubusercontent.com/cocopon/iceberg.vim/master/colors/iceberg.vim"
-{{-   end }}
 {{- end }}

@@ -329,6 +329,25 @@ def test_powershell_path_updates_are_idempotent():
     assert "$env:Path +=" not in profile
 
 
+def test_vim_calls_the_git_for_windows_binary_directly():
+    """scoop の shim は `current` の junction を通り、ssh (sshd の RedirectionGuard) では辿れない。
+
+    Git for Windows 同梱の vim を直接呼ぶ。対話時だけの定義で、無ければ定義しない
+    (scoop の gow の vim 7.4 は、この .vimrc の signcolumn などを解釈できない)。
+    """
+    profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
+    git_vim = r'"$env:ProgramFiles\Git\usr\bin\vim.exe"'
+
+    head, tail = split_at_interactive_guard(profile)
+    assert "function vim" not in head
+    code = strip_comments(tail)
+    assert f"[System.IO.File]::Exists({git_vim})" in code
+    assert "function vim {" in code
+    # 関数は既定では標準入力を子プロセスへ引き継がない
+    assert "$MyInvocation.ExpectingInput" in code
+    assert f"$input | & {git_vim} @args" in code
+
+
 def test_pbcopy_forwards_pipeline_input():
     """エイリアスと違い、関数は標準入力を子プロセスへ引き継がない。"""
     profile = (ROOT / "home/dot_config/powershell/profile.ps1.tmpl").read_text(encoding="utf-8-sig")
