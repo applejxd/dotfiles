@@ -15,6 +15,7 @@ see docs/spec/development.md#補助スクリプトの短い入口pk
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import unicodedata
 from pathlib import Path
@@ -178,6 +179,9 @@ def main(argv: list[str]) -> int:
         print(head_comment(entry))
         return 0
     print(f"→ sh {entry} {' '.join(args[1:])}".rstrip(), file=sys.stderr)
+    if os.name == "nt":
+        # Windows の os.execvp は、子の終了を待たずに親が終わる (終了コードも失う)。子を待って、終了コードを返す
+        return subprocess.call(["sh", str(entry), *args[1:]])
     os.execvp("sh", ["sh", str(entry), *args[1:]])
     return 0  # 到達しない
 

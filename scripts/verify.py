@@ -306,7 +306,7 @@ RULES: tuple[Rule, ...] = (
             "*.ps1",
             "*.ps1.tmpl",
         ),
-        ("test_windows_assets", "test_powershell_interactive"),
+        ("test_windows_assets", "test_powershell_functions", "test_powershell_interactive"),
         windows=True,
     ),
     Rule(

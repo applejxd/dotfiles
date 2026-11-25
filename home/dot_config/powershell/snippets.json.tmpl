@@ -1,0 +1,27 @@
+{{- /*
+  zeno (home/dot_config/zeno/*.yml) の snippet のうち、Windows の PowerShell でも通じるものを JSON にする。
+  zeno は zsh のプラグインなので、PowerShell では modules/ShellSnippets が同じ形の定義を読み、
+  PSReadLine のキーで展開する (Space で `gs,` → `git status --short --branch`)。
+  定義の本体は zeno の YAML のままにして、二重管理を避ける。
+  - Unix のコマンドが中心のファイル (03_ros2・04_tmux) は読まない。
+  - 00_config.yml は Unix のコマンドが混ざるので、通じるものだけを選び、Windows 向けに書き換えたものを使う。
+  see docs/spec/shell.md#bashzsh-と-powershell-の対応
+*/ -}}
+{{- $snippets := list -}}
+{{- range $name := list "01_git" "02_docker" "05_gh" "10_cpp" -}}
+{{-   $document := include (printf "dot_config/zeno/%s.yml" $name) | fromYaml -}}
+{{-   $snippets = concat $snippets $document.snippets -}}
+{{- end -}}
+{{- /* 00_config.yml: 通じるものだけ。値が空文字のものは YAML のまま、文字列のものは Windows 向けの書き換え */ -}}
+{{- $common := dict "null," "*> $null" "b," "" "kgen," "" "pgen," "" "sha2," "" -}}
+{{- $config := include "dot_config/zeno/00_config.yml" | fromYaml -}}
+{{- range $snippet := $config.snippets -}}
+{{-   if hasKey $common $snippet.keyword -}}
+{{-     $override := get $common $snippet.keyword -}}
+{{-     if $override -}}
+{{-       $snippet = set $snippet "snippet" $override -}}
+{{-     end -}}
+{{-     $snippets = append $snippets $snippet -}}
+{{-   end -}}
+{{- end -}}
+{{ dict "snippets" $snippets | toPrettyJson }}

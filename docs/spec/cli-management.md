@@ -71,6 +71,15 @@ Git・Python 3.12（chezmoi が要る）、GUI アプリです。既に winget �
 `winget uninstall OpenJS.NodeJS astral-sh.uv junegunn.fzf jqlang.jq` で外せます。
 mise の node（zip 版）の npm の global prefix は node の版付きフォルダなので、そのままだと npm で入れる CLI（opencode）は PATH に出ず、版を上げると消えます（Sandbox で確認）。`314` は `NPM_CONFIG_PREFIX=%APPDATA%\npm` を設定してから npm を実行し、そのフォルダを User PATH に保証します。
 
+### Windows のシェル補助ツール
+
+PowerShell の補助（[bash/zsh と PowerShell の対応](shell.md#bashzsh-と-powershell-の対応)）が使う道具を、Windows でも入れる（2026-11-25）。
+`bat`（`cat`・fzf の Ctrl+t のプレビュー）・`eza`（`ll` / `lt`・chpwd の一覧・fzf の Alt+C のプレビュー）・`ripgrep`（fzf の既定のコマンド）・`yazi`（`y`）は mise
+（`config.toml.tmpl` の Windows の `[tools]`）、`yt-dlp`（`audio-dl` / `video-dl`）は個人 PC だけ mise、`zstd`（`zpack` / `zunpack`）は mise の registry に無いので scoop（`311_scoop`）、
+`posh-git`（git の Tab 補完だけ。プロンプトは oh-my-posh のまま）は PSGallery（`310_winget`）。どの補助も、道具が無い機では標準の機能へ落ちる（`ll` は `Get-ChildItem`、`cat` は `Get-Content`）。
+mise で入れる 5 つが、Windows で入ることは、使い捨ての `MISE_DATA_DIR` へ `mise install` して確かめた（2026-11-25。`gwq`（go バックエンド）・`tmux`・`neovim`・`deno`・`btop` などは入れない）。
+実際の配備（`313_mise`）は未実行。
+
 ### chezmoi 本体
 
 README の公式インストーラ（`get.chezmoi.io`、Windows は winget）は初回の

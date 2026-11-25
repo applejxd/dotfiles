@@ -105,6 +105,7 @@
 | [ssh では RedirectionGuard が junction を止める件の洗い出し](shell/redirectionguard-ssh-2026-11.md) | 2026-11-25。sshd が有効にする保護で、scoop の shim 119 個・PATH の `current`・uv が管理する Python の junction が動かない（この機で再現）。mise の shim・WinGet のパッケージ・Git などは動く。再現の道具、対処、未確認 |
 | [PowerShell が遅いことがある件の原因分析と対策](shell/powershell-slow-2026-11.md) | 2026-11-25。ConPTY での実測。起動後の idle の読み込みが打鍵を 0.3〜1.1 秒止める（676→364 ms）、プロンプトごとの oh-my-posh 起動（146→48 ms、git で 269→142 ms）、起動の約 1.2 秒は不変で oh-my-posh が約 0.33 秒。`-EditMode` が Enter ハンドラを消していた不具合。MSIX の別名は 1 起動あたり 35〜50 ms 遅い。残った候補 |
 | [PowerShell プロファイルの起動時間](shell/powershell-profile-startup.md) | pwsh 1420→510 ms などの中央値、cmdlet の初回呼び出しの遅さ、oh-my-posh キャッシュを外した後は未計測 |
+| [bash/zsh の機能を PowerShell へ取り入れた調査](shell/powershell-linux-parity-2026-11.md) | 2026-11-25。洗い出し、起動時間の内訳（+約 40 ms）、cat や pk が自動読み込みの関数に負ける、CommandNotFoundAction・LocationChangedAction の挙動、補完の横取り、tar（GNU と bsd）、MinGW に sanitizer が無い、未確認の項目 |
 | [zsh の起動時間](shell/zsh-startup-time.md) | 2026-10-18。WSL2 で 0.37〜0.40 s → 0.24〜0.25 s、区間別の時間、`/mnt/*` を走査する `command -v` が約 10 ms、`${__p#*…}` が 37 ms。macOS / Windows / 別マシンは未検証 |
 | [Windows PowerShell 5.1 / 7 での実機確認](shell/windows-powershell-live-check.md) | 2026-10-05。`copilot` 関数の環境変数・終了コード・finally・パイプ、非対話でのプロファイル、Windows の Python での読み取り判定の大小文字。5.1 はネイティブ引数（`"`・空文字・末尾 `\`）が欠ける。pwsh 7 は `finally` が変数を空文字で残す不具合（修正済み・再確認済み）、未確認は対話シェル |
 | [非対話シェルで mise の shims を使う](shell/mise-shims-resolution.md) | 2026-10-03。shims を先頭側に置くと cwd の `mise.toml` に従う、`activate` 済み PATH の継承は版が固定される、未 trust はエラー終了で待たない、venv が先なら venv が勝つ、shim は約 40 ms/回 |

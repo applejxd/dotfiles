@@ -19,6 +19,12 @@ PSFzf の仮のキーバインド（Ctrl+r で読み込まれること）であ�
 `chezmoi update` / `chezmoi apply` はテスト内で実行しないため、変更した設定は事前に適用する。
 Windows 以外、または `pywinpty` 未指定の場合は対話テストをスキップする。
 
+bash/zsh の機能を PowerShell へ取り入れた関数と設定（[対応表](shell.md#bashzsh-と-powershell-の対応)）は、次の 3 つで検査する。
+
+- `test/test_windows_assets.py`（静的。CI の Windows runner でも回る）: モジュールの manifest と実体の一致、起動で読むファイルが `interactive.ps1` の 1 つだけ、起動で `Get-Command` を呼ばない、`Update-RepoLocalTemp` の位置と形、snippet の生成元、道具の宣言、個人用モジュールを配らない。
+- `test/test_powershell_functions.py`（`pwsh` を起動する）: `interactive.ps1` を読み、モジュールを自動読み込みして関数を呼ぶ。外部の道具は PATH の先頭の偽物（fzf・gwq・pi・sudo・bat・eza・補完を出すツール）で、渡した引数・標準入力・終了コードを確かめる。zstd・g++・python と sh（Git for Windows）が無い機では、該当のテストをスキップする。tar は GNU と bsd の両方。`CommandOrigin`（Runspace か Internal か）で動きが変わる auto_cd は、`-Command` の文字列として評価する。
+- `test/test_powershell_interactive.py`（ConPTY。対話セッション）: snippet の展開・auto_cd と chpwd の一覧・Tab・キー割り当て・履歴のハンドラ・`TEMP`、5.1 で 7 専用の機能を飛ばして起動エラーが無いこと。配備前の変更は、描画した `profile.ps1`（`chezmoi execute-template` の出力を `commands/`・`modules/`・`cache.ps1` と同じ場所へ置いたもの）を、環境変数 `PWSH_TEST_PROFILE` で渡すと試せる（snippet の試験には、描画した `snippets.json`〔`snippets.json.tmpl` の出力〕も同じ場所へ置く）。
+
 プロファイル本体は `~/.config/powershell/profile.ps1` で、`$PROFILE`
 （`Documents/PowerShell` と `Documents/WindowsPowerShell`）は dot-source するだけのローダーである。
 起動時間の切り分けには `-NoProfile` との差を見る。`mise` の init は

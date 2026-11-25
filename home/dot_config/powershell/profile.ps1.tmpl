@@ -117,6 +117,90 @@ Remove-DuplicateEnvPathEntry
 # see https://github.com/junegunn/fzf/wiki/Windows
 $env:FZF_DEFAULT_OPTS = '--reverse --border'
 
+#-----------------------------#
+# リポジトリごとの TEMP / TMP #
+#-----------------------------#
+
+# Linux の .zshenv の _tmpdir_repo_local_update (TMPDIR) に相当する。git のリポジトリの中にいる間は、
+# TEMP / TMP をそのリポジトリの `.tmp` へ向ける (システムの Temp への書き込みを減らし、作業ツリーの中に
+# 一時ファイルを置く運用と書き込み先を揃える)。リポジトリの外では、最初に読まれた時点の値へ戻す。
+# 起動経路 (非対話を含む) で読まれるので、cmdlet を使わず .NET だけで書く。fork もしない。
+# 元の値は `_TMPDIR_REPO_LOCAL_ORIG` (TEMP) と `_TMPDIR_REPO_LOCAL_ORIG_TMP` (TMP) に、1 度だけ控える (未設定は `<unset>`)。
+# これが無いと、リポジトリ A で向けた TEMP を引き継いだ子のシェルが、リポジトリ B の外へ出たときに、
+# A の `.tmp` を「元の値」と取り違える。TEMP と TMP は、別々の値でも、別々に控えて戻す。
+# TEMP が既に `<repo>\.tmp\s\` の配下 (pi のセッションの置き場) のときは、そのまま維持する。
+# 元の値を保つ (向けない) のは、次のとき: `.tmp` を作れない・ディレクトリでない・再解析ポイント (ジャンクション
+# など。行き先がリポジトリの外かもしれない)、リポジトリが UNC (`\\wsl.localhost\…` など。遅く、信頼できない)。
+# `.tmp` に書き込めるかは検査しない (検査の書き込みは、ウイルス対策の走査で起動が数十 ms 遅れる)。
+function Update-RepoLocalTemp {
+  if ($PWD.Provider.Name -ne 'FileSystem') {
+    return
+  }
+  if ($null -eq [Environment]::GetEnvironmentVariable('_TMPDIR_REPO_LOCAL_ORIG')) {
+    [Environment]::SetEnvironmentVariable('_TMPDIR_REPO_LOCAL_ORIG', $(if ($env:TEMP) { $env:TEMP } else { '<unset>' }))
+    [Environment]::SetEnvironmentVariable('_TMPDIR_REPO_LOCAL_ORIG_TMP', $(if ($env:TMP) { $env:TMP } else { '<unset>' }))
+  }
+  $targetTemp = [Environment]::GetEnvironmentVariable('_TMPDIR_REPO_LOCAL_ORIG')
+  $targetTmp = [Environment]::GetEnvironmentVariable('_TMPDIR_REPO_LOCAL_ORIG_TMP')
+  if ($null -eq $targetTmp) {
+    # 控えが TEMP の分だけ (TMP の控えが無い環境) のときは、TMP も同じ値へ戻す
+    $targetTmp = $targetTemp
+  }
+  $repoRoot = $null
+  $directory = $PWD.ProviderPath
+  while ($directory) {
+    $marker = [System.IO.Path]::Combine($directory, '.git')
+    if ([System.IO.Directory]::Exists($marker) -or [System.IO.File]::Exists($marker)) {
+      $repoRoot = $directory
+      break
+    }
+    $directory = [System.IO.Path]::GetDirectoryName($directory)
+  }
+  if ($repoRoot -and -not $repoRoot.StartsWith('\\')) {
+    $repoTemp = [System.IO.Path]::Combine($repoRoot, '.tmp')
+    if ($env:TEMP -and $env:TEMP.StartsWith($repoTemp + '\s\', [System.StringComparison]::OrdinalIgnoreCase)) {
+      return
+    }
+    try {
+      $null = [System.IO.Directory]::CreateDirectory($repoTemp)
+      if (-not ([System.IO.File]::GetAttributes($repoTemp) -band [System.IO.FileAttributes]::ReparsePoint)) {
+        $targetTemp = $repoTemp
+        $targetTmp = $repoTemp
+      }
+    } catch {}
+  }
+  if ($targetTemp -eq '<unset>') { $targetTemp = $null }
+  if ($targetTmp -eq '<unset>') { $targetTmp = $null }
+  if ($env:TEMP -ne $targetTemp) {
+    $env:TEMP = $targetTemp
+  }
+  if ($env:TMP -ne $targetTmp) {
+    $env:TMP = $targetTmp
+  }
+}
+Update-RepoLocalTemp
+# cd のたびに追従する (LocationChangedAction は PowerShell 6 以降。5.1 は起動時だけ)。
+# (PSObject.Properties で有無を調べると、初回に約 10 ms かかるので、版で判定する)
+# 別の拡張が登録済みのハンドラは、残して後に呼ぶ。このファイルや interactive.ps1 が登録した古いもの
+# (再読み込み) は、置き換える
+if ($PSVersionTable.PSVersion.Major -ge 6) {
+  $existingLocationHandler = $ExecutionContext.InvokeCommand.LocationChangedAction
+  if ($existingLocationHandler -and
+    -not [object]::ReferenceEquals($existingLocationHandler, $global:RepoLocalTempInstalled) -and
+    -not [object]::ReferenceEquals($existingLocationHandler, $global:ChpwdInstalled)) {
+    $global:RepoLocalTempHook = {
+      param($sender, $eventArgs)
+      Update-RepoLocalTemp
+      $existingLocationHandler.Invoke($sender, $eventArgs)
+    }.GetNewClosure()
+  } else {
+    $global:RepoLocalTempHook = { Update-RepoLocalTemp }
+  }
+  $ExecutionContext.InvokeCommand.LocationChangedAction = $global:RepoLocalTempHook
+  # 代入したスクリプトブロックではなく、変換されたデリゲートが読み戻される。再読み込みで自分のものと見分けるために控える
+  $global:RepoLocalTempInstalled = $ExecutionContext.InvokeCommand.LocationChangedAction
+}
+
 #------------------------#
 # ここから下は対話時のみ #
 #------------------------#
@@ -179,6 +263,14 @@ if ([System.IO.File]::Exists("$env:ProgramFiles\Git\usr\bin\vim.exe")) {
       & "$env:ProgramFiles\Git\usr\bin\vim.exe" @args
     }
   }
+  # Linux の `alias vi=vim` (nvim が無い機)
+  function vi {
+    if ($MyInvocation.ExpectingInput) {
+      $input | vim @args
+    } else {
+      vim @args
+    }
+  }
 }
 
 # `chezmoi cd` that keeps the current shell session
@@ -200,6 +292,10 @@ if (Get-Module PSReadLine) {
   # 標準だと Ctrl+d は DeleteCharOrExit のため、うっかり端末が終了することを防ぐ
   Set-PSReadLineKeyHandler -Chord 'Ctrl+d' -Function DeleteChar
 }
+
+# 環境変数・履歴・autosuggestion・auto_cd・chpwd・snippet・補完・関数のモジュール (modules/)。
+# -EditMode は上で設定済みなので、ここでは割り当てが消えない
+. "$PSScriptRoot/commands/interactive.ps1"
 
 # テーマ。winget の MSIX 版 (ohmyposh.cli) は POSH_THEMES_PATH を設定しないので、同梱の複製を使う
 # see docs/spec/shell.md#powershellプロファイル

@@ -377,4 +377,4 @@ chezmoi apply --exclude=scripts
 - `pk -n <話題>` は実行せず、入口のパスと先頭のコメントだけを見る。実行するときは、実際のパスを必ず先に表示する
 - 置き場: `$PK_ROOT` → カレントから上へ探した `.tmp/keep` → `~/.local/share/chezmoi/.tmp/keep`
 - 守り: 置き場の外を指すシンボリックリンクの入口・`..` や `/` を含む話題名を拒否する。**スクリプトの中身を信頃してよいという保証ではない**（AI が書いたものを利用者が実行する、という信頼の前提は従来の `sh <パス>` と同じ。不安なときは `-n` で先頭のコメントを読む）
-- 対象: Linux・macOS・WSL（`sh` と `python3` が要る）。Windows の PowerShell は対象外。試験は `test/test_pk.py`
+- 対象: Linux・macOS・WSL（`sh` と `python3` が要る）。Windows の PowerShell は、同名の関数 `pk`（`commands/interactive.ps1` と、モジュール `ShellPk`）が python で本体を呼び、`sh` は PATH に無ければ Git for Windows のものを使う（[対応表](shell.md#bashzsh-と-powershell-の対応)）。Windows の `os.execvp` は子を待たないので、本体は Windows では `subprocess.call` で待つ。Tab 補完は PowerShell には無い。試験は `test/test_pk.py`（Windows では、symlink の権限と、MSYS の `sh` に渡す Windows パスの 2 件が、もともと通らない）と `test/test_powershell_functions.py`
