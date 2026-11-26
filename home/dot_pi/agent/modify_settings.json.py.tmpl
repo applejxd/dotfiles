@@ -1,2 +1,10 @@
-{{- $prompt := dict "work" (eq (includeTemplate "is-work" .) "true") -}}
-{{ template "modify_pi_stock_settings.py.tmpl" (dict "packages" (includeTemplate "pi-stock-packages" .) "isWork" (includeTemplate "is-work" .) "shellPath" (ternary (printf "%s/.local/bin/pib-shell" .chezmoi.homeDir) "" (eq .chezmoi.os "linux")) "researcherPrompt" (includeTemplate "pi-agent-prompt-researcher" $prompt) "evidenceAuditorPrompt" (includeTemplate "pi-agent-prompt-evidence-auditor" $prompt)) -}}
+{{- $isWork := eq (includeTemplate "is-work" .) "true" -}}
+{{- $prompt := dict "work" $isWork -}}
+{{- $workProfile := "bedrock" -}}
+{{- if and $isWork (hasKey . "work_pi_profile") -}}
+{{-   $workProfile = .work_pi_profile -}}
+{{-   if not (has ($workProfile | toJson) (list `"bedrock"` `"copilot"`)) -}}
+{{-     fail "work_pi_profile は bedrock または copilot にしてください" -}}
+{{-   end -}}
+{{- end -}}
+{{ template "modify_pi_stock_settings.py.tmpl" (dict "packages" (includeTemplate "pi-stock-packages" .) "isWork" (ternary "true" "false" $isWork) "workProfile" $workProfile "shellPath" (ternary (printf "%s/.local/bin/pib-shell" .chezmoi.homeDir) "" (eq .chezmoi.os "linux")) "researcherPrompt" (includeTemplate "pi-agent-prompt-researcher" $prompt) "evidenceAuditorPrompt" (includeTemplate "pi-agent-prompt-evidence-auditor" $prompt)) -}}
