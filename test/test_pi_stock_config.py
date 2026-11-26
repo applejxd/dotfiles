@@ -200,14 +200,14 @@ def test_stock_settings_removes_harness_keys_and_sets_packages(tmp_path):
     # 利用者のキーと pi 自身のキーは残る
     for key in (
         "theme",
-        "defaultProvider",
-        "defaultModel",
-        "defaultThinkingLevel",
         "hideThinkingBlock",
         "lastChangelogVersion",
     ):
         assert out[key] == CUSTOM_SETTINGS[key], key
     assert out["packages"] == stock_packages(tmp_path)
+    assert out["defaultProvider"] == "amazon-bedrock"
+    assert out["defaultModel"] == "us.anthropic.claude-sonnet-5-5"
+    assert out["defaultThinkingLevel"] == "medium"
 
 
 def test_stock_settings_excludes_the_orca_skills_every_run(tmp_path):
@@ -251,19 +251,20 @@ def test_stock_settings_from_empty_input(tmp_path):
         "defaultTools": ["+grep", "+find", "+ls"],
         "skills": ["!computer-use", "!orca-cli", "!orchestration"],
         "packages": stock_packages(tmp_path),
+        "defaultProvider": "amazon-bedrock",
+        "defaultModel": "us.anthropic.claude-sonnet-5-5",
+        "defaultThinkingLevel": "medium",
+        "enabledModels": ["amazon-bedrock/us.anthropic.claude-sonnet-5-5", "amazon-bedrock/*"],
         "shellPath": str(tmp_path / ".local" / "bin" / "pib-shell"),  # Linux だけ (下の試験)
     }
 
 
-def test_stock_settings_scopes_models_to_copilot_on_personal_machines_only(tmp_path):
-    """家の機は enabledModels を Copilot に絞る。会社 PC は触らない。
-
-    Bedrock の認証情報が残っていても、pi が Bedrock で起動・自動選択しないようにするため。
-    """
+def test_stock_settings_scopes_models_to_the_profile(tmp_path):
+    """家では Copilot、会社の既定では Bedrock を起動候補にする。"""
     home = json.loads(run_script(stock_settings_script(tmp_path, username="applejxd"), ""))
     work = json.loads(run_script(stock_settings_script(tmp_path, username="tester"), ""))
     assert home["enabledModels"] == ["github-copilot/*"]
-    assert "enabledModels" not in work  # 会社 PC は Bedrock を使う
+    assert work["enabledModels"] == ["amazon-bedrock/us.anthropic.claude-sonnet-5-5", "amazon-bedrock/*"]
 
 
 def test_stock_settings_keeps_the_users_enabled_models_and_is_idempotent(tmp_path):

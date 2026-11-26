@@ -99,7 +99,7 @@ pi の設定は、1 か所にまとまっていない。これは pi の標準�
 | 対象 | 配り方 |
 | --- | --- |
 | `~/.pi/agent/AGENTS.md` | `agent-instructions-stock.md`（ツール非依存の短い指示）。委譲の常設の指示を含む。**家の機（`is-work` が `false`）だけ**、末尾に `agent-instructions-home.md` を足す（開発中の Web サービスを tailnet だけに公開する指示と、複雑な不具合の修正が膠着したときの診断手順）。会社 PC には出さない。`AGENTS.md.tmpl` が出し分ける。`tailscale serve` の手順・WSL での扱いは、家の機だけに配るスキル `tailscale-serve`（[tailscale.md](tailscale.md)）。 経緯・実測は [research](../research/agents/permission-policy-rationale-2026-11.md#tailscale-の指示の経緯) |
-| `~/.pi/agent/settings.json` | `modify_pi_stock_settings.py.tmpl`。`packages` を `pi-stock-packages` にし、`defaultTools` を `["+grep", "+find", "+ls"]`（pi の既定 read・bash・edit・write に読み取り専用の探索ツールを足す増分指定。plan mode の探索にも使う。利用者が `+`/`-` だけの増分指定にしたら保つ）にする。撤去した自作ハーネスの `extensions`・`skills` の項目は取り除く。`skills` には、Orca が入れたスキル 3 本の除外（`!computer-use`・`!orca-cli`・`!orchestration`）を毎回そろえる（利用者の他の項目は保つ。戻すときは `+skills/<名前>`。[手動起動と除外](skill-frontmatter.md#手動起動disable-model-invocation)）。テーマなど利用者のキーは触らない（既定のモデルは、家の機で未設定か前の既定のままのときだけ Sol・high にする。[役割ごとのモデル](#pi-subagents-の設定)）。**家の機（`is-work` でない）は、`enabledModels` を `["github-copilot/*"]` にする**（2026-11-16。利用者の指示。利用者がすでに `enabledModels` を書いていれば保つ。会社 PC は触らない）。家で AWS CLI の API 検証のために Bedrock の認証情報（`AWS_PROFILE`・`~/.aws`・`AWS_BEARER_TOKEN_BEDROCK` など）を置いても、**pi が Bedrock のモデルで無意識に起動しない**ため。pi は環境変数などの認証情報で Bedrock を使えるようにし（`docs/providers.md`）、`defaultProvider` が無い・Copilot が使えないとき、起動時の選択が別のプロバイダへ落ちうる。`enabledModels` は「起動時の選択とモデルの切り替え（Ctrl+P）の対象」なので（`docs/settings.md`）、Bedrock を外せば、そこへ落ちない。`/model` で明示して選ぶのは妨げない。家で他のプロバイダも使うときは、`settings.json` の `enabledModels` にパターンを足す（利用者の値は保たれる）。AWS CLI 自体は、エージェントからも普通に使える（制限しない）。 |
+| `~/.pi/agent/settings.json` | `modify_pi_stock_settings.py.tmpl`。`packages` を `pi-stock-packages` にし、`defaultTools` を `["+grep", "+find", "+ls"]`（pi の既定 read・bash・edit・write に読み取り専用の探索ツールを足す増分指定。plan mode の探索にも使う。利用者が `+`/`-` だけの増分指定にしたら保つ）にする。撤去した自作ハーネスの `extensions`・`skills` の項目は取り除く。`skills` には、Orca が入れたスキル 3 本の除外（`!computer-use`・`!orca-cli`・`!orchestration`）を毎回そろえる（利用者の他の項目は保つ。戻すときは `+skills/<名前>`。[手動起動と除外](skill-frontmatter.md#手動起動disable-model-invocation)）。テーマなど利用者のキーは保つ。起動モデルと子の既定配分は[プロファイルの説明](#pi-subagents-の設定)を参照。自宅の `enabledModels` は未設定なら `["github-copilot/*"]` を補う。これは起動・モデル循環の候補であり、別プロバイダの手動選択や Pi 本体のフォールバックを禁止しない。 |
 | `~/.pi/agent/mcp.json` | `modify_mcp.json.py.tmpl` が `generate.py --target pi-mcp` で配る（下の「MCP 設定」） |
 | `~/.pi/agent/extensions/pi-permission-system/config.json` | `modify_` で配る（下の「permission-system の設定」） |
 | `~/.pi/agent/extensions/subagent/config.json`・`agents/` | pi-subagents の設定と agent 定義（下の「pi-subagents の設定」） |
@@ -390,26 +390,34 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
     - 同時数の上限に当たったことは無い（2026-11-10 に 4 本を同時に回して、上限に達しなかった）。先に詰まりやすいのは、全件検査の CPU（`feature-orchestration` の落とし穴に記録。**推測**）と、親の確認の手間。
   - 利用者が足した他のキーは保つ。壊れた JSON は触らない。何度流しても同じ。
 - **settings の `subagents.agentOverrides`**（`modify_pi_stock_settings.py.tmpl`）: 組み込みの `scout`（`read`・`grep`・`find`・`ls`・`contact_supervisor`）と `oracle`（`read`・`grep`・`find`・`ls`）の `tools` を読み取り専用に絞る（組み込みの既定は `bash`・`write` を持つ）。`reviewer`（読み取り専用）・`worker` は変えない。検索の子 `researcher`（`read`・`write`）・`evidence-auditor`（`read`）には、機の検索・取得の MCP を `mcp:websearch`（家）・`mcp:agentcore-websearch` と `mcp:webfetch`（会社 PC）で足し、組み込みの prompt の食い違いを直す `systemPrompt` を置く（[理由と会社 PC の設定](mcp-servers.md#子のエージェントへの検索-mcp-の渡し方)）。利用者が同じ役の `tools` を書いていれば保つ（無いときだけ補う）。`systemPrompt` だけは repo が管理し、毎回揃える。他の `subagents` のキー・他の役の上書きも保つ。
-- **役割ごとのモデル**（`modify_pi_stock_settings.py.tmpl` の `PROVIDER_AGENT_MODELS` と `HOME_COPILOT_MODELS`。`subagents.agentOverridesByProvider.<プロバイダ>.<名>.model`。`:` の後ろは思考の深さ）: 家の機では Copilot のモデルを、実装 = Sonnet / レビュー・証拠監査 = Sol / 調査・delegate = Neon / 判定 = Carbon に振り分ける。会社 PC では Copilot・Bedrock ともに従来どおり。pi-subagents は**親のセッションのモデルのプロバイダごとに層を重ねる**（`/model` で替えても追従する。apply 時の `defaultProvider` には依らない）。知らないプロバイダの子は親のモデルを継ぐ。利用者が書いた `model` は保つ。
+- **会社のモデルプロファイル**: `chezmoi edit-config` で既存の `[data]` に `work_pi_profile = "copilot"` を置くと会社 Copilot になる。`"bedrock"` または未指定なら会社 Bedrock。会社の機で不正な値を指定すると描画は失敗する。自宅ではこのキーを参照しない。
+  - 利用者の端末で `chezmoi apply ~/.pi/agent/settings.json` を実行し、新しい Pi セッションを開く。再開すると旧セッションのモデルが復元される。T3 Code でも新規スレッドを開き、作業前にプロバイダを確認する。
+  - 既定の親は Sonnet 5.5 `medium`。選択先と同じプロバイダの既存の親モデル・思考設定は保つ。`enabledModels` には選択したプロバイダの候補だけを残し、親モデルを先頭に置く。
+  - 選択していない側の既定の子モデルは除く。利用者が変えた子の割り当てや他のキーは残す。
+  - 切り替え前の親モデル・思考設定と候補は、同じ `settings.json` の `dotfilesWorkPiModels` に退避し、元の会社プロファイルに戻ると復元する。他のプロバイダや曖昧な候補も退避するが、会社の起動候補には入れない。認証・履歴や検索 MCP は変えない。
+  - これは起動設定の切り替えであり、アクセス制御ではない。別プロバイダへの手動切り替えや、選択先の利用可能なモデルがない場合に Pi 本体が行う起動時のフォールバックを禁止しない。
+- **役割ごとのモデル**（`modify_pi_stock_settings.py.tmpl` の `PROVIDER_AGENT_MODELS` と `HOME_COPILOT_MODELS`。`subagents.agentOverridesByProvider.<プロバイダ>.<名>.model`。`:` の後ろは思考の深さ）: 家の機では Copilot のモデルを、実装 = Sonnet / レビュー・証拠監査 = Sol / 調査・delegate = Neon / 判定 = Carbon に振り分ける。会社 PC では選んだプロバイダの既定だけを生成する。会社 Copilot の `scout`・`researcher`・`worker` は Sonnet 5.5 `low`・`medium`・`medium`。`reviewer`・`evidence-auditor`・`oracle` は Sol 6.2 `high`。`delegate` は親を継ぐ。Opus・Fable・Astra を子の既定にはしない。pi-subagents は**親のセッションのモデルのプロバイダごとに層を重ねる**（`/model` で替えても追従する。apply 時の `defaultProvider` には依らない）。知らないプロバイダの子は親のモデルを継ぐ。利用者が書いた `model` は保つ。
 
-  | 役割 | github-copilot（家） | amazon-bedrock（変更なし） | 理由 |
+  | 役割 | github-copilot（家） | amazon-bedrock（会社） | 理由 |
   | --- | --- | --- | --- |
   | `worker` | `claude-sonnet-5.5:high` | `us.anthropic.claude-sonnet-5-5:medium` | 実装は Sonnet に任せる。Copilot は high（2026-11-26 の利用者の指示。前は medium） |
-  | `reviewer` | `gpt-6.2-sol:high` | `us.openai.gpt-6.1-sol:high` | コードレビューは実装（Claude）と別系統の GPT に任せ、独立した目で見る（second_opinion） |
-  | `evidence-auditor` | `gpt-6.2-sol:high` | `us.openai.gpt-6.1-sol:high` | 証拠監査は Sol high（2026-11-26 の利用者の指示。前は Carbon medium。「知らないと言える」ことを優先した AA-Omniscience の根拠は、Carbon を選んだ時点のもの） |
-  | `oracle` | `gemini-4-carbon:high` | `us.openai.gpt-6.1-sol:high` | 判定役を `worker` の Claude・`reviewer` の GPT のどちらとも別系統にし、使える範囲で最も推論が強い設定にする。`advisor` は `oracle` の別名（`aliases: advisor`）で、設定は正規名の `oracle` に書く（同じ割り当てになる） |
+  | `reviewer` | `gpt-6.2-sol:high` | `us.openai.gpt-6.2-sol:high` | コードレビューは実装（Claude）と別系統の GPT に任せ、独立した目で見る（second_opinion） |
+  | `evidence-auditor` | `gpt-6.2-sol:high` | `us.openai.gpt-6.2-sol:high` | 証拠監査は Sol high（2026-11-26 の利用者の指示。前は Carbon medium。「知らないと言える」ことを優先した AA-Omniscience の根拠は、Carbon を選んだ時点のもの） |
+  | `oracle` | `gemini-4-carbon:high` | `us.openai.gpt-6.2-sol:high` | 家では実装・レビューと別系統。Bedrock ではレビューと同じ Sol を使う。`advisor` は `oracle` の別名（`aliases: advisor`）で、設定は正規名の `oracle` に書く（同じ割り当てになる） |
   | `scout` | `gemini-4-neon:medium` | `us.anthropic.claude-sonnet-5-5:low` | 速い調査（**新しい判断**。2026-11-26 の利用者の指示。前は Sonnet low） |
   | `researcher` | `gemini-4-neon:xhigh` | `us.anthropic.claude-sonnet-5-5:medium` | 調査の合成（**新しい判断**。2026-11-26 の利用者の指示。前は Sonnet medium。`gemini-4-neon` は `xhigh` を受け付ける。Carbon は受け付けない） |
   | `delegate` | `gemini-4-neon:high` | （設定なし。親を継ぐ） | 軽量な汎用の子（2026-11-26 の利用者の指示。Bedrock は変えない） |
 
   **根拠**: 2026-11-26 に利用者が示した割り当て表（ChatGPT の提案。親 = Sol high、scout = Neon medium、researcher = Neon xhigh、evidence-auditor = Sol high、worker = Sonnet high、reviewer = Sol high、oracle・advisor = Carbon high、delegate = Neon high）を、Copilot 由来のモデル名（Sol = `gpt-6.2-sol`、Neon = `gemini-4-neon`、Carbon = `gemini-4-carbon`、Sonnet = `claude-sonnet-5.5`）へ対応させた。pi のカタログ（`pi-ai` の `github-copilot.json`）に 4 つとも実在し、思考あり（`gemini-4-neon` は 1,048,576 トークン・`xhigh` まで）。**実測の裏付けは無い**（運用で効果を確かめるまでは未確認）。表の第二候補（Neon 以外の Sonnet・Carbon・Astra など）は使わない。
 
-  Haiku は使わない（利用者の方針。担当外の編集・書式崩れの実測）。Bedrock の `gpt-6.1-sol`・`opus-5-5` は `verified=false`（会社の機での pi のツール呼び出しは未確認）。
-  **カタログと非対称な割り当て**: Bedrock には Gemini が無いので、`reviewer`・`evidence-auditor`・`oracle` は GPT のままにし、3 系統への分離は Copilot だけに適用する。Bedrock の 6.2 の ID（`us.openai.gpt-6.2-sol`）もカタログに無く実在未確認なので、6.1 を保つ。Bedrock の Opus 5.5 は高価で、plan 役か明示の指示に限り、自律に起動する子には使わない。`oracle` は `context: fork` で親の会話を引き継ぐため、別モデルでは読み込みの再利用が効かない。
+  Haiku は使わない（利用者の方針。担当外の編集・書式崩れの実測）。
 
-  **親のセッションの既定（家の機だけ）**: 親は Sol high（`defaultProvider: github-copilot`・`defaultModel: gpt-6.2-sol`・`defaultThinkingLevel: high`）。3 つのキーが**全部無いとき**と、**前の値（`claude-sonnet-5.5`・`xhigh` の組）のままのとき**だけ置く（`HOME_PARENT_DEFAULT`・`LEGACY_HOME_PARENT_DEFAULT`）。一部でも別の値なら利用者の選択として保つ（`/model` で選んだ値は pi が `settings.json` へ書くので、apply が毎回戻すことはしない）。会社 PC は触らない。
+  **会社 Bedrock の割り当て**: `reviewer`・`evidence-auditor`・`oracle` は同じ Sol 6.2 を使う。自宅の Bedrock 向けの値は変更せず、従来の Sol 6.1 を保つ。`us.openai.gpt-6.2-sol` は Pi 1.6.0 のカタログと [AWS のモデルカード](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-2-sol.html) で確認した。会社の Pi でのツール・MCP 呼び出しは未検証。
+  Opus 5.5 は手動の計画・相談用とし、Astra は明示の指定がある場合だけ使う。どちらも役割の既定にはしない。`oracle` の既定は `context: fork` で、別モデルに渡す場合は親のキャッシュを再利用できない。
 
-  **既存値の移行**: `LEGACY_AGENT_MODELS` の従来の移行対象に加え、家の機の Copilot だけ、`scout`（Sonnet low → Neon medium）・`researcher`（Sonnet medium → Neon xhigh）・`worker`（Sonnet medium → Sonnet high）・`evidence-auditor`（Carbon medium → Sol high）の前の既定を `chezmoi apply` で移す。旧既定と異なる利用者のモデル・思考の深さは保つ。
+  **親のセッションの既定（家の機だけ）**: 親は Sol high（`defaultProvider: github-copilot`・`defaultModel: gpt-6.2-sol`・`defaultThinkingLevel: high`）。3 つのキーが**全部無いとき**と、**前の値（`claude-sonnet-5.5`・`xhigh` の組）のままのとき**だけ置く（`HOME_PARENT_DEFAULT`・`LEGACY_HOME_PARENT_DEFAULT`）。一部でも別の値なら利用者の選択として保つ（`/model` で選んだ値は pi が `settings.json` へ書くので、apply が毎回戻すことはしない）。会社 PC の既定は `work_pi_profile` に従う。
+
+  **既存値の移行**: 会社 Bedrock の `reviewer`・`evidence-auditor`・`oracle` に旧既定の `us.openai.gpt-6.1-sol:high` があれば、6.2 の `high` に移す。家の機の Copilot では、従来の移行対象に加えて、`scout`（Sonnet low → Neon medium）・`researcher`（Sonnet medium → Neon xhigh）・`worker`（Sonnet medium → Sonnet high）・`evidence-auditor`（Carbon medium → Sol high）の前の既定を `chezmoi apply` で移す。旧既定と異なる利用者のモデル・思考の深さは保つ。
 
   **撤去条件**: Neon に移した `scout`・`researcher`・`delegate` の出来が Sonnet 時代より悪い（調査の誤り・取りこぼしが増える）と分かったら、その役を Sonnet（`claude-sonnet-5.5`）に戻す。Carbon の `oracle` の指摘の的中率が Sol 時代と変わらなければ、`github-copilot/gpt-6.2-sol:high` に戻す。ベンチマークの根拠だけで運用上の改善があったとはみなさない。
 - **agent 定義の写し**（`home/dot_pi/agent/agents/{worker,reviewer,scout,oracle,researcher,evidence-auditor}.md`。配備先は `~/.pi/agent/agents/`。）: 組み込みの agent を**そのまま写し**、frontmatter に `permission: { external_directory: deny }` だけを足した。

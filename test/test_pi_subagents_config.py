@@ -30,7 +30,7 @@ READ_ONLY = {"read", "grep", "find", "ls", "contact_supervisor"}
 WRITE_TOOLS = {"bash", "write", "edit"}
 
 
-def render(template: str, home: Path, *, username: str = "tester") -> str:
+def render(template: str, home: Path, *, username: str = "tester", data: dict | None = None) -> str:
     chezmoi = shutil.which("chezmoi")
     if chezmoi is None:
         pytest.skip("chezmoi is not installed")
@@ -43,6 +43,7 @@ def render(template: str, home: Path, *, username: str = "tester") -> str:
             "workingTree": str(ROOT),
         }
     }
+    context.update(data or {})
     wrapped = (
         "{{ with " + json.dumps(json.dumps(context)) + " | fromJson }}" + template + "{{ end }}"
     )
@@ -60,11 +61,11 @@ def render(template: str, home: Path, *, username: str = "tester") -> str:
     return result.stdout
 
 
-def script(src: Path, tmp_path: Path, name: str, username: str = "tester") -> Path:
+def script(src: Path, tmp_path: Path, name: str, username: str = "tester", *, data=None) -> Path:
     # tester は会社 PC (is-work)、applejxd は家の機
     out = tmp_path / name
     out.write_text(
-        render(src.read_text(encoding="utf-8"), tmp_path, username=username),
+        render(src.read_text(encoding="utf-8"), tmp_path, username=username, data=data),
         encoding="utf-8",
     )
     return out
@@ -90,6 +91,11 @@ def config_script(tmp_path: Path) -> Path:
 @pytest.fixture
 def settings_script(tmp_path: Path) -> Path:
     return script(SETTINGS_MODIFY, tmp_path, "modify_settings.py")
+
+
+@pytest.fixture
+def work_copilot_settings_script(tmp_path: Path) -> Path:
+    return script(SETTINGS_MODIFY, tmp_path, "modify_work_copilot.py", data={"work_pi_profile": "copilot"})
 
 
 @pytest.fixture
@@ -352,18 +358,18 @@ def test_home_settings_assigns_models_by_role_for_copilot(home_settings_script):
     assert all(m.startswith("github-copilot/") for m in models.values())
 
 
-def test_work_settings_keeps_the_existing_copilot_assignment(settings_script):
-    first = run(settings_script, "{}")
+def test_work_settings_assigns_models_by_role_for_copilot(work_copilot_settings_script):
+    first = run(work_copilot_settings_script, "{}")
     models = {n: e["model"] for n, e in by_provider(json.loads(first))["github-copilot"].items()}
     assert models == {
         "scout": "github-copilot/claude-sonnet-5.5:low",
         "researcher": "github-copilot/claude-sonnet-5.5:medium",
         "worker": "github-copilot/claude-sonnet-5.5:medium",
         "reviewer": "github-copilot/gpt-6.2-sol:high",
-        "evidence-auditor": "github-copilot/gemini-4-carbon:medium",
-        "oracle": "github-copilot/gemini-4-carbon:high",
+        "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
+        "oracle": "github-copilot/gpt-6.2-sol:high",
     }
-    assert run(settings_script, first) == first
+    assert run(work_copilot_settings_script, first) == first
 
 
 def test_settings_assigns_models_by_role_for_bedrock(settings_script):
@@ -372,7 +378,7 @@ def test_settings_assigns_models_by_role_for_bedrock(settings_script):
     assert models["worker"] == "amazon-bedrock/us.anthropic.claude-sonnet-5-5:medium"
     assert models["scout"] == "amazon-bedrock/us.anthropic.claude-sonnet-5-5:low"
     assert models["researcher"] == "amazon-bedrock/us.anthropic.claude-sonnet-5-5:medium"
-    assert models["reviewer"] == "amazon-bedrock/us.openai.gpt-6.1-sol:high"
+    assert models["reviewer"] == "amazon-bedrock/us.openai.gpt-6.2-sol:high"
     assert models["evidence-auditor"] == models["reviewer"]
     # Opus は高価でカタログでは plan 役の既定。指示なしに自律で起動する oracle には使わない
     assert "opus" not in models["oracle"]
@@ -381,16 +387,94 @@ def test_settings_assigns_models_by_role_for_bedrock(settings_script):
     assert set(models) == {"scout", "researcher", "worker", "reviewer", "evidence-auditor", "oracle"}  # delegate は親を継ぐ
 
 
-def test_settings_layers_models_per_provider_not_per_apply_time_default(settings_script):
-    """defaultProvider に依らず、両方の層を常に置く (後からプロバイダを替えても、/model で替えても追従する)。"""
-    for existing in ({}, {"defaultProvider": "amazon-bedrock"}, {"defaultProvider": "other"}):
-        out = json.loads(run(settings_script, json.dumps(existing)))
-        assert set(by_provider(out)) == {"github-copilot", "amazon-bedrock"}
-    out = json.loads(run(settings_script, "{}"))
-    assert all("model" not in e for e in out["subagents"]["agentOverrides"].values())  # 層に置く。素の役には置かない
+def test_home_settings_keeps_both_provider_layers(home_settings_script):
+    out = json.loads(run(home_settings_script, "{}"))
+    assert set(by_provider(out)) == {"github-copilot", "amazon-bedrock"}
+    assert all("model" not in e for e in out["subagents"]["agentOverrides"].values())
 
 
-def test_settings_moves_the_old_oracle_default_but_keeps_a_users_choice(settings_script):
+@pytest.mark.parametrize("value", ["", "Bedrock", "other", True, ["bedrock"]])
+def test_work_settings_rejects_unknown_profile(tmp_path, value):
+    with pytest.raises(AssertionError, match="work_pi_profile は bedrock または copilot"):
+        script(SETTINGS_MODIFY, tmp_path, "invalid.py", data={"work_pi_profile": value})
+
+
+def test_work_settings_switches_profiles_without_leaving_inactive_defaults(settings_script, work_copilot_settings_script):
+    bedrock = run(settings_script, "{}")
+    switched = run(work_copilot_settings_script, bedrock)
+    out = json.loads(switched)
+    assert out["defaultProvider"] == "github-copilot"
+    assert out["defaultModel"] == "claude-sonnet-5.5"
+    assert out["defaultThinkingLevel"] == "medium"
+    assert out["enabledModels"] == ["github-copilot/claude-sonnet-5.5", "github-copilot/*"]
+    assert set(by_provider(out)) == {"github-copilot"}
+    assert run(work_copilot_settings_script, switched) == switched
+    restored = run(settings_script, switched)
+    restored_data = json.loads(restored)
+    assert set(restored_data.pop("dotfilesWorkPiModels")) == {"github-copilot"}
+    assert restored_data == json.loads(bedrock)
+    assert run(settings_script, restored) == restored
+
+
+def test_work_settings_restores_custom_parent_and_candidates_on_round_trip(settings_script, work_copilot_settings_script):
+    copilot_models = ["github-copilot/claude-opus-5.5:low", "github-copilot/gpt-6.2-sol"]
+    existing = {
+        "defaultProvider": "github-copilot",
+        "defaultModel": "claude-opus-5.5",
+        "defaultThinkingLevel": "low",
+        "enabledModels": [*copilot_models, "openrouter/*"],
+        "subagents": {
+            "agentOverridesByProvider": {
+                "github-copilot": {"delegate": {"model": "github-copilot/gemini-4-neon:high"}},
+            },
+        },
+    }
+    bedrock = run(settings_script, json.dumps(existing))
+    out = json.loads(bedrock)
+    assert all(p.startswith("amazon-bedrock/") for p in out["enabledModels"])
+    assert out["dotfilesWorkPiModels"]["unscopedEnabledModels"] == ["openrouter/*"]
+    assert out["dotfilesWorkPiModels"]["github-copilot"]["enabledModels"] == copilot_models
+    assert by_provider(out)["github-copilot"] == existing["subagents"]["agentOverridesByProvider"]["github-copilot"]
+    restored = run(work_copilot_settings_script, bedrock)
+    out = json.loads(restored)
+    assert out["enabledModels"] == copilot_models
+    for key in ("defaultProvider", "defaultModel", "defaultThinkingLevel"):
+        assert out[key] == existing[key]
+    assert by_provider(out)["github-copilot"]["delegate"]["model"] == "github-copilot/gemini-4-neon:high"
+    assert run(work_copilot_settings_script, restored) == restored
+
+
+def test_work_settings_keeps_thinking_without_a_saved_model(settings_script, work_copilot_settings_script):
+    existing = json.dumps({"defaultProvider": "amazon-bedrock", "defaultThinkingLevel": "high"})
+    switched = run(work_copilot_settings_script, existing)
+    for source in (existing, switched):
+        out = json.loads(run(settings_script, source))
+        assert out["defaultModel"] == "us.anthropic.claude-sonnet-5-5"
+        assert out["defaultThinkingLevel"] == "high"
+
+
+def test_work_settings_keeps_active_choices_and_inactive_custom_roles(work_copilot_settings_script):
+    existing = {
+        "defaultProvider": "github-copilot",
+        "defaultModel": "claude-opus-5.5",
+        "defaultThinkingLevel": "low",
+        "enabledModels": ["amazon-bedrock/*", "github-copilot/claude-opus-5.5:low", "*", "github-copilot/*"],
+        "subagents": {"agentOverridesByProvider": {"amazon-bedrock": {
+            "oracle": {"model": "amazon-bedrock/us.openai.gpt-6.1-sol:medium"},
+            "reviewer": {"model": "amazon-bedrock/us.openai.gpt-6.1-sol:high", "description": "mine"},
+        }}},
+    }
+    out = json.loads(run(work_copilot_settings_script, json.dumps(existing)))
+    assert out["defaultModel"] == "claude-opus-5.5"
+    assert out["defaultThinkingLevel"] == "low"
+    assert out["enabledModels"] == ["github-copilot/claude-opus-5.5:low", "github-copilot/*"]
+    assert by_provider(out)["amazon-bedrock"] == {
+        "oracle": {"model": "amazon-bedrock/us.openai.gpt-6.1-sol:medium"},
+        "reviewer": {"description": "mine"},
+    }
+
+
+def test_settings_moves_the_old_oracle_default_but_keeps_a_users_choice(home_settings_script):
     """前の既定 (Sonnet の xhigh) は Carbon の high へ移す。利用者が別のモデルにしていれば保つ。"""
     old = {
         "subagents": {
@@ -400,13 +484,13 @@ def test_settings_moves_the_old_oracle_default_but_keeps_a_users_choice(settings
             }
         }
     }
-    out = json.loads(run(settings_script, json.dumps(old)))
+    out = json.loads(run(home_settings_script, json.dumps(old)))
     assert by_provider(out)["github-copilot"]["oracle"]["model"] == "github-copilot/gemini-4-carbon:high"
     assert by_provider(out)["amazon-bedrock"]["oracle"]["model"] == "amazon-bedrock/us.anthropic.claude-opus-5-5:high"
 
 
-def test_settings_moves_the_previous_gpt_default_for_copilot_only(settings_script):
-    """6.1 sol の high は役ごとの新既定へ移す。利用者が選んだ値と、Bedrock は触らない。"""
+def test_settings_moves_the_previous_copilot_gpt_default_and_keeps_custom_bedrock(work_copilot_settings_script):
+    """Copilot の 6.1 Sol は役ごとの既定へ移し、Bedrock の個別設定は保つ。"""
     old = {
         "subagents": {
             "agentOverridesByProvider": {
@@ -415,17 +499,37 @@ def test_settings_moves_the_previous_gpt_default_for_copilot_only(settings_scrip
                     "evidence-auditor": {"model": "github-copilot/gpt-6.1-sol:high"},
                     "oracle": {"model": "github-copilot/gpt-6.1-sol:xhigh"},  # 利用者が思考の深さを変えた
                 },
-                "amazon-bedrock": {"reviewer": {"model": "amazon-bedrock/us.openai.gpt-6.1-sol:high"}},
+                "amazon-bedrock": {"reviewer": {"model": "amazon-bedrock/us.openai.gpt-6.1-sol:medium"}},
             }
         }
     }
-    out = json.loads(run(settings_script, json.dumps(old)))
+    out = json.loads(run(work_copilot_settings_script, json.dumps(old)))
     copilot = by_provider(out)["github-copilot"]
     assert copilot["reviewer"]["model"] == "github-copilot/gpt-6.2-sol:high"
-    assert copilot["evidence-auditor"]["model"] == "github-copilot/gemini-4-carbon:medium"
+    assert copilot["evidence-auditor"]["model"] == "github-copilot/gpt-6.2-sol:high"
     assert copilot["oracle"]["model"] == "github-copilot/gpt-6.1-sol:xhigh"  # 利用者の選択を保つ
-    # Bedrock は、6.2 の ID が未確認なので、6.1 のまま
-    assert by_provider(out)["amazon-bedrock"]["reviewer"]["model"] == "amazon-bedrock/us.openai.gpt-6.1-sol:high"
+    assert by_provider(out)["amazon-bedrock"]["reviewer"]["model"] == "amazon-bedrock/us.openai.gpt-6.1-sol:medium"
+
+
+@pytest.mark.parametrize("role", ["reviewer", "evidence-auditor", "oracle"])
+def test_settings_migrates_only_the_work_bedrock_sol_default(settings_script, home_settings_script, role):
+    for model, expected in (
+        ("amazon-bedrock/us.openai.gpt-6.1-sol:high", "amazon-bedrock/us.openai.gpt-6.2-sol:high"),
+        ("amazon-bedrock/us.openai.gpt-6.1-sol:medium", "amazon-bedrock/us.openai.gpt-6.1-sol:medium"),
+        ("amazon-bedrock/global.openai.gpt-6.1-sol:high", "amazon-bedrock/global.openai.gpt-6.1-sol:high"),
+    ):
+        existing = {
+            "subagents": {
+                "agentOverridesByProvider": {
+                    "amazon-bedrock": {role: {"model": model, "description": "mine"}},
+                }
+            }
+        }
+        first = run(settings_script, json.dumps(existing))
+        assert by_provider(json.loads(first))["amazon-bedrock"][role] == {"model": expected, "description": "mine"}
+        assert run(settings_script, first) == first
+        home = json.loads(run(home_settings_script, json.dumps(existing)))
+        assert by_provider(home)["amazon-bedrock"][role] == {"model": model, "description": "mine"}
 
 
 @pytest.mark.parametrize(
@@ -436,7 +540,7 @@ def test_settings_moves_the_previous_gpt_default_for_copilot_only(settings_scrip
 def test_home_settings_moves_gpt_audit_defaults_to_the_new_default(home_settings_script, role, expected, version):
     """登録済みの旧既定だけ移し、同じ役の他のキーと Bedrock の値は保つ。再適用でも変わらない。"""
     bedrock = {
-        name: {"model": "amazon-bedrock/us.openai.gpt-6.1-sol:high"}
+        name: {"model": "amazon-bedrock/us.openai.gpt-6.1-sol:medium"}
         for name in ("reviewer", "evidence-auditor", "oracle")
     }
     old = {
@@ -506,19 +610,19 @@ def test_home_delegate_default_keeps_an_explicit_common_model(home_settings_scri
 
 @pytest.mark.parametrize("role", ["evidence-auditor", "oracle"])
 @pytest.mark.parametrize("model", ["github-copilot/gpt-6.2-sol:medium", "github-copilot/gemini-4-carbon:low", "other/model:high"])
-def test_settings_keeps_user_audit_models(settings_script, role, model):
+def test_settings_keeps_user_audit_models(work_copilot_settings_script, role, model):
     """モデルや思考の深さを独自に選んだ値は旧既定とみなさない。"""
     existing = {
         "subagents": {
             "agentOverridesByProvider": {"github-copilot": {role: {"model": model}}},
         }
     }
-    first = run(settings_script, json.dumps(existing))
+    first = run(work_copilot_settings_script, json.dumps(existing))
     assert by_provider(json.loads(first))["github-copilot"][role]["model"] == model
-    assert run(settings_script, first) == first
+    assert run(work_copilot_settings_script, first) == first
 
 
-def test_settings_keeps_a_users_model_and_other_providers(settings_script):
+def test_settings_keeps_a_users_model_and_other_providers(work_copilot_settings_script):
     existing = {
         "subagents": {
             "agentOverridesByProvider": {
@@ -527,7 +631,7 @@ def test_settings_keeps_a_users_model_and_other_providers(settings_script):
             }
         },
     }
-    out = json.loads(run(settings_script, json.dumps(existing)))
+    out = json.loads(run(work_copilot_settings_script, json.dumps(existing)))
     layer = by_provider(out)["github-copilot"]
     assert layer["worker"]["model"] == "x/y"  # 利用者の model を保つ
     assert layer["reviewer"]["thinking"] == "low"
@@ -567,19 +671,26 @@ def test_home_parent_default_keeps_a_users_choice(tmp_path, chosen):
     assert {k: out[k] for k in HOME_PARENT if k in out} == chosen
 
 
-def test_work_parent_default_is_untouched(tmp_path):
-    """会社 PC は親の既定に触らない (前の既定と同じ値でも、無いときも)。"""
-    work = script(SETTINGS_MODIFY, tmp_path, "modify_settings_work.py", "tester")
-    assert _parent(json.loads(run(work, "{}"))) == {k: None for k in HOME_PARENT}
-    assert _parent(json.loads(run(work, json.dumps(PREVIOUS_PARENT)))) == PREVIOUS_PARENT
+def test_home_ignores_work_profile(home_settings_script, tmp_path):
+    home = script(SETTINGS_MODIFY, tmp_path, "modify_settings_home_profile.py", "applejxd", data={"work_pi_profile": "copilot"})
+    assert run(home, "{}") == run(home_settings_script, "{}")
+
+
+def test_explicit_work_bedrock_matches_the_unset_profile(settings_script, tmp_path):
+    explicit = script(SETTINGS_MODIFY, tmp_path, "modify_settings_explicit.py", data={"work_pi_profile": "bedrock"})
+    assert run(explicit, "{}") == run(settings_script, "{}")
 
 
 def test_home_only_enables_copilot_models(tmp_path):
-    """家の機が使うモデルは Copilot 由来だけ (enabledModels)。会社 PC は触らない。"""
+    """家の機は Copilot、会社 PC の既定は Bedrock の候補を出す。"""
     home = script(SETTINGS_MODIFY, tmp_path, "modify_settings_home.py", "applejxd")
     work = script(SETTINGS_MODIFY, tmp_path, "modify_settings_work.py", "tester")
     assert json.loads(run(home, "{}"))["enabledModels"] == ["github-copilot/*"]
-    assert "enabledModels" not in json.loads(run(work, "{}"))
+    work_settings = json.loads(run(work, "{}"))
+    assert work_settings["defaultProvider"] == "amazon-bedrock"
+    assert work_settings["defaultModel"] == "us.anthropic.claude-sonnet-5-5"
+    assert work_settings["defaultThinkingLevel"] == "medium"
+    assert work_settings["enabledModels"] == ["amazon-bedrock/us.anthropic.claude-sonnet-5-5", "amazon-bedrock/*"]
 
 
 def test_neon_compaction_default_only_applies_at_home(home_settings_script, settings_script):

@@ -18,12 +18,16 @@ SEARCH_AGENT_PROMPTS = {
 }
 # 会社 PC (is-work) か。検索の MCP が機で違う (家は websearch、会社 PC は agentcore-websearch)
 IS_WORK = {{ if eq .isWork "true" }}True{{ else }}False{{ end }}
-# 家の機で、起動時の選択とモデルの切り替え (Ctrl+P) の対象にするモデル。家は Copilot だけを使うので、Bedrock の認証情報が
-# 環境変数や ~/.aws に残っていても、pi が Bedrock のモデルで無意識に起動しない (Copilot が使えないときの自動の選択も含む)。
-# /model で明示して選ぶのは妨げない。利用者が enabledModels を書いていれば保つ。会社 PC は触らない (Bedrock を使う)
+WORK_PI_PROFILE = {{ .workProfile | default "bedrock" | toJson }}
+WORK_PARENT_MODELS = {
+    "bedrock": ("amazon-bedrock", "us.anthropic.claude-sonnet-5-5"),
+    "copilot": ("github-copilot", "claude-sonnet-5.5"),
+}
+# 家の起動・モデル循環の候補。利用者が enabledModels を書いていれば保つ。
+# 手動での /model 選択や、候補が解決できないときの Pi 本体のフォールバックは制限しない。
 HOME_ENABLED_MODELS = ["github-copilot/*"]
 # 家の機の親のセッションの既定 (Sol・high)。3 つのキーが全部無いときと、前の既定 (Sonnet・xhigh) のままのときだけ置く。
-# 利用者が別の値を選んでいれば保つ。会社 PC は触らない。see docs/spec/agent-config-generation.md#pi-subagents-の設定
+# 利用者が別の値を選んでいれば保つ。会社では work_pi_profile で選ぶ。
 HOME_PARENT_DEFAULT = {
     "defaultProvider": "github-copilot",
     "defaultModel": "gpt-6.2-sol",
@@ -148,6 +152,15 @@ LEGACY_AGENT_MODELS = {
     ("amazon-bedrock", "oracle"): ("amazon-bedrock/us.anthropic.claude-sonnet-5-5:xhigh",),
 }
 
+# 会社の監査・相談役はプロバイダを問わず Sol 6.2。以前の既定だけを移す。
+WORK_BEDROCK_MODELS = dict.fromkeys(
+    ("reviewer", "evidence-auditor", "oracle"), "amazon-bedrock/us.openai.gpt-6.2-sol:high"
+)
+WORK_COPILOT_MODELS = {
+    "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
+    "oracle": "github-copilot/gpt-6.2-sol:high",
+}
+
 # 家の機だけで Copilot の割り当てを上書きし、変更した役の前の既定を移行対象にする。
 HOME_COPILOT_MODELS = {
     "scout": "github-copilot/gemini-4-neon:medium",
@@ -156,6 +169,63 @@ HOME_COPILOT_MODELS = {
     "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
     "delegate": "github-copilot/gemini-4-neon:high",
 }
+
+
+def select_work_parent(data: dict) -> str:
+    provider, fallback_model = WORK_PARENT_MODELS[WORK_PI_PROFILE]
+    # このキーは chezmoi 専用。Pi が使うのは下で生成する有効側の設定だけ。
+    saved = data.get("dotfilesWorkPiModels")
+    if not isinstance(saved, dict):
+        saved = {}
+    previous_provider = data.get("defaultProvider")
+    model_keys = ("defaultModel", "defaultThinkingLevel")
+    if isinstance(previous_provider, str) and previous_provider and previous_provider != provider:
+        previous = saved.get(previous_provider)
+        previous = previous if isinstance(previous, dict) else {}
+        saved[previous_provider] = {**previous, **{key: data[key] for key in model_keys if key in data}}
+
+    patterns = data.get("enabledModels")
+    configured = [pattern for pattern in patterns if isinstance(pattern, str)] if isinstance(patterns, list) else []
+    for other, _ in WORK_PARENT_MODELS.values():
+        if other == provider:
+            continue
+        inactive = [p for p in configured if p.startswith(f"{other}/")]
+        if inactive:
+            previous = saved.get(other)
+            previous = previous if isinstance(previous, dict) else {}
+            saved[other] = {**previous, "enabledModels": inactive}
+    unscoped = [p for p in configured if not p.startswith(("amazon-bedrock/", "github-copilot/"))]
+    if unscoped:
+        saved["unscopedEnabledModels"] = unscoped
+
+    selected = saved.get(provider)
+    selected = selected if isinstance(selected, dict) else {}
+    scoped = [p for p in configured if p.startswith(f"{provider}/")]
+    if not scoped and isinstance(selected.get("enabledModels"), list):
+        scoped = [p for p in selected["enabledModels"] if isinstance(p, str) and p.startswith(f"{provider}/")]
+    if previous_provider != provider:
+        for key in model_keys:
+            data.pop(key, None)
+            if key in selected:
+                data[key] = selected[key]
+    model = data.get("defaultModel")
+    if not isinstance(model, str) or not model.strip():
+        model = fallback_model
+        data["defaultModel"] = model
+    data.setdefault("defaultThinkingLevel", "medium")
+    data["defaultProvider"] = provider
+    if not scoped:
+        scoped = [f"{provider}/*"]
+    # Pi は新規セッションで候補の先頭を選ぶ。希望のモデルをプロバイダの glob より先に置く。
+    preferred = f"{provider}/{model}"
+    first = next((p for p in scoped if p == preferred or p.startswith(f"{preferred}:")), preferred)
+    data["enabledModels"] = [first, *(p for p in scoped if p != first)]
+    saved.pop(provider, None)
+    if saved:
+        data["dotfilesWorkPiModels"] = saved
+    else:
+        data.pop("dotfilesWorkPiModels", None)
+    return provider
 
 
 def is_incremental(value: object) -> bool:
@@ -218,6 +288,7 @@ def main() -> int:
     data["packages"] = packages()
     if not IS_WORK and "enabledModels" not in data:
         data["enabledModels"] = list(HOME_ENABLED_MODELS)
+    work_provider = select_work_parent(data) if IS_WORK else None
     if not IS_WORK:
         parent = {key: data.get(key) for key in HOME_PARENT_DEFAULT}
         if not (HOME_PARENT_DEFAULT.keys() & data.keys()) or parent == LEGACY_HOME_PARENT_DEFAULT:
@@ -245,11 +316,30 @@ def main() -> int:
     if not isinstance(by_provider, dict):
         by_provider = {}
     for provider, roles in PROVIDER_AGENT_MODELS.items():
+        if work_provider is not None and provider != work_provider:
+            # 非選択側には既定を生成しない。前の既定だけ除き、利用者の上書きは切り替え直すときのために残す。
+            inactive = by_provider.get(provider)
+            if isinstance(inactive, dict):
+                for name, entry in list(inactive.items()):
+                    known = {roles.get(name), *LEGACY_AGENT_MODELS.get((provider, name), ())}
+                    work_models = WORK_COPILOT_MODELS if provider == "github-copilot" else WORK_BEDROCK_MODELS
+                    known.add(work_models.get(name))
+                    if isinstance(entry, dict) and isinstance(entry.get("model"), str) and entry["model"] in known:
+                        del entry["model"]
+                        if not entry:
+                            del inactive[name]
+                if not inactive:
+                    by_provider.pop(provider)
+            continue
         layer = by_provider.get(provider)
         if not isinstance(layer, dict):
             layer = {}
-        home_models = HOME_COPILOT_MODELS if not IS_WORK and provider == "github-copilot" else {}
-        for name, model in (roles | home_models).items():
+        profile_models = {}
+        if provider == "github-copilot":
+            profile_models = WORK_COPILOT_MODELS if IS_WORK else HOME_COPILOT_MODELS
+        elif IS_WORK:
+            profile_models = WORK_BEDROCK_MODELS
+        for name, model in (roles | profile_models).items():
             # 新たにモデルを割り当てる役では、共通の上書きに利用者が書いたモデルを優先する。
             common = overrides.get(name)
             if name not in roles and isinstance(common, dict) and "model" in common:
@@ -258,7 +348,7 @@ def main() -> int:
             if not isinstance(entry, dict):
                 entry = {}
             legacy = LEGACY_AGENT_MODELS.get((provider, name), ())
-            if name in home_models and name in roles:
+            if name in profile_models and name in roles:
                 legacy += (roles[name],)
             if entry.get("model") in legacy:
                 entry["model"] = model
