@@ -45,6 +45,7 @@
 | [conference-video（学会発表動画風の解説動画）](conference-video.md) | skill-lab から複製したスキル。流れ・依存（uv・Manim・VOICEVOX）・成果物の保存先・このリポジトリでの扱い（配布から外すもの・lint の対象外） |
 | [readme-writer（README を作る・直す・点検する）](readme-writer.md) | skill-lab から複製したスキル。事実の抽出と README の実在検査をスクリプトで行う。配る範囲・このリポジトリでの扱い・評価の結果 |
 | [sdd-docs（探索型 SDD の文書を整える）](sdd-docs.md) | skill-lab を正本とする通常版の配布手順と、予備の Claude Code 版との区別 |
+| [実物の検証と再発防止の汎用スキル](verification-skills.md) | pstack から借りる 5 手法、発火条件、実行の境界 |
 | [スキルの frontmatter の方針](skill-frontmatter.md) | `allowed-tools` の書き方、スキルごとの宣言、委譲の型の割り当て、手動起動（`disable-model-invocation`）と Orca のスキルの除外 |
 | [トラブルシューティング](troubleshooting.md) | 症状 → 対象 OS・CLI → 対応先の索引 |
 | [トラブルシューティング: 導入と適用](troubleshooting-bootstrap.md) | スクリプトの再実行、Python・Bitwarden・mise・APT・pi の導入で起きる障害 |
