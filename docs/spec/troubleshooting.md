@@ -38,7 +38,7 @@ chezmoi status --include=scripts   # 次の apply で走るスクリプト（R�
 | `No version is set for shim`、`configuration invalid` | Linux / WSL / macOS の旧 AI CLI | [AI CLI が mise に global default version を指定しろと言う](troubleshooting-bootstrap.md#ai-cli-が-mise-に-global-default-version-を指定しろと言う) |
 | `UnicodeEncodeError: 'cp932' codec can't encode character` で `modify_` スクリプトが落ちる、pi の設定が文字化けする | Windows（日本語） | [modify スクリプトの文字コード](agent-config-generation.md#modify-スクリプトの文字コード) |
 | `UnicodeDecodeError: 'utf-8' codec can't decode byte` と `chezmoi: .pi/agent/….json: exit status 1` で `chezmoi apply` / `update` が止まる | Windows（日本語） | [旧版が書いた cp932 のファイルの移行](agent-config-generation.md#旧版が書いた-cp932-のファイルの移行) |
-| ssh で `vim`・`ghq`・`7z` などが `Shim: Could not create process` で起動しない。`uv` が `Failed to inspect Python interpreter` と言う | Windows（scoop・uv） | [ssh では RedirectionGuard が junction を止める](shell.md#powershellプロファイル)（[調査記録](../research/shell/redirectionguard-ssh-2026-11.md)。scoop・uv は profile が対処済み（uv は ssh のとき `UV_PYTHON_PREFERENCE=only-system`。管理 Python で作った既存の `.venv` は作り直す））
+| ssh で `vim`・`ghq`・`7z` などが `Shim: Could not create process` で起動しない。`uv` が `Failed to inspect Python interpreter` と言う | Windows（scoop・uv） | [ssh では RedirectionGuard が junction を止める](shell.md#powershellプロファイル)（[調査記録](../research/shell/redirectionguard-ssh-2026-11.md)。scoop・uv は profile が対処済み（uv は ssh のとき `UV_PYTHON_PREFERENCE=only-system`。管理 Python で作った既存の `.venv` は作り直す）） |
 | `pi --version` が `SyntaxError` などで落ちる、pi の導入（npm）が失敗する | Windows の pi | [Windows で pi が起動しない（古い node が先に見つかる）](troubleshooting-bootstrap.md#windows-で-pi-が起動しない古い-node-が先に見つかる) |
 
 [仕様・運用一覧へ戻る](index.md)
