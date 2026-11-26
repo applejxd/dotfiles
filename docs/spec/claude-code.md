@@ -14,7 +14,7 @@ pi の設定とは**共有しません**。pi の指示・権限の方針・プ�
 | `~/.claude/settings.json` の `permissions.deny` と `permissions.ask` | `home/dot_claude/modify_private_settings.json`（`chezmoi:modify-template`）と、データ `home/.chezmoitemplates/claude-permissions.json` | この 2 つのリストだけを、データの内容に置き換える。ほかのキーは保つ（下）。会社 PC（`is-work`）だけ、`permissions.allow` に MCP のサーバ名 `mcp__<名前>` を足す（置き換えない） |
 | `~/.claude.json` の `mcpServers`（会社 PC だけ） | `home/modify_private_dot_claude.json`（`chezmoi:modify-template`）と、データ `home/.chezmoitemplates/claude-mcp-servers.json` | 宣言した 2 サーバ（`agentcore-websearch`・`webfetch`）の定義だけを置き、ほかのキーを保つ（[MCP](#mcp会社-pc-だけ)） |
 | `~/.claude/commands/stepback.md` | `home/dot_claude/commands/stepback.md` | pi の prompt `stepback` の写し（`$ARGUMENTS` の書式が同じ）。`/stepback` で使う |
-| `~/.claude/skills/commit/` | `home/dot_claude/skills/commit/` | pi の `commit`（Conventional Commits のメッセージ作成と、承認を取ってからのコミット）を、Claude Code 向けに直した写し |
+| `~/.claude/skills/commit/` | `home/dot_claude/skills/commit/` | コミットの書式・差分確認・承認が必要な場合の提示手順 |
 | `~/.claude/skills/sdd-docs/` | `home/dot_claude/skills/sdd-docs/` | pi の `sdd-docs`（`docs/` の案件・ADR・調査記録・仕様・索引の整え方）の写し。検査のスクリプト 3 本（`lint_docs.py`・`check_refs.py`・`docs_state.py`）と雛形を含む |
 
 **配る範囲**: claude が PATH にある機だけ。`.chezmoiignore.tmpl` が、`lookPath "claude"` が空の機では `.claude` を除外する。Claude Code の導入は、このリポジトリは行わない。**MCP（`~/.claude.json`）は、そのうえで `is-work` の機だけ**（`.chezmoiignore.tmpl`。家の機には配らない）。
@@ -32,7 +32,7 @@ pi の版（`home/dot_agents/skills/`）を複製し、Claude Code 向けに次�
 - pi 固有の記述を除いた: 子エージェントへの委譲（`subagent`・`worker`・`references/delegation.md`・「子エージェントに分担させるとき」の節）、`session-recall`・stock の pi・`pi-permission-system` への言及、このリポジトリ（dotfiles）固有の括弧書き。
 - 置き場を読み替えた: `~/.agents/skills/sdd-docs` → `~/.claude/skills/sdd-docs`（`SKILL.md` の手順・雛形・スクリプトの使い方）。リポジトリの規約の置き場に、`CLAUDE.md` を足した（`AGENTS.md` と並べる）。
 - `allowed-tools` は、`commit`（`git add`・`git commit` など）は pi の版のまま。`sdd-docs` は、スクリプトの実行（`python3 …/scripts/*`）の許可を**外した**（`check_refs.py --save <パス>` が任意のパスへ書け、Python 内部の書き込みには Read・Edit の deny が効かないため）。`Edit`・`Write`・`git mv`・`git check-ignore` は残した。Claude Code では、スキルを呼んだターンの許可になり、**deny・ask の規則が先に当たる**（例: `commit` の `git restore --staged` は、`git restore` の ask に当たって確認が出る）。
-- `commit` の承認の手順（メッセージ全文を提示して承認を得てからコミットする）は、そのまま。Claude Code では、同名の `~/.claude/commands/commit.md`（旧い生成器の残り）よりスキルが優先される（公式 docs「Resolve skills that share a name」）。
+- `commit` 自体は承認を要求しない。承認の要否は利用者の指示・共通やプロジェクトの指示・権限設定で決める。スキルは承認が必要な場合の提示手順だけを定める。Claude Code では、同名の `~/.claude/commands/commit.md`（旧い生成器の残り）よりスキルが優先される（公式 docs「Resolve skills that share a name」）。
 - `sdd-docs` の検査のスクリプトは、pi の版と**別の写し**（`~/.claude/skills/sdd-docs/scripts/`）。このリポジトリの pre-commit が呼ぶのは、pi の版のまま。
 
 ## MCP（会社 PC だけ）

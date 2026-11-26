@@ -11,16 +11,17 @@ description: "feature を起票して worker に実装を切り出し、成果�
 
 ## 使う条件
 
-- 担当ファイルを分けられる実装が 2 件以上ある。または 1 件でも、設計が固まっていて指示を完全に書ける。
-- 設計判断が連続する作業・利用者と対話で詰める設計は、親で行う。調査・レビュー・計画は feature を切らず、読み取り専用の子（`scout` / `reviewer` / `oracle`）に任せる。
+- 利用者が委譲を禁止した範囲では、起動条件やコミット前の監査手順より禁止を優先し、子を起動しない。別の規則で独立監査が必須なら、未監査のままコミットせず報告する。
+- 最初の編集前に、常設の指示に沿って、親が直接実装するか、`worker` に 1 件だけ渡すか、並列で渡すかを決める。設計・担当範囲・禁止事項・合格条件が固まり、引き継ぎと再検証に見合う利点があるなら、1 件でも委譲する。
+- 設計判断が連続する作業・利用者と対話で詰める設計は、親で行う。設計が固まった時点で残りを渡せるか再判定する。調査・レビュー・計画だけなら feature を切らない。調査の担当と並列の可否、レビューや計画で子を呼ぶ条件は常設の指示に従う。
 - 会話を複数並行しているときは、統合の窓口を 1 つにし、ほかはコミットまでで止める。
 
 ## 工程
 
-1. **分ける**: 1 worktree = 1 feature = 1 worker。担当ファイルを重ねない。共有されやすいファイル（docs の索引・`scripts/verify.py`・`pi-mcp-servers.toml`）は、1 人か親だけが触る。依存があるときは、契約の「前提」に書く。
+1. **分ける**: 1 worktree = 1 feature = 1 worker。並列は担当ファイルが重ならず、共有のインターフェースとテストの期待値が固まっている場合だけ。共有ファイル（docs の索引・`scripts/verify.py`・`pi-mcp-servers.toml`）は 1 人か親だけが触る。依存は契約の「前提」に書き、先行の成果がないと進められない作業は待つ。
 2. **起票**: `git flow feature start <名前> --worktree --no-fetch`（名前は小文字・数字・`.`・`_`・`-`）。worktree は `.tmp/worktrees/<名前>/`。まだ統合していない feature A の変更が要る B は、`git flow feature start <B> feature/<A> --worktree --no-fetch`（[積み重ね](references/bundle-and-stack.md)）。
-3. **依頼**: worktree を作った**あとで**、契約を worktree の `.tmp/keep/plan/<名前>.md` に書く（同時だと作成が失敗する）。続けて `subagent({ agent: "worker", cwd: "<worktree の絶対パス>", async: true, options: { timeoutMs, checkpointBeforeDeadlineMs }, task: "契約 … を読み、…" })`。`task` は契約のパスと 1〜2 行だけ。契約の中身は [worker-contract.md](references/worker-contract.md)。権限や境界を**緩める**変更は、反例の試験を先に足して現状で落ちることを確かめてから直し、前後で `reviewer` に見せる。
-4. **確認**: 完了通知で再開する。**子の自己申告は信じず、親が同じコマンドを再実行する**（子が「確認していない」と書いたことは、未確認のまま）。複数ファイル・設計・安全に関わる変更は、コミット前に `reviewer` に監査させる（差分は親が依頼文に貼る）。担当外のファイルが変わっていないか `git diff --stat`。整形 hook が書き込み直後にファイルを空にすることがあるので、`git add -A` のあと `git diff --cached --numstat` で行数の急減を見る。
+3. **依頼**: worktree を作った**あとで**、契約を worktree の `.tmp/keep/plan/<名前>.md` に書く（同時だと作成が失敗する）。続けて `subagent({ agent: "worker", cwd: "<worktree の絶対パス>", async: true, options: { timeoutMs, checkpointBeforeDeadlineMs }, task: "契約 … を読み、…" })`。`task` は契約のパスと 1〜2 行だけ。契約の中身は [worker-contract.md](references/worker-contract.md)。コミット前の監査が必要な変更は、子にコミットさせない。権限や境界を**緩める**変更は、反例の試験を先に足して現状で落ちることを確かめてから直し、前後で `reviewer` に見せる。
+4. **確認**: 完了通知で再開する。**子の自己申告は信じず、親が同じコマンドを再実行する**（子が「確認していない」と書いたことは、未確認のまま）。複数ファイルの変更は、コミット前に新しいコンテキストの読み取り専用 `reviewer` に監査させる。挙動・設計・互換性・権限・安全に影響する変更は、数行の差分でも同じ手順で監査する。親は要件・差分ファイル・検査結果・未検証事項を渡し、実装者の自己評価は渡さない。担当外のファイルが変わっていないか `git diff --stat`。整形 hook が書き込み直後にファイルを空にすることがあるので、`git add -A` のあと `git diff --cached --numstat` で行数の急減を見る。
 5. **登録の漏れを先に潰す**: 新しい試験ファイルは `scripts/verify.py` の該当の `Rule` へ（対象が実在するか確かめてから書く。ほかの feature と隣り合わない位置。同じ位置は取り込みで衝突する）。`uv run --with pytest --with pyyaml --no-project pytest test/test_verify.py -q`（2 秒）で確かめる。docs を触ったら `lint_docs.py`・`check_refs.py`（`home/dot_agents/skills/sdd-docs/scripts/`）。日付は `date '+%F %H:%M'` で確かめる。
 6. **全件検査**: `bg_run` で `mise run verify:all` を**1 本ずつ**（完了通知を待つ。worker の試験が走っている間も重ねない。重なると負荷で時間依存の試験が落ちる。落ちたら、単独で再実行して確かめる）。
 7. **コミット**: `commit` スキルの形式（Conventional Commits）。
