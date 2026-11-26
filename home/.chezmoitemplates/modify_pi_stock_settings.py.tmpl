@@ -22,6 +22,18 @@ IS_WORK = {{ if eq .isWork "true" }}True{{ else }}False{{ end }}
 # 環境変数や ~/.aws に残っていても、pi が Bedrock のモデルで無意識に起動しない (Copilot が使えないときの自動の選択も含む)。
 # /model で明示して選ぶのは妨げない。利用者が enabledModels を書いていれば保つ。会社 PC は触らない (Bedrock を使う)
 HOME_ENABLED_MODELS = ["github-copilot/*"]
+# 家の機の親のセッションの既定 (Sol・high)。3 つのキーが全部無いときと、前の既定 (Sonnet・xhigh) のままのときだけ置く。
+# 利用者が別の値を選んでいれば保つ。会社 PC は触らない。see docs/spec/agent-config-generation.md#pi-subagents-の設定
+HOME_PARENT_DEFAULT = {
+    "defaultProvider": "github-copilot",
+    "defaultModel": "gpt-6.2-sol",
+    "defaultThinkingLevel": "high",
+}
+LEGACY_HOME_PARENT_DEFAULT = {
+    "defaultProvider": "github-copilot",
+    "defaultModel": "claude-sonnet-5.5",
+    "defaultThinkingLevel": "xhigh",
+}
 
 # pi のシェル。Linux (Ubuntu / WSL) だけが、コマンド実行の囲い (pib-shell) を指す。空文字なら触らない。
 # pib-shell は、環境変数 PIB_SANDBOX が立っているとき (= pib で起動したとき) だけ囲う。普段の pi は素の bash と同じ
@@ -48,6 +60,7 @@ COMPACTION_MODELS = (
     "github-copilot/gpt-6-sol",
     "github-copilot/gpt-6.2-sol",
     "github-copilot/gemini-4-carbon",
+    "github-copilot/gemini-4-neon",
     "github-copilot/gpt-5.3-codex",
     "github-copilot/gemini-3.8-flash",
 )
@@ -99,17 +112,19 @@ LEGACY_AGENT_TOOLS = {
 
 # 役割ごとのモデル (subagents.agentOverridesByProvider.<プロバイダ>.<役>.model。`:` の後ろは思考の深さ)。
 # pi-subagents が、親のセッションのモデルのプロバイダ (/model で替えても追従する) ごとに層を重ねる (docs/models.md)。
-# Copilot は Claude / GPT / Gemini の 3 系統。Bedrock には Gemini が無いので GPT を保つ。
+# Copilot は Claude (Sonnet) / GPT (Sol) / Gemini (Neon・Carbon) の 3 系統。Bedrock には Gemini が無いので GPT を保つ (会社 PC。変えない)。
+# `advisor` は `oracle` の別名で、設定は正規名の `oracle` に書く。
 # 割り当ての根拠・思考の深さ・撤去条件は docs/spec/agent-config-generation.md#pi-subagents-の設定。
 # 利用者がすでに同じ役の model を書いていれば保つ (旧既定だけ移行し、無いときだけ補う)。
 PROVIDER_AGENT_MODELS = {
     "github-copilot": {
-        "scout": "github-copilot/claude-sonnet-5.5:low",
-        "researcher": "github-copilot/claude-sonnet-5.5:medium",
-        "worker": "github-copilot/claude-sonnet-5.5:medium",
+        "scout": "github-copilot/gemini-4-neon:medium",
+        "researcher": "github-copilot/gemini-4-neon:xhigh",
+        "worker": "github-copilot/claude-sonnet-5.5:high",
         "reviewer": "github-copilot/gpt-6.2-sol:high",
-        "evidence-auditor": "github-copilot/gemini-4-carbon:medium",
+        "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
         "oracle": "github-copilot/gemini-4-carbon:high",
+        "delegate": "github-copilot/gemini-4-neon:high",
     },
     "amazon-bedrock": {
         "scout": "amazon-bedrock/us.anthropic.claude-sonnet-5-5:low",
@@ -124,10 +139,14 @@ PROVIDER_AGENT_MODELS = {
 
 # 前の既定値 (プロバイダ, 役) -> モデルの一覧。この値のままなら、利用者が選んだ値ではないので新しい既定へ移す
 LEGACY_AGENT_MODELS = {
+    ("github-copilot", "scout"): ("github-copilot/claude-sonnet-5.5:low",),
+    ("github-copilot", "researcher"): ("github-copilot/claude-sonnet-5.5:medium",),
+    ("github-copilot", "worker"): ("github-copilot/claude-sonnet-5.5:medium",),
     ("github-copilot", "reviewer"): ("github-copilot/gpt-6.1-sol:high",),
     ("github-copilot", "evidence-auditor"): (
         "github-copilot/gpt-6.1-sol:high",
         "github-copilot/gpt-6.2-sol:high",
+        "github-copilot/gemini-4-carbon:medium",
     ),
     ("github-copilot", "oracle"): (
         "github-copilot/claude-sonnet-5.5:xhigh",
@@ -198,6 +217,10 @@ def main() -> int:
     data["packages"] = packages()
     if not IS_WORK and "enabledModels" not in data:
         data["enabledModels"] = list(HOME_ENABLED_MODELS)
+    if not IS_WORK:
+        parent = {key: data.get(key) for key in HOME_PARENT_DEFAULT}
+        if all(value is None for value in parent.values()) or parent == LEGACY_HOME_PARENT_DEFAULT:
+            data.update(HOME_PARENT_DEFAULT)
     if SHELL_PATH and "shellPath" not in data:  # 利用者が別のシェルを書いていれば保つ (pib が、囲いを指していないと知らせる)
         data["shellPath"] = SHELL_PATH
     subagents = data.get("subagents")

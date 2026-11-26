@@ -333,13 +333,18 @@ def by_provider(out: dict) -> dict:
 def test_settings_assigns_models_by_role_for_copilot(settings_script):
     out = json.loads(run(settings_script, "{}"))
     models = {n: e["model"] for n, e in by_provider(out)["github-copilot"].items()}
-    assert models["worker"] == "github-copilot/claude-sonnet-5.5:medium"
-    assert models["scout"] == "github-copilot/claude-sonnet-5.5:low"
-    assert models["researcher"] == "github-copilot/claude-sonnet-5.5:medium"
-    # 書き手は Claude、コードレビューは GPT、判定・証拠監査は Gemini に分ける
-    assert models["reviewer"] == "github-copilot/gpt-6.2-sol:high"
-    assert models["oracle"] == "github-copilot/gemini-4-carbon:high"
-    assert models["evidence-auditor"] == "github-copilot/gemini-4-carbon:medium"
+    # 実装は Sonnet、レビュー・証拠監査は Sol、調査・delegate は Neon、判定は Carbon (すべて Copilot 経由)
+    assert models == {
+        "scout": "github-copilot/gemini-4-neon:medium",
+        "researcher": "github-copilot/gemini-4-neon:xhigh",
+        "worker": "github-copilot/claude-sonnet-5.5:high",
+        "reviewer": "github-copilot/gpt-6.2-sol:high",
+        "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
+        "oracle": "github-copilot/gemini-4-carbon:high",
+        "delegate": "github-copilot/gemini-4-neon:high",
+    }
+    assert "advisor" not in models  # advisor は oracle の別名。設定は正規名の oracle に書く
+    assert all(m.startswith("github-copilot/") for m in models.values())
 
 
 def test_settings_assigns_models_by_role_for_bedrock(settings_script):
@@ -354,6 +359,7 @@ def test_settings_assigns_models_by_role_for_bedrock(settings_script):
     assert "opus" not in models["oracle"]
     assert models["oracle"] == models["reviewer"]
     assert all(m.startswith("amazon-bedrock/us.") for m in models.values())  # global. は使わない
+    assert set(models) == {"scout", "researcher", "worker", "reviewer", "evidence-auditor", "oracle"}  # delegate は親を継ぐ
 
 
 def test_settings_layers_models_per_provider_not_per_apply_time_default(settings_script):
@@ -397,15 +403,18 @@ def test_settings_moves_the_previous_gpt_default_for_copilot_only(settings_scrip
     out = json.loads(run(settings_script, json.dumps(old)))
     copilot = by_provider(out)["github-copilot"]
     assert copilot["reviewer"]["model"] == "github-copilot/gpt-6.2-sol:high"
-    assert copilot["evidence-auditor"]["model"] == "github-copilot/gemini-4-carbon:medium"
+    assert copilot["evidence-auditor"]["model"] == "github-copilot/gpt-6.2-sol:high"
     assert copilot["oracle"]["model"] == "github-copilot/gpt-6.1-sol:xhigh"  # 利用者の選択を保つ
     # Bedrock は、6.2 の ID が未確認なので、6.1 のまま
     assert by_provider(out)["amazon-bedrock"]["reviewer"]["model"] == "amazon-bedrock/us.openai.gpt-6.1-sol:high"
 
 
-@pytest.mark.parametrize("role, effort", [("evidence-auditor", "medium"), ("oracle", "high")])
+@pytest.mark.parametrize(
+    "role, expected",
+    [("evidence-auditor", "github-copilot/gpt-6.2-sol:high"), ("oracle", "github-copilot/gemini-4-carbon:high")],
+)
 @pytest.mark.parametrize("version", ["6.1", "6.2"])
-def test_settings_moves_gpt_audit_defaults_to_carbon(settings_script, role, effort, version):
+def test_settings_moves_gpt_audit_defaults_to_the_new_default(settings_script, role, expected, version):
     """登録済みの旧既定だけ移し、同じ役の他のキーと Bedrock の値は保つ。再適用でも変わらない。"""
     bedrock = {
         name: {"model": "amazon-bedrock/us.openai.gpt-6.1-sol:high"}
@@ -423,13 +432,49 @@ def test_settings_moves_gpt_audit_defaults_to_carbon(settings_script, role, effo
     }
     first = run(settings_script, json.dumps(old))
     layers = by_provider(json.loads(first))
-    assert layers["github-copilot"][role] == {
-        "model": f"github-copilot/gemini-4-carbon:{effort}",
-        "description": "mine",
-    }
+    assert layers["github-copilot"][role] == {"model": expected, "description": "mine"}
     for name, entry in bedrock.items():
         assert layers["amazon-bedrock"][name] == entry
     assert run(settings_script, first) == first
+
+
+def test_settings_moves_the_previous_copilot_assignment_to_neon_and_sol(settings_script):
+    """前の既定 (Sonnet の low・medium、証拠監査の Carbon medium) は、役ごとの新既定へ移す。他の値は保つ。"""
+    old = {
+        "subagents": {
+            "agentOverridesByProvider": {
+                "github-copilot": {
+                    "scout": {"model": "github-copilot/claude-sonnet-5.5:low"},
+                    "researcher": {"model": "github-copilot/claude-sonnet-5.5:medium"},
+                    "worker": {"model": "github-copilot/claude-sonnet-5.5:medium", "thinking": "low"},
+                    "evidence-auditor": {"model": "github-copilot/gemini-4-carbon:medium"},
+                    "oracle": {"model": "github-copilot/gemini-4-carbon:high"},
+                },
+            }
+        }
+    }
+    first = run(settings_script, json.dumps(old))
+    copilot = by_provider(json.loads(first))["github-copilot"]
+    assert copilot["scout"]["model"] == "github-copilot/gemini-4-neon:medium"
+    assert copilot["researcher"]["model"] == "github-copilot/gemini-4-neon:xhigh"
+    assert copilot["worker"] == {"model": "github-copilot/claude-sonnet-5.5:high", "thinking": "low"}
+    assert copilot["evidence-auditor"]["model"] == "github-copilot/gpt-6.2-sol:high"
+    assert copilot["oracle"]["model"] == "github-copilot/gemini-4-carbon:high"
+    assert copilot["delegate"]["model"] == "github-copilot/gemini-4-neon:high"  # 無かったものは補う
+    assert run(settings_script, first) == first
+
+
+def test_settings_keeps_a_users_choice_for_neon_roles(settings_script):
+    chosen = {
+        "scout": {"model": "github-copilot/claude-sonnet-5.5:medium"},
+        "researcher": {"model": "github-copilot/gemini-4-neon:high"},
+        "worker": {"model": "github-copilot/claude-sonnet-5.5:xhigh"},
+        "delegate": {"model": "github-copilot/gpt-6.2-sol:high"},
+    }
+    existing = {"subagents": {"agentOverridesByProvider": {"github-copilot": chosen}}}
+    layer = by_provider(json.loads(run(settings_script, json.dumps(existing))))["github-copilot"]
+    for name, entry in chosen.items():
+        assert layer[name] == entry
 
 
 @pytest.mark.parametrize("role", ["evidence-auditor", "oracle"])
@@ -461,6 +506,52 @@ def test_settings_keeps_a_users_model_and_other_providers(settings_script):
     assert layer["reviewer"]["thinking"] == "low"
     assert layer["reviewer"]["model"] == "github-copilot/gpt-6.2-sol:high"  # 無いものは補う
     assert by_provider(out)["openrouter"] == {"worker": {"model": "z/w"}}  # 知らないプロバイダの層は触らない
+
+
+HOME_PARENT = {"defaultProvider": "github-copilot", "defaultModel": "gpt-6.2-sol", "defaultThinkingLevel": "high"}
+PREVIOUS_PARENT = {"defaultProvider": "github-copilot", "defaultModel": "claude-sonnet-5.5", "defaultThinkingLevel": "xhigh"}
+
+
+def _parent(out: dict) -> dict:
+    return {k: out.get(k) for k in HOME_PARENT}
+
+
+def test_home_parent_default_is_sol_high_when_unset_or_previous_default(tmp_path):
+    """家の機: 親の既定が無いときと、前の既定 (Sonnet・xhigh) のままのときだけ、Sol・high にする。"""
+    home = script(SETTINGS_MODIFY, tmp_path, "modify_settings_home.py", "applejxd")
+    assert _parent(json.loads(run(home, "{}"))) == HOME_PARENT
+    first = run(home, json.dumps(PREVIOUS_PARENT))
+    assert _parent(json.loads(first)) == HOME_PARENT
+    assert run(home, first) == first
+
+
+@pytest.mark.parametrize(
+    "chosen",
+    [
+        {**PREVIOUS_PARENT, "defaultThinkingLevel": "high"},  # 思考の深さだけ違う = 利用者の選択
+        {**PREVIOUS_PARENT, "defaultModel": "claude-opus-5.5"},
+        {"defaultProvider": "github-copilot"},  # 一部だけ書いてある
+    ],
+)
+def test_home_parent_default_keeps_a_users_choice(tmp_path, chosen):
+    home = script(SETTINGS_MODIFY, tmp_path, "modify_settings_home.py", "applejxd")
+    out = json.loads(run(home, json.dumps(chosen)))
+    assert {k: out.get(k) for k in HOME_PARENT} == {k: chosen.get(k) for k in HOME_PARENT}
+
+
+def test_work_parent_default_is_untouched(tmp_path):
+    """会社 PC は親の既定に触らない (前の既定と同じ値でも、無いときも)。"""
+    work = script(SETTINGS_MODIFY, tmp_path, "modify_settings_work.py", "tester")
+    assert _parent(json.loads(run(work, "{}"))) == {k: None for k in HOME_PARENT}
+    assert _parent(json.loads(run(work, json.dumps(PREVIOUS_PARENT)))) == PREVIOUS_PARENT
+
+
+def test_home_only_enables_copilot_models(tmp_path):
+    """家の機が使うモデルは Copilot 由来だけ (enabledModels)。会社 PC は触らない。"""
+    home = script(SETTINGS_MODIFY, tmp_path, "modify_settings_home.py", "applejxd")
+    work = script(SETTINGS_MODIFY, tmp_path, "modify_settings_work.py", "tester")
+    assert json.loads(run(home, "{}"))["enabledModels"] == ["github-copilot/*"]
+    assert "enabledModels" not in json.loads(run(work, "{}"))
 
 
 def test_assigned_models_never_use_haiku():

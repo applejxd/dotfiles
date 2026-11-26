@@ -33,6 +33,7 @@ WINDOW_1M_MODELS = (
     "github-copilot/gpt-6-sol",
     "github-copilot/gpt-6.2-sol",
     "github-copilot/gemini-4-carbon",
+    "github-copilot/gemini-4-neon",
     "github-copilot/gpt-5.3-codex",
     "github-copilot/gemini-3.8-flash",
 )
