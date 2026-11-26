@@ -503,6 +503,43 @@ def test_stock_agents_md_adds_the_tailnet_policy_only_on_personal_machines(tmp_p
         assert word not in personal, word
 
 
+@pytest.mark.parametrize("os_name", ["linux", "windows"])
+def test_stock_agents_md_adds_debug_stalemate_guidance_only_on_personal_machines(tmp_path, os_name):
+    template = "dot_pi/agent/AGENTS.md.tmpl"
+    personal = render_file(template, tmp_path, os_name=os_name, username="applejxd")
+    work = render_file(template, tmp_path, os_name=os_name, username="tester")
+    common = render(
+        '{{ includeTemplate "agent-instructions-stock.md" . | trim }}\n',
+        tmp_path,
+        os_name=os_name,
+        username="tester",
+    )
+    assert work == common  # 会社側には見出しも本文も追加しない
+    heading = "## 複雑な不具合の修正が膠着したとき"
+    assert heading in personal
+    section = personal.split(heading, 1)[1].split("\n## ", 1)[0]
+    for marker in (
+        "2 回",
+        "新しい証拠",
+        'agentScope: "user", capabilities: true',
+        "読み取り専用の Pi の子",
+        "Astra でない Copilot モデル",
+        "確認できなければ起動しない",
+        "確認を通った場合だけ",
+        "`oracle` を 1 回だけ",
+        "`async: true`",
+        '`options.agentScope: "user"`',
+        '`options.context: "fresh"`',
+        "仮説を区別できる最小の実験",
+        "承認待ち",
+        "親がその実験を行い",
+        "元の再現手順や回帰テストで確認する",
+        "報告して止める",
+        "Astra は利用者が明示したときだけ",
+    ):
+        assert marker in section
+
+
 def test_tailscale_serve_skill_carries_the_procedure_and_is_deployed_only_to_personal_machines(tmp_path):
     skill = (HOME_SRC / "dot_agents" / "skills" / "tailscale-serve" / "SKILL.md").read_text(encoding="utf-8")
     # WSL では Windows 側を呼び、既存の https ポートを上書きしない
