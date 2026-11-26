@@ -22,6 +22,18 @@ IS_WORK = {{ if eq .isWork "true" }}True{{ else }}False{{ end }}
 # 環境変数や ~/.aws に残っていても、pi が Bedrock のモデルで無意識に起動しない (Copilot が使えないときの自動の選択も含む)。
 # /model で明示して選ぶのは妨げない。利用者が enabledModels を書いていれば保つ。会社 PC は触らない (Bedrock を使う)
 HOME_ENABLED_MODELS = ["github-copilot/*"]
+# 家の機の親のセッションの既定 (Sol・high)。3 つのキーが全部無いときと、前の既定 (Sonnet・xhigh) のままのときだけ置く。
+# 利用者が別の値を選んでいれば保つ。会社 PC は触らない。see docs/spec/agent-config-generation.md#pi-subagents-の設定
+HOME_PARENT_DEFAULT = {
+    "defaultProvider": "github-copilot",
+    "defaultModel": "gpt-6.2-sol",
+    "defaultThinkingLevel": "high",
+}
+LEGACY_HOME_PARENT_DEFAULT = {
+    "defaultProvider": "github-copilot",
+    "defaultModel": "claude-sonnet-5.5",
+    "defaultThinkingLevel": "xhigh",
+}
 
 # pi のシェル。Linux (Ubuntu / WSL) だけが、コマンド実行の囲い (pib-shell) を指す。空文字なら触らない。
 # pib-shell は、環境変数 PIB_SANDBOX が立っているとき (= pib で起動したとき) だけ囲う。普段の pi は素の bash と同じ
@@ -50,7 +62,7 @@ COMPACTION_MODELS = (
     "github-copilot/gemini-4-carbon",
     "github-copilot/gpt-5.3-codex",
     "github-copilot/gemini-3.8-flash",
-)
+) + (() if IS_WORK else ("github-copilot/gemini-4-neon",))
 
 
 def add_compaction_overrides(data: dict) -> None:
@@ -99,9 +111,8 @@ LEGACY_AGENT_TOOLS = {
 
 # 役割ごとのモデル (subagents.agentOverridesByProvider.<プロバイダ>.<役>.model。`:` の後ろは思考の深さ)。
 # pi-subagents が、親のセッションのモデルのプロバイダ (/model で替えても追従する) ごとに層を重ねる (docs/models.md)。
-# Copilot は Claude / GPT / Gemini の 3 系統。Bedrock には Gemini が無いので GPT を保つ。
-# 割り当ての根拠・思考の深さ・撤去条件は docs/spec/agent-config-generation.md#pi-subagents-の設定。
-# 利用者がすでに同じ役の model を書いていれば保つ (旧既定だけ移行し、無いときだけ補う)。
+# `advisor` は `oracle` の別名で、設定は正規名の `oracle` に書く。
+# see docs/spec/agent-config-generation.md#pi-subagents-の設定
 PROVIDER_AGENT_MODELS = {
     "github-copilot": {
         "scout": "github-copilot/claude-sonnet-5.5:low",
@@ -135,6 +146,15 @@ LEGACY_AGENT_MODELS = {
         "github-copilot/gpt-6.2-sol:high",
     ),
     ("amazon-bedrock", "oracle"): ("amazon-bedrock/us.anthropic.claude-sonnet-5-5:xhigh",),
+}
+
+# 家の機だけで Copilot の割り当てを上書きし、変更した役の前の既定を移行対象にする。
+HOME_COPILOT_MODELS = {
+    "scout": "github-copilot/gemini-4-neon:medium",
+    "researcher": "github-copilot/gemini-4-neon:xhigh",
+    "worker": "github-copilot/claude-sonnet-5.5:high",
+    "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
+    "delegate": "github-copilot/gemini-4-neon:high",
 }
 
 
@@ -198,6 +218,10 @@ def main() -> int:
     data["packages"] = packages()
     if not IS_WORK and "enabledModels" not in data:
         data["enabledModels"] = list(HOME_ENABLED_MODELS)
+    if not IS_WORK:
+        parent = {key: data.get(key) for key in HOME_PARENT_DEFAULT}
+        if not (HOME_PARENT_DEFAULT.keys() & data.keys()) or parent == LEGACY_HOME_PARENT_DEFAULT:
+            data.update(HOME_PARENT_DEFAULT)
     if SHELL_PATH and "shellPath" not in data:  # 利用者が別のシェルを書いていれば保つ (pib が、囲いを指していないと知らせる)
         data["shellPath"] = SHELL_PATH
     subagents = data.get("subagents")
@@ -224,11 +248,19 @@ def main() -> int:
         layer = by_provider.get(provider)
         if not isinstance(layer, dict):
             layer = {}
-        for name, model in roles.items():
+        home_models = HOME_COPILOT_MODELS if not IS_WORK and provider == "github-copilot" else {}
+        for name, model in (roles | home_models).items():
+            # 新たにモデルを割り当てる役では、共通の上書きに利用者が書いたモデルを優先する。
+            common = overrides.get(name)
+            if name not in roles and isinstance(common, dict) and "model" in common:
+                continue
             entry = layer.get(name)
             if not isinstance(entry, dict):
                 entry = {}
-            if entry.get("model") in LEGACY_AGENT_MODELS.get((provider, name), ()):
+            legacy = LEGACY_AGENT_MODELS.get((provider, name), ())
+            if name in home_models and name in roles:
+                legacy += (roles[name],)
+            if entry.get("model") in legacy:
                 entry["model"] = model
             entry.setdefault("model", model)
             layer[name] = entry
