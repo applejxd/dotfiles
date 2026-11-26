@@ -378,6 +378,20 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
   `test/test_pi_commands_doc.py`（[早見](pi-commands.md)と実物の一致）。
 - **既存の機への反映**: `chezmoi apply`（`~/.pi/agent/prompts` だけに絞ってよい）。全体の `apply` は他のスクリプトも動かすので、絞る。
 
+### 会社の Pi のモデルプロファイルを切り替える
+
+会社の機では、Bedrock と Copilot のどちらを起動時に使うかを、chezmoi の設定で選ぶ。自宅ではこの設定を参照しない。
+
+1. `chezmoi edit-config` で既存の `[data]` に `work_pi_profile = "copilot"` を追加する。Bedrock に戻すには `"bedrock"` にするか、キーを削除する。未指定なら Bedrock。不正な値では反映が止まる。
+2. 利用者の端末で `chezmoi apply ~/.pi/agent/settings.json` を実行する。
+3. Pi では新しいセッション、T3 Code では新しいスレッドを開く。作業前に親モデルのプロバイダを確かめる。旧セッションを再開すると当時のモデルが復元される。
+
+既定の親は Sonnet 5.5 `medium`。同じプロバイダで選んだ親モデルや思考レベルは保つ。`enabledModels` には選んだプロバイダの候補だけを残し、親モデルを先頭に置く。
+
+- 別の会社プロファイルへ切り替えると、親モデル・思考レベル・候補を `settings.json` の `dotfilesWorkPiModels` に退避する。元に戻すと復元する。他のプロバイダや曖昧な候補も退避するが、会社の起動候補には入れない。
+- 選択していない側の子モデルの既定は除き、個別に設定した割り当ては保つ。認証・履歴・検索 MCP は変えない。
+- これはアクセス制御ではない。別プロバイダの手動選択や、選択先の利用可能なモデルがない場合の Pi のフォールバックは防がない。意図と異なるプロバイダで起動したら、作業を始めず認証と設定を確認する。
+
 ### pi-subagents の設定
 
 子エージェントは package `pi-subagents`（nicobailon。`pi-stock-packages` で版固定）。評価は [評価の記録](../research/agents/pi-stock-packages-evaluation-2026-11.md) の「オーケストレーションの評価と決定」、運用は `.agents/skills/feature-orchestration/references/pi-subagents.md`。自作のコードは足さない（既存の `modify_` スクリプトと設定だけ）。複数形の `extensions/subagents/` は凍結した自作拡張で、ここの対象ではない。
@@ -390,12 +404,7 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
     - 同時数の上限に当たったことは無い（2026-11-10 に 4 本を同時に回して、上限に達しなかった）。先に詰まりやすいのは、全件検査の CPU（`feature-orchestration` の落とし穴に記録。**推測**）と、親の確認の手間。
   - 利用者が足した他のキーは保つ。壊れた JSON は触らない。何度流しても同じ。
 - **settings の `subagents.agentOverrides`**（`modify_pi_stock_settings.py.tmpl`）: 組み込みの `scout`（`read`・`grep`・`find`・`ls`・`contact_supervisor`）と `oracle`（`read`・`grep`・`find`・`ls`）の `tools` を読み取り専用に絞る（組み込みの既定は `bash`・`write` を持つ）。`reviewer`（読み取り専用）・`worker` は変えない。検索の子 `researcher`（`read`・`write`）・`evidence-auditor`（`read`）には、機の検索・取得の MCP を `mcp:websearch`（家）・`mcp:agentcore-websearch` と `mcp:webfetch`（会社 PC）で足し、組み込みの prompt の食い違いを直す `systemPrompt` を置く（[理由と会社 PC の設定](mcp-servers.md#子のエージェントへの検索-mcp-の渡し方)）。利用者が同じ役の `tools` を書いていれば保つ（無いときだけ補う）。`systemPrompt` だけは repo が管理し、毎回揃える。他の `subagents` のキー・他の役の上書きも保つ。
-- **会社のモデルプロファイル**: `chezmoi edit-config` で既存の `[data]` に `work_pi_profile = "copilot"` を置くと会社 Copilot になる。`"bedrock"` または未指定なら会社 Bedrock。会社の機で不正な値を指定すると描画は失敗する。自宅ではこのキーを参照しない。
-  - 利用者の端末で `chezmoi apply ~/.pi/agent/settings.json` を実行し、新しい Pi セッションを開く。再開すると旧セッションのモデルが復元される。T3 Code でも新規スレッドを開き、作業前にプロバイダを確認する。
-  - 既定の親は Sonnet 5.5 `medium`。選択先と同じプロバイダの既存の親モデル・思考設定は保つ。`enabledModels` には選択したプロバイダの候補だけを残し、親モデルを先頭に置く。
-  - 選択していない側の既定の子モデルは除く。利用者が変えた子の割り当てや他のキーは残す。
-  - 切り替え前の親モデル・思考設定と候補は、同じ `settings.json` の `dotfilesWorkPiModels` に退避し、元の会社プロファイルに戻ると復元する。他のプロバイダや曖昧な候補も退避するが、会社の起動候補には入れない。認証・履歴や検索 MCP は変えない。
-  - これは起動設定の切り替えであり、アクセス制御ではない。別プロバイダへの手動切り替えや、選択先の利用可能なモデルがない場合に Pi 本体が行う起動時のフォールバックを禁止しない。
+- 会社で使うプロバイダは [会社の Pi のモデルプロファイル](#会社の-pi-のモデルプロファイルを切り替える) で選ぶ。
 - **役割ごとのモデル**（`modify_pi_stock_settings.py.tmpl` の `PROVIDER_AGENT_MODELS` と `HOME_COPILOT_MODELS`。`subagents.agentOverridesByProvider.<プロバイダ>.<名>.model`。`:` の後ろは思考の深さ）: 家の機では Copilot のモデルを、実装 = Sonnet / レビュー・証拠監査 = Sol / 調査・delegate = Neon / 判定 = Carbon に振り分ける。会社 PC では選んだプロバイダの既定だけを生成する。会社 Copilot の `scout`・`researcher`・`worker` は Sonnet 5.5 `low`・`medium`・`medium`。`reviewer`・`evidence-auditor`・`oracle` は Sol 6.2 `high`。`delegate` は親を継ぐ。Opus・Fable・Astra を子の既定にはしない。pi-subagents は**親のセッションのモデルのプロバイダごとに層を重ねる**（`/model` で替えても追従する。apply 時の `defaultProvider` には依らない）。知らないプロバイダの子は親のモデルを継ぐ。利用者が書いた `model` は保つ。
 
   | 役割 | github-copilot（家） | amazon-bedrock（会社） | 理由 |

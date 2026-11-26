@@ -192,6 +192,11 @@ A. 共有の設定はこのリポジトリ（chezmoi が管理）に置き、PC 
 A. 宣言した項目（`~/.pi/agent/settings.json`・`mcp.json` など）は `chezmoi apply` が更新し、宣言していない項目と利用者が足した項目は保つ。
 変え方と所有権は [pi の設定の生成と所有権](docs/spec/agent-config-generation.md)。確認の設定（YOLO など）は `/permission-system`（機械ごとで、apply では戻らない）。
 
+### Q. 会社の Pi で Bedrock と Copilot を切り替えたい
+
+A. chezmoi の `[data]` に `work_pi_profile` を設定し、Pi の設定だけを反映して新規セッションを開く。未指定なら Bedrock。
+詳しくは [会社の Pi のモデルプロファイルを切り替える](docs/spec/agent-config-generation.md#会社の-pi-のモデルプロファイルを切り替える)。
+
 ### Q. Bedrock だと Web 検索ができない
 
 A. [AgentCore Web Search](docs/spec/mcp-servers.md#agentcore-web-search) を参照。
