@@ -80,7 +80,8 @@ python3 ~/.agents/skills/sdd-docs/scripts/check_refs.py --save
 
 ## 書き方（読みやすさ）
 
-書く前に `references/markdown-style.md` を読む。要点は次のとおり。
+書く前に [共通の Markdown ガイド](references/markdown-common.md) と
+[SDD 文書の書式](references/markdown-style.md) を読む。要点は次のとおり。
 
 - 長文のベタ書きをしない。段落は 3 文まで。3 項目以上の並列は箇条書きにする
 - 比較・対応は表にする。セルは 40 字以内の短い語にし、理由は表の外へ出す
@@ -149,7 +150,11 @@ python3 ~/.agents/skills/sdd-docs/scripts/check_refs.py --save
 
 ### `docs/research/` — 実測の記録
 
-1 記録 = 1 つの問い。過去の節を書き換えない・消さない。雛形は `references/research-template.md`。
+1 記録 = 1 つの問い。過去の観測を書き換えない・消さない。
+通常は [Markdown の雛形](references/research-template.md) を使う。
+図・原画像と注釈・評価プロットを並べて読むことが中心なら、
+[HTML の雛形](references/research-report.html.tpl) を使ってよい。HTML だけで記録を完結させ、
+索引に日付・結論1行・リンクを載せる。形式の制約は [文書化の細則](references/docs-rules.md) を参照する。
 
 ### `docs/spec/` — 現行の仕様・運用
 

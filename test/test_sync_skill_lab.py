@@ -88,3 +88,80 @@ def test_a_missing_skill_is_refused(labs):
     src, repo, _dest, _doc = labs
     with pytest.raises(mod.SyncError, match="無い"):
         mod.sync("nope", src, repo)
+
+
+def _add_readme_skill(src, frontmatter):
+    skill = src / "skills" / "readme-writer"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(frontmatter, encoding="utf-8")
+    _git(src, "add", "--", "skills/readme-writer")
+    _git(src, "commit", "-qm", "readme")
+    return skill
+
+
+FRONT = '---\nname: readme-writer\ndescription: "説明: README"\nlicense: MIT\n'
+
+
+@pytest.mark.parametrize("setting", ["", "disable-model-invocation: false\n", "disable-model-invocation: true\n"])
+def test_only_distribution_uses_manual_invocation(labs, setting):
+    src, repo, _, _ = labs
+    upstream = FRONT + setting + "---\n\n# 本文\n"
+    skill = _add_readme_skill(src, upstream)
+    dest = repo / "home/dot_agents/skills/readme-writer"
+    assert mod.sync("readme-writer", src, repo, check=True) == 1
+    assert not dest.exists()
+    assert mod.sync("readme-writer", src, repo) == 0
+    expected = FRONT + "disable-model-invocation: true\n---\n\n# 本文\n"
+    assert (dest / "SKILL.md").read_text(encoding="utf-8") == expected
+    assert (skill / "SKILL.md").read_text(encoding="utf-8") == upstream
+    assert mod.sync("readme-writer", src, repo, check=True) == 0
+
+
+@pytest.mark.parametrize(
+    "frontmatter",
+    [
+        "name: readme-writer\n",
+        FRONT + "description: duplicate\n---\n",
+        FRONT + "disable-model-invocation: yes\n---\n",
+        FRONT + "disable-model-invocation: true\ndisable-model-invocation: false\n---\n",
+        FRONT.replace('"説明: README"', '"閉じていない') + "---\n",
+        FRONT.replace('"説明: README"', "null") + "---\n",
+        FRONT.replace('"説明: README"', '" "') + "---\n",
+        FRONT.replace('"説明: README"', '"' + "説" * 1025 + '"') + "---\n",
+    ],
+)
+def test_invalid_frontmatter_does_not_replace_destination(labs, frontmatter):
+    src, repo, _, _ = labs
+    _add_readme_skill(src, frontmatter)
+    dest = repo / "home/dot_agents/skills/readme-writer"
+    dest.mkdir()
+    marker = dest / "SKILL.md"
+    marker.write_text("old\n", encoding="utf-8")
+    for check in (True, False):
+        with pytest.raises(mod.SyncError, match="frontmatter が不正"):
+            mod.sync("readme-writer", src, repo, check=check)
+        assert marker.read_text(encoding="utf-8") == "old\n"
+
+
+def test_pinned_commit_keeps_reviewed_version_if_head_advances(labs):
+    src, repo, dest, doc = labs
+    origin = subprocess.check_output(
+        ["git", "-C", str(src), "rev-parse", "HEAD"], encoding="utf-8"
+    ).strip()
+    assert mod.sync("demo", src, repo, check=True, commit=origin) == 1
+    (src / "skills/demo/SKILL.md").write_text("変更後\n", encoding="utf-8")
+    _git(src, "add", "--", "skills/demo/SKILL.md")
+    _git(src, "commit", "-qm", "next")
+    assert mod.sync("demo", src, repo, commit=origin) == 0
+    assert (dest / "SKILL.md").read_text(encoding="utf-8") == "v1\n"
+    assert origin[:7] in doc.read_text(encoding="utf-8")
+    assert mod.sync("demo", src, repo, check=True, commit=origin) == 0
+    assert mod.sync("demo", src, repo, check=True) == 1
+
+
+@pytest.mark.parametrize("ref", ["HEAD", "HEAD~1", "abc1234"])
+def test_only_complete_commit_ids_can_be_pinned(labs, ref):
+    src, repo, dest, _ = labs
+    with pytest.raises(mod.SyncError, match="完全なハッシュ"):
+        mod.sync("demo", src, repo, commit=ref)
+    assert (dest / "OLD.md").is_file()

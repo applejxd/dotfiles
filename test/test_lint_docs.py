@@ -29,7 +29,10 @@ def load_module():
     spec = importlib.util.spec_from_file_location("lint_docs", SCRIPT_PATH)
     module = importlib.util.module_from_spec(spec)
     sys.modules["lint_docs"] = module
-    spec.loader.exec_module(module)
+    # CLI での実行と同じように、同梱モジュールを解決できるようにする。
+    with pytest.MonkeyPatch.context() as path:
+        path.syspath_prepend(str(SCRIPT_PATH.parent))
+        spec.loader.exec_module(module)
     return module
 
 

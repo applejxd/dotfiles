@@ -1,6 +1,7 @@
 # 調査記録テンプレート
 
-`docs/research/<topic>.md` の雛形。規約の正本は `docs/research/index.md` の「記録の単位」と「後の観測・現行の仕様への案内」。書き方の規則は `markdown-style.md`。
+`docs/research/<topic>.md` の雛形。書き方は [SDD 文書の書式](markdown-style.md)、記録の単位は対象リポジトリの `docs/research/index.md` を参照する。
+図表が中心なら、別の Markdown ファイルを作らず [自己完結 HTML の雛形](research-report.html.tpl) を使ってよい。
 
 ## 約束
 

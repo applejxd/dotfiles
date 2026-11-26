@@ -1,6 +1,6 @@
 # docs の Markdown の書き方
 
-`docs/` の文書を書く・直すときの規則。長文のベタ書きを避け、図・表・箇条書きで読ませる。
+[共通の Markdown ガイド](markdown-common.md) に加え、SDD の `docs/` で使う書式と記録の規則。
 
 根拠の凡例:
 
@@ -11,9 +11,7 @@
 | 弱 | 解釈・経験則 |
 | 目安 | 出典に数値が無い。運用の目安として置く |
 
-出典と実測値は、配布元 applejxd/dotfiles の次の文書にある。
-
-- `docs/research/agents/markdown-writing-best-practices-2026-11.md`
+出典と実測値は、移行元の [Markdown の調査記録](https://github.com/applejxd/dotfiles/blob/9b0e2670e8d1d8aaf2ddfd314187903f4c8e7432/docs/research/agents/markdown-writing-best-practices-2026-11.md) にある。
 
 ## 1. 形を選ぶ
 

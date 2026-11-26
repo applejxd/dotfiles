@@ -5,7 +5,7 @@
 
 - **配布の場所**: `home/dot_agents/skills/readme-writer/`（`chezmoi apply` で `~/.agents/skills/readme-writer/` へ）。pi など、`~/.agents/skills` を読む CLI から使える。
 - **正本は skill-lab**（個人のスキル開発用リポジトリの `skills/readme-writer/`）。ここへは**複製**（vendor）で、このリポジトリでは編集しない。直すときは skill-lab 側で直して、取り込み直す。
-- **取り込んだ版**: skill-lab のコミット `af3e23d`（2026-11-17）の `skills/readme-writer/` の追跡ファイル（45 件。`git archive` で取り出した）。
+- **取り込んだ版**: skill-lab のコミット `27b6cc1`（2026-11-26）の `skills/readme-writer/` の追跡ファイル（46 件。`git archive` で取り出した）。
 - **正本の仕様・評価**: skill-lab の `docs/spec/0005-readme-writer.md`、`docs/change/0007-readme-writer.md`、`experiments/readme-writer/`（比較評価と改善ループの記録）。
 
 ## 契約
@@ -32,7 +32,9 @@
 - 評価用リポジトリは、評価の入力なので、書き換えて lint を通さない（上流との差分も小さく保つ）。
 - `home/.chezmoiignore.tmpl` で、試験が作る `__pycache__` を配布・取り込みの対象から外す。
 - `SKILL.md` の frontmatter は `name` と `description` のほかは、手動起動の 1 行だけ（`allowed-tools` なし・`context: fork` なし）。理由は [スキルの frontmatter の方針](skill-frontmatter.md)。
-- ローカルの変更: `SKILL.md` の frontmatter に `disable-model-invocation: true` を 1 行足した（2026-11-18。利用者の決定。理由は skill-frontmatter の「[手動起動](skill-frontmatter.md#手動起動disable-model-invocation)」）。skill-lab 側にも同じ変更を入れて取り込み直すまで、`sync_skill_lab.py` の置き換えで消える（`--check` の差分に出る）。 あわせて、description の対象外案内の「AGENTS.md / CLAUDE.md の作成(onboarding)」は、`onboarding` を `agents-md` へ統合したので古い（skill-lab 側で直す。手動起動なので害は小さい）。
+- 手動起動は chezmoi 側の配布設定。`sync_skill_lab.py` が取り込み時に `disable-model-invocation: true` を適用し、`--check` も適用後の内容を比較する。
+  Skill Lab の定義と評価時の挙動は変えない。frontmatter の `description` は1行の二重引用文字列、1024文字以内とする。
+  手動起動の理由は [方針](skill-frontmatter.md#手動起動disable-model-invocation) を参照する。
 
 ## 評価の結果（正本の記録の要約。skill-lab 側が正本）
 
@@ -45,8 +47,10 @@
 skill-lab 側で直してコミットし、このリポジトリで次を実行する（取り込むのは**コミット済みの版**だけ。未コミットの変更があると止まる）。
 
 ```bash
-python3 scripts/sync_skill_lab.py readme-writer --check   # 差分を見るだけ（差分があれば終了コード 1）
-python3 scripts/sync_skill_lab.py readme-writer           # 置き換え。上の「取り込んだ版」も更新する
+commit=$(git -C "$HOME/src/skill-lab" rev-parse HEAD)
+python3 scripts/sync_skill_lab.py readme-writer --commit "$commit" --check
+python3 scripts/sync_skill_lab.py readme-writer --commit "$commit"
 ```
 
-置き換えたら feature で commit → finish する。シンボリックリンクにしない理由は [conference-video](conference-video.md) の同名の節と同じ。
+置き換えたら feature でコミットする。以前の版へ戻すときは、配布コミットを revert する。
+ホームへの適用は同期と別に行う。シンボリックリンクにしない理由は [conference-video](conference-video.md) の同名の節と同じ。

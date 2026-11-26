@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """docs/ の状態と、反映すべき差分の手がかりを出す。sdd-docs スキルの「指示なし」の入口。
 
 何を書くかは判断が要るので、ここでは**判断の材料を決定的に集めるだけ**にする
@@ -67,7 +66,7 @@ def _git(args: list[str], cwd: Path) -> str | None:
     """git を呼ぶ。失敗 (git が無い・リポジトリでない・不正な rev) は None。"""
     try:
         proc = subprocess.run(
-            ["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+            ["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
         )
     except OSError:
         return None
@@ -121,6 +120,11 @@ def diff_context(docs: Path, since: str | None) -> dict | None:
     }
 
 
+def existing_docs(docs: Path) -> list[Path]:
+    candidates = [*docs.rglob("*.md"), *(docs / "research").rglob("*.html")]
+    return sorted(path for path in candidates if path.is_file())
+
+
 def mentions(docs: Path, files: list[str]) -> dict[str, list[str]]:
     """変更されたファイルに言及している文書を探す (パス、または 8 文字以上のファイル名が本文にある)。"""
     needles = {}
@@ -128,7 +132,10 @@ def mentions(docs: Path, files: list[str]) -> dict[str, list[str]]:
         name = f.rsplit("/", 1)[-1]
         needles[f] = [f] + ([name] if len(name) >= 8 else [])
     found: dict[str, list[str]] = {}
-    for doc in sorted(docs.rglob("*.md")):
+    research = docs.resolve() / "research"
+    for doc in existing_docs(docs):
+        if doc.suffix == ".html" and not doc.resolve().is_relative_to(research):
+            continue
         try:
             text = doc.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -166,10 +173,10 @@ def cmd_status(args: argparse.Namespace) -> int:
     state, missing = structure(docs)
     print(f"state: {state}")
     if state == "absent":
-        others = sorted(p.relative_to(docs).as_posix() for p in docs.rglob("*.md")) if docs.is_dir() else []
+        others = [p.relative_to(docs).as_posix() for p in existing_docs(docs)]
         print(f"{docs}/ に構成（index.md と spec / adr / research / change の索引）が無い。")
         if others:
-            print("既にある .md（消さない・動かさない。取り込む対象）:")
+            print("既にある .md と調査の .html（消さない・動かさない。取り込む対象）:")
             for line in _capped(others):
                 print(f"  {line}")
         print("次: scaffold で骨組みを作り、リポジトリと今の文脈から中身を書く (SKILL.md「新規に作る」)")
