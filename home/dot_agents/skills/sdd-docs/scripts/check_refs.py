@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """docs への参照が、実在するファイルと見出しを指しているかを確かめる。
 
 文書を分割・移動すると、索引の検査 (lint_docs.py) では見えない参照が切れる。
@@ -32,6 +31,9 @@ import sys
 import unicodedata
 from functools import cache
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+from research_html import is_report, read_report
 
 # 利用者の確認なしに実行されうるので、リポジトリの設定からコマンドを起動させない。
 GIT = ["git", "-c", "core.fsmonitor=false"]
@@ -45,7 +47,10 @@ EXIT_USAGE = 2
 SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".pptx", ".lock", ".db"}
 LINK = re.compile(r"\]\(([^)\s]+)\)")
 # 前の文字の否定は、`sdd-docs/references/...` の途中から `docs/...` を拾わせないため
-PATH_REF = re.compile(r"(?<![\w/.-])(docs/[\w./-]+?\.md)(#[^\s)`'\"」、。,]+)?")
+PATH_REF = re.compile(
+    r"(?<![\w/.-])(docs/(?:[\w./-]+?\.md|research/[\w./-]+?\.html))"
+    r"(#[^\s)`'\"」、。,]+)?"
+)
 NAME_REF = re.compile(r"(?<![\w/.-])(docs/[\w./-]+?\.md)\s*「([^」]+)」")
 
 
@@ -89,22 +94,64 @@ def tracked_files(root: Path) -> list[str]:
     return done.stdout.splitlines()
 
 
+@cache
+def report_refs(path: Path) -> tuple[frozenset[str], tuple[str, ...]]:
+    report = read_report(path)
+    return frozenset(report.ids), tuple(report.links)
+
+
 def check_target(root: Path, source: Path, dest: Path, anchor: str | None, label: str):
     where = source.relative_to(root).as_posix()
     if not dest.exists():
         return f"{where}: ファイルが無い -> {label}"
+    anchor = unquote(anchor) if anchor else None
     if anchor and dest.suffix == ".md" and anchor not in headings(dest)[0]:
         return f"{where}: 見出しが無い -> {label}"
+    if is_report(root, dest) and not is_report(root, dest.resolve()):
+        return f"{where}: 調査ディレクトリ外へのリンク -> {label}"
+    if anchor and is_report(root, dest):
+        try:
+            ids, _ = report_refs(dest)
+        except (OSError, ValueError, AssertionError):
+            return f"{where}: 調査 HTML を読めない -> {label}"
+        if anchor not in ids:
+            return f"{where}: id が無い -> {label}"
     return None
 
 
-def find_problems(root: Path, skip: frozenset[Path] = frozenset()) -> list[str]:
+def html_link_problems(root: Path, source: Path) -> list[str]:
+    where = source.relative_to(root).as_posix()
+    if not is_report(root, source.resolve()):
+        return [f"{where}: 調査ディレクトリ外のファイルは検査しない"]
+    try:
+        _, links = report_refs(source)
+    except (OSError, ValueError, AssertionError):
+        return [f"{where}: 調査 HTML を読めない"]
+    issues = []
+    for link in links:
+        target = urlsplit(link)
+        dest = (source.parent / unquote(target.path)).resolve() if target.path else source
+        if not dest.is_relative_to(root):
+            issues.append(f"{where}: リポジトリ外へのリンク -> {link}")
+            continue
+        problem = check_target(root, source, dest, target.fragment or None, link)
+        if problem:
+            issues.append(problem)
+    return issues
+
+
+def find_problems(
+    root: Path, skip: frozenset[Path] = frozenset(), *, research_html_only: bool = False
+) -> list[str]:
     problems: set[str] = set()
     for rel in tracked_files(root):
         source = root / rel
         if not source.is_file() or source.suffix.lower() in SKIP_SUFFIXES:
             continue
         if source.resolve() in skip:
+            continue
+        if is_report(root, source):
+            problems.update(html_link_problems(root, source))
             continue
         try:
             text = source.read_text(encoding="utf-8")
@@ -115,7 +162,9 @@ def find_problems(root: Path, skip: frozenset[Path] = frozenset()) -> list[str]:
                 if re.match(r"[a-z][a-z0-9+.-]*:", target) or target.startswith("<"):
                     continue
                 file_part, _, anchor = target.partition("#")
-                dest = (source.parent / file_part).resolve() if file_part else source
+                dest = (source.parent / unquote(file_part)).resolve() if file_part else source
+                if research_html_only and not is_report(root, dest):
+                    continue
                 problem = check_target(root, source, dest, anchor or None, target)
                 if problem:
                     problems.add(problem)
@@ -123,11 +172,14 @@ def find_problems(root: Path, skip: frozenset[Path] = frozenset()) -> list[str]:
             path, anchor = match.group(1), match.group(2)
             if "<" in path or "*" in path or "..." in path:
                 continue
-            problem = check_target(
-                root, source, root / path, anchor[1:] if anchor else None, match.group(0)
-            )
+            dest = root / path
+            if research_html_only and not is_report(root, dest):
+                continue
+            problem = check_target(root, source, dest, anchor[1:] if anchor else None, match.group(0))
             if problem:
                 problems.add(problem)
+        if research_html_only:
+            continue
         for match in NAME_REF.finditer(text):
             dest = root / match.group(1)
             name = match.group(2)
@@ -154,6 +206,9 @@ def git_root(start: Path) -> Path | None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="docs への参照の切れを検査する")
     parser.add_argument("--root", help="リポジトリのルート (既定: 現在地の git のルート)")
+    parser.add_argument(
+        "--research-html-only", action="store_true", help="調査 HTML との間の参照だけを検査する"
+    )
     # パスを省く形は確認なしで通せる (書き込み先を引数で決められない)。
     parser.add_argument(
         "--save", nargs="?", const="", help="今の結果をこのファイルへ保存する"
@@ -173,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # 控え自体が git の管理外でなくても、控えに書いたパスを参照として数えない
     skip = frozenset(Path(p).resolve() for p in (args.save, args.baseline) if p)
-    problems = find_problems(root.resolve(), skip)
+    problems = find_problems(root.resolve(), skip, research_html_only=args.research_html_only)
     if args.save:
         Path(args.save).parent.mkdir(parents=True, exist_ok=True)
         Path(args.save).write_text("".join(f"{p}\n" for p in problems), encoding="utf-8")

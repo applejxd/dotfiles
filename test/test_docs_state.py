@@ -27,7 +27,10 @@ def load(name: str):
     spec = importlib.util.spec_from_file_location(name, SKILL / "scripts" / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
-    spec.loader.exec_module(module)
+    # CLI での実行と同じように、同梱モジュールを解決できるようにする。
+    with pytest.MonkeyPatch.context() as path:
+        path.syspath_prepend(str(SKILL / "scripts"))
+        spec.loader.exec_module(module)
     return module
 
 

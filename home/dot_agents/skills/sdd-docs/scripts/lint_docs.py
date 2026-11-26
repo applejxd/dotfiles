@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """docs/ の索引と実ファイルの整合を検査する。
 
 索引が腐ると docs 全体が腐る。整合だけは決定的に判定できるので、ここで機械に
@@ -12,11 +11,12 @@
 検査:
 
     1. 索引の一覧に載っているファイルが実在する
-    2. ディレクトリ内の .md が全て索引のどこかに載っている
+    2. ディレクトリ内の .md と research/ の .html が全て索引のどこかに載っている
     3. adr/ と change/ の番号が (カテゴリ内で) 重複していない
     4. 案件の状態が既定値のどれか
     5. Done / Abandoned の案件が「活動中」区分に残っていない
     6. Superseded by ADR-NNNN の参照先が実在する
+    7. 調査 HTML が単体で読める形式であり、同じベース名の Markdown と重複しない
 
 意図的に検査しないこと:
 
@@ -38,6 +38,9 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from urllib.parse import unquote
+
+from research_html import read_report
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -67,13 +70,13 @@ STATE_RE = re.compile(r"^-\s*\*\*状態\*\*\s*:\s*(.+?)\s*$", re.MULTILINE)
 SUPERSEDED_RE = re.compile(r"Superseded by ADR-(\d{4})")
 
 
-def _linked_targets(index: Path) -> set[str]:
-    """索引から張られている配下の .md を集める (サブディレクトリを含む)。"""
+def _linked_targets(index: Path, suffixes: tuple[str, ...]) -> set[str]:
+    """索引が指す同じカテゴリ内の記録を集める。"""
     text = index.read_text(encoding="utf-8")
     names: set[str] = set()
     for target in LINK_RE.findall(text):
-        target = target.split("#", 1)[0].strip()
-        if not target.endswith(".md"):
+        target = unquote(target.split("#", 1)[0].strip()).removeprefix("./")
+        if not target.endswith(suffixes):
             continue
         # 上位や別カテゴリへのリンクは対象外
         if target.startswith(("../", "/", "http")):
@@ -108,17 +111,17 @@ def check_category(docs: Path, name: str) -> list[str]:
     if not index.exists():
         return [f"{name}/index.md が無い"]
 
+    suffixes = (".md", ".html") if name == "research" else (".md",)
     documents = sorted(
-        p
-        for p in directory.rglob("*.md")
-        if p.name != "index.md" or p.parent != directory
+        p for suffix in suffixes for p in directory.rglob(f"*{suffix}")
+        if p != index and p.is_file()
     )
-    linked = _linked_targets(index)
+    linked = _linked_targets(index, suffixes)
     index_text = index.read_text(encoding="utf-8")
 
     # 1. 索引が指す先が実在するか
     for target in sorted(linked):
-        if not (directory / target).exists():
+        if not (directory / target).is_file():
             problems.append(f"{name}/index.md が実在しないファイルを指している: {target}")
 
     # 2. 掲載漏れが無いか
@@ -141,6 +144,23 @@ def check_category(docs: Path, name: str) -> list[str]:
                     f"{seen[number]} と {document.name}"
                 )
             seen[number] = document.name
+
+    if name == "research":
+        for document in documents:
+            if document.suffix != ".html":
+                continue
+            relative = document.relative_to(directory)
+            if document.with_suffix(".md") in documents:
+                problems.append(f"research/{relative}: 同じベース名の Markdown と重複")
+            if not document.resolve().is_relative_to(directory.resolve()):
+                problems.append(f"research/{relative}: カテゴリ外のファイルは検査しない")
+                continue
+            try:
+                report = read_report(document)
+            except (OSError, ValueError, AssertionError) as exc:
+                problems.append(f"research/{relative}: {exc}")
+            else:
+                problems.extend(f"research/{relative}: {issue}" for issue in report.problems)
 
     if name == "change":
         problems.extend(_check_change(directory, documents, index_text))
@@ -195,11 +215,11 @@ def _check_adr(directory: Path, documents: list[Path]) -> list[str]:
     return problems
 
 
-def lint_docs(docs: Path) -> list[str]:
+def lint_docs(docs: Path, categories: tuple[str, ...] = CATEGORIES) -> list[str]:
     problems: list[str] = []
     if not (docs / "index.md").exists():
         problems.append("docs/index.md が無い")
-    for name in CATEGORIES:
+    for name in categories:
         problems.extend(check_category(docs, name))
     return problems
 
@@ -211,7 +231,8 @@ def main(argv: list[str] | None = None) -> int:
         default="docs",
         help="docs ディレクトリ (既定: docs)",
     )
-    # pre-commit がファイル名を渡してくるが、検査は docs 全体で行う。
+    parser.add_argument("--category", choices=CATEGORIES, help="対象カテゴリを絞る（既定: 全カテゴリ）")
+    # pre-commit が渡すファイル名では対象を絞らない。
     parser.add_argument("files", nargs="*", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
@@ -220,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {docs} が無い", file=sys.stderr)
         return EXIT_FAIL
 
-    problems = lint_docs(docs)
+    problems = lint_docs(docs, (args.category,) if args.category else CATEGORIES)
     for problem in problems:
         print(f"error: {problem}", file=sys.stderr)
     if problems:

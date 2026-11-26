@@ -94,7 +94,7 @@ Claude Code・Copilot CLI・OpenCode は撤去した（[ADR-0037](../adr/0037-re
 - **手動起動にしたスキル（9 本）**: `conference-video`・`powerpoint-studio`・`ipynb-to-marimo-pages`・`arxiv-paper-ja`・`cuda-version-migration`・`uv-migration`・`readme-writer`・`fix`・`agents-md`（旧 `learn`・`onboarding` を統合）。
 - **理由**: 一覧の固定部分を減らす。自動の選択の便益が小さい。戻しは 1 行（その `disable-model-invocation: true` を消す）。
 - **呼び方**: `/skill:<名前>`。
-- **skill-lab からの複製**（`conference-video`・`readme-writer`）は、この 1 行をこのリポジトリで足している。skill-lab 側にも同じ変更を入れて取り込み直すまで、`sync_skill_lab.py` の置き換えで消える（`--check` の差分に出る）。
+- **skill-lab からの複製**のうち `readme-writer` は、`sync_skill_lab.py` が配布用に手動起動を設定する。`conference-video` の設定は引き続きローカル差分なので、同期前に `--check` で確認する。
 - **Orca が入れたスキル 3 本**（`computer-use`・`orca-cli`・`orchestration`）は、設定 `skills` の `!名前` で除外する（`modify_pi_stock_settings.py.tmpl` が毎回そろえる。戻すときは `+skills/<名前>`）。`!名前` が自動検出した `~/.agents/skills/` のスキルに効くことは、pi 1.5.0 のソース（`package-manager.js`）の読解に加えて、`DefaultResourceLoader` を一時の `HOME` で実行して確かめた（2026-11-18。`skills: ["!computer-use", …]` で 3 本が読み込まれず、他は残る。`+skills/<名前>` は並びによらず復帰させ、`+<名前>`（`skills/` なし）は復帰させない。手動起動のスキルは読み込まれるが、一覧からだけ外れる）。配備した実機の起動は未確認。
 
 ## pi 向けの書き直し（2026-11-10〜11）
