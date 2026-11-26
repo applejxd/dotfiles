@@ -91,7 +91,13 @@ pi 本体が組み込みで読み込む拡張（`dist/extensions/`）が登録�
 | `/parallel-research` | 子を並列に動かして調べる |
 | `/parallel-review` | 子を並列に動かしてレビューする |
 | `/parallel-cleanup` | 子を並列に動かして掃除の観点でレビューする |
-| `/review-loop` | レビューと修正を、指摘が無くなるまで繰り返す |
+| `/review-loop` | `pi-subagents` 同梱のレビュー・修正の反復。既定は 3 ラウンド |
+
+### 同名のレビュー手順の使い分け
+
+- `/review-loop` は同梱の prompt template。複数の `reviewer` が並列に読み、`worker` が修正する。
+- `/skill:review-loop` は [このリポジトリのスキル](../../home/dot_agents/skills/review-loop/SKILL.md)。親が修正し、指摘台帳で収束を判定する。既定は 5 ラウンド。
+- コマンド名は衝突しないが、用途は重なる。この構成では `reviewer` は shell を使えず、`watchdog_diff` も拒否される。差分を親から渡す手順がある `/skill:review-loop` を使う。同梱版を明示して使う場合も、親が差分ファイルと基準を渡す。
 
 ## このリポジトリが配る prompt template
 
@@ -100,5 +106,5 @@ pi 本体が組み込みで読み込む拡張（`dist/extensions/`）が登録�
 
 | コマンド | 内容 |
 | --- | --- |
-| `/fleet <依頼>` | 依頼を並列に動かせる作業に分け、`subagent` ツールで worker を同時に起動して進める。書き手ごとに専用の枝と worktree を作り、完了した順に統合用の枝へ取り込む。作業間の境界は契約で先に決めて見込みで進め、検査は 3 段（全体は最後に 1 回）で背景へ出す。目的は利用者の待ち時間の短縮 |
+| `/fleet <依頼>` | 独立した実装を別 worktree で並列に進める。条件に合う単独の実装も委譲できる |
 | `/stepback [質問]` | 質問（省略時は直前の質問と回答）を一段抽象化した問いに先に答えてから、答え直す |

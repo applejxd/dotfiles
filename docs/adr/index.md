@@ -16,7 +16,7 @@
 | [0011](0011-close-change-records-into-subdirectory.md) | 終了案件は `closed/` へ | `change/` 直下には取り組み中の案件だけを置き、終了しても削除しない |
 | [0031](0031-evaluate-existing-extensions-first.md) | 既存の評価を先に、自作は最後 | 機能は標準 → 入れた package → 公開 package → skill/MCP の順に探し、自作は理由・維持費・撤去条件・承認があるときだけ |
 | [0032](0032-docs-by-audience.md)（Proposed） | docs を読み手別に整理 | ADR はエージェント用、案件・調査・仕様は利用者用。入口は「今の作業計画」と本一覧 |
-| [0033](0033-delegate-subagents-by-standing-instruction.md)（Proposed） | 子の起動は常設の指示で授権し、数の上限は設けない | 小さな作業以外は、依頼を待たずに `subagent` へ委譲する。安全は数の上限でなく、外側の権限（作業ツリー外は即拒否・理由つき deny・子ごとの `timeout`）で担保する |
+| [0033](0033-delegate-subagents-by-standing-instruction.md)（Proposed） | 子の起動は常設の指示で授権する | 安全は外側の権限で担保する。実装・調査の委譲条件と監査の手順は ADR-0043 |
 | [0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) | pi の sandbox は、コマンドの実行を `shellPath` の囲い 1 つに、ファイルの道具をパスの判定に分ける | コマンドの実行（bash・`bg_run`・`!`・子の bash）は `shellPath` の 1 つの囲いに通し、ファイルの道具（`read`・`write`・`edit`）は権限の層がパスで判定する。見える範囲は許可リスト型（ホーム・`/mnt`・`/tmp` を覆い、必要な所だけ重ねる）で、通信は既定で開ける。方針は 1 か所、自作は 1 部品、既存の囲いの穴は自作で埋めない。実装は素の `bwrap`（約 16 ミリ秒。`pib`・`pib-shell`・`pi-sandbox-runner`）。`/mnt` は既定で覆い、見せる所だけユーザー設定で足す。通信は既定で開け、`pib --offline` で遮断する。ADR-0035 を置き換えた |
 | [0037](0037-retire-custom-profile-and-other-harnesses.md) | 旧 custom プロファイルと pi 以外のハーネスの撤去 | 自作の基盤・pi 以外の CLI の設定生成を持たない。pi は公式の既定＋人気の拡張で使い、保護は `pib` の囲いと権限の package に任せる。復元はタグ（`archive/custom-harness-2026-11-12`） |
 | [0038](0038-allow-chezmoi-init-dependency.md) | `chezmoi init` を前提にした設計を禁止から許容へ | 設定でしか実現できないもの（`hooks` など）は `init` を前提にしてよい。更新手順に `init` を含め、省いても壊れない形にする |
@@ -24,6 +24,7 @@
 | [0040](0040-pi-sandbox-session-toggle.md) | pi の囲いと YOLO を、セッションの途中で `/sandbox` で切り替える | 切り替えは利用者が打った `/sandbox` だけ（モデルが呼べる道具は登録しない）。囲いを入れたら YOLO も入れ、外したら YOLO も切る（外すときは YOLO が先）。素の `pi` でも使えるが、`pib` より弱い。ADR-0036 の「起動時に選ぶ」を改めた |
 | [0041](0041-claude-code-spare-harness-static-config.md) | Claude Code を予備のハーネスとして、静的な標準設定だけを chezmoi で管理する | `~/.claude` の `CLAUDE.md`（最低限）・`settings.json` の `permissions.deny/ask`・`commands/stepback.md`・スキル `commit`・`sdd-docs` の写しと、会社 PC だけ `~/.claude.json` の MCP 2 件（`allow` も）を配る。会社用の前提。pi とは共有せず、ほかのスキル・子・MCP・hook・`sandbox` は持ち込まない。導入は自動化しない。試験の対象外 |
 | [0042](0042-t3-code-pi-wrapper-reads-shellenv.md) | T3 Code が起動する pi には、`shellenv.sh` を読む wrapper（`pi-t3`）で環境変数を渡す | T3 のインスタンス環境変数（静的）・fork のパッチ・`userenv.sh` だけを読む案は採らない。wrapper は `shellenv.sh` を stderr へ逃がして読み、`exec pi` するだけ（set -e なし）。撤去条件は「T3 が login shell から任意の変数を取り込むようになったとき」。T3 での確認は未了 |
+| [0043](0043-delegate-bounded-implementation-to-a-single-worker.md) | 条件を満たす実装は 1 件でも `worker` に委譲する | 範囲と合格条件を固定し、引き継ぎに見合う利点があるときに起動する |
 
 撤去した決定（0001・0002・0004〜0009・0012〜0019・0021〜0028・0030・0034）は、[ADR-0037](0037-retire-custom-profile-and-other-harnesses.md) の「置き換えた決定と記録」にまとめた（本文はタグから読める）。
 
@@ -80,6 +81,8 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0020](0020-env-allowlist-and-env-check.md) | 環境変数の一覧・個別参照は許可リスト方式で止め、診断は env-check に集める | Accepted | 2026-10-25 | 案件は CHG-0037 |
 | [0031](0031-evaluate-existing-extensions-first.md) | pi の機能は、既存の拡張・設定の評価を先にし、自作は最後の手段にする | Accepted | 2026-11-09 | ADR-0016 を置き換える。順序は pi 本体の標準 → 入れている package → 公開 package の評価と導入 → skill + CLI / MCP → 最小の自作。自作は、理由・維持費・撤去条件の記録と利用者の承認があるときだけ。AI の提案には「作らない案」を必ず含める。供給網のリスクは版の固定・権限・初回の試用で下げる。例外として家の検索 MCP を記録。2026-11-18: 自作が 4 件になった見直し条件を再評価し、維持と決めた（一覧を実測に更新し、permission-explain のフォークを追記。決定は不変）。 |
 | [0032](0032-docs-by-audience.md) | docs を読み手別に整理し、利用者向けの入口を「今の作業計画」と「俯瞰」にする | Proposed | 2026-11-09 | ADR-0010・0011 を置き換えず補う。試作（縮小版）を利用者が見て決める |
+| [0033](0033-delegate-subagents-by-standing-instruction.md) | 子の起動を常設の指示で授権する | Proposed | 2026-11-11 | 実装・調査の委譲条件と監査の手順を ADR-0043 で部分改定 |
 | [0035](0035-pi-sandbox-gpu-runner.md) | GPU を使う作業向けに、pi の sandbox 拡張へ設定つきの runner を足す | Superseded by ADR-0036 | 2026-11-12 | 拡張を使う方式を、`shellPath` の囲い（拡張なし）で置き換えた。実測・比較は調査記録に残る |
 | [0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) | pi の sandbox は、コマンドの実行を `shellPath` の囲い 1 つに、ファイルの道具をパスの判定に分ける | Accepted | 2026-11-12 | 「強さは起動時に選ぶ（実行中は切り替えない）」を ADR-0040 で改定（2026-11-15）。それ以外は有効 |
 | [0037](0037-retire-custom-profile-and-other-harnesses.md) | 旧 custom プロファイルと、pi 以外のハーネスを撤去する | Accepted | 2026-11-12 | ADR-0030・0034 と、自作基盤・各 CLI の生成の決定（0001・0002・0004〜0009・0012〜0019・0021〜0028）を置き換える。タグ `archive/custom-harness-2026-11-12` で復元できる |
+| [0043](0043-delegate-bounded-implementation-to-a-single-worker.md) | 条件を満たす実装は 1 件でも `worker` に委譲する | Accepted | 2026-11-26 | ADR-0033 の部分改定 |

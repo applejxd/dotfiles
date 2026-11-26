@@ -504,6 +504,40 @@ def test_stock_agents_md_adds_the_tailnet_policy_only_on_personal_machines(tmp_p
 
 
 @pytest.mark.parametrize("os_name", ["linux", "windows"])
+def test_stock_agents_md_has_the_same_delegation_policy_at_home_and_work(tmp_path, os_name):
+    """家・会社とも、単独の実装・調査を委譲でき、小さな変更でも影響に応じて監査する。"""
+    template = "dot_pi/agent/AGENTS.md.tmpl"
+    policy = []
+    for username in ("applejxd", "tester"):
+        text = render_file(template, tmp_path, os_name=os_name, username=username)
+        section = text.split("## 委譲（サブエージェント）\n", 1)[1].split("\n## ", 1)[0]
+        for marker in (
+            "起動条件や監査手順より禁止を優先し、子を起動しない",
+            "最初の編集前",
+            "1 件でも `worker` の候補",
+            "引き継ぎと再検証の手間を上回るなら委譲",
+            "残りを渡せるか再判定",
+            "互いの結果を待たずに進められる",
+            "前提が揃っていない作業は順に起動",
+            "問いが 1 件でも `scout` に任せる",
+            "問いが 1 件でも `researcher` に任せる",
+            "少数回の検索で済むなら親が調べる",
+            "公式資料 1 件の確認で答えが出るなら親が調べる",
+            "調査を並列にするのは、互いの結果を待たずに進められる場合だけ",
+            "影響のある変更の監査は省かない",
+            "互換性・権限・安全に影響する変更は、数行の差分でも",
+            "コミットの前に新しいコンテキストの読み取り専用 `reviewer`",
+            "実装者の自己評価は渡さない",
+            "`worker` の契約には検査コマンドも書く",
+            "`reviewer` には検査結果と未検証事項を渡す",
+            "子からの再委譲は、明示された場合を除いて行わない",
+        ):
+            assert marker in section
+        policy.append(section)
+    assert policy[0] == policy[1]
+
+
+@pytest.mark.parametrize("os_name", ["linux", "windows"])
 def test_stock_agents_md_adds_debug_stalemate_guidance_only_on_personal_machines(tmp_path, os_name):
     template = "dot_pi/agent/AGENTS.md.tmpl"
     personal = render_file(template, tmp_path, os_name=os_name, username="applejxd")
@@ -997,9 +1031,14 @@ HARNESS_ONLY = ("guarded_task", "guarded_", "pis ", "--role", "フルガード",
 # stock の /fleet が、利用者の待ち時間の 3 つの原因 (書き手の衝突・前の作業の完了待ち・長い検査の待ち) への
 # 手順を持つこと。(節の番号, 手順を担う句)。方針の説明や frontmatter に同じ語があっても通らないよう、節ごとに探す
 FLEET_STRATEGY = {
-    "分けない判断": ("1", "分けずに自分で進める"),
+    "小変更は親が実装": ("1", "数分で済む依頼は親が実装"),
+    "単独委譲の条件": ("1", "引き継ぎと再検証に見合う利点があるなら 1 件の `worker` に渡す"),
+    "調査の役割分担": ("1", "コード調査は `scout`、外部資料の照合は `researcher`"),
+    "レビューだけなら実装の子を起動しない": ("1", "実装の子は起動しない"),
+    "衝突解消で実質的な変更が入ったら再監査": ("3", "更新後の差分を再監査してからコミット・取り込み"),
+    "小さな高影響差分も監査": ("3", "数行の差分でも worker にコミットさせない"),
     "共有ファイルの担当": ("2", "共有されやすいファイル"),
-    "境界の契約を先に決める": ("2", "契約に対して同時に実装"),
+    "独立して検査できる部分だけ並列": ("2", "単独の実装・検証ができる部分だけ並列"),
     "todo に登録する": ("2", "todo に登録"),
     "書き手ごとの専用の枝と worktree": ("3", "書き手 1 人につき、専用の枝と worktree"),
     "統合用の枝を先に切る": ("3", "統合用の枝を先に"),
@@ -1007,7 +1046,10 @@ FLEET_STRATEGY = {
     "取り込む前に clean を確かめる": ("3", "統合用の worktree が clean"),
     "衝突は merge --abort で戻す": ("3", "git merge --abort"),
     "履歴を書き換えない": ("3", "rebase など履歴を書き換える操作"),
-    "見込み実装 (前の完了を待たない)": ("3", "前の完了を待たずに始める"),
+    "実体に依存する作業は待つ": ("3", "前提が揃ってから対応する枝を切って起動する"),
+    "監査対象は親の再検証・監査の後にコミット": ("3", "監査を済ませてから、コミット・取り込み"),
+    "旧前提で進められない作業を停止": ("3", "旧前提のまま進められない作業は止める"),
+    "承認が必要な契約変更は確認後に反映": ("3", "利用者の承認が必要な変更は、確認を得るまで反映しない"),
     "管理 worktree の成果の採用": ("3", "handoff と patch を確認"),
     "完了ごとに次を起動 (上限 4)": ("4", "進行中は 4 件まで"),
     "子に全体の検査を回させない": ("5", "子には全体の検査を回させない"),
@@ -1037,6 +1079,9 @@ def test_fleet_prompt_instructs_the_subagent_tool_not_the_harness():
     """pi の道具は subagent (pi-subagents)。自作ハーネスの guarded_task・pis の指示が残ると、存在しない道具を呼ばせる。"""
     text = (PROMPTS / "fleet.md").read_text(encoding="utf-8")
     assert "$ARGUMENTS" in text and text.startswith("---\n")
+    opening = text.split("$ARGUMENTS", 1)[0]
+    assert "この呼び出しや監査の条件より禁止を優先し、子を起動しない" in opening
+    assert "別の規則で独立監査が必須なら、省略してコミットせず" in opening
     assert "subagent" in text and "worktree" in text  # 書き手ごとの作業ディレクトリ (git worktree) の隔離
     for word in HARNESS_ONLY:
         assert word not in text, word
