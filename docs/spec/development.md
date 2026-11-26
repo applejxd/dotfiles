@@ -346,7 +346,7 @@ chezmoi apply --exclude=scripts
 
 このリポジトリは、`main`（リリース。他のマシンの `chezmoi update` が見る）・`develop`（統合。この PC の chezmoi のソースが指す）・`feature/<名前>`（作業。専用の worktree）で運用する（[CHG-0047](../change/0047-gitflow.md)）。`release`・`hotfix` は使わない。
 
-- **feature**: 親が `git flow feature start <名前> --worktree --no-fetch` で起票する。AI は feature の worktree（`.tmp/worktrees/<名前>`）で、`git commit` で細かくコミットする（bash の `git commit` は確認なしで通る）。**develop への統合は、下の「統合の規則」に従う**。AI の `gitflow_feature_*` の操作は撤去した（CHG-0050、[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）
+- **feature**: 親が `git flow feature start <名前> --worktree --no-fetch` で起票する。AI は担当 feature の worktree（`.tmp/worktrees/<名前>`）で、`git commit` で細かくコミットする。検証と必要な監査の後は、ローカルコミットのメッセージに個別承認を求めない。hook・権限の確認は残す。`develop` への統合と `chezmoi apply` のゲートは変えない。AI の `gitflow_feature_*` の操作は撤去した（CHG-0050、[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）
 - **feature の統合（2026-11-14。[ADR-0039](../adr/0039-merge-to-develop.md)）**: `develop` へは merge（`git flow feature finish <名前> --no-ff --no-squash …`）。2 件以上は、束ね用の feature へ `git merge` で取り込んでから、1 回だけ `finish` する。rebase は `git flow feature update <名前> --rebase`（feature を最新の `develop` に追従させる）だけ。統合後の実機への反映は `chezmoi apply`（`chezmoi update` は pull --rebase を固定で行うので、未 push の merge commit がある間は使わない）。
 - **main へ**: 検証（`mise run verify:all`）の後、`git flow integrate develop` で `develop` を `main` に merge する（タグ・fetch は既定でオフ）。`push` は利用者が行う。
 - **統合の規則（stock の pi。2026-11-11）**: 保護ブランチへの統合（`git flow feature finish`・`git flow integrate`）は、AI は**原則実行しない**。**利用者が自分から明示的に指示したときだけ**実行する。

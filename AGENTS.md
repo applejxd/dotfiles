@@ -14,7 +14,7 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 ## 常に守ること
 
 - 公開リポジトリ。私物の環境以外の具体（勤務先・組織の情報）と秘密は、コード・docs・コミットのどこにも書かない。
-- `develop` / `main` に直接コミットしない。実装は feature の worktree（`.tmp/worktrees/<名前>/`）で行う。
+- `develop` / `main` に直接コミットしない。実装は feature の worktree（`.tmp/worktrees/<名前>/`）で行う。担当の `feature/*` へのローカルコミットは、必要な検証・監査の後、メッセージの個別承認を求めず実行する。この例外は統合・`chezmoi apply` のゲートには適用しない。
 - 保護ブランチへの統合（`git flow feature finish`・`git flow integrate`）は、AI は原則実行しない。**利用者が自分から明示的に指示したときだけ**実行する。AI が「統合してよいですか」と聞いて得た返事は数えない（許可を求める質問はせず、「準備ができた」という報告だけにする）。`git push` は方針で deny（利用者が行う）。
 - 生成先（`~/.pi/agent/mcp.json` 等）を直接編集しない。MCP の宣言は `home/.chezmoitemplates/pi-mcp-servers.toml` が単一ソース。
 - docs・コメント・コミットメッセージは日本語で書く。
