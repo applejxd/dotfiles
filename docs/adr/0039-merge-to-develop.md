@@ -1,6 +1,6 @@
 # develop への統合は merge、rebase は feature の枝の追従だけ
 
-- **ステータス**: Accepted
+- **ステータス**: Superseded by [ADR-0044](0044-github-app-auto-merge-and-3os-ci.md)
 - **日付**: 2026-11-14
 - **決定者**: applejxd
 - **関係**: ADR-0038（`init` の前提）。feature-orchestration の統合の手順（束ねる）を定める

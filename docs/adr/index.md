@@ -20,11 +20,11 @@
 | [0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) | pi の sandbox は、コマンドの実行を `shellPath` の囲い 1 つに、ファイルの道具をパスの判定に分ける | コマンドの実行（bash・`bg_run`・`!`・子の bash）は `shellPath` の 1 つの囲いに通し、ファイルの道具（`read`・`write`・`edit`）は権限の層がパスで判定する。見える範囲は許可リスト型（ホーム・`/mnt`・`/tmp` を覆い、必要な所だけ重ねる）で、通信は既定で開ける。方針は 1 か所、自作は 1 部品、既存の囲いの穴は自作で埋めない。実装は素の `bwrap`（約 16 ミリ秒。`pib`・`pib-shell`・`pi-sandbox-runner`）。`/mnt` は既定で覆い、見せる所だけユーザー設定で足す。通信は既定で開け、`pib --offline` で遮断する。ADR-0035 を置き換えた |
 | [0037](0037-retire-custom-profile-and-other-harnesses.md) | 旧 custom プロファイルと pi 以外のハーネスの撤去 | 自作の基盤・pi 以外の CLI の設定生成を持たない。pi は公式の既定＋人気の拡張で使い、保護は `pib` の囲いと権限の package に任せる。復元はタグ（`archive/custom-harness-2026-11-12`） |
 | [0038](0038-allow-chezmoi-init-dependency.md) | `chezmoi init` を前提にした設計を禁止から許容へ | 設定でしか実現できないもの（`hooks` など）は `init` を前提にしてよい。更新手順に `init` を含め、省いても壊れない形にする |
-| [0039](0039-merge-to-develop.md) | `develop` への統合は merge、rebase は feature の追従だけ | `develop`・`main` は書き換えず merge。複数の feature は束ねて 1 回で統合。rebase は `git flow feature update --rebase` だけ。統合後の反映は `chezmoi apply` |
 | [0040](0040-pi-sandbox-session-toggle.md) | pi の囲いと YOLO を、セッションの途中で `/sandbox` で切り替える | 切り替えは利用者が打った `/sandbox` だけ（モデルが呼べる道具は登録しない）。囲いを入れたら YOLO も入れ、外したら YOLO も切る（外すときは YOLO が先）。素の `pi` でも使えるが、`pib` より弱い。ADR-0036 の「起動時に選ぶ」を改めた |
 | [0041](0041-claude-code-spare-harness-static-config.md) | Claude Code を予備のハーネスとして、静的な標準設定だけを chezmoi で管理する | `~/.claude` の `CLAUDE.md`（最低限）・`settings.json` の `permissions.deny/ask`・`commands/stepback.md`・スキル `commit`・`sdd-docs` の写しと、会社 PC だけ `~/.claude.json` の MCP 2 件（`allow` も）を配る。会社用の前提。pi とは共有せず、ほかのスキル・子・MCP・hook・`sandbox` は持ち込まない。導入は自動化しない。試験の対象外 |
 | [0042](0042-t3-code-pi-wrapper-reads-shellenv.md) | T3 Code が起動する pi には、`shellenv.sh` を読む wrapper（`pi-t3`）で環境変数を渡す | T3 のインスタンス環境変数（静的）・fork のパッチ・`userenv.sh` だけを読む案は採らない。wrapper は `shellenv.sh` を stderr へ逃がして読み、`exec pi` するだけ（set -e なし）。撤去条件は「T3 が login shell から任意の変数を取り込むようになったとき」。T3 での確認は未了 |
 | [0043](0043-delegate-bounded-implementation-to-a-single-worker.md) | 条件を満たす実装は 1 件でも `worker` に委譲する | 範囲と合格条件を固定し、引き継ぎに見合う利点があるときに起動する |
+| [0044](0044-github-app-auto-merge-and-3os-ci.md) | `develop` 統合を GitHub App + 3 OS CI + Squash Auto-Merge へ移行する | `ai/*` 枝から専用 GitHub App で PR を立て、`ci-gate`（3 OS・保護パス Environment 承認）通過後に無承認で Squash Auto-Merge し終了後に片付ける。ADR-0039 を置き換える |
 
 撤去した決定（0001・0002・0004〜0009・0012〜0019・0021〜0028・0030・0034）は、[ADR-0037](0037-retire-custom-profile-and-other-harnesses.md) の「置き換えた決定と記録」にまとめた（本文はタグから読める）。
 
@@ -85,4 +85,6 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0035](0035-pi-sandbox-gpu-runner.md) | GPU を使う作業向けに、pi の sandbox 拡張へ設定つきの runner を足す | Superseded by ADR-0036 | 2026-11-12 | 拡張を使う方式を、`shellPath` の囲い（拡張なし）で置き換えた。実測・比較は調査記録に残る |
 | [0036](0036-pi-sandbox-shell-wrap-and-tool-policy.md) | pi の sandbox は、コマンドの実行を `shellPath` の囲い 1 つに、ファイルの道具をパスの判定に分ける | Accepted | 2026-11-12 | 「強さは起動時に選ぶ（実行中は切り替えない）」を ADR-0040 で改定（2026-11-15）。それ以外は有効 |
 | [0037](0037-retire-custom-profile-and-other-harnesses.md) | 旧 custom プロファイルと、pi 以外のハーネスを撤去する | Accepted | 2026-11-12 | ADR-0030・0034 と、自作基盤・各 CLI の生成の決定（0001・0002・0004〜0009・0012〜0019・0021〜0028）を置き換える。タグ `archive/custom-harness-2026-11-12` で復元できる |
+| [0039](0039-merge-to-develop.md) | `develop` への統合は merge、rebase は feature の追従だけ | Superseded by ADR-0044 | 2026-11-14 | 2026-11-27: GitHub App + Squash Auto-Merge へ置き換え（ADR-0044） |
 | [0043](0043-delegate-bounded-implementation-to-a-single-worker.md) | 条件を満たす実装は 1 件でも `worker` に委譲する | Accepted | 2026-11-26 | ADR-0033 の部分改定 |
+| [0044](0044-github-app-auto-merge-and-3os-ci.md) | `develop` 統合を GitHub App + 3 OS CI + Squash Auto-Merge へ移行する | Accepted | 2026-11-27 | ADR-0039 を置き換える。案件は CHG-0067 |

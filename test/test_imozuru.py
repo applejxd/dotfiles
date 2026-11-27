@@ -69,11 +69,18 @@ def test_confine_refuses_dotdot_that_leaves_the_root(work):
         mod.confine(Path(".tmp/research/topic/../../../escape"))
 
 
+def _symlink_or_skip(link: Path, target: Path, *, is_dir: bool = False) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=is_dir)
+    except (OSError, NotImplementedError):
+        pytest.skip("シンボリックリンクを作れない環境")
+
+
 def test_confine_refuses_a_symlink_that_points_outside(work):
     tmp, root = work
     outside = tmp / "outside"
     outside.mkdir()
-    (root / "link").symlink_to(outside, target_is_directory=True)
+    _symlink_or_skip(root / "link", outside, is_dir=True)
     mod = _load("imozuru_root")
     with pytest.raises(SystemExit):
         mod.confine(root / "link")
@@ -90,12 +97,12 @@ def test_confine_refuses_a_symlink_inside_the_topic(work, child):
     (root / "t").mkdir()
     mod = _load("imozuru_root")
     assert mod.confine(root / "t") == (root / "t").resolve()
-    (root / "t" / child).symlink_to(outside, target_is_directory=True)
+    _symlink_or_skip(root / "t" / child, outside, is_dir=True)
     with pytest.raises(SystemExit):
         mod.confine(root / "t")
     (root / "t" / child).unlink()
     (root / "other").mkdir()
-    (root / "t" / child).symlink_to(root / "other", target_is_directory=True)
+    _symlink_or_skip(root / "t" / child, root / "other", is_dir=True)
     with pytest.raises(SystemExit):
         mod.confine(root / "t")
 
@@ -104,7 +111,7 @@ def test_confine_refuses_a_root_that_is_a_symlink(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     real = tmp_path / "real"
     (real / "research").mkdir(parents=True)
-    (tmp_path / ".tmp").symlink_to(real, target_is_directory=True)
+    _symlink_or_skip(tmp_path / ".tmp", real, is_dir=True)
     mod = _load("imozuru_root")
     with pytest.raises(SystemExit):
         mod.confine(Path(".tmp/research/topic"))
@@ -331,7 +338,7 @@ def test_scripts_refuse_a_topic_that_contains_a_symlink(work):
     tmp, root = work
     (tmp / "outside").mkdir()
     (root / "t" / "sources").mkdir(parents=True)
-    (root / "t" / "watch").symlink_to(tmp / "outside", target_is_directory=True)
+    _symlink_or_skip(root / "t" / "watch", tmp / "outside", is_dir=True)
     for script, args in (
         ("watch.py", ["check", ".tmp/research/t"]),
         ("report.py", [".tmp/research/t"]),

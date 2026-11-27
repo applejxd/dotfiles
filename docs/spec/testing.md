@@ -43,6 +43,24 @@ Python の Windows 環境変数復元処理は空文字列を削除してしま�
 空の `core.fsmonitor` だけを同じ無効状態の `false` に置き換える。
 その他の有効な Git 設定は保持する。
 
+## 3 OS の GitHub Actions（`ci.yml` と `ci-gate`）
+
+`.github/workflows/ci.yml` が `main` / `develop` への push・すべての `pull_request`（`opened`・`synchronize`・`reopened`・`edited`）・手動実行で起動し、単一の集約ジョブ `ci-gate` に合否を集約する（[ADR-0044](../adr/0044-github-app-auto-merge-and-3os-ci.md)）。
+
+| ジョブ | ランナー | 内容 |
+| --- | --- | --- |
+| `policy` | `ubuntu-24.04` | PR タイトルの Conventional Commits 検査と保護パスの検出（`scripts/ci_policy.py`） |
+| `static` | `ubuntu-24.04` | `mise` 導入後に `pre-commit`（commit 段・pre-push 段の `lint-templates-local` を含む）、全 `*.sh` の `shellcheck`、`test_verify`・`test_ci_policy`・`test_ai_pr` |
+| `linux` | `ubuntu-24.04` | `chezmoi`・`zsh` 導入後に `test/` 全件の pytest |
+| `windows` | `windows-2025` | `PYTHONUTF8=1` で共通コア + `test_windows_assets`・`test_powershell_functions`・`test_windows_terminal_settings`・`test_t3code_remote_access`・`test_pk` |
+| `macos` | `macos-latest` | 共通コア + `test_bootstrap_scripts`（BSD `date` 含む）・`test_shell_*`・`test_zshenv_tmpdir`・`test_pk` |
+| `protected-approval` | `ubuntu-24.04` | 保護パス変更を含む PR だけ、上記全ジョブ通過後に Environment `protected-path-approval`（`deployment: false`）でオーナー承認待ち |
+| `ci-gate` | `ubuntu-24.04` | `if: always()` で全ジョブの `success` を検証（依存失敗による `skipped` 通過を禁止） |
+
+未マージのまま close された同一リポジトリ内の `ai/*` 枝は `.github/workflows/cleanup-closed-ai-branch.yml` が自動削除する。
+
+**CI が見ない範囲（実機必須）**: `test_powershell_interactive`（ConPTY＋配備済み実プロファイル）、`test_pi_commands_doc`・`test_pi_permission_decisions`（pi 導入済み依存）、`.chezmoiscripts` の実実行（winget / UAC / Touch ID）、`applejxd` 個人分岐。
+
 ## Linux の GitHub Actions
 
 `.github/workflows/linux.yml` が `ubuntu-24.04` の素の runner で pytest の全件を回す

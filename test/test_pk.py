@@ -61,7 +61,7 @@ def test_runs_the_entry_with_arguments_and_passes_the_exit_code(keep):
 
 def test_unique_partial_match_runs_and_ambiguous_does_not(keep):
     marker = keep.parent / "ran"
-    body = f"touch {marker}\n"
+    body = f'touch "{marker.as_posix()}"\n'
     make_topic(keep, "pending-e2e", {"a.sh": body})
     make_topic(keep, "pending-cleanup", {"b.sh": body})
     ok = pk(keep, "e2e")
@@ -107,9 +107,12 @@ def test_path_like_topic_names_are_refused(keep, bad):
 def test_an_entry_symlinked_outside_the_root_is_refused(keep):
     marker = keep.parent / "ran"
     outside = keep.parent / "outside.sh"
-    outside.write_text(f"touch {marker}\n", encoding="utf-8")
+    outside.write_text(f'touch "{marker.as_posix()}"\n', encoding="utf-8")
     d = make_topic(keep, "t", {})
-    (d / "run.sh").symlink_to(outside)
+    try:
+        (d / "run.sh").symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("シンボリックリンクを作れない環境")
     r = pk(keep, "t")
     assert r.returncode == 2 and "外" in r.stderr
     assert not marker.exists(), "置き場の外のスクリプトが実行された"

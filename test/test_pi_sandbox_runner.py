@@ -1291,6 +1291,7 @@ def test_load_config_reads_the_local_file_next_to_the_shared_one(tmp_path):
     assert runner.load_config(shared).hide_dirs == ("~/.ssh", "~/notes")
 
 
+@linux_only
 def test_load_config_follows_a_valid_symlink_for_the_local_file(tmp_path):
     (tmp_path / "runner.toml").write_text(MINIMAL, encoding="utf-8")
     real = tmp_path / "elsewhere.toml"
@@ -2357,22 +2358,26 @@ def test_pib_refuses_a_managed_tool_that_is_a_link_leaving_the_protected_place(t
     assert any(str(bin_dir / name) in line and "既定の位置の外" in line for line in found), found
 
 
+@linux_only
 def test_pib_accepts_control_files_in_place(tmp_path):
     home, env = make_setup(tmp_path)
     (home / ".config" / "pi-sandbox" / "runner.local.toml").write_text(MINIMAL, encoding="utf-8")
     assert pib.problems(env, home, tmp_path / "work") == []
 
 
+@linux_only
 def test_pib_accepts_a_complete_setup(tmp_path):
     home, env = make_setup(tmp_path)
     assert pib.problems(env, home, tmp_path / "work") == []
 
 
+@linux_only
 def test_pib_accepts_a_tilde_shell_path(tmp_path):
     home, env = make_setup(tmp_path, settings={"shellPath": "~/.local/bin/pib-shell"})
     assert pib.problems(env, home, tmp_path / "work") == []
 
 
+@linux_only
 @pytest.mark.parametrize(
     ("kwargs", "needle"),
     [
@@ -2393,12 +2398,14 @@ def test_pib_names_what_is_missing(tmp_path, kwargs, needle):
     assert any(needle in line for line in found), found
 
 
+@linux_only
 def test_pib_refuses_a_broken_settings_file(tmp_path):
     home, env = make_setup(tmp_path, settings=False)
     (home / ".pi" / "agent" / "settings.json").write_text("{not json", encoding="utf-8")
     assert any("読めない" in line for line in pib.problems(env, home, tmp_path / "work"))
 
 
+@linux_only
 def test_pib_refuses_a_project_setting_that_overrides_the_shell(tmp_path):
     """プロジェクトの設定は利用者の設定を上書きする。ここで shellPath を替えられると、囲いなしで動く。"""
     home, env = make_setup(tmp_path)
@@ -2450,6 +2457,7 @@ def test_pib_refuses_a_project_setting_that_is_a_directory(tmp_path):
     assert any("読めない" in line for line in pib.problems(env, home, work))
 
 
+@linux_only
 def test_pib_reads_settings_with_a_bom_the_way_pi_does(tmp_path):
     """pi は BOM を取り除いて読む。BOM 付きで囲いを外す値を書いても、通さない。BOM 付きの正しい値は通す。"""
     home, env = make_setup(tmp_path)
@@ -2466,6 +2474,7 @@ def test_pib_reads_settings_with_a_bom_the_way_pi_does(tmp_path):
     assert pib.problems(env, home, work) == []
 
 
+@linux_only
 def test_pib_requires_the_deployed_path_itself_not_an_alias_of_it(tmp_path):
     """別名 (シンボリックリンク) は、内側から別のシェルへ付け替えられる。配備先の絶対パスそのものだけを認める。"""
     home, env = make_setup(tmp_path)
@@ -2493,6 +2502,7 @@ def test_pib_requires_the_deployed_path_itself_not_an_alias_of_it(tmp_path):
     assert any("絶対パスそのもの" in line for line in found), found
 
 
+@linux_only
 def test_pib_resolves_the_agent_dir_the_way_pi_does(tmp_path, monkeypatch):
     """pi は PI_CODING_AGENT_DIR の ~ と ~/ を展開する。展開せずに読むと、作業ディレクトリの偽の設定を検査してしまう。"""
     home, env = make_setup(
@@ -2511,6 +2521,7 @@ def test_pib_resolves_the_agent_dir_the_way_pi_does(tmp_path, monkeypatch):
     )  # ホーム側の本物の設定を検査して、止める
 
 
+@linux_only
 @pytest.mark.parametrize(
     ("value", "relative"),
     [("~", ""), ("~/agent", "agent"), (None, ".pi/agent")],
@@ -2576,6 +2587,7 @@ def test_pib_refuses_locations_the_file_tool_guard_does_not_cover(tmp_path, name
     assert any(line.startswith(f"{name} は既定の場所") for line in found), found
 
 
+@linux_only
 def test_pib_accepts_the_default_locations_when_they_are_spelled_out(tmp_path):
     home, env = make_setup(tmp_path)
     env = {

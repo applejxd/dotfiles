@@ -344,6 +344,7 @@ def interpreter_command(rendered: str) -> str:
     return lines[index + 1].strip()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Unix の lookPath による python3.x 探索の試験 (Windows は py -3 固定)")
 @pytest.mark.parametrize(
     ("available", "expected"),
     [
@@ -364,6 +365,7 @@ def test_interpreter_prefers_newest_versioned_python(tmp_path, available, expect
     assert interpreter_command(render_config(path_dir=bin_dir)) == expected
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Unix の lookPath による shim フォールバックの試験 (Windows は py -3 固定)")
 @pytest.mark.parametrize("available", [[], ["python3"], ["python3", "python3.10"]])
 def test_interpreter_falls_back_to_shim_without_modern_python(tmp_path, available):
     """3.11 以上が PATH に無ければ、005 が張る shim の絶対パスを指す。

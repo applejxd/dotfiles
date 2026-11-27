@@ -256,7 +256,7 @@ def test_stock_settings_from_empty_input(tmp_path):
         "defaultModel": "us.anthropic.claude-sonnet-5-5",
         "defaultThinkingLevel": "medium",
         "enabledModels": ["amazon-bedrock/us.anthropic.claude-sonnet-5-5", "amazon-bedrock/*"],
-        "shellPath": str(tmp_path / ".local" / "bin" / "pib-shell"),  # Linux だけ (下の試験)
+        "shellPath": f"{tmp_path}/.local/bin/pib-shell",  # Linux だけ (下の試験)
     }
 
 
@@ -279,7 +279,7 @@ def test_stock_settings_keeps_the_users_enabled_models_and_is_idempotent(tmp_pat
 def test_stock_settings_points_the_shell_at_pib_shell_only_on_linux(tmp_path):
     """pi のシェルは、コマンド実行の囲い (pib-shell) を指す。bwrap は Linux 専用なので、他の OS には入れない。"""
     linux = json.loads(run_script(stock_settings_script(tmp_path, "linux"), "{}"))
-    assert linux["shellPath"] == str(tmp_path / ".local" / "bin" / "pib-shell")
+    assert linux["shellPath"] == f"{tmp_path}/.local/bin/pib-shell"
     for os_name in ("darwin", "windows"):
         assert "shellPath" not in json.loads(run_script(stock_settings_script(tmp_path, os_name), "{}"))
 
