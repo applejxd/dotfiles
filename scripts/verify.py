@@ -245,8 +245,11 @@ RULES: tuple[Rule, ...] = (
         ("test_t3_usage_status",),
     ),
     Rule(
-        "Pi の Copilot 画像ガード試作",
-        ("prototypes/pi-copilot-image-guard/**",),
+        "Pi の Copilot 画像ガード",
+        (
+            "home/dot_pi/agent/local-packages/pi-copilot-image-guard/**",
+            "test/agents/pi_stock/copilot_image_guard.test.mjs",
+        ),
         ("test_pi_copilot_image_guard",),
     ),
     Rule("env-check", ("home/dot_agents/skills/env-check/**",), ("test_env_check",)),

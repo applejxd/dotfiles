@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import guard from "./index.js";
+import guard from "../../../home/dot_pi/agent/local-packages/pi-copilot-image-guard/src/index.js";
 
 const ids = ["gemini-3.8-flash", "gemini-4-argon", "gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-neon"];
 const model = (id = ids.at(-1), provider = "github-copilot", api = "openai-completions") => ({ id, provider, api });
@@ -26,12 +26,14 @@ function hooks(selected = model()) {
     assert.equal(request(payload), undefined, "送信直前は検査のみ");
     return payload;
   };
-  return { ctx, notices, project, request, run };
+  const cacheWarming = () => handlers.get("cache_warming_decision")({ action: "warm" }, ctx);
+  return { ctx, notices, project, request, run, cacheWarming };
 }
 
 for (const id of ids) {
   test(`${id}: 今回とツールの画像を保護し、履歴の最古から減らす`, () => {
-    const { ctx, notices, run } = hooks(model(id));
+    const { ctx, notices, run, cacheWarming } = hooks(model(id));
+    assert.deepEqual(cacheWarming(), { action: "stop" });
     const old = many(9);
     const latest = [image(10), image(11)];
     const transcript = [message("user", ...old), message("assistant"), message("user", latest[0]), message("toolResult", latest[1])];
@@ -178,7 +180,8 @@ test("対象外モデルのサブリクエストには非干渉、スナップ�
 
 for (const candidate of [model("gpt-6.2-sol"), model("claude-opus-5.5"), model("gemini-next"), model(ids.at(-1), "google"), model(ids.at(-1), "github-copilot", "openai-responses")]) {
   test(`非対象: ${candidate.provider}/${candidate.id} (${candidate.api})`, () => {
-    const { ctx, notices, project, request } = hooks(candidate);
+    const { ctx, notices, project, request, cacheWarming } = hooks(candidate);
+    assert.equal(cacheWarming(), undefined);
     const transcript = [message("user", ...many(11))];
     assert.equal(project(transcript), transcript);
     assert.equal(request(outbound(candidate.id, transcript)), undefined);

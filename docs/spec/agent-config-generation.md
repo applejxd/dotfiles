@@ -299,11 +299,20 @@ package `cc-safety-net` は、破壊的なコマンド（`git reset --hard`・`r
 
 自作の拡張（[ADR-0031](../adr/0031-evaluate-existing-extensions-first.md) の例外の一覧にあるもの）は、先例（`pi-permission-explain`・`pi-sandbox-toggle`・`t3-usage-status`。2026-11-19 にここへ記録）に従う。
 
-- **置き場**: `home/dot_pi/agent/local-packages/<名前>/`（配備先は `~/.pi/agent/local-packages/<名前>/`）。pi の package の形で、`package.json` の `pi.extensions` が `./src/index.ts` を指す。本体が出すもの（`@earendil-works/pi-coding-agent`）は `dependencies` に入れず、`peerDependencies`（`optional`）にする。
+- **置き場**: `home/dot_pi/agent/local-packages/<名前>/`（配備先は `~/.pi/agent/local-packages/<名前>/`）。pi の package の形で、`package.json` の `pi.extensions` が実装の入口を指す（例: `./src/index.ts`）。本体が提供する依存は `dependencies` に入れず、使う場合は `peerDependencies`（`optional`）にする。
 - **読み込み**: `pi-stock-packages` に `./local-packages/<名前>` を 1 行足す（`settings.json` からの相対パス）。OS を限るなら、その行だけをテンプレートの条件で囲み、`.chezmoiignore.tmpl` でも配備を除く（`pi-sandbox-toggle` は Linux だけ）。OS を問わない拡張（`t3-usage-status`）は無条件の 1 行にする。
 - **配らないもの**: stock は、自作の拡張のコードを `~/.pi/agent/extensions/` へ配らない（そこにあるのは package の設定だけ）。
 - **保護**: 配備先は `path_write` で deny（`~/.pi/agent/local-packages`。[判定表](#権限の方針の試験)）。囲いの外の pi 本体で実行されるコードなので、ファイルの道具で書き換えさせない。
 - **試験の登録**: `test/test_<名前>.py` を作り、`scripts/verify.py` の `Rule` に `home/dot_pi/agent/local-packages/<名前>/**` を登録する。配線（`pi-stock-packages` の 1 行）は `test/test_pi_stock_config.py` の `LOCAL_PACKAGES` と配線の試験で固定する。
+
+### Copilot Gemini の画像ガード
+
+自宅・会社の標準 Pi で [`pi-copilot-image-guard`](../../home/dot_pi/agent/local-packages/pi-copilot-image-guard/README.md) を既定で読み込む。
+対象は Copilot 経由の Neon・Carbon・Argon・Hydrogen・3.8 Flash。履歴の古い画像だけを送信用コピーから省き、現在ターンだけで上限を超えたら送信を止める。Sol・Claude・Google 直接 API・Bedrock、既定モデルの割り当ては変えない。
+
+既存環境では `chezmoi apply ~/.pi/agent/local-packages/pi-copilot-image-guard ~/.pi/agent/settings.json` で配備し、Pi を開き直す。
+
+**撤去条件**: Pi 本体・Copilot 側・代替拡張が、利用中の Pi と Copilot の経路で同等の画像対策を提供したら削除する。履歴のみの省略と、現在ターンだけでの超過時に画像を捨てずに止める挙動を先に確認する。撤去時は `pi-stock-packages` の登録、ローカル package、専用試験・検証規則を外す。配備済みのディレクトリは `.chezmoiremove` で削除する。
 
 ### Windows
 

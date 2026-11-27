@@ -1,4 +1,4 @@
-"""未配備の画像ガード。外部 API、実際の認証、実際のセッションを使わない。"""
+"""Pi の画像ガード。外部 API、実際の認証、実際のセッションを使わない。"""
 
 from __future__ import annotations
 
@@ -16,7 +16,9 @@ from threading import Thread
 
 import pytest
 
-PROTOTYPE = Path(__file__).resolve().parents[1] / "prototypes" / "pi-copilot-image-guard"
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE_PACKAGE = ROOT / "home" / "dot_pi" / "agent" / "local-packages" / "pi-copilot-image-guard"
+GUARD_TEST = ROOT / "test" / "agents" / "pi_stock" / "copilot_image_guard.test.mjs"
 MODEL = "gemini-4-neon"
 
 
@@ -25,7 +27,7 @@ def test_image_guard_hooks():
     if not node:
         pytest.skip("Node.js が無いため拡張の単体試験を実行できない")
     result = subprocess.run(
-        [node, "--test", "guard.test.mjs"], cwd=PROTOTYPE, capture_output=True, text=True, encoding="utf-8", timeout=20,
+        [node, "--test", str(GUARD_TEST)], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=20,
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -77,7 +79,12 @@ def test_pi_mock_gateway(tmp_path):
         pytest.fail("PI_IMAGE_GUARD_TEST_PI の Pi が見つからない")
     agent_dir = tmp_path / "agent"
     agent_dir.mkdir()
-    (agent_dir / "settings.json").write_text('{"images":{"autoResize":false},"retry":{"enabled":false}}')
+    # -e を使わず、配備と同じ相対パスを package に登録して読み込む。
+    shutil.copytree(SOURCE_PACKAGE, agent_dir / "local-packages" / "pi-copilot-image-guard")
+    (agent_dir / "settings.json").write_text(json.dumps({
+        "packages": ["./local-packages/pi-copilot-image-guard"],
+        "images": {"autoResize": False}, "retry": {"enabled": False},
+    }), encoding="utf-8")
 
     # Pi が動く Node 内では、模擬サーバ以外の HTTP リクエストを拒む。
     network_guard = tmp_path / "loopback-only.mjs"
@@ -115,8 +122,8 @@ def _exercise_rpc(pi, tmp_path, agent_dir, origin, network_guard, requests):
         "HOME": str(tmp_path), "USERPROFILE": str(tmp_path), "PI_CODING_AGENT_DIR": str(agent_dir),
         "NODE_OPTIONS": f'--import="{network_guard.as_uri()}"', "IMAGE_GUARD_MOCK_ORIGIN": origin,
     })
-    args = [pi, "--offline", "--mode", "rpc", "--no-session", "--tools", "read", "--no-extensions",
-            "--no-skills", "--provider", "github-copilot", "--model", MODEL, "-e", str(PROTOTYPE / "index.js")]
+    args = [pi, "--offline", "--mode", "rpc", "--no-session", "--tools", "read",
+            "--no-skills", "--provider", "github-copilot", "--model", MODEL]
     with subprocess.Popen(args, cwd=tmp_path, env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE, text=True, encoding="utf-8") as process:
         records = Queue()

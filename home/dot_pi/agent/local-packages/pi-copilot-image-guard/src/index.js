@@ -85,6 +85,8 @@ function stop(ctx, reason) {
 
 export default function copilotImageGuard(pi) {
   let pending;
+  // 同じ要求を別の signal で再送する cache warming は、現在ターンの照合を通らない。
+  pi.on("cache_warming_decision", (_event, ctx) => isTarget(ctx.model) ? { action: "stop" } : undefined);
   pi.on("context_with_system", (event, ctx) => {
     pending = undefined;
     if (!isTarget(ctx.model)) return;
