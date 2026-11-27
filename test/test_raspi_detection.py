@@ -58,9 +58,10 @@ def context(
     username: str = "applejxd",
     osrelease: str = "6.8.0-45-generic",
     is_raspi: bool | None = None,
+    no_sudo: bool | None = None,
     home: str = "/home/applejxd",
 ) -> dict:
-    """描画コンテキストを組み立てる。`is_raspi` は None なら鍵ごと省く。"""
+    """描画コンテキストを組み立てる。`is_raspi` / `no_sudo` は None なら鍵ごと省く。"""
     data: dict = {
         "chezmoi": {
             "os": os_name,
@@ -71,6 +72,8 @@ def context(
     }
     if is_raspi is not None:
         data["is_raspi"] = is_raspi
+    if no_sudo is not None:
+        data["no_sudo"] = no_sudo
     return data
 
 
@@ -399,8 +402,12 @@ def test_raspi_excludes_gui_assets(target):
 
 @pytest.mark.parametrize("target", RASPI_EXCLUDED)
 def test_ordinary_linux_keeps_gui_assets(target):
-    """Raspberry Pi 以外の native Linux では従来どおり配る。"""
-    assert target not in ignore_entries(context(is_raspi=False))
+    """Raspberry Pi 以外の native Linux（sudo あり）では従来どおり配る。
+
+    Windows runner のように PATH に sudo が無いホストでは no-sudo が自動発動して
+    110_native/ が除外されるため、sudo あり (no_sudo=False) を明示してホスト非依存にする。
+    """
+    assert target not in ignore_entries(context(is_raspi=False, no_sudo=False))
 
 
 def test_wsl_script_is_excluded_on_native_linux():
