@@ -5,13 +5,9 @@ description = "Dotfiles for personal configuration"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "keypirinha-stub",
     "pre-commit>=4.3.0",
     "yamllint>=1.35.1",
 ]
-
-[tool.uv.sources]
-keypirinha-stub = { git = "https://github.com/applejxd/keypirinha-stub.git" }
 
 [tool.pytest.ini_options]
 # 一時領域の肥大を防ぐ。pytest 既定は直近 3 回分を全部残し、TMPDIR に 5 GB 積み上がった。
