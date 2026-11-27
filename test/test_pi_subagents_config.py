@@ -360,10 +360,15 @@ def test_home_settings_assigns_models_by_role_for_copilot(home_settings_script):
 
 def test_work_settings_assigns_models_by_role_for_copilot(work_copilot_settings_script):
     first = run(work_copilot_settings_script, "{}")
-    models = {n: e["model"] for n, e in by_provider(json.loads(first))["github-copilot"].items()}
+    out = json.loads(first)
+    assert out["defaultProvider"] == "github-copilot"
+    assert out["defaultModel"] == "gemini-4-neon"
+    assert out["defaultThinkingLevel"] == "medium"
+    assert out["enabledModels"] == ["github-copilot/gemini-4-neon", "github-copilot/*"]
+    models = {n: e["model"] for n, e in by_provider(out)["github-copilot"].items()}
     assert models == {
         "scout": "github-copilot/claude-sonnet-5.5:low",
-        "researcher": "github-copilot/claude-sonnet-5.5:medium",
+        "researcher": "github-copilot/gemini-4-neon:medium",
         "worker": "github-copilot/claude-sonnet-5.5:medium",
         "reviewer": "github-copilot/gpt-6.2-sol:high",
         "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
@@ -404,16 +409,105 @@ def test_work_settings_switches_profiles_without_leaving_inactive_defaults(setti
     switched = run(work_copilot_settings_script, bedrock)
     out = json.loads(switched)
     assert out["defaultProvider"] == "github-copilot"
-    assert out["defaultModel"] == "claude-sonnet-5.5"
+    assert out["defaultModel"] == "gemini-4-neon"
     assert out["defaultThinkingLevel"] == "medium"
-    assert out["enabledModels"] == ["github-copilot/claude-sonnet-5.5", "github-copilot/*"]
+    assert out["enabledModels"] == ["github-copilot/gemini-4-neon", "github-copilot/*"]
     assert set(by_provider(out)) == {"github-copilot"}
     assert run(work_copilot_settings_script, switched) == switched
     restored = run(settings_script, switched)
     restored_data = json.loads(restored)
     assert set(restored_data.pop("dotfilesWorkPiModels")) == {"github-copilot"}
+    assert restored_data.pop("dotfilesWorkCopilotModels") == {"parentMigrated": True}
     assert restored_data == json.loads(bedrock)
     assert run(settings_script, restored) == restored
+    assert json.loads(run(work_copilot_settings_script, restored)) == out
+
+
+@pytest.mark.parametrize("inactive", [False, True])
+def test_work_copilot_migrates_legacy_parent_once(settings_script, work_copilot_settings_script, inactive):
+    old = {
+        "defaultProvider": "github-copilot",
+        "defaultModel": "claude-sonnet-5.5",
+        "defaultThinkingLevel": "medium",
+        "enabledModels": ["github-copilot/claude-sonnet-5.5", "github-copilot/gemini-4-neon:high"],
+    }
+    before = json.dumps(old)
+    if inactive:
+        before = run(settings_script, before)
+    after = run(work_copilot_settings_script, before)
+    out = json.loads(after)
+    assert out["defaultModel"] == "gemini-4-neon"
+    assert out["defaultThinkingLevel"] == "medium"
+    assert out["enabledModels"] == ["github-copilot/gemini-4-neon", *old["enabledModels"]]
+    assert run(work_copilot_settings_script, after) == after
+
+    out["defaultModel"] = "claude-sonnet-5.5"
+    reselected = run(settings_script, json.dumps(out))
+    restored = json.loads(run(work_copilot_settings_script, reselected))
+    assert restored["defaultModel"] == "claude-sonnet-5.5"
+    assert restored["defaultThinkingLevel"] == "medium"
+    assert restored["enabledModels"][0] == "github-copilot/claude-sonnet-5.5"
+
+
+@pytest.mark.parametrize("thinking", [None, "high"])
+def test_work_copilot_keeps_sonnet_without_the_exact_legacy_effort(work_copilot_settings_script, thinking):
+    old = {"defaultProvider": "github-copilot", "defaultModel": "claude-sonnet-5.5"}
+    if thinking is not None:
+        old["defaultThinkingLevel"] = thinking
+    after = run(work_copilot_settings_script, json.dumps(old))
+    out = json.loads(after)
+    assert out["defaultModel"] == "claude-sonnet-5.5"
+    assert out["defaultThinkingLevel"] == (thinking or "medium")
+    assert run(work_copilot_settings_script, after) == after
+
+
+@pytest.mark.parametrize("enabled_effort, model_effort, expected_model", [
+    ("high", None, "claude-sonnet-5.5"),
+    (None, "high", "claude-sonnet-5.5"),
+    ("medium", "high", "gemini-4-neon"),
+])
+@pytest.mark.parametrize("inactive", [False, True])
+def test_work_copilot_respects_startup_effort_precedence(
+    settings_script, work_copilot_settings_script, enabled_effort, model_effort, expected_model, inactive,
+):
+    sonnet = "github-copilot/claude-sonnet-5.5"
+    candidate = f"{sonnet}:{enabled_effort}" if enabled_effort else sonnet
+    old = {
+        "defaultProvider": "github-copilot",
+        "defaultModel": "claude-sonnet-5.5",
+        "defaultThinkingLevel": "medium",
+        "enabledModels": [candidate, "github-copilot/*"],
+    }
+    if model_effort:
+        old["modelThinkingLevels"] = {sonnet: model_effort}
+    before = json.dumps(old)
+    if inactive:
+        before = run(settings_script, before)
+    out = json.loads(run(work_copilot_settings_script, before))
+    assert out["defaultModel"] == expected_model
+    assert out.get("modelThinkingLevels") == old.get("modelThinkingLevels")
+    expected_first = "github-copilot/gemini-4-neon" if expected_model == "gemini-4-neon" else candidate
+    assert out["enabledModels"][0] == expected_first
+    assert candidate in out["enabledModels"]
+
+
+@pytest.mark.parametrize("copilot_first", [False, True])
+def test_work_bedrock_preserves_a_preexisting_neon_researcher(settings_script, work_copilot_settings_script, copilot_first):
+    entry = {"model": "github-copilot/gemini-4-neon:medium", "description": "mine"}
+    before = json.dumps({"subagents": {"agentOverridesByProvider": {"github-copilot": {"researcher": entry}}}})
+    if copilot_first:
+        before = run(work_copilot_settings_script, before)
+    out = json.loads(run(settings_script, before))
+    assert by_provider(out)["github-copilot"]["researcher"] == entry
+
+
+@pytest.mark.parametrize("thinking", ["medium", "high"])
+def test_work_copilot_migrates_only_the_legacy_sonnet_researcher(work_copilot_settings_script, thinking):
+    entry = {"model": f"github-copilot/claude-sonnet-5.5:{thinking}", "description": "mine"}
+    before = {"subagents": {"agentOverridesByProvider": {"github-copilot": {"researcher": entry}}}}
+    out = json.loads(run(work_copilot_settings_script, json.dumps(before)))
+    expected = "github-copilot/gemini-4-neon:medium" if thinking == "medium" else entry["model"]
+    assert by_provider(out)["github-copilot"]["researcher"] == {**entry, "model": expected}
 
 
 def test_work_settings_restores_custom_parent_and_candidates_on_round_trip(settings_script, work_copilot_settings_script):

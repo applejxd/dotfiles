@@ -384,9 +384,9 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
 
 1. `chezmoi edit-config` で既存の `[data]` に `work_pi_profile = "copilot"` を追加する。Bedrock に戻すには `"bedrock"` にするか、キーを削除する。未指定なら Bedrock。不正な値では反映が止まる。
 2. 利用者の端末で `chezmoi apply ~/.pi/agent/settings.json` を実行する。
-3. Pi では新しいセッション、T3 Code では新しいスレッドを開く。作業前に親モデルのプロバイダを確かめる。旧セッションを再開すると当時のモデルが復元される。
+3. Pi では新しいセッション、T3 Code では新しいスレッドを開く。作業前に親のプロバイダ・モデル・思考レベルを確かめる。旧セッションを再開すると当時のモデルが復元される。
 
-既定の親は Sonnet 5.5 `medium`。同じプロバイダで選んだ親モデルや思考レベルは保つ。`enabledModels` には選んだプロバイダの候補だけを残し、親モデルを先頭に置く。
+既定の親は、Bedrock が Sonnet 5.5 `medium`、Copilot が Gemini 4 Neon `medium`。同じプロバイダで選んだ親モデルや思考レベルは、旧既定の移行時を除いて保つ。`enabledModels` には選んだプロバイダの候補だけを残し、親モデルを先頭に置く。
 
 - 別の会社プロファイルへ切り替えると、親モデル・思考レベル・候補を `settings.json` の `dotfilesWorkPiModels` に退避する。元に戻すと復元する。他のプロバイダや曖昧な候補も退避するが、会社の起動候補には入れない。
 - 選択していない側の子モデルの既定は除き、個別に設定した割り当ては保つ。認証・履歴・検索 MCP は変えない。
@@ -404,31 +404,38 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
     - 同時数の上限に当たったことは無い（2026-11-10 に 4 本を同時に回して、上限に達しなかった）。先に詰まりやすいのは、全件検査の CPU（`feature-orchestration` の落とし穴に記録。**推測**）と、親の確認の手間。
   - 利用者が足した他のキーは保つ。壊れた JSON は触らない。何度流しても同じ。
 - **settings の `subagents.agentOverrides`**（`modify_pi_stock_settings.py.tmpl`）: 組み込みの `scout`（`read`・`grep`・`find`・`ls`・`contact_supervisor`）と `oracle`（`read`・`grep`・`find`・`ls`）の `tools` を読み取り専用に絞る（組み込みの既定は `bash`・`write` を持つ）。`reviewer`（読み取り専用）・`worker` は変えない。検索の子 `researcher`（`read`・`write`）・`evidence-auditor`（`read`）には、機の検索・取得の MCP を `mcp:websearch`（家）・`mcp:agentcore-websearch` と `mcp:webfetch`（会社 PC）で足し、組み込みの prompt の食い違いを直す `systemPrompt` を置く（[理由と会社 PC の設定](mcp-servers.md#子のエージェントへの検索-mcp-の渡し方)）。利用者が同じ役の `tools` を書いていれば保つ（無いときだけ補う）。`systemPrompt` だけは repo が管理し、毎回揃える。他の `subagents` のキー・他の役の上書きも保つ。
-- 会社で使うプロバイダは [会社の Pi のモデルプロファイル](#会社の-pi-のモデルプロファイルを切り替える) で選ぶ。
-- **役割ごとのモデル**（`modify_pi_stock_settings.py.tmpl` の `PROVIDER_AGENT_MODELS` と `HOME_COPILOT_MODELS`。`subagents.agentOverridesByProvider.<プロバイダ>.<名>.model`。`:` の後ろは思考の深さ）: 家の機では Copilot のモデルを、実装 = Sonnet / レビュー・証拠監査 = Sol / 調査・delegate = Neon / 判定 = Carbon に振り分ける。会社 PC では選んだプロバイダの既定だけを生成する。会社 Copilot の `scout`・`researcher`・`worker` は Sonnet 5.5 `low`・`medium`・`medium`。`reviewer`・`evidence-auditor`・`oracle` は Sol 6.2 `high`。`delegate` は親を継ぐ。Opus・Fable・Astra を子の既定にはしない。pi-subagents は**親のセッションのモデルのプロバイダごとに層を重ねる**（`/model` で替えても追従する。apply 時の `defaultProvider` には依らない）。知らないプロバイダの子は親のモデルを継ぐ。利用者が書いた `model` は保つ。
+- **役割ごとのモデル**: 起動時の親と子の既定は、自宅 Copilot・会社 Bedrock・会社 Copilot の 3 プロファイルで異なる。会社では [`work_pi_profile`](#会社の-pi-のモデルプロファイルを切り替える) で選ぶ。表の `:` の後ろは思考の深さを示す。
 
-  | 役割 | github-copilot（家） | amazon-bedrock（会社） | 理由 |
+  | 役割 | 自宅 Copilot (`github-copilot`) | 会社 Bedrock (`amazon-bedrock`) | 会社 Copilot (`github-copilot`) |
   | --- | --- | --- | --- |
-  | `worker` | `claude-sonnet-5.5:high` | `us.anthropic.claude-sonnet-5-5:medium` | 実装は Sonnet に任せる。Copilot は high（2026-11-26 の利用者の指示。前は medium） |
-  | `reviewer` | `gpt-6.2-sol:high` | `us.openai.gpt-6.2-sol:high` | コードレビューは実装（Claude）と別系統の GPT に任せ、独立した目で見る（second_opinion） |
-  | `evidence-auditor` | `gpt-6.2-sol:high` | `us.openai.gpt-6.2-sol:high` | 証拠監査は Sol high（2026-11-26 の利用者の指示。前は Carbon medium。「知らないと言える」ことを優先した AA-Omniscience の根拠は、Carbon を選んだ時点のもの） |
-  | `oracle` | `gemini-4-carbon:high` | `us.openai.gpt-6.2-sol:high` | 家では実装・レビューと別系統。Bedrock ではレビューと同じ Sol を使う。`advisor` は `oracle` の別名（`aliases: advisor`）で、設定は正規名の `oracle` に書く（同じ割り当てになる） |
-  | `scout` | `gemini-4-neon:medium` | `us.anthropic.claude-sonnet-5-5:low` | 速い調査（**新しい判断**。2026-11-26 の利用者の指示。前は Sonnet low） |
-  | `researcher` | `gemini-4-neon:xhigh` | `us.anthropic.claude-sonnet-5-5:medium` | 調査の合成（**新しい判断**。2026-11-26 の利用者の指示。前は Sonnet medium。`gemini-4-neon` は `xhigh` を受け付ける。Carbon は受け付けない） |
-  | `delegate` | `gemini-4-neon:high` | （設定なし。親を継ぐ） | 軽量な汎用の子（2026-11-26 の利用者の指示。Bedrock は変えない） |
+  | 親（起動時） | `gpt-6.2-sol:high` | `us.anthropic.claude-sonnet-5-5:medium` | `gemini-4-neon:medium` |
+  | `scout` | `gemini-4-neon:medium` | `us.anthropic.claude-sonnet-5-5:low` | `claude-sonnet-5.5:low` |
+  | `researcher` | `gemini-4-neon:xhigh` | `us.anthropic.claude-sonnet-5-5:medium` | `gemini-4-neon:medium` |
+  | `worker` | `claude-sonnet-5.5:high` | `us.anthropic.claude-sonnet-5-5:medium` | `claude-sonnet-5.5:medium` |
+  | `reviewer` | `gpt-6.2-sol:high` | `us.openai.gpt-6.2-sol:high` | `gpt-6.2-sol:high` |
+  | `evidence-auditor` | `gpt-6.2-sol:high` | `us.openai.gpt-6.2-sol:high` | `gpt-6.2-sol:high` |
+  | `oracle` | `gemini-4-carbon:high` | `us.openai.gpt-6.2-sol:high` | `gpt-6.2-sol:high` |
+  | `delegate` | `gemini-4-neon:high` | 設定なし（親のモデルを継ぐ） | 設定なし（親のモデルを継ぐ） |
 
-  **根拠**: 2026-11-26 に利用者が示した割り当て表（ChatGPT の提案。親 = Sol high、scout = Neon medium、researcher = Neon xhigh、evidence-auditor = Sol high、worker = Sonnet high、reviewer = Sol high、oracle・advisor = Carbon high、delegate = Neon high）を、Copilot 由来のモデル名（Sol = `gpt-6.2-sol`、Neon = `gemini-4-neon`、Carbon = `gemini-4-carbon`、Sonnet = `claude-sonnet-5.5`）へ対応させた。pi のカタログ（`pi-ai` の `github-copilot.json`）に 4 つとも実在し、思考あり（`gemini-4-neon` は 1,048,576 トークン・`xhigh` まで）。**実測の裏付けは無い**（運用で効果を確かめるまでは未確認）。表の第二候補（Neon 以外の Sonnet・Carbon・Astra など）は使わない。
+  子の設定先は `subagents.agentOverridesByProvider.<プロバイダ>.<役>.model`。`advisor` は `oracle` の別名で、設定には `oracle` を使う。生成元は [`modify_pi_stock_settings.py.tmpl`](../../home/.chezmoitemplates/modify_pi_stock_settings.py.tmpl) の `PROVIDER_AGENT_MODELS`、`HOME_COPILOT_MODELS`、`WORK_BEDROCK_MODELS`、`WORK_COPILOT_MODELS`。
 
-  Haiku は使わない（利用者の方針。担当外の編集・書式崩れの実測）。
+  - **プロバイダの選択**: pi-subagents は起動時の `defaultProvider` ではなく、親が使っているモデルのプロバイダで子の設定を選ぶ。`/model` で親のプロバイダを変えても追従する。割り当てがなければ子は親のモデルを継ぐ。
+  - **Bedrock の扱い**: 会社では選択したプロバイダだけに子の既定を生成する。自宅では Copilot が起動時の既定だが、手動選択に備えて Bedrock の子の設定も残す。自宅で Bedrock を使う場合、`reviewer`・`evidence-auditor`・`oracle` は Sol 6.1 `high`、他の役は会社 Bedrock と同じ。
+  - **自宅の親の既定**: `defaultProvider`・`defaultModel`・`defaultThinkingLevel` がすべて無い場合か、以前の既定（Copilot の Sonnet 5.5 `xhigh`）と一致する場合だけ、表の値を設定する。それ以外の親の設定は保つ。
+  - **会社 Copilot の旧既定**: Copilot を有効にした最初の反映で、親が旧既定の Sonnet 5.5 `medium` と一致すると Neon `medium` に移す。休眠プロファイルから復元した値も対象で、旧既定と同じ値を手動で選んだ設定はこの一度だけ区別できない。その後は Sonnet に戻しても再移行しない。
+  - **子の既存値の移行**: 会社 Copilot の `researcher` は、旧既定の Sonnet 5.5 `medium` だけを Neon `medium` に移す。会社 Copilot が生成・移行した Neon の割り当ては Bedrock への切り替えで除くが、元から Neon を指定していた利用者の設定は保つ。会社 Bedrock の監査・相談役は Sol 6.1 から 6.2 へ移す。
 
-  **会社 Bedrock の割り当て**: `reviewer`・`evidence-auditor`・`oracle` は同じ Sol 6.2 を使う。自宅の Bedrock 向けの値は変更せず、従来の Sol 6.1 を保つ。`us.openai.gpt-6.2-sol` は Pi 1.6.0 のカタログと [AWS のモデルカード](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-2-sol.html) で確認した。会社の Pi でのツール・MCP 呼び出しは未検証。
-  Opus 5.5 は手動の計画・相談用とし、Astra は明示の指定がある場合だけ使う。どちらも役割の既定にはしない。`oracle` の既定は `context: fork` で、別モデルに渡す場合は親のキャッシュを再利用できない。
+  **割り当ての理由**: 実装の Sonnet とレビューの Sol を別系統にする。自宅では `oracle` も別系統の Carbon にし、調査と `delegate` は Neon に任せる。Opus・Fable・Astra・Haiku は子の既定にしない。
 
-  **親のセッションの既定（家の機だけ）**: 親は Sol high（`defaultProvider: github-copilot`・`defaultModel: gpt-6.2-sol`・`defaultThinkingLevel: high`）。3 つのキーが**全部無いとき**と、**前の値（`claude-sonnet-5.5`・`xhigh` の組）のままのとき**だけ置く（`HOME_PARENT_DEFAULT`・`LEGACY_HOME_PARENT_DEFAULT`）。一部でも別の値なら利用者の選択として保つ（`/model` で選んだ値は pi が `settings.json` へ書くので、apply が毎回戻すことはしない）。会社 PC の既定は `work_pi_profile` に従う。
+  **会社 Copilot の親**: [Copilot の公式料金表](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing) では、Sol は入力が 272K トークンを超えるとリクエスト全体に長文単価がかかる。履歴が伸びる親にはその段差がない Neon を使い、差分と要件に絞れるレビューには Sol を使う。会社での作業 1 件あたりの費用や品質は未測定。
 
-  **既存値の移行**: 会社 Bedrock の `reviewer`・`evidence-auditor`・`oracle` に旧既定の `us.openai.gpt-6.1-sol:high` があれば、6.2 の `high` に移す。家の機の Copilot では、従来の移行対象に加えて、`scout`（Sonnet low → Neon medium）・`researcher`（Sonnet medium → Neon xhigh）・`worker`（Sonnet medium → Sonnet high）・`evidence-auditor`（Carbon medium → Sol high）の前の既定を `chezmoi apply` で移す。旧既定と異なる利用者のモデル・思考の深さは保つ。
+  親を切り替えても、Sonnet のモデル別圧縮設定は Neon へ移さない。会社の Neon にモデル別の設定がなければ、Pi の共通の圧縮設定が適用される。
 
-  **撤去条件**: Neon に移した `scout`・`researcher`・`delegate` の出来が Sonnet 時代より悪い（調査の誤り・取りこぼしが増える）と分かったら、その役を Sonnet（`claude-sonnet-5.5`）に戻す。Carbon の `oracle` の指摘の的中率が Sol 時代と変わらなければ、`github-copilot/gpt-6.2-sol:high` に戻す。ベンチマークの根拠だけで運用上の改善があったとはみなさない。
+  **会社 Copilot の難関タスク**: 複数モジュールの移行や手戻りの大きい実装では、`worker` 起動時に `model: "github-copilot/claude-opus-5.5:medium"` を明示する。設計相談では読み取り専用の `oracle` に同じモデルを指定し、`options.context: "fresh"` で決定済み事項・制約・未決事項を渡す。既定の `context: fork` で別モデルに切り替えると親のキャッシュを再利用できない。思考レベルやモデルの自動切り替えは行わない。
+
+  **検証の範囲**: `test/test_pi_subagents_config.py` で 3 プロファイルの設定生成を検査する。会社 Bedrock の Sol 6.2 は Pi 1.6.0 のカタログと [AWS のモデルカード](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-2-sol.html) で確認した。会社の Pi でのツール・MCP 呼び出しと、自宅の割り当てによる品質改善は未検証。
+
+  **撤去条件**: Neon で調査の誤りや取りこぼしが増えた役は Sonnet に戻す。Carbon の `oracle` の指摘の的中率が Sol と変わらなければ、Copilot の Sol 6.2 `high` に戻す。
 - **agent 定義の写し**（`home/dot_pi/agent/agents/{worker,reviewer,scout,oracle,researcher,evidence-auditor}.md`。配備先は `~/.pi/agent/agents/`。）: 組み込みの agent を**そのまま写し**、frontmatter に `permission: { external_directory: deny }` だけを足した。
   - **理由（ADR-0031 の評価）**: 子が作業ツリーの外を読もうとすると、方針は確認（ask）になり、**親の画面へ転送される。離席中は誰も答えず、5 分止まる**（実例: 2026-11-10、`review` の worker が `cd ~/.pi/…` で 240 秒以上待った）。確認ではなく**即座の拒否**にしたい。agent ごとの `permission:` は、agent ファイルの frontmatter にしか書けない（settings の `agentOverrides` は `permission` を扱えない）。ほかの標準の手段は無い。
   - **実測**（2026-11-10。使い捨ての project agent で。審査ログの `permission_request.blocked`・`origin: project-agent` でも確認。記録は [権限の frontmatter の実測](../research/agents/subagent-permission-frontmatter-2026-11.md)。**user 配下に配備した写しでの実測は、反映後に一度確かめる（未確認）**）: `external_directory: deny` で、作業ツリーの外の `read` と bash のパス引数は即座に拒否された（`/etc/hostname`・`/etc`・`/tmp`・`~/.agents/skills/…`。pi 本体の `~/.pi/agent/npm/…` は読めた）。作業ツリーの中は通った。`skills: <名>` と `inheritSkills: false` で、子には指定した skill だけが見えた。
