@@ -506,6 +506,18 @@ def test_stock_agents_md_adds_the_tailnet_policy_only_on_personal_machines(tmp_p
 
 
 @pytest.mark.parametrize("os_name", ["linux", "windows"])
+@pytest.mark.parametrize("username", ["applejxd", "tester"])
+def test_stock_agents_md_guides_roles_when_parent_uses_copilot(tmp_path, os_name, username):
+    text = render_file("dot_pi/agent/AGENTS.md.tmpl", tmp_path, os_name=os_name, username=username)
+    guidance = text.split("**Copilot での要件整理・計画・実装**:", 1)[1].split("委譲の作法:", 1)[0]
+    assert "親が `github-copilot` を使う場合だけ" in guidance
+    assert 'options.context: "fresh"' in guidance
+    assert "既存の委譲ルール" in guidance
+    assert "利用者がモデルを明示したときはその指定を優先" in guidance
+    assert "`oracle`" in guidance and "`worker`" in guidance and "`reviewer`" in guidance
+
+
+@pytest.mark.parametrize("os_name", ["linux", "windows"])
 def test_stock_agents_md_has_the_same_delegation_policy_at_home_and_work(tmp_path, os_name):
     """家・会社とも、単独の実装・調査を委譲でき、小さな変更でも影響に応じて監査する。"""
     template = "dot_pi/agent/AGENTS.md.tmpl"
