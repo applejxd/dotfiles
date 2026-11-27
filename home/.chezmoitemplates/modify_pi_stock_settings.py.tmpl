@@ -19,9 +19,10 @@ SEARCH_AGENT_PROMPTS = {
 # 会社 PC (is-work) か。検索の MCP が機で違う (家は websearch、会社 PC は agentcore-websearch)
 IS_WORK = {{ if eq .isWork "true" }}True{{ else }}False{{ end }}
 WORK_PI_PROFILE = {{ .workProfile | default "bedrock" | toJson }}
+WORK_COPILOT_MODEL_STATE = "dotfilesWorkCopilotModels"
 WORK_PARENT_MODELS = {
     "bedrock": ("amazon-bedrock", "us.anthropic.claude-sonnet-5-5"),
-    "copilot": ("github-copilot", "claude-sonnet-5.5"),
+    "copilot": ("github-copilot", "gemini-4-neon"),
 }
 # 家の起動・モデル循環の候補。利用者が enabledModels を書いていれば保つ。
 # 手動での /model 選択や、候補が解決できないときの Pi 本体のフォールバックは制限しない。
@@ -157,6 +158,7 @@ WORK_BEDROCK_MODELS = dict.fromkeys(
     ("reviewer", "evidence-auditor", "oracle"), "amazon-bedrock/us.openai.gpt-6.2-sol:high"
 )
 WORK_COPILOT_MODELS = {
+    "researcher": "github-copilot/gemini-4-neon:medium",
     "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
     "oracle": "github-copilot/gpt-6.2-sol:high",
 }
@@ -171,7 +173,11 @@ HOME_COPILOT_MODELS = {
 }
 
 
-def select_work_parent(data: dict) -> str:
+def preferred_model_pattern(scoped: list[str], preferred: str) -> str:
+    return next((p for p in scoped if p == preferred or p.startswith(f"{preferred}:")), preferred)
+
+
+def select_work_parent(data: dict, copilot_state: dict) -> str:
     provider, fallback_model = WORK_PARENT_MODELS[WORK_PI_PROFILE]
     # このキーは chezmoi 専用。Pi が使うのは下で生成する有効側の設定だけ。
     saved = data.get("dotfilesWorkPiModels")
@@ -208,6 +214,23 @@ def select_work_parent(data: dict) -> str:
             data.pop(key, None)
             if key in selected:
                 data[key] = selected[key]
+    migrate_parent = False
+    if provider == "github-copilot" and copilot_state.get("parentMigrated") is not True:
+        # 休眠プロファイルも、モデルと実効の思考レベルが旧既定と同じ場合だけ移す。
+        legacy_model = "claude-sonnet-5.5"
+        legacy_preferred = f"{provider}/{legacy_model}"
+        legacy_pattern = preferred_model_pattern(scoped, legacy_preferred)
+        per_model = data.get("modelThinkingLevels")
+        legacy_effort = per_model.get(legacy_preferred, "medium") if isinstance(per_model, dict) else "medium"
+        if legacy_pattern != legacy_preferred:
+            legacy_effort = legacy_pattern.rsplit(":", 1)[-1]
+        migrate_parent = (
+            data.get("defaultModel") == legacy_model
+            and data.get("defaultThinkingLevel") == legacy_effort == "medium"
+        )
+        if migrate_parent:
+            data["defaultModel"] = fallback_model
+        copilot_state["parentMigrated"] = True
     model = data.get("defaultModel")
     if not isinstance(model, str) or not model.strip():
         model = fallback_model
@@ -218,7 +241,7 @@ def select_work_parent(data: dict) -> str:
         scoped = [f"{provider}/*"]
     # Pi は新規セッションで候補の先頭を選ぶ。希望のモデルをプロバイダの glob より先に置く。
     preferred = f"{provider}/{model}"
-    first = next((p for p in scoped if p == preferred or p.startswith(f"{preferred}:")), preferred)
+    first = preferred if migrate_parent else preferred_model_pattern(scoped, preferred)
     data["enabledModels"] = [first, *(p for p in scoped if p != first)]
     saved.pop(provider, None)
     if saved:
@@ -288,7 +311,10 @@ def main() -> int:
     data["packages"] = packages()
     if not IS_WORK and "enabledModels" not in data:
         data["enabledModels"] = list(HOME_ENABLED_MODELS)
-    work_provider = select_work_parent(data) if IS_WORK else None
+    copilot_state = data.get(WORK_COPILOT_MODEL_STATE) if IS_WORK else None
+    if not isinstance(copilot_state, dict):
+        copilot_state = {}
+    work_provider = select_work_parent(data, copilot_state) if IS_WORK else None
     if not IS_WORK:
         parent = {key: data.get(key) for key in HOME_PARENT_DEFAULT}
         if not (HOME_PARENT_DEFAULT.keys() & data.keys()) or parent == LEGACY_HOME_PARENT_DEFAULT:
@@ -323,13 +349,17 @@ def main() -> int:
                 for name, entry in list(inactive.items()):
                     known = {roles.get(name), *LEGACY_AGENT_MODELS.get((provider, name), ())}
                     work_models = WORK_COPILOT_MODELS if provider == "github-copilot" else WORK_BEDROCK_MODELS
-                    known.add(work_models.get(name))
+                    # researcher の Neon は、この設定が生成したと分かる場合だけ削除する。
+                    if provider != "github-copilot" or name != "researcher" or copilot_state.get("researcherManaged") is True:
+                        known.add(work_models.get(name))
                     if isinstance(entry, dict) and isinstance(entry.get("model"), str) and entry["model"] in known:
                         del entry["model"]
                         if not entry:
                             del inactive[name]
                 if not inactive:
                     by_provider.pop(provider)
+            if provider == "github-copilot":
+                copilot_state.pop("researcherManaged", None)
             continue
         layer = by_provider.get(provider)
         if not isinstance(layer, dict):
@@ -350,11 +380,18 @@ def main() -> int:
             legacy = LEGACY_AGENT_MODELS.get((provider, name), ())
             if name in profile_models and name in roles:
                 legacy += (roles[name],)
+            if work_provider == "github-copilot" and name == "researcher":
+                if "model" not in entry or entry["model"] in legacy:
+                    copilot_state["researcherManaged"] = True
+                elif entry["model"] != model:
+                    copilot_state.pop("researcherManaged", None)
             if entry.get("model") in legacy:
                 entry["model"] = model
             entry.setdefault("model", model)
             layer[name] = entry
         by_provider[provider] = layer
+    if IS_WORK and copilot_state:
+        data[WORK_COPILOT_MODEL_STATE] = copilot_state
     subagents["agentOverridesByProvider"] = by_provider
     subagents["agentOverrides"] = overrides
     data["subagents"] = subagents

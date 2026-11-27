@@ -384,9 +384,9 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
 
 1. `chezmoi edit-config` で既存の `[data]` に `work_pi_profile = "copilot"` を追加する。Bedrock に戻すには `"bedrock"` にするか、キーを削除する。未指定なら Bedrock。不正な値では反映が止まる。
 2. 利用者の端末で `chezmoi apply ~/.pi/agent/settings.json` を実行する。
-3. Pi では新しいセッション、T3 Code では新しいスレッドを開く。作業前に親モデルのプロバイダを確かめる。旧セッションを再開すると当時のモデルが復元される。
+3. Pi では新しいセッション、T3 Code では新しいスレッドを開く。作業前に親のプロバイダ・モデル・思考レベルを確かめる。旧セッションを再開すると当時のモデルが復元される。
 
-既定の親は Sonnet 5.5 `medium`。同じプロバイダで選んだ親モデルや思考レベルは保つ。`enabledModels` には選んだプロバイダの候補だけを残し、親モデルを先頭に置く。
+既定の親は、Bedrock が Sonnet 5.5 `medium`、Copilot が Gemini 4 Neon `medium`。同じプロバイダで選んだ親モデルや思考レベルは、旧既定の移行時を除いて保つ。`enabledModels` には選んだプロバイダの候補だけを残し、親モデルを先頭に置く。
 
 - 別の会社プロファイルへ切り替えると、親モデル・思考レベル・候補を `settings.json` の `dotfilesWorkPiModels` に退避する。元に戻すと復元する。他のプロバイダや曖昧な候補も退避するが、会社の起動候補には入れない。
 - 選択していない側の子モデルの既定は除き、個別に設定した割り当ては保つ。認証・履歴・検索 MCP は変えない。
@@ -408,9 +408,9 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
 
   | 役割 | 自宅 Copilot (`github-copilot`) | 会社 Bedrock (`amazon-bedrock`) | 会社 Copilot (`github-copilot`) |
   | --- | --- | --- | --- |
-  | 親（起動時） | `gpt-6.2-sol:high` | `us.anthropic.claude-sonnet-5-5:medium` | `claude-sonnet-5.5:medium` |
+  | 親（起動時） | `gpt-6.2-sol:high` | `us.anthropic.claude-sonnet-5-5:medium` | `gemini-4-neon:medium` |
   | `scout` | `gemini-4-neon:medium` | `us.anthropic.claude-sonnet-5-5:low` | `claude-sonnet-5.5:low` |
-  | `researcher` | `gemini-4-neon:xhigh` | `us.anthropic.claude-sonnet-5-5:medium` | `claude-sonnet-5.5:medium` |
+  | `researcher` | `gemini-4-neon:xhigh` | `us.anthropic.claude-sonnet-5-5:medium` | `gemini-4-neon:medium` |
   | `worker` | `claude-sonnet-5.5:high` | `us.anthropic.claude-sonnet-5-5:medium` | `claude-sonnet-5.5:medium` |
   | `reviewer` | `gpt-6.2-sol:high` | `us.openai.gpt-6.2-sol:high` | `gpt-6.2-sol:high` |
   | `evidence-auditor` | `gpt-6.2-sol:high` | `us.openai.gpt-6.2-sol:high` | `gpt-6.2-sol:high` |
@@ -422,9 +422,16 @@ pi の配色テーマ `iceberg`（暗色）を配る。目的は配色の読み�
   - **プロバイダの選択**: pi-subagents は起動時の `defaultProvider` ではなく、親が使っているモデルのプロバイダで子の設定を選ぶ。`/model` で親のプロバイダを変えても追従する。割り当てがなければ子は親のモデルを継ぐ。
   - **Bedrock の扱い**: 会社では選択したプロバイダだけに子の既定を生成する。自宅では Copilot が起動時の既定だが、手動選択に備えて Bedrock の子の設定も残す。自宅で Bedrock を使う場合、`reviewer`・`evidence-auditor`・`oracle` は Sol 6.1 `high`、他の役は会社 Bedrock と同じ。
   - **自宅の親の既定**: `defaultProvider`・`defaultModel`・`defaultThinkingLevel` がすべて無い場合か、以前の既定（Copilot の Sonnet 5.5 `xhigh`）と一致する場合だけ、表の値を設定する。それ以外の親の設定は保つ。
-  - **既存値の移行**: `chezmoi apply` は移行対象として登録した旧既定だけを置き換え、それ以外の利用者の設定を保つ。たとえば会社 Bedrock の監査・相談役は Sol 6.1 から 6.2 へ、会社 Copilot の証拠監査・相談役は Carbon から Sol 6.2 へ移す。
+  - **会社 Copilot の旧既定**: Copilot を有効にした最初の反映で、親が旧既定の Sonnet 5.5 `medium` と一致すると Neon `medium` に移す。休眠プロファイルから復元した値も対象で、旧既定と同じ値を手動で選んだ設定はこの一度だけ区別できない。その後は Sonnet に戻しても再移行しない。
+  - **子の既存値の移行**: 会社 Copilot の `researcher` は、旧既定の Sonnet 5.5 `medium` だけを Neon `medium` に移す。会社 Copilot が生成・移行した Neon の割り当ては Bedrock への切り替えで除くが、元から Neon を指定していた利用者の設定は保つ。会社 Bedrock の監査・相談役は Sol 6.1 から 6.2 へ移す。
 
-  **割り当ての理由**: 実装の Sonnet とレビューの Sol を別系統にする。自宅では `oracle` も別系統の Carbon にし、調査と `delegate` は Neon に任せる。Opus・Fable・Astra・Haiku は子の既定にしない。`oracle` の既定は `context: fork` で、別モデルに渡すと親のキャッシュを再利用できない。
+  **割り当ての理由**: 実装の Sonnet とレビューの Sol を別系統にする。自宅では `oracle` も別系統の Carbon にし、調査と `delegate` は Neon に任せる。Opus・Fable・Astra・Haiku は子の既定にしない。
+
+  **会社 Copilot の親**: [Copilot の公式料金表](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing) では、Sol は入力が 272K トークンを超えるとリクエスト全体に長文単価がかかる。履歴が伸びる親にはその段差がない Neon を使い、差分と要件に絞れるレビューには Sol を使う。会社での作業 1 件あたりの費用や品質は未測定。
+
+  親を切り替えても、Sonnet のモデル別圧縮設定は Neon へ移さない。会社の Neon にモデル別の設定がなければ、Pi の共通の圧縮設定が適用される。
+
+  **会社 Copilot の難関タスク**: 複数モジュールの移行や手戻りの大きい実装では、`worker` 起動時に `model: "github-copilot/claude-opus-5.5:medium"` を明示する。設計相談では読み取り専用の `oracle` に同じモデルを指定し、`options.context: "fresh"` で決定済み事項・制約・未決事項を渡す。既定の `context: fork` で別モデルに切り替えると親のキャッシュを再利用できない。思考レベルやモデルの自動切り替えは行わない。
 
   **検証の範囲**: `test/test_pi_subagents_config.py` で 3 プロファイルの設定生成を検査する。会社 Bedrock の Sol 6.2 は Pi 1.6.0 のカタログと [AWS のモデルカード](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-2-sol.html) で確認した。会社の Pi でのツール・MCP 呼び出しと、自宅の割り当てによる品質改善は未検証。
 
