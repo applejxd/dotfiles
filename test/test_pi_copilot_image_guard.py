@@ -104,7 +104,7 @@ def test_pi_mock_gateway(tmp_path):
         (agent_dir / "models.json").write_text(json.dumps({
             "providers": {"github-copilot": {
                 "baseUrl": origin + "/v1", "api": "openai-completions", "apiKey": "mock-only",
-                "models": [{"id": MODEL, "input": ["text", "image"], "reasoning": False}],
+                "models": [{"id": MODEL, "input": ["text", "image"], "reasoning": False, "contextWindow": 2_000_000}],
             }},
         }))
         thread = Thread(target=server.serve_forever, daemon=True)
@@ -183,7 +183,17 @@ def _exercise_rpc(pi, tmp_path, agent_dir, origin, network_guard, requests):
             assert notified(events, "現在ターンだけで画像が 11 枚")
             events = prompt("too large", [_image(40, padding=3_200_000)])
             assert len(requests) == 5
-            assert notified(events, "4 MiB の予算を超えます")
+            assert notified(events, "上限 10 枚・4 MiB")
+            # 長いテキストのあとでも、過去画像を削って全体 4 MiB 以下なら送信できる。
+            # さらに過去画像を全削除して画像 0 枚になれば、テキストが 4 MiB 超でも画像ガードで止めない。
+            big_img = _image(80, padding=700_000)
+            events = prompt("long text " + ("a" * 2_400_000), [big_img])
+            assert len(requests) == 6
+            assert sent_urls() == ["data:image/png;base64," + big_img["data"]]
+            events = prompt("continue " + ("b" * 2_000_000), [])
+            assert len(requests) == 7
+            assert sent_urls() == []
+            assert notified(events, "過去の画像を")
         finally:
             process.stdin.close()
             try:
