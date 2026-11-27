@@ -132,8 +132,7 @@ def test_staged_deletion_is_ignored(repo, capsys):
 def test_mode_change_mismatches(repo, capsys):
     (repo / "a.txt").write_text("two\n")
     stamp.write_stamp(repo)
-    (repo / "a.txt").chmod(0o755)
-    git(repo, "add", "a.txt")
+    git(repo, "update-index", "--chmod=+x", "a.txt")
     assert stamp.staged(repo)["a.txt"][0] == "100755"
     code, err = run_check(repo, capsys)
     assert code == 0
@@ -173,7 +172,8 @@ def test_write_stamp_leaves_index_and_refs_alone(repo):
     assert state() == before
     assert not (repo / ".git" / "verify-stamp.index").exists()
     assert dest == repo / ".git" / "verify-stamp.json"
-    assert dest.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert dest.stat().st_mode & 0o777 == 0o600
     data = json.loads(dest.read_text())
     assert data["head"] == git(repo, "rev-parse", "HEAD").strip()
     assert data["entries"]["new.txt"][0] == "100644"

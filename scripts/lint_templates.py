@@ -94,14 +94,15 @@ def lint_shell(rendered: str) -> str | None:
     # shebang があれば shellcheck に方言を判定させる (既存の *.sh と同じ扱い)。
     # source される断片には shebang が無いので、そのときだけ bash を仮定する。
     dialect = [] if rendered.lstrip().startswith("#!") else ["-s", "bash"]
+    # Windows の text=True パイプは \n を \r\n へ変換するため、バイナリ入力で LF のまま渡す
     result = subprocess.run(
         ["shellcheck", *dialect, "-"],
-        input=rendered,
+        input=rendered.replace("\r\n", "\n").encode("utf-8"),
         capture_output=True,
-        text=True,
         check=False,
     )
-    return result.stdout.strip() or None if result.returncode != 0 else None
+    out = result.stdout.decode("utf-8", errors="replace").strip()
+    return out or None if result.returncode != 0 else None
 
 
 # 拡張子 -> linter。ここに足せば対象が広がる。
@@ -135,6 +136,14 @@ def target_no_sudo(text: str) -> tuple[bool | None, ...]:
     return NO_SUDO if "no-sudo" in text else (None,)
 
 
+def target_osreleases(platform: str, text: str) -> tuple[str | None, ...]:
+    if platform != "linux":
+        return (None,)
+    if "osrelease" in text or "is-raspi" in text or "is_raspi" in text:
+        return ("6.8.0-generic", "6.6.87.2-microsoft-standard-WSL2")
+    return ("6.8.0-generic",)
+
+
 def render(
     source: Path,
     text: str,
@@ -142,12 +151,17 @@ def render(
     username: str,
     raspi: bool = False,
     no_sudo: bool | None = None,
+    osrelease: str | None = None,
 ) -> tuple[str | None, str]:
     """(描画結果, 理由) を返す。秘密でスキップしたときは (None, 理由)。"""
     chezmoi = shutil.which("chezmoi")
     if chezmoi is None:
         raise SystemExit("chezmoi が見つかりません (描画できないので検査できません)")
-    data: dict[str, object] = {"chezmoi": {"os": platform, "username": username}}
+    chezmoi_data: dict[str, object] = {"os": platform, "username": username}
+    if platform == "linux":
+        # Windows や macOS から linux 向けテンプレートを描画するときは .chezmoi.kernel.osrelease が不在になる
+        chezmoi_data["kernel"] = {"osrelease": osrelease or "6.8.0-generic"}
+    data: dict[str, object] = {"chezmoi": chezmoi_data}
     # 鍵の不在そのものが分岐条件 (hasKey) なので、False 側では鍵を渡さない。
     if raspi:
         data["is_raspi"] = True
@@ -167,6 +181,7 @@ def render(
         input=text,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if result.returncode != 0:
@@ -188,20 +203,24 @@ def check(source: Path, path: str) -> list[str]:
         for username in target_users(text):
             for raspi in target_raspi(text):
                 for no_sudo in target_no_sudo(text):
-                    where = (
-                        f"{path} [os={platform} user={username} raspi={raspi} no_sudo={no_sudo}]"
-                    )
-                    rendered, reason = render(source, text, platform, username, raspi, no_sudo)
-                    if rendered is None:
-                        if not reason.startswith("秘密"):
-                            failures.append(f"{where}: {reason}")
-                        continue
-                    # {{ if }} で中身が全部消えるテンプレートがある
-                    if not rendered.replace("\ufeff", "").strip():
-                        continue
-                    problem = linter(rendered)
-                    if problem:
-                        failures.append(f"{where}:\n{problem}")
+                    for osrelease in target_osreleases(platform, text):
+                        rel = f" osrelease={osrelease}" if osrelease and "microsoft" in osrelease else ""
+                        where = (
+                            f"{path} [os={platform} user={username} raspi={raspi} no_sudo={no_sudo}{rel}]"
+                        )
+                        rendered, reason = render(
+                            source, text, platform, username, raspi, no_sudo, osrelease=osrelease
+                        )
+                        if rendered is None:
+                            if not reason.startswith("秘密"):
+                                failures.append(f"{where}: {reason}")
+                            continue
+                        # {{ if }} で中身が全部消えるテンプレートがある
+                        if not rendered.replace("\ufeff", "").strip():
+                            continue
+                        problem = linter(rendered)
+                        if problem:
+                            failures.append(f"{where}:\n{problem}")
     return failures
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 from pathlib import Path
 
@@ -63,7 +64,8 @@ def test_sync_replaces_the_copy_keeps_runtime_dirs_and_updates_the_doc(labs):
     assert (dest / "SKILL.md").read_text(encoding="utf-8") == "v1\n"
     assert not (dest / "OLD.md").exists()
     assert (dest / ".venv" / "keep").exists()
-    assert (dest / "scripts" / "run.sh").stat().st_mode & 0o111
+    if os.name != "nt":
+        assert (dest / "scripts" / "run.sh").stat().st_mode & 0o111
     text = doc.read_text(encoding="utf-8")
     assert "`0000000`" not in text and "（2 件。`git archive`" in text
     assert mod.sync("demo", src, repo, check=True) == 0

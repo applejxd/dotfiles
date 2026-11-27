@@ -537,7 +537,10 @@ def test_worktree_replaced_by_symlink_to_other_repository_is_excluded(repo, caps
     foreign = tmp_path / "foreign-repo"
     _git_init(foreign)
     shutil.rmtree(swapped)
-    swapped.symlink_to(foreign, target_is_directory=True)
+    try:
+        swapped.symlink_to(foreign, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("シンボリックリンクを作れない環境")
     write_session(sessions, str(swapped), "2026-11-12T00:00:00.000Z", "iiii9999-swapped", [msg("user", text("SWAPPED-FOREIGN"))])
     write_session(sessions, str(foreign.resolve()), "2026-11-13T00:00:00.000Z", "jjjj0000-foreign", [msg("user", text("FOREIGN-DIRECT"))])
     _all_commands_hide(capsys, main, sessions, "FOREIGN", ["iiii9999", "jjjj0000"])

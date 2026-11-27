@@ -658,11 +658,11 @@ def test_snapshot_skips_secrets_symlinks_and_reports_them(repo, capsys):
     (repo / "my_secret_notes.txt").write_text("s\n")  # 部分一致の glob (*secret*)
     (repo / ".ssh").mkdir()
     (repo / ".ssh" / "config").write_text("Host x\n")
-    (repo / "link.py").symlink_to("a.py")
+    symlink_or_skip(repo / "link.py", Path("a.py"))
     outside = repo.parent / f"{repo.name}-outside"
     outside.mkdir()
     (outside / "secret.txt").write_text("s")
-    (repo / "dirlink").symlink_to(outside)
+    symlink_or_skip(repo / "dirlink", outside, is_dir=True)
 
     assert guard.main(["snapshot", "r1"]) == 0
 

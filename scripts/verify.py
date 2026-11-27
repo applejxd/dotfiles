@@ -55,12 +55,15 @@ REGISTRATION_TEST = "test/test_verify.py"
 # T0 の pre-push の hook (raspi-regression-local) が実行する試験。T1 と T2 からは外す (hook の entry と一致することは試験で見る)
 HOOK_PYTEST_FILES = ("test/test_raspi_detection.py",)
 T0_PYTEST_FILES = (REGISTRATION_TEST, *HOOK_PYTEST_FILES)
-LINT_TEMPLATES = ["mise", "exec", "--", "python3", "scripts/lint_templates.py"]
+LINT_TEMPLATES = ["mise", "exec", "--", "uv", "run", "--no-project", "python", "scripts/lint_templates.py"]
 LINT_DOCS = [
     "mise",
     "exec",
     "--",
-    "python3",
+    "uv",
+    "run",
+    "--no-project",
+    "python",
     "home/dot_agents/skills/sdd-docs/scripts/lint_docs.py",
 ]
 # pyyaml を足さない試験 (AGENTS.md「検証」の表の形)
@@ -271,6 +274,11 @@ RULES: tuple[Rule, ...] = (
         ("scripts/lint_templates.py",),
         ("test_lint_templates",),
         ("templates",),
+    ),
+    Rule(
+        "CI ポリシーと ai-pr 入口",
+        ("scripts/ci_policy.py", "scripts/ai_pr.py", ".github/workflows/ci.yml", ".github/workflows/cleanup-closed-ai-branch.yml"),
+        ("test_ci_policy", "test_ai_pr"),
     ),
     Rule(
         "検証の入口",
@@ -662,7 +670,9 @@ def collect_changed(run: Callable[[list[str]], str], base: str = "HEAD") -> list
 
 
 def _git(cmd: list[str]) -> str:
-    proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, check=False)
+    proc = subprocess.run(
+        cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", check=False
+    )
     if proc.returncode != 0:
         sys.stderr.write(proc.stderr)
         raise SystemExit(f"git が失敗しました: {shlex.join(cmd)}")
@@ -769,8 +779,12 @@ def _lock_path(root: Path) -> Path | None:
     return (Path(root) / out).resolve() / "verify-all.lock"
 
 
+def _holder_path(lock_path: Path) -> Path:
+    return lock_path.with_suffix(".holder.json")
+
+
 def _try_lock(fd: int) -> bool:
-    if os.name == "nt":  # Windows は未検証 (msvcrt。実機で試していない)
+    if os.name == "nt":
         import msvcrt
 
         try:
@@ -788,18 +802,41 @@ def _try_lock(fd: int) -> bool:
     return True
 
 
-def _read_holder(fd: int) -> str:
-    try:
-        info = json.loads(os.pread(fd, 4096, 0).decode("utf-8") or "{}")
-        return f"{info['pid']} {info['cwd']} {info['started']}"
-    except Exception:
-        return "不明"
+def _read_holder(lock_path: Path, fd: int) -> str:
+    # Windows の msvcrt.locking は先頭 1 バイトを強制ロックするため、別ファイルから保持者を読む
+    for reader in (
+        lambda: _holder_path(lock_path).read_text(encoding="utf-8"),
+        lambda: os.pread(fd, 4096, 0).decode("utf-8"),
+    ):
+        try:
+            raw = reader().strip()
+            if not raw:
+                continue
+            info = json.loads(raw)
+            return f"{info['pid']} {info['cwd']} {info['started']}"
+        except Exception:
+            continue
+    return "不明"
+
+
+def _write_holder(lock_path: Path, fd: int, info: dict[str, object]) -> None:
+    payload = json.dumps(info, ensure_ascii=False)
+    # まず別ファイルへ原子的に書く（Windows でもロック中の別プロセスから読める）
+    with contextlib.suppress(OSError):
+        holder = _holder_path(lock_path)
+        tmp = holder.with_name(f"{holder.name}.{os.getpid()}.tmp")
+        tmp.write_text(payload, encoding="utf-8")
+        os.replace(tmp, holder)
+    if os.name != "nt":
+        with contextlib.suppress(OSError, AttributeError):
+            os.ftruncate(fd, 0)
+            os.pwrite(fd, payload.encode("utf-8"), 0)
 
 
 def acquire_all_lock(root: Path = ROOT, timeout: float | None = None) -> int | None:
     """全件検査の排他ロックを取る (リポジトリの全 worktree・全会話で 1 本だけ)。
 
-    置き場は `git rev-parse --git-common-dir` の下の verify-all.lock。flock なので、プロセスが死ねば OS が解放する。
+    置き場は `git rev-parse --git-common-dir` の下の verify-all.lock。OS のファイルロックなので、プロセスが死ねば OS が解放する。
     取れなければ timeout 秒まで待ち (既定 VERIFY_LOCK_TIMEOUT、1800)、超えたら LockTimeout。0 は待たない。
     git でない・書けないときは、警告して None を返し続行する。
     """
@@ -820,11 +857,11 @@ def acquire_all_lock(root: Path = ROOT, timeout: float | None = None) -> int | N
             elapsed = time.monotonic() - start
             if elapsed >= timeout:
                 raise LockTimeout(
-                    f"他の全件検査が実行中のため終了します (待ち {int(elapsed)} 秒)。保持者: {_read_holder(fd)}"
+                    f"他の全件検査が実行中のため終了します (待ち {int(elapsed)} 秒)。保持者: {_read_holder(path, fd)}"
                 )
             if elapsed >= next_notice:
                 print(
-                    f"他の全件検査が実行中。待っている (経過 {int(elapsed)} 秒)。保持者: {_read_holder(fd)}",
+                    f"他の全件検査が実行中。待っている (経過 {int(elapsed)} 秒)。保持者: {_read_holder(path, fd)}",
                     file=sys.stderr, flush=True,
                 )  # fmt: skip
                 next_notice += LOCK_NOTICE_INTERVAL
@@ -832,14 +869,12 @@ def acquire_all_lock(root: Path = ROOT, timeout: float | None = None) -> int | N
     except BaseException:
         os.close(fd)
         raise
-    with contextlib.suppress(OSError, AttributeError):  # 保持者の情報はベストエフォート
-        info = {
-            "pid": os.getpid(),
-            "cwd": os.getcwd(),
-            "started": datetime.now().isoformat(timespec="seconds"),
-        }
-        os.ftruncate(fd, 0)
-        os.pwrite(fd, json.dumps(info).encode("utf-8"), 0)
+    info = {
+        "pid": os.getpid(),
+        "cwd": os.getcwd(),
+        "started": datetime.now().isoformat(timespec="seconds"),
+    }
+    _write_holder(path, fd, info)
     _held_locks.append(fd)
     return fd
 

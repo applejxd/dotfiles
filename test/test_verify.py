@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import posixpath
 import re
 import subprocess
@@ -461,7 +462,7 @@ def test_no_shell_true_in_source():
 # --- 全件検査の排他ロック (リポジトリ全体で 1 本だけ) ---
 
 _HOLDER = """
-import importlib.util, sys, time
+import importlib.util, os, sys, time
 from pathlib import Path
 spec = importlib.util.spec_from_file_location("verify", sys.argv[1])
 v = importlib.util.module_from_spec(spec)
@@ -472,7 +473,7 @@ try:
 except v.LockTimeout as exc:
     print(exc, file=sys.stderr)
     raise SystemExit(3)
-print("ACQUIRED", flush=True)
+print(f"ACQUIRED {os.getpid()}", flush=True)
 time.sleep(float(sys.argv[4]))
 """
 
@@ -494,16 +495,39 @@ def _holder(tmp_path: Path, root: Path, timeout: float, hold: float) -> subproce
     script = tmp_path / "holder.py"
     script.write_text(_HOLDER, encoding="utf-8")
     return subprocess.Popen(
-        [sys.executable, str(script), str(SCRIPT), str(root), str(timeout), str(hold)],
+        [sys.executable, "-X", "utf8", str(script), str(SCRIPT), str(root), str(timeout), str(hold)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         encoding="utf-8",
     )
 
 
-def _wait_acquired(p: subprocess.Popen) -> None:
+def _wait_acquired(p: subprocess.Popen) -> int:
     assert p.stdout is not None
-    assert p.stdout.readline().strip() == "ACQUIRED"
+    line = p.stdout.readline().strip()
+    assert line.startswith("ACQUIRED "), line
+    return int(line.split()[1])
+
+
+def _stop_holder(p: subprocess.Popen, pid: int | None = None) -> None:
+    # Windows の venv python.exe はランチャー経由で実 Python を子起動するため、プロセスツリーごと終了させる
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(p.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if pid is not None and pid != p.pid:
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+    else:
+        p.kill()
+    p.wait(5)
 
 
 def test_lock_second_process_waits_until_first_exits(tmp_path, repo):
@@ -518,9 +542,8 @@ def test_lock_second_process_waits_until_first_exits(tmp_path, repo):
 
 def test_lock_released_when_holder_is_killed(tmp_path, repo):
     a = _holder(tmp_path, repo, 5, 60)
-    _wait_acquired(a)
-    a.kill()
-    a.wait(5)
+    pid_a = _wait_acquired(a)
+    _stop_holder(a, pid_a)
     t0 = time.monotonic()
     b = _holder(tmp_path, repo, 0, 0)
     _wait_acquired(b)  # stale にならず、待たずに取れる
@@ -530,20 +553,19 @@ def test_lock_released_when_holder_is_killed(tmp_path, repo):
 
 def test_lock_timeout_exits_3_and_names_holder(tmp_path, repo):
     a = _holder(tmp_path, repo, 5, 20)
-    _wait_acquired(a)
+    pid_a = _wait_acquired(a)
     try:
         t0 = time.monotonic()
         b = _holder(tmp_path, repo, 1, 0)
         _, err = b.communicate(timeout=15)
         assert b.returncode == 3
         assert 0.8 <= time.monotonic() - t0 < 10
-        assert str(a.pid) in err
+        assert str(pid_a) in err
         c = _holder(tmp_path, repo, 0, 0)  # 0 は待たずに即失敗
         _, err0 = c.communicate(timeout=15)
-        assert c.returncode == 3 and str(a.pid) in err0
+        assert c.returncode == 3 and str(pid_a) in err0
     finally:
-        a.kill()
-        a.wait(5)
+        _stop_holder(a, pid_a)
 
 
 def test_lock_is_shared_by_worktrees_but_not_by_other_repos(tmp_path, repo):
@@ -553,7 +575,7 @@ def test_lock_is_shared_by_worktrees_but_not_by_other_repos(tmp_path, repo):
     other.mkdir()
     _git(other, "init", "-q")
     a = _holder(tmp_path, repo, 5, 20)
-    _wait_acquired(a)
+    pid_a = _wait_acquired(a)
     try:
         b = _holder(tmp_path, wt, 0, 0)
         b.communicate(timeout=15)
@@ -562,8 +584,7 @@ def test_lock_is_shared_by_worktrees_but_not_by_other_repos(tmp_path, repo):
         _wait_acquired(c)  # 別リポジトリは独立
         assert c.wait(5) == 0
     finally:
-        a.kill()
-        a.wait(5)
+        _stop_holder(a, pid_a)
 
 
 def test_lock_without_git_warns_and_continues(tmp_path, capsys, monkeypatch):

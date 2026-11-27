@@ -1,0 +1,350 @@
+name: ci
+
+# 3 OS（Ubuntu / Windows / macOS）と静的検査・秘密検査・保護パス承認を単一ゲート ci-gate に集約する。
+# - Ruleset は ci-gate 1 本だけを必須にし、依存失敗による skipped 通過を if: always() で防ぐ。
+# - policy と ci-gate は PR 側コードではなく base コミット側の scripts/ci_policy.py を実行する（P0-1 対策）。
+# - PR の秘密検査は policy ジョブで BASE_SHA..HEAD_SHA を gitleaks で走査する（P1-3 対策）。
+# - 各 OS の pytest は --junitxml を出力し、0 件収集・想定外の skip 増を不合格にする（P1-5 対策）。
+# see docs/adr/0044-github-app-auto-merge-and-3os-ci.md
+"on":
+  push:
+    branches: [main, develop]
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # edited（PR 本文・タイトル更新）だけで承認待ちや実行中の CI を取り消さない
+  cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
+
+jobs:
+  policy:
+    name: policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      protected: ${{ steps.paths.outputs.protected }}
+      protected_count: ${{ steps.paths.outputs.protected_count }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        with:
+          install_args: "gitleaks"
+          cache: true
+
+      # PR 自身が scripts/ci_policy.py を改ざんしても無効化できないよう、base コミット版を取り出して実行する。
+      # 初回導入 PR（base にまだ存在しない）だけはワークツリー版へフォールバックする。
+      - name: Extract trusted ci_policy.py from base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -eu
+          target="$RUNNER_TEMP/trusted_ci_policy.py"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            if [ -n "$(git ls-tree "$BASE_SHA" -- scripts/ci_policy.py)" ]; then
+              git show "${BASE_SHA}:scripts/ci_policy.py" > "$target"
+            else
+              cp scripts/ci_policy.py "$target"
+            fi
+          else
+            cp scripts/ci_policy.py "$target"
+          fi
+
+      - name: Validate PR title (Conventional Commits)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python3 "$RUNNER_TEMP/trusted_ci_policy.py" check-title "$PR_TITLE"
+
+      - name: Detect protected path changes
+        id: paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            python3 "$RUNNER_TEMP/trusted_ci_policy.py" check-paths --base "$BASE_SHA" --head "$HEAD_SHA"
+          else
+            printf 'protected=false\nprotected_count=0\n' >> "$GITHUB_OUTPUT"
+            printf '{"changed_count":0,"protected":false,"protected_paths":[]}\n'
+          fi
+
+      - name: Detect secrets in PR commit range (gitleaks)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          gitleaks git --log-opts "${BASE_SHA}..${HEAD_SHA}" --redact --verbose
+
+  static:
+    name: static
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        with:
+          install_args: ""
+          cache: true
+
+      - name: Install chezmoi
+        run: |
+          bin="$RUNNER_TEMP/chezmoi-bin"
+          sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b "$bin"
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: pre-commit (all hooks)
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          uv run pre-commit run --all-files
+          uv run pre-commit run --all-files --hook-stage pre-push
+
+      - name: shellcheck (tracked *.sh)
+        run: |
+          mapfile -d '' sh_files < <(git ls-files -z '*.sh')
+          if [ "${#sh_files[@]}" -gt 0 ]; then
+            mise exec shellcheck -- shellcheck "${sh_files[@]}"
+          fi
+
+      - name: registration and policy unit tests
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          uv run --python 3.13 --with pytest --with pyyaml --no-project \
+            pytest test/test_verify.py test/test_ci_policy.py test/test_ai_pr.py \
+            --junitxml="$RUNNER_TEMP/static-junit.xml" -q -ra
+          python3 scripts/ci_policy.py check-junit "$RUNNER_TEMP/static-junit.xml" --min-passed 120 --max-skipped 0
+
+  linux:
+    name: linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Install chezmoi and zsh
+        run: |
+          bin="$RUNNER_TEMP/chezmoi-bin"
+          sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b "$bin"
+          echo "$bin" >> "$GITHUB_PATH"
+          sudo apt-get update -qq && sudo apt-get install -y -qq zsh
+
+      - name: pytest (Linux)
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          uv run --python 3.13 --with pytest --with pyyaml --with pytest-xdist --no-project \
+            pytest test/ --junitxml="$RUNNER_TEMP/linux-junit.xml" -q -ra -n auto --dist worksteal
+          python3 scripts/ci_policy.py check-junit "$RUNNER_TEMP/linux-junit.xml" --min-passed 1200 --max-skipped 120
+
+  windows:
+    name: windows
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Install chezmoi
+        run: |
+          $bin = Join-Path $env:RUNNER_TEMP 'chezmoi-bin'
+          iex "&{$(irm 'https://get.chezmoi.io/ps1')} -b '$bin'"
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+
+      - name: pytest (Windows common + Windows lane)
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          $junit = Join-Path $env:RUNNER_TEMP 'windows-junit.xml'
+          uv run --python 3.13 --with pytest --with pyyaml --with pytest-xdist --no-project `
+            pytest `
+            test/agents/ `
+            test/test_authorized_keys.py `
+            test/test_check_refs.py `
+            test/test_check_staged_drop.py `
+            test/test_chezmoi_templates.py `
+            test/test_ci_policy.py `
+            test/test_ai_pr.py `
+            test/test_clean_stale_source.py `
+            test/test_docs_state.py `
+            test/test_exp.py `
+            test/test_imozuru.py `
+            test/test_lint_docs.py `
+            test/test_modify_legacy_cp932.py `
+            test/test_pi_compaction_config.py `
+            test/test_pi_stock_config.py `
+            test/test_pi_subagents_config.py `
+            test/test_pi_theme.py `
+            test/test_pk.py `
+            test/test_powershell_functions.py `
+            test/test_raspi_detection.py `
+            test/test_review_converge.py `
+            test/test_sync_skill_lab.py `
+            test/test_t3code_remote_access.py `
+            test/test_verify.py `
+            test/test_verify_stamp.py `
+            test/test_websearch.py `
+            test/test_websearch_mcp.py `
+            test/test_windows_assets.py `
+            test/test_windows_terminal_settings.py `
+            test/test_wsl_timesync_script.py `
+            --junitxml="$junit" -q -ra -n auto --dist worksteal
+          uv run --python 3.13 --no-project python scripts/ci_policy.py check-junit "$junit" --min-passed 1200 --max-skipped 120
+
+  macos:
+    name: macos
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Install chezmoi
+        run: |
+          bin="$RUNNER_TEMP/chezmoi-bin"
+          sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b "$bin"
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: pytest (macOS common + Unix/BSD lane)
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          uv run --python 3.13 --with pytest --with pyyaml --with pytest-xdist --no-project \
+            pytest \
+            test/agents/ \
+            test/test_authorized_keys.py \
+            test/test_bootstrap_scripts.py \
+            test/test_check_refs.py \
+            test/test_check_staged_drop.py \
+            test/test_chezmoi_templates.py \
+            test/test_ci_policy.py \
+            test/test_ai_pr.py \
+            test/test_clean_stale_source.py \
+            test/test_docs_state.py \
+            test/test_exp.py \
+            test/test_imozuru.py \
+            test/test_lint_docs.py \
+            test/test_modify_legacy_cp932.py \
+            test/test_pi_compaction_config.py \
+            test/test_pi_stock_config.py \
+            test/test_pi_subagents_config.py \
+            test/test_pi_theme.py \
+            test/test_pk.py \
+            test/test_raspi_detection.py \
+            test/test_review_converge.py \
+            test/test_shell_functions.py \
+            test/test_shell_startup.py \
+            test/test_sync_skill_lab.py \
+            test/test_t3code_remote_access.py \
+            test/test_verify.py \
+            test/test_verify_stamp.py \
+            test/test_websearch.py \
+            test/test_websearch_mcp.py \
+            test/test_windows_assets.py \
+            test/test_windows_terminal_settings.py \
+            test/test_wsl_timesync_script.py \
+            test/test_zshenv_tmpdir.py \
+            --junitxml="$RUNNER_TEMP/macos-junit.xml" -q -ra -n auto --dist worksteal
+          python3 scripts/ci_policy.py check-junit "$RUNNER_TEMP/macos-junit.xml" --min-passed 1200 --max-skipped 120
+
+  # 保護パスの変更を含む PR だけ、通常テスト全通過後にオーナー承認待ちへ入る。
+  # deployment: false でリポジトリの Deployments 履歴を汚さずに Required reviewers だけ効かせる。
+  protected-approval:
+    name: protected-approval
+    needs: [policy, static, linux, windows, macos]
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.policy.result == 'success' &&
+      needs.policy.outputs.protected == 'true' &&
+      needs.static.result == 'success' &&
+      needs.linux.result == 'success' &&
+      needs.windows.result == 'success' &&
+      needs.macos.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment:
+      name: protected-path-approval
+      deployment: false
+    steps:
+      - name: Approved protected path change
+        run: echo "Protected path change approved by reviewer."
+
+  # Ruleset が必須チェックとして参照する唯一の集約ジョブ。
+  # if: always() と base コミット側の check-gate により、PR 側改ざんと skipped 通過を構造的に防ぐ。
+  ci-gate:
+    name: ci-gate
+    needs: [policy, static, linux, windows, macos, protected-approval]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Evaluate aggregated gate
+        env:
+          RES_POLICY: ${{ needs.policy.result }}
+          RES_STATIC: ${{ needs.static.result }}
+          RES_LINUX: ${{ needs.linux.result }}
+          RES_WINDOWS: ${{ needs.windows.result }}
+          RES_MACOS: ${{ needs.macos.result }}
+          IS_PROTECTED: ${{ needs.policy.outputs.protected || 'false' }}
+          RES_APPROVAL: ${{ needs.protected-approval.result }}
+        run: |
+          set -eu
+          if [ -f scripts/ci_policy.py ]; then
+            python3 scripts/ci_policy.py check-gate \
+              --job "policy=$RES_POLICY" \
+              --job "static=$RES_STATIC" \
+              --job "linux=$RES_LINUX" \
+              --job "windows=$RES_WINDOWS" \
+              --job "macos=$RES_MACOS" \
+              --protected "$IS_PROTECTED" \
+              --approval "$RES_APPROVAL"
+          else
+            # 初回導入 PR（base にまだ ci_policy.py が無い）向けのインライン厳格判定
+            python3 - <<'PY'
+          import os, sys
+          jobs = {k: os.environ[f"RES_{k.upper()}"] for k in ("policy", "static", "linux", "windows", "macos")}
+          bad = [f"{k}={v!r}" for k, v in jobs.items() if v != "success"]
+          if os.environ.get("IS_PROTECTED") == "true" and os.environ.get("RES_APPROVAL") != "success":
+              bad.append(f"protected-approval={os.environ.get('RES_APPROVAL')!r}")
+          if bad:
+              print("ci-gate: FAIL:", ", ".join(bad), file=sys.stderr)
+              sys.exit(1)
+          print("ci-gate: PASS")
+          PY
+          fi

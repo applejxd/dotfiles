@@ -210,7 +210,8 @@ $env:ZZ_CAT_VAR = 'from-env'
 'ENV=' + (cat Env:ZZ_CAT_VAR)
 'GLOB=' + (cat *.txt)
 $ErrorActionPreference = 'Continue'
-'MISSING=' + ((cat nothing.txt 2>&1 | Out-String) -match 'nothing.txt')
+# xdist (popen-gw0) 配下の長い tmp_path だと ErrorView 既定整形が 120 桁付近で 'nothing.txt' を折り返すため改行を除いて照合する
+'MISSING=' + (((cat nothing.txt 2>&1 | Out-String) -replace '\r?\n', '') -match 'nothing\.txt')
 'FILE=' + (cat f.txt)
 """
     lines, stderr, code = powershell(tmp_path, body, env=with_path(fakebin))

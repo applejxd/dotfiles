@@ -1,0 +1,39 @@
+name: cleanup-closed-ai-branch
+
+# 未マージのまま close された同一リポジトリ内の ai/* ブランチを自動削除する。
+# マージ時はリポジトリ設定 delete_branch_on_merge が削除を担う。
+# see docs/adr/0044-github-app-auto-merge-and-3os-ci.md
+"on":
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  delete-unmerged-ai-branch:
+    name: delete-unmerged-ai-branch
+    if: >-
+      github.event.pull_request.merged == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'ai/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Delete unmerged ai/* head branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -eu
+          encoded_ref=$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["HEAD_REF"], safe=""))')
+          status=$(gh api --method DELETE "repos/${REPO}/git/refs/heads/${encoded_ref}" -i 2>&1 || true)
+          if printf '%s' "$status" | grep -Eq 'HTTP/[0-9.]+ 204'; then
+            echo "Deleted: ${HEAD_REF}"
+          elif printf '%s' "$status" | grep -Eq 'Reference does not exist'; then
+            echo "Already absent: ${HEAD_REF}"
+          else
+            printf '%s\n' "$status" >&2
+            exit 1
+          fi

@@ -67,6 +67,7 @@
 | [0047](0047-gitflow.md) | main 一本から gitflow（main / develop / feature）へ切り替える（feature の起票・クローズの AI 化は CHG-0050 で撤去。動機: コミット粒度・main の安定・並列開発） | In progress | ブランチモデルは運用中。起票・クローズは利用者のシェル、AI は feature の worktree の `pi` から `git_commit`。経緯の本文は撤去前の設計の記録 | 実機で、feature の worktree から `git_commit` が期待どおり動くかを確認 | 2026-10-31 |
 | [0051](0051-verification-tiers.md) | 検査（verify / verify:all）を段階化し、安い検査を先に・重い検査を後にする（失敗の見つかる順序・並列度・印の記録を直す） | In progress | T0 / T1 / T2 の段階化、fail-fast、並列度の上限と nice、印の開始時記録を実装済み。故意の失敗で 23 秒で止まることを確認 | 印の段と義務の置き場の判断、`AGENTS.md` の縮約、`pi` を起動する試験の起動費用の削減 | 2026-10-31 |
 | [0066](0066-pi-sandbox-boundary.md) | pi のコマンド実行を包む囲いの問題を洗い出し、境界を決めて実装する（ADR-0036。拡張を外し、`shellPath` の囲いにした） | In progress | 実装は feature に入れた（未統合）。TUI の `!` と、YOLO を切ったときの確認の実機の試験は未実施 | 統合の指示を受けて統合し、配備して使い始める | 2026-11-12 |
+| [0067](0067-github-app-auto-merge-and-3os-ci.md) | 3 OS CI と専用 GitHub App Auto-Merge で計画後の検証・統合・片付けを全自動化する（ADR-0044） | In progress | 本物 3 OS ランナーでの初回通過と Ruleset 強制下の Auto-Merge 挙動が未実測 | 段 1（Windows 基本 4 点・3 OS `ci-gate`・`ai_pr.py`・権限ポリシー）を実装して検証する | 2026-11-27 |
 
 ## 保留
 

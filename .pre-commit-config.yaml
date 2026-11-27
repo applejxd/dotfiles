@@ -19,7 +19,7 @@ repos:
       # push する範囲の全履歴を見る。see docs/spec/development.md#hook-の-stage-の分け方
       - id: gitleaks-prepush
         name: Detect secrets in pushed history
-        entry: python3 scripts/gitleaks_prepush.py
+        entry: mise exec -- uv run --no-project python scripts/gitleaks_prepush.py
         language: system
         pass_filenames: false
         always_run: true
@@ -43,8 +43,9 @@ repos:
         entry: mise exec -- uvx ruff@0.16.5 check --force-exclude
         language: system
         types_or: [python, pyi]
-        # readme-writer の複製は対象外 (docs/spec/readme-writer.md#lint-の対象外)
-        exclude: ^home/dot_agents/skills/readme-writer/
+        # readme-writer の複製と *.tmpl (Go テンプレート構文を含む) は対象外。
+        # Windows では shebang (#!/usr/bin/env python3) で identify が *.py.tmpl に python タグを付けるため明示除外する。
+        exclude: ^(home/dot_agents/skills/readme-writer/|.*\.tmpl$)
 
       - id: markdownlint-local
         name: Markdown Lint via mise
@@ -67,7 +68,7 @@ repos:
       #  [[mcp]] の形が主目的)
       - id: pi-mcp-servers-local
         name: Rendered pi-mcp-servers.toml check
-        entry: mise exec -- python3 scripts/agents/validate_mcp.py
+        entry: mise exec -- uv run --no-project python scripts/agents/validate_mcp.py
         language: system
         pass_filenames: false
         files: ^(home/\.chezmoitemplates/pi-mcp-servers\.toml|scripts/agents/(generate|validate_mcp)\.py)$
@@ -76,7 +77,7 @@ repos:
       # shellcheck がテンプレートを素通りする。描画してから振り分ける。
       - id: lint-templates-local
         name: Lint rendered chezmoi templates
-        entry: mise exec -- python3 scripts/lint_templates.py
+        entry: mise exec -- uv run --no-project python scripts/lint_templates.py
         language: system
         pass_filenames: false
         files: (\.tmpl|^scripts/lint_templates\.py)$
@@ -101,7 +102,7 @@ repos:
       # 検査するのは整合だけで、記述の妥当性は判定しない。
       - id: lint-docs-local
         name: Lint docs index consistency
-        entry: mise exec -- python3 home/dot_agents/skills/sdd-docs/scripts/lint_docs.py
+        entry: mise exec -- uv run --no-project python home/dot_agents/skills/sdd-docs/scripts/lint_docs.py
         language: system
         pass_filenames: false
         files: ^(docs/.*\.md|home/dot_agents/skills/sdd-docs/scripts/lint_docs\.py)$
@@ -109,7 +110,7 @@ repos:
       # 警告のみでコミットは止めない。see docs/spec/development.md#コミット前の検証の印
       - id: verify-stamp
         name: Warn when staged content lacks a verify:all stamp
-        entry: python3 scripts/verify_stamp.py check
+        entry: mise exec -- uv run --no-project python scripts/verify_stamp.py check
         language: system
         pass_filenames: false
         always_run: true
@@ -118,7 +119,7 @@ repos:
       # 既存ファイルが空のままコミットされる事故を止める。see docs/spec/development.md#ステージの空ファイル検査
       - id: staged-emptied-files
         name: Fail when a staged file became empty
-        entry: python3 scripts/check_staged_drop.py
+        entry: mise exec -- uv run --no-project python scripts/check_staged_drop.py
         language: system
         pass_filenames: false
         always_run: true
@@ -127,7 +128,7 @@ repos:
       # push する範囲の内容を印と照合する。警告のみ (常に 0)
       - id: verify-stamp-push
         name: Warn when pushed content lacks a verify:all stamp
-        entry: python3 scripts/verify_stamp.py check-push
+        entry: mise exec -- uv run --no-project python scripts/verify_stamp.py check-push
         language: system
         pass_filenames: false
         always_run: true

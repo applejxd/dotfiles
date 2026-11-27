@@ -51,6 +51,7 @@ dirs = [
   "~/.aws",
   "~/.gnupg",
   "~/.config/gh",
+  "~/.config/dotfiles-ai",
   "~/.config/gcloud",
   "~/.docker",
   "~/.kube",

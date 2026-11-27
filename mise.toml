@@ -12,6 +12,8 @@ node = "latest"
 
 [env]
 UV_PROJECT_ENVIRONMENT = "{% if os() == 'windows' %}.venv-windows{% else %}.venv{% endif %}"
+# Windows でも Python の標準入出力・テキスト I/O を UTF-8 に固定する（日本語ログやパイプ時の cp932 ずれを防ぐ）
+PYTHONUTF8 = "1"
 # uvx が作る tools ディレクトリを作業ツリー内の .tmp へ置く。pib の囲いの内側では ~/.local/share/uv へ書けず、
 # pre-commit の uvx hook (ruff / yamllint) が os error 13 で落ちる。
 UV_TOOL_DIR = "{{config_root}}/.tmp/uv-tools"
@@ -22,11 +24,11 @@ run = "bash test/test.sh"
 
 [tasks.verify]
 description = "変更に応じた検証だけを選んで実行する（日常用。横断的な変更は全件へフォールバック）"
-run = "python3 scripts/verify.py --changed"
+run = "uv run --no-project python scripts/verify.py --changed"
 
 [tasks."verify:all"]
 description = "検証を全件実行する（安い検査を先に回し、前の段が落ちたら止まる。コミット前に 1 回）"
-run = "python3 scripts/verify.py --all"
+run = "uv run --no-project python scripts/verify.py --all"
 
 [tasks."websearch:keys"]
 description = "web-search の API キーを Bitwarden から取り直す（BW_SESSION が無ければ bw unlock を求める）"
