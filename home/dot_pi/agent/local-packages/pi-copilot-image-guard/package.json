@@ -1,0 +1,9 @@
+{
+  "name": "pi-copilot-image-guard-local",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": ["./src/index.js"]
+  }
+}

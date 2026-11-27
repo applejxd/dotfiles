@@ -244,6 +244,14 @@ RULES: tuple[Rule, ...] = (
         ("home/dot_pi/agent/local-packages/t3-usage-status/**",),
         ("test_t3_usage_status",),
     ),
+    Rule(
+        "Pi の Copilot 画像ガード",
+        (
+            "home/dot_pi/agent/local-packages/pi-copilot-image-guard/**",
+            "test/agents/pi_stock/copilot_image_guard.test.mjs",
+        ),
+        ("test_pi_copilot_image_guard",),
+    ),
     Rule("env-check", ("home/dot_agents/skills/env-check/**",), ("test_env_check",)),
     # Claude Code (予備のハーネス) は、利用者の決定で、専用の試験を置かない (docs/spec/claude-code.md#試験の対象外)。
     # この規則が無いと、規則に当たらないパスとして全件に回る。

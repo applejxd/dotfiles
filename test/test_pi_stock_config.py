@@ -21,6 +21,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 # settings.json からの相対パスで指す、リポジトリが配るローカル版の package
 LOCAL_PACKAGES = {
+    "./local-packages/pi-copilot-image-guard",
     "./local-packages/pi-permission-explain",
     "./local-packages/pi-sandbox-toggle",
     "./local-packages/t3-usage-status",
@@ -751,6 +752,18 @@ def test_t3_usage_status_local_package_is_wired_on_every_os(tmp_path, os_name):
     packages = [line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")]
     assert packages.count("./local-packages/t3-usage-status") == 1
     assert len(packages) == len(set(packages))
+
+
+@pytest.mark.parametrize("os_name", ["linux", "darwin", "windows"])
+@pytest.mark.parametrize("username", ["applejxd", "tester"])
+def test_copilot_image_guard_local_package_is_wired_everywhere(tmp_path, os_name, username):
+    text = render('{{ includeTemplate "pi-stock-packages" . }}', tmp_path, os_name=os_name, username=username)
+    assert text.splitlines().count("./local-packages/pi-copilot-image-guard") == 1
+    package = HOME_SRC / "dot_pi" / "agent" / "local-packages" / "pi-copilot-image-guard"
+    manifest = json.loads((package / "package.json").read_text(encoding="utf-8"))
+    assert manifest["pi"]["extensions"] == ["./src/index.js"]
+    assert (package / "src" / "index.js").is_file()
+    assert "dependencies" not in manifest
 
 
 def test_sandbox_toggle_is_never_a_tool_the_model_can_call():
