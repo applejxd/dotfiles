@@ -27,18 +27,13 @@ WORK_PARENT_MODELS = {
 # 家の起動・モデル循環の候補。利用者が enabledModels を書いていれば保つ。
 # 手動での /model 選択や、候補が解決できないときの Pi 本体のフォールバックは制限しない。
 HOME_ENABLED_MODELS = ["github-copilot/*"]
-# 家の機の親のセッションの既定 (Sol・high)。3 つのキーが全部無いときと、前の既定 (Sonnet・xhigh) のままのときだけ置く。
-# 利用者が別の値を選んでいれば保つ。会社では work_pi_profile で選ぶ。
+HOME_PARENT_MIGRATION = "dotfilesHomeCopilotParentMigrated"
 HOME_PARENT_DEFAULT = {
     "defaultProvider": "github-copilot",
-    "defaultModel": "gpt-6.2-sol",
-    "defaultThinkingLevel": "high",
+    "defaultModel": "gemini-4-neon",
+    "defaultThinkingLevel": "medium",
 }
-LEGACY_HOME_PARENT_DEFAULT = {
-    "defaultProvider": "github-copilot",
-    "defaultModel": "claude-sonnet-5.5",
-    "defaultThinkingLevel": "xhigh",
-}
+LEGACY_HOME_PARENT_MODELS = {"claude-sonnet-5.5": "xhigh", "gpt-6.2-sol": "high"}
 
 # pi のシェル。Linux (Ubuntu / WSL) だけが、コマンド実行の囲い (pib-shell) を指す。空文字なら触らない。
 # pib-shell は、環境変数 PIB_SANDBOX が立っているとき (= pib で起動したとき) だけ囲う。普段の pi は素の bash と同じ
@@ -153,24 +148,47 @@ LEGACY_AGENT_MODELS = {
     ("amazon-bedrock", "oracle"): ("amazon-bedrock/us.anthropic.claude-sonnet-5-5:xhigh",),
 }
 
-# 会社の監査・相談役はプロバイダを問わず Sol 6.2。以前の既定だけを移す。
 WORK_BEDROCK_MODELS = dict.fromkeys(
     ("reviewer", "evidence-auditor", "oracle"), "amazon-bedrock/us.openai.gpt-6.2-sol:high"
 )
-WORK_COPILOT_MODELS = {
-    "researcher": "github-copilot/gemini-4-neon:medium",
-    "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
-    "oracle": "github-copilot/gpt-6.2-sol:high",
+COPILOT_EXECUTION_MODELS = {
+    "worker": "github-copilot/gpt-6.2-sol:xhigh",
+    "reviewer": "github-copilot/claude-sonnet-5.5:high",
+    "evidence-auditor": "github-copilot/claude-sonnet-5.5:high",
 }
-
-# 家の機だけで Copilot の割り当てを上書きし、変更した役の前の既定を移行対象にする。
-HOME_COPILOT_MODELS = {
-    "scout": "github-copilot/gemini-4-neon:medium",
+WORK_COPILOT_MODELS = COPILOT_EXECUTION_MODELS | {
+    "scout": "github-copilot/claude-sonnet-5.5:medium",
+    "researcher": "github-copilot/gemini-4-neon:medium",
+    "oracle": "github-copilot/claude-opus-5.5:medium",
+}
+HOME_COPILOT_MODELS = COPILOT_EXECUTION_MODELS | {
+    "scout": "github-copilot/claude-sonnet-5.5:high",
     "researcher": "github-copilot/gemini-4-neon:xhigh",
+}
+LEGACY_HOME_COPILOT_MODELS = {
+    "scout": "github-copilot/gemini-4-neon:medium",
     "worker": "github-copilot/claude-sonnet-5.5:high",
-    "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
     "delegate": "github-copilot/gemini-4-neon:high",
 }
+
+
+def set_home_parent(data: dict) -> None:
+    data.setdefault("enabledModels", list(HOME_ENABLED_MODELS))
+    if not (HOME_PARENT_DEFAULT.keys() & data.keys()):
+        data.update(HOME_PARENT_DEFAULT)
+    elif data.get(HOME_PARENT_MIGRATION) is not True:
+        model = data.get("defaultModel")
+        old_effort = LEGACY_HOME_PARENT_MODELS.get(model) if isinstance(model, str) else None
+        model_efforts = data.get("modelThinkingLevels")
+        affected_models = {f"github-copilot/{model}", f"github-copilot/{HOME_PARENT_DEFAULT['defaultModel']}"}
+        has_override = isinstance(model_efforts, dict) and bool(model_efforts.keys() & affected_models)
+        if (
+            data.get("defaultProvider") == "github-copilot"
+            and old_effort is not None and data.get("defaultThinkingLevel") == old_effort
+            and data["enabledModels"] == HOME_ENABLED_MODELS and not has_override
+        ):
+            data.update(HOME_PARENT_DEFAULT)
+    data[HOME_PARENT_MIGRATION] = True
 
 
 def preferred_model_pattern(scoped: list[str], preferred: str) -> str:
@@ -309,16 +327,16 @@ def main() -> int:
     if not skills_not_list:  # 配列でなければ触らない
         data["skills"] = skills + [i for i in EXCLUDED_SKILLS if i not in skills]
     data["packages"] = packages()
-    if not IS_WORK and "enabledModels" not in data:
-        data["enabledModels"] = list(HOME_ENABLED_MODELS)
     copilot_state = data.get(WORK_COPILOT_MODEL_STATE) if IS_WORK else None
     if not isinstance(copilot_state, dict):
         copilot_state = {}
     work_provider = select_work_parent(data, copilot_state) if IS_WORK else None
+    managed = copilot_state.get("managedModels")
+    managed = {key: model for key, model in managed.items() if isinstance(model, str)} if isinstance(managed, dict) else {}
+    if copilot_state.pop("researcherManaged", None) is True:
+        managed.setdefault("researcher", WORK_COPILOT_MODELS["researcher"])
     if not IS_WORK:
-        parent = {key: data.get(key) for key in HOME_PARENT_DEFAULT}
-        if not (HOME_PARENT_DEFAULT.keys() & data.keys()) or parent == LEGACY_HOME_PARENT_DEFAULT:
-            data.update(HOME_PARENT_DEFAULT)
+        set_home_parent(data)
     if SHELL_PATH and "shellPath" not in data:  # 利用者が別のシェルを書いていれば保つ (pib が、囲いを指していないと知らせる)
         data["shellPath"] = SHELL_PATH
     subagents = data.get("subagents")
@@ -348,10 +366,9 @@ def main() -> int:
             if isinstance(inactive, dict):
                 for name, entry in list(inactive.items()):
                     known = {roles.get(name), *LEGACY_AGENT_MODELS.get((provider, name), ())}
-                    work_models = WORK_COPILOT_MODELS if provider == "github-copilot" else WORK_BEDROCK_MODELS
-                    # researcher の Neon は、この設定が生成したと分かる場合だけ削除する。
-                    if provider != "github-copilot" or name != "researcher" or copilot_state.get("researcherManaged") is True:
-                        known.add(work_models.get(name))
+                    # 新しい配分と偶然一致する利用者指定を、無効側の切り替えで消さない。
+                    defaults = managed if provider == "github-copilot" else WORK_BEDROCK_MODELS
+                    known.add(defaults.get(name))
                     if isinstance(entry, dict) and isinstance(entry.get("model"), str) and entry["model"] in known:
                         del entry["model"]
                         if not entry:
@@ -359,39 +376,51 @@ def main() -> int:
                 if not inactive:
                     by_provider.pop(provider)
             if provider == "github-copilot":
-                copilot_state.pop("researcherManaged", None)
+                managed.clear()
             continue
         layer = by_provider.get(provider)
         if not isinstance(layer, dict):
             layer = {}
         profile_models = {}
+        home_copilot = provider == "github-copilot" and not IS_WORK
         if provider == "github-copilot":
-            profile_models = WORK_COPILOT_MODELS if IS_WORK else HOME_COPILOT_MODELS
+            profile_models = HOME_COPILOT_MODELS if home_copilot else WORK_COPILOT_MODELS
         elif IS_WORK:
             profile_models = WORK_BEDROCK_MODELS
+        if home_copilot:
+            delegate = layer.get("delegate")
+            if isinstance(delegate, dict) and delegate.get("model") == LEGACY_HOME_COPILOT_MODELS["delegate"]:
+                del delegate["model"]
+                if not delegate:
+                    del layer["delegate"]
         for name, model in (roles | profile_models).items():
-            # 新たにモデルを割り当てる役では、共通の上書きに利用者が書いたモデルを優先する。
-            common = overrides.get(name)
-            if name not in roles and isinstance(common, dict) and "model" in common:
-                continue
             entry = layer.get(name)
             if not isinstance(entry, dict):
                 entry = {}
             legacy = LEGACY_AGENT_MODELS.get((provider, name), ())
             if name in profile_models and name in roles:
                 legacy += (roles[name],)
-            if work_provider == "github-copilot" and name == "researcher":
-                if "model" not in entry or entry["model"] in legacy:
-                    copilot_state["researcherManaged"] = True
-                elif entry["model"] != model:
-                    copilot_state.pop("researcherManaged", None)
-            if entry.get("model") in legacy:
+            if home_copilot and name in LEGACY_HOME_COPILOT_MODELS:
+                legacy += (LEGACY_HOME_COPILOT_MODELS[name],)
+            generated = "model" not in entry or entry["model"] in legacy
+            if work_provider == "github-copilot":
+                if generated:
+                    managed[name] = model
+                elif entry["model"] != managed.get(name):
+                    managed.pop(name, None)
+            if generated:
                 entry["model"] = model
-            entry.setdefault("model", model)
             layer[name] = entry
         by_provider[provider] = layer
-    if IS_WORK and copilot_state:
-        data[WORK_COPILOT_MODEL_STATE] = copilot_state
+    if IS_WORK:
+        if managed:
+            copilot_state["managedModels"] = managed
+        else:
+            copilot_state.pop("managedModels", None)
+        if copilot_state:
+            data[WORK_COPILOT_MODEL_STATE] = copilot_state
+        else:
+            data.pop(WORK_COPILOT_MODEL_STATE, None)
     subagents["agentOverridesByProvider"] = by_provider
     subagents["agentOverrides"] = overrides
     data["subagents"] = subagents

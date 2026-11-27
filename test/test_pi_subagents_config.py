@@ -344,15 +344,14 @@ def by_provider(out: dict) -> dict:
 def test_home_settings_assigns_models_by_role_for_copilot(home_settings_script):
     out = json.loads(run(home_settings_script, "{}"))
     models = {n: e["model"] for n, e in by_provider(out)["github-copilot"].items()}
-    # 実装は Sonnet、レビュー・証拠監査は Sol、調査・delegate は Neon、判定は Carbon (すべて Copilot 経由)
+    # 実装は Sol、レビュー・証拠監査は Sonnet、テキスト調査は Neon、計画は Carbon。
     assert models == {
-        "scout": "github-copilot/gemini-4-neon:medium",
+        "scout": "github-copilot/claude-sonnet-5.5:high",
         "researcher": "github-copilot/gemini-4-neon:xhigh",
-        "worker": "github-copilot/claude-sonnet-5.5:high",
-        "reviewer": "github-copilot/gpt-6.2-sol:high",
-        "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
+        "worker": "github-copilot/gpt-6.2-sol:xhigh",
+        "reviewer": "github-copilot/claude-sonnet-5.5:high",
+        "evidence-auditor": "github-copilot/claude-sonnet-5.5:high",
         "oracle": "github-copilot/gemini-4-carbon:high",
-        "delegate": "github-copilot/gemini-4-neon:high",
     }
     assert "advisor" not in models  # advisor は oracle の別名。設定は正規名の oracle に書く
     assert all(m.startswith("github-copilot/") for m in models.values())
@@ -367,13 +366,38 @@ def test_work_settings_assigns_models_by_role_for_copilot(work_copilot_settings_
     assert out["enabledModels"] == ["github-copilot/gemini-4-neon", "github-copilot/*"]
     models = {n: e["model"] for n, e in by_provider(out)["github-copilot"].items()}
     assert models == {
-        "scout": "github-copilot/claude-sonnet-5.5:low",
+        "scout": "github-copilot/claude-sonnet-5.5:medium",
         "researcher": "github-copilot/gemini-4-neon:medium",
-        "worker": "github-copilot/claude-sonnet-5.5:medium",
-        "reviewer": "github-copilot/gpt-6.2-sol:high",
-        "evidence-auditor": "github-copilot/gpt-6.2-sol:high",
-        "oracle": "github-copilot/gpt-6.2-sol:high",
+        "worker": "github-copilot/gpt-6.2-sol:xhigh",
+        "reviewer": "github-copilot/claude-sonnet-5.5:high",
+        "evidence-auditor": "github-copilot/claude-sonnet-5.5:high",
+        "oracle": "github-copilot/claude-opus-5.5:medium",
     }
+    assert run(work_copilot_settings_script, first) == first
+
+
+def test_work_copilot_migrates_the_previous_lineup(work_copilot_settings_script):
+    old = {
+        "scout": "claude-sonnet-5.5:low",
+        "researcher": "gemini-4-neon:medium",
+        "worker": "claude-sonnet-5.5:medium",
+        "reviewer": "gpt-6.2-sol:high",
+        "evidence-auditor": "gpt-6.2-sol:high",
+        "oracle": "gpt-6.2-sol:high",
+    }
+    existing = {
+        "dotfilesWorkCopilotModels": {"parentMigrated": True, "researcherManaged": True},
+        "subagents": {"agentOverridesByProvider": {"github-copilot": {
+            role: {"model": f"github-copilot/{model}", "description": role} for role, model in old.items()
+        }}},
+    }
+    first = run(work_copilot_settings_script, json.dumps(existing))
+    out = json.loads(first)
+    defaults = by_provider(json.loads(run(work_copilot_settings_script, "{}")))["github-copilot"]
+    assert by_provider(out)["github-copilot"] == {
+        role: {**entry, "description": role} for role, entry in defaults.items()
+    }
+    assert out["dotfilesWorkCopilotModels"]["managedModels"] == {role: entry["model"] for role, entry in defaults.items()}
     assert run(work_copilot_settings_script, first) == first
 
 
@@ -492,13 +516,37 @@ def test_work_copilot_respects_startup_effort_precedence(
 
 
 @pytest.mark.parametrize("copilot_first", [False, True])
-def test_work_bedrock_preserves_a_preexisting_neon_researcher(settings_script, work_copilot_settings_script, copilot_first):
-    entry = {"model": "github-copilot/gemini-4-neon:medium", "description": "mine"}
-    before = json.dumps({"subagents": {"agentOverridesByProvider": {"github-copilot": {"researcher": entry}}}})
+def test_work_bedrock_preserves_preexisting_choices_that_match_new_defaults(settings_script, work_copilot_settings_script, copilot_first):
+    chosen = {
+        "scout": {"model": "github-copilot/claude-sonnet-5.5:medium"},
+        "researcher": {"model": "github-copilot/gemini-4-neon:medium", "description": "mine"},
+        "worker": {"model": "github-copilot/gpt-6.2-sol:xhigh"},
+        "reviewer": {"model": "github-copilot/claude-sonnet-5.5:high"},
+        "evidence-auditor": {"model": "github-copilot/claude-sonnet-5.5:high"},
+        "oracle": {"model": "github-copilot/claude-opus-5.5:medium"},
+    }
+    before = json.dumps({"subagents": {"agentOverridesByProvider": {"github-copilot": chosen}}})
     if copilot_first:
         before = run(work_copilot_settings_script, before)
     out = json.loads(run(settings_script, before))
-    assert by_provider(out)["github-copilot"]["researcher"] == entry
+    assert by_provider(out)["github-copilot"] == chosen
+
+
+def test_old_managed_researcher_is_removed_when_going_to_bedrock(settings_script, work_copilot_settings_script):
+    previous = {
+        "dotfilesWorkCopilotModels": {"parentMigrated": True, "researcherManaged": True},
+        "subagents": {"agentOverridesByProvider": {"github-copilot": {
+            "researcher": {"model": "github-copilot/gemini-4-neon:medium", "description": "mine"},
+        }}},
+    }
+    upgraded = json.loads(run(work_copilot_settings_script, json.dumps(previous)))
+    state = upgraded["dotfilesWorkCopilotModels"]
+    assert state["managedModels"]["researcher"] == "github-copilot/gemini-4-neon:medium"
+    assert "researcherManaged" not in state
+    for data in (previous, upgraded):
+        restored = json.loads(run(settings_script, json.dumps(data)))
+        assert by_provider(restored)["github-copilot"] == {"researcher": {"description": "mine"}}
+        assert restored["dotfilesWorkCopilotModels"] == {"parentMigrated": True}
 
 
 @pytest.mark.parametrize("thinking", ["medium", "high"])
@@ -599,8 +647,8 @@ def test_settings_moves_the_previous_copilot_gpt_default_and_keeps_custom_bedroc
     }
     out = json.loads(run(work_copilot_settings_script, json.dumps(old)))
     copilot = by_provider(out)["github-copilot"]
-    assert copilot["reviewer"]["model"] == "github-copilot/gpt-6.2-sol:high"
-    assert copilot["evidence-auditor"]["model"] == "github-copilot/gpt-6.2-sol:high"
+    assert copilot["reviewer"]["model"] == "github-copilot/claude-sonnet-5.5:high"
+    assert copilot["evidence-auditor"]["model"] == "github-copilot/claude-sonnet-5.5:high"
     assert copilot["oracle"]["model"] == "github-copilot/gpt-6.1-sol:xhigh"  # 利用者の選択を保つ
     assert by_provider(out)["amazon-bedrock"]["reviewer"]["model"] == "amazon-bedrock/us.openai.gpt-6.1-sol:medium"
 
@@ -628,7 +676,7 @@ def test_settings_migrates_only_the_work_bedrock_sol_default(settings_script, ho
 
 @pytest.mark.parametrize(
     "role, expected",
-    [("evidence-auditor", "github-copilot/gpt-6.2-sol:high"), ("oracle", "github-copilot/gemini-4-carbon:high")],
+    [("evidence-auditor", "github-copilot/claude-sonnet-5.5:high"), ("oracle", "github-copilot/gemini-4-carbon:high")],
 )
 @pytest.mark.parametrize("version", ["6.1", "6.2"])
 def test_home_settings_moves_gpt_audit_defaults_to_the_new_default(home_settings_script, role, expected, version):
@@ -655,29 +703,33 @@ def test_home_settings_moves_gpt_audit_defaults_to_the_new_default(home_settings
     assert run(home_settings_script, first) == first
 
 
-def test_home_settings_moves_the_previous_copilot_assignment_to_neon_and_sol(home_settings_script):
-    """前の既定 (Sonnet の low・medium、証拠監査の Carbon medium) は、役ごとの新既定へ移す。他の値は保つ。"""
+@pytest.mark.parametrize("previous_home", [False, True])
+def test_home_settings_moves_the_previous_copilot_assignment(home_settings_script, previous_home):
+    """旧共通設定と以前の自宅専用設定のどちらも、新既定に移す。他のキーは保つ。"""
     old = {
         "subagents": {
             "agentOverridesByProvider": {
                 "github-copilot": {
-                    "scout": {"model": "github-copilot/claude-sonnet-5.5:low"},
+                    "scout": {"model": "github-copilot/gemini-4-neon:medium" if previous_home else "github-copilot/claude-sonnet-5.5:low"},
                     "researcher": {"model": "github-copilot/claude-sonnet-5.5:medium"},
-                    "worker": {"model": "github-copilot/claude-sonnet-5.5:medium", "thinking": "low"},
+                    "worker": {"model": f"github-copilot/claude-sonnet-5.5:{'high' if previous_home else 'medium'}", "thinking": "low"},
+                    "reviewer": {"model": "github-copilot/gpt-6.2-sol:high"},
                     "evidence-auditor": {"model": "github-copilot/gemini-4-carbon:medium"},
                     "oracle": {"model": "github-copilot/gemini-4-carbon:high"},
+                    "delegate": {"model": "github-copilot/gemini-4-neon:high", "description": "mine"},
                 },
             }
         }
     }
     first = run(home_settings_script, json.dumps(old))
     copilot = by_provider(json.loads(first))["github-copilot"]
-    assert copilot["scout"]["model"] == "github-copilot/gemini-4-neon:medium"
+    assert copilot["scout"]["model"] == "github-copilot/claude-sonnet-5.5:high"
     assert copilot["researcher"]["model"] == "github-copilot/gemini-4-neon:xhigh"
-    assert copilot["worker"] == {"model": "github-copilot/claude-sonnet-5.5:high", "thinking": "low"}
-    assert copilot["evidence-auditor"]["model"] == "github-copilot/gpt-6.2-sol:high"
+    assert copilot["worker"] == {"model": "github-copilot/gpt-6.2-sol:xhigh", "thinking": "low"}
+    assert copilot["reviewer"]["model"] == "github-copilot/claude-sonnet-5.5:high"
+    assert copilot["evidence-auditor"]["model"] == "github-copilot/claude-sonnet-5.5:high"
     assert copilot["oracle"]["model"] == "github-copilot/gemini-4-carbon:high"
-    assert copilot["delegate"]["model"] == "github-copilot/gemini-4-neon:high"  # 無かったものは補う
+    assert copilot["delegate"] == {"description": "mine"}
     assert run(home_settings_script, first) == first
 
 
@@ -729,11 +781,12 @@ def test_settings_keeps_a_users_model_and_other_providers(work_copilot_settings_
     layer = by_provider(out)["github-copilot"]
     assert layer["worker"]["model"] == "x/y"  # 利用者の model を保つ
     assert layer["reviewer"]["thinking"] == "low"
-    assert layer["reviewer"]["model"] == "github-copilot/gpt-6.2-sol:high"  # 無いものは補う
+    assert layer["reviewer"]["model"] == "github-copilot/claude-sonnet-5.5:high"  # 無いものは補う
     assert by_provider(out)["openrouter"] == {"worker": {"model": "z/w"}}  # 知らないプロバイダの層は触らない
 
 
-HOME_PARENT = {"defaultProvider": "github-copilot", "defaultModel": "gpt-6.2-sol", "defaultThinkingLevel": "high"}
+HOME_PARENT = {"defaultProvider": "github-copilot", "defaultModel": "gemini-4-neon", "defaultThinkingLevel": "medium"}
+SOL_PARENT = {"defaultProvider": "github-copilot", "defaultModel": "gpt-6.2-sol", "defaultThinkingLevel": "high"}
 PREVIOUS_PARENT = {"defaultProvider": "github-copilot", "defaultModel": "claude-sonnet-5.5", "defaultThinkingLevel": "xhigh"}
 
 
@@ -741,13 +794,26 @@ def _parent(out: dict) -> dict:
     return {k: out.get(k) for k in HOME_PARENT}
 
 
-def test_home_parent_default_is_sol_high_when_unset_or_previous_default(tmp_path):
-    """家の機: 親の既定が無いときと、前の既定 (Sonnet・xhigh) のままのときだけ、Sol・high にする。"""
-    home = script(SETTINGS_MODIFY, tmp_path, "modify_settings_home.py", "applejxd")
-    assert _parent(json.loads(run(home, "{}"))) == HOME_PARENT
-    first = run(home, json.dumps(PREVIOUS_PARENT))
-    assert _parent(json.loads(first)) == HOME_PARENT
-    assert run(home, first) == first
+@pytest.mark.parametrize("existing", [{}, SOL_PARENT, PREVIOUS_PARENT])
+def test_home_parent_defaults_to_neon_and_migrates_once(home_settings_script, existing):
+    first = run(home_settings_script, json.dumps(existing))
+    out = json.loads(first)
+    assert _parent(out) == HOME_PARENT
+    assert run(home_settings_script, first) == first
+    out.update(SOL_PARENT)
+    assert _parent(json.loads(run(home_settings_script, json.dumps(out)))) == SOL_PARENT
+
+
+@pytest.mark.parametrize("custom", [
+    {"enabledModels": ["github-copilot/gpt-6.2-sol:high", "github-copilot/*"]},
+    {"modelThinkingLevels": {"github-copilot/gpt-6.2-sol": "high"}},
+    {"modelThinkingLevels": {"github-copilot/gemini-4-neon": "high"}},
+])
+def test_home_parent_does_not_migrate_custom_model_scope_or_effort(home_settings_script, custom):
+    old = SOL_PARENT | custom
+    out = json.loads(run(home_settings_script, json.dumps(old)))
+    assert _parent(out) == SOL_PARENT
+    assert all(out[key] == value for key, value in custom.items())
 
 
 @pytest.mark.parametrize(
