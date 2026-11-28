@@ -1,0 +1,204 @@
+---
+name: promote-main
+
+# 手動トリガーで develop 先端に対して 3 OS（Ubuntu / Windows / macOS）の隔離 chezmoi apply ＋
+# 起動スモークを実行し、全通過後に Environment 承認を経て main を更新する。
+# see docs/adr/0045-stage3-smoke-promotion-and-safe-update.md
+"on":
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "3 OS 隔離スモークと承認確認まで行い、main の更新は行わない"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-main
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      develop_sha: ${{ steps.refs.outputs.develop_sha }}
+      main_sha: ${{ steps.refs.outputs.main_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Pin develop and main SHAs
+        id: refs
+        run: |
+          set -eu
+          dev_sha=$(git rev-parse origin/develop)
+          main_sha=$(git rev-parse origin/main)
+          echo "develop_sha=$dev_sha" >> "$GITHUB_OUTPUT"
+          echo "main_sha=$main_sha" >> "$GITHUB_OUTPUT"
+          echo "Resolved develop=$dev_sha main=$main_sha"
+
+  smoke-linux:
+    name: smoke-linux
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.develop_sha }}
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Install chezmoi and zsh
+        run: |
+          bin="$RUNNER_TEMP/chezmoi-bin"
+          sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b "$bin"
+          echo "$bin" >> "$GITHUB_PATH"
+          sudo apt-get update -qq && sudo apt-get install -y -qq zsh vim
+
+      - name: Isolated chezmoi apply + startup smoke (Linux)
+        env:
+          PYTHONUTF8: "1"
+        run: uv run --python 3.13 --no-project python scripts/isolated_smoke.py isolate --work-dir "$RUNNER_TEMP"
+
+  smoke-windows:
+    name: smoke-windows
+    needs: resolve
+    runs-on: windows-2025
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.develop_sha }}
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Install chezmoi
+        run: |
+          $bin = Join-Path $env:RUNNER_TEMP 'chezmoi-bin'
+          iex "&{$(irm 'https://get.chezmoi.io/ps1')} -b '$bin'"
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
+
+      - name: Isolated chezmoi apply + startup smoke (Windows)
+        env:
+          PYTHONUTF8: "1"
+        run: uv run --python 3.13 --no-project python scripts/isolated_smoke.py isolate --work-dir "$env:RUNNER_TEMP"
+
+  smoke-macos:
+    name: smoke-macos
+    needs: resolve
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.develop_sha }}
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Install chezmoi
+        run: |
+          bin="$RUNNER_TEMP/chezmoi-bin"
+          sh -c "$(curl -fsLS https://get.chezmoi.io)" -- -b "$bin"
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Isolated chezmoi apply + startup smoke (macOS)
+        env:
+          PYTHONUTF8: "1"
+        run: uv run --python 3.13 --no-project python scripts/isolated_smoke.py isolate --work-dir "$RUNNER_TEMP"
+
+  promote-approval:
+    name: promote-approval
+    needs: [resolve, smoke-linux, smoke-windows, smoke-macos]
+    if: >-
+      needs.resolve.result == 'success' &&
+      needs.smoke-linux.result == 'success' &&
+      needs.smoke-windows.result == 'success' &&
+      needs.smoke-macos.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment:
+      name: protected-path-approval
+      deployment: false
+    steps:
+      - name: Ready for main promotion
+        env:
+          DEV_SHA: ${{ needs.resolve.outputs.develop_sha }}
+          MAIN_SHA: ${{ needs.resolve.outputs.main_sha }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          echo "Approved promotion: main ($MAIN_SHA) -> develop ($DEV_SHA), dry_run=$DRY_RUN"
+
+  promote-main:
+    name: promote-main
+    needs: [resolve, smoke-linux, smoke-windows, smoke-macos, promote-approval]
+    if: >-
+      always() &&
+      needs.resolve.result == 'success' &&
+      needs.smoke-linux.result == 'success' &&
+      needs.smoke-windows.result == 'success' &&
+      needs.smoke-macos.result == 'success' &&
+      needs.promote-approval.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Advance main to verified develop SHA
+        env:
+          DEV_SHA: ${{ needs.resolve.outputs.develop_sha }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -eu
+          cur_main=$(git rev-parse HEAD)
+          commit_count=$(git rev-list --count "${cur_main}..${DEV_SHA}")
+          if [ "$DRY_RUN" = "true" ]; then
+            {
+              echo "### Promote main (dry-run)"
+              echo "- current main: \`${cur_main}\`"
+              echo "- verified develop: \`${DEV_SHA}\` (+${commit_count} commits)"
+              echo "- 3 OS isolated smoke: **PASSED**"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "$cur_main" = "$DEV_SHA" ]; then
+            echo "main is already at $DEV_SHA"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git merge-base --is-ancestor "$cur_main" "$DEV_SHA"; then
+            git merge --ff-only "$DEV_SHA"
+            mode="fast-forward"
+          else
+            git merge --no-ff "$DEV_SHA" -m "chore(release): promote verified develop (${DEV_SHA:0:8}) to main"
+            mode="merge-commit"
+          fi
+          git push origin HEAD:refs/heads/main
+          new_main=$(git rev-parse HEAD)
+          {
+            echo "### Promoted develop to main (${mode})"
+            echo "- previous main: \`${cur_main}\`"
+            echo "- promoted develop: \`${DEV_SHA}\` (+${commit_count} commits)"
+            echo "- new main: \`${new_main}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
