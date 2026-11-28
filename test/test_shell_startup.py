@@ -886,19 +886,21 @@ def test_shims_are_first_and_unique(shims_path):
 
 def test_shims_inherited_in_path_are_moved_to_front_without_duplicates(shims_path, tmp_path):
     shims = str(tmp_path / "mise-data" / "shims")
-    inherited = f"/opt/x:{shims}:/usr/bin:{shims}:{shims}:/bin"
+    # macOS の login bash は /etc/profile の path_helper が /usr/bin を先頭へ再配置するため、
+    # ユーザー独自パス同士の相対順序 (/opt/x < /opt/y) で継承順序の保持を検証する
+    inherited = f"/opt/x:{shims}:/opt/y:{shims}:{shims}:/usr/bin:/bin"
     _, entries = shims_path(path=inherited)
     assert entries[0] == shims
     assert entries.count(shims) == 1
-    assert entries.index("/opt/x") < entries.index("/usr/bin")  # 他の要素の順序は保つ
+    assert entries.index("/opt/x") < entries.index("/opt/y")  # 他の要素の順序は保つ
 
 
 def test_venv_bin_stays_ahead_of_shims(shims_path, tmp_path):
     shims = str(tmp_path / "mise-data" / "shims")
     venv = str(tmp_path / "venv")
-    _, entries = shims_path(path=f"{venv}/bin:/usr/bin:{shims}", VIRTUAL_ENV=venv)
+    _, entries = shims_path(path=f"{venv}/bin:/opt/y:/usr/bin:{shims}", VIRTUAL_ENV=venv)
     assert entries.index(f"{venv}/bin") < entries.index(shims)
-    assert entries.index(shims) < entries.index("/usr/bin")
+    assert entries.index(shims) < entries.index("/opt/y")
     assert entries.count(shims) == 1
 
 
