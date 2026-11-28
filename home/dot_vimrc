@@ -64,8 +64,10 @@ nnoremap <Leader>= <C-w>=
 " Y を Vimの直感に合わせて行末までヤンク
 nnoremap Y y$
 
-" クリップボード連携（OS対応時のみ）
-if has('clipboard') | set clipboard=unnamedplus | endif
+" SSH 越しでは Vim 内のレジスタを使う
+if has('clipboard') && empty($SSH_CONNECTION)
+  set clipboard=unnamedplus
+endif
 
 " 分割の既定：右/下に開く。分割間の移動ショートカット
 set splitright
