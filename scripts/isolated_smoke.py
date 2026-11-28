@@ -89,13 +89,15 @@ def _run(
 
 
 def _isolated_env(dest: Path) -> dict[str, str]:
-    """起動スモークが実機の認証・Bitwarden・SSH 状態に触れない最小環境を作る。"""
+    """起動スモークが実機の認証・Bitwarden・SSH・X11 状態に触れない最小環境を作る。"""
     env = dict(os.environ)
     env["HOME"] = str(dest)
     env["USERPROFILE"] = str(dest)
     env["PYTHONUTF8"] = "1"
     for key in (
         "BW_SESSION",
+        "DISPLAY",
+        "WAYLAND_DISPLAY",
         "SSH_CONNECTION",
         "SSH_CLIENT",
         "SSH_TTY",
@@ -165,10 +167,11 @@ def check_destination(dest: Path, *, min_entries: int = 1) -> list[StepResult]:
         results.append(StepResult("vim-smoke", "skipped", "vim が PATH にありません"))
     else:
         env_local = _isolated_env(dest)
-        p_local = _run([vim_bin, "-Nu", str(vimrc), "-es", "-c", "qa!"], env=env_local, timeout=20)
+        # -X: ヘッドレス Linux 上でも X11 サーバへ接続しない（ハング・エラー防止）
+        p_local = _run([vim_bin, "-X", "-Nu", str(vimrc), "-es", "-c", "qa!"], env=env_local, timeout=20)
         env_ssh = dict(env_local, SSH_CONNECTION="192.0.2.1 50000 192.0.2.2 22")
         p_ssh = _run(
-            [vim_bin, "-Nu", str(vimrc), "-es", "-c", 'if &clipboard !=# "" | cquit 2 | endif | qa!'],
+            [vim_bin, "-X", "-Nu", str(vimrc), "-es", "-c", 'if &clipboard !=# "" | cquit 2 | endif | qa!'],
             env=env_ssh,
             timeout=20,
         )
@@ -283,6 +286,8 @@ def run_isolated_smoke(
         chezmoi,
         "-S",
         str(source_root),
+        "--working-tree",
+        str(source_root),
         "-D",
         str(dest),
         "-c",
@@ -299,18 +304,21 @@ def run_isolated_smoke(
             return SmokeReport(False, "isolate", sys.platform, str(source_root), str(dest), 0, steps)
         steps.append(StepResult("chezmoi-init", "passed", "config rendered"))
 
-        # Unix では modify_ スクリプト用の Python 3.11+ shim を現在の Python（3.11+）で用意する
+        # 2. 1 回目 apply（scripts と externals を除外して純粋なテンプレート・modify 展開を検査）
+        # Unix では chezmoi.toml が ~/.local/bin/chezmoi-python3 を指す場合があるため、
+        # apply 後に掃除可能な形で Python 3.11+ shim を用意する。
+        created_shim: Path | None = None
         if os.name != "nt":
             shim = dest / ".local" / "bin" / "chezmoi-python3"
-            shim.parent.mkdir(parents=True, exist_ok=True)
             if not shim.exists():
+                shim.parent.mkdir(parents=True, exist_ok=True)
                 try:
                     shim.symlink_to(sys.executable)
                 except OSError:
                     shim.write_text(f"#!/bin/sh\nexec '{sys.executable}' \"$@\"\n", encoding="utf-8")
                     shim.chmod(0o755)
+                created_shim = shim
 
-        # 2. 1 回目 apply（scripts と externals を除外して純粋なテンプレート・modify 展開を検査）
         r_apply1 = _run(
             [*base_cmd, "apply", "--exclude", "scripts,externals", "--no-tty", "--force"],
             env=env,
@@ -319,7 +327,7 @@ def run_isolated_smoke(
         if r_apply1.returncode != 0:
             steps.append(StepResult("chezmoi-apply-1", "failed", r_apply1.stderr.strip()[:400]))
             return SmokeReport(False, "isolate", sys.platform, str(source_root), str(dest), 0, steps)
-        applied_entries = sum(1 for _ in dest.rglob("*"))
+        applied_entries = sum(1 for _ in dest.rglob("*")) - (1 if created_shim and created_shim.exists() else 0)
         steps.append(StepResult("chezmoi-apply-1", "passed", f"{applied_entries} entries"))
 
         # 3. 1 回目直後の残差分検査（modify_ の初回冪等性違反もここで検出する）
@@ -349,7 +357,9 @@ def run_isolated_smoke(
             return SmokeReport(False, "isolate", sys.platform, str(source_root), str(dest), applied_entries, steps)
         steps.append(StepResult("chezmoi-apply-2", "passed", "idempotent"))
 
-        # 5. 展開物への起動スモーク
+        # 5. 展開物への起動スモーク（テスト用の最小リポで min_entries を水増ししないよう仮 shim は掃除してから数える）
+        if created_shim is not None and created_shim.exists():
+            created_shim.unlink(missing_ok=True)
         dest_steps = check_destination(dest, min_entries=min_entries)
         steps.extend(dest_steps)
         ok = all(s.status != "failed" for s in steps)

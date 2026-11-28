@@ -121,8 +121,10 @@ def test_update_happy_path_preflight_failure_and_manual_rollback(tmp_path, capsy
     ]
 
     # 1. 初回 update（v1 適用）→ 成功し last_good_sha == sha_v1 になる
-    assert safe_update.main(["update", *common, "--exclude-scripts"]) == 0
-    out1 = json.loads(capsys.readouterr().out)
+    rc1 = safe_update.main(["update", *common, "--exclude-scripts"])
+    captured1 = capsys.readouterr()
+    assert rc1 == 0, f"stdout={captured1.out}\nstderr={captured1.err}"
+    out1 = json.loads(captured1.out)
     assert out1["ok"] is True
     assert out1["last_good_sha"] == sha_v1
     assert '"version": "v1"' in (dest / ".pi" / "agent" / "settings.json").read_text(encoding="utf-8")
@@ -137,8 +139,10 @@ def test_update_happy_path_preflight_failure_and_manual_rollback(tmp_path, capsy
     sha_v2 = _git(seed, "rev-parse", "HEAD").strip()
     _git(seed, "push", "-q", "origin", "main")
 
-    assert safe_update.main(["update", *common, "--exclude-scripts"]) == 0
-    out2 = json.loads(capsys.readouterr().out)
+    rc2 = safe_update.main(["update", *common, "--exclude-scripts"])
+    captured2 = capsys.readouterr()
+    assert rc2 == 0, f"stdout={captured2.out}\nstderr={captured2.err}"
+    out2 = json.loads(captured2.out)
     assert out2["ok"] is True
     assert out2["branch_ff_updated"] is True
     assert out2["last_good_sha"] == sha_v2
@@ -159,8 +163,10 @@ def test_update_happy_path_preflight_failure_and_manual_rollback(tmp_path, capsy
     assert _git(client, "rev-parse", "HEAD").strip() == sha_v2
 
     # 4. 手動 rollback で sha_v1 へ切り戻せる
-    assert safe_update.main(["rollback", *common, "--to", sha_v1]) == 0
-    out4 = json.loads(capsys.readouterr().out)
+    rc4 = safe_update.main(["rollback", *common, "--to", sha_v1])
+    captured4 = capsys.readouterr()
+    assert rc4 == 0, f"stdout={captured4.out}\nstderr={captured4.err}"
+    out4 = json.loads(captured4.out)
     assert out4["ok"] is True
     assert out4["rolled_back_to"] == sha_v1
     assert '"version": "v1"' in (dest / ".pi" / "agent" / "settings.json").read_text(encoding="utf-8")

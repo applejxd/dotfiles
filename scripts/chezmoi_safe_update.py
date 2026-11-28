@@ -275,7 +275,8 @@ def _cmd_update(args: argparse.Namespace) -> int:
     state_dir = args.state_dir.resolve()
     cfg_file = args.chezmoi_config.resolve() if args.chezmoi_config else None
     state_db = args.chezmoi_state.resolve() if args.chezmoi_state else None
-    work_parent = repo / ".tmp" / "safe-update"
+    # 一時 worktree 置き場は source 外の state_dir 配下にまとめる
+    work_parent = state_dir / "work"
     apply_timeout = None if args.apply_timeout <= 0 else args.apply_timeout
 
     with _exclusive_lock(state_dir):
@@ -518,7 +519,7 @@ def _cmd_rollback(args: argparse.Namespace) -> int:
     state_dir = args.state_dir.resolve()
     cfg_file = args.chezmoi_config.resolve() if args.chezmoi_config else None
     state_db = args.chezmoi_state.resolve() if args.chezmoi_state else None
-    work_parent = repo / ".tmp" / "safe-update"
+    work_parent = state_dir / "work"
 
     with _exclusive_lock(state_dir):
         if _git(repo, "status", "--porcelain").stdout.strip():
