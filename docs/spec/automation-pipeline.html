@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dotfiles 全自動パイプライン・昇格・ロールバック仕様図</title>
+<style>
+  :root {
+    --background: #ffffff;
+    --foreground: #18181b;
+    --muted: #f4f4f5;
+    --muted-foreground: #52525b;
+    --card: #ffffff;
+    --card-foreground: #18181b;
+    --secondary: #fafafa;
+    --secondary-foreground: #27272a;
+    --border: #e4e4e7;
+    --ring: #6366f1;
+    --primary: #4f46e5;
+    --accent-surface: #eef2ff;
+    --destructive: #dc2626;
+    --destructive-surface: #fef2f2;
+    --warning: #b45309;
+    --warning-surface: #fffbeb;
+    --success: #15803d;
+    --info: #1d4ed8;
+    --code-background: #f4f4f5;
+    --radius: 10px;
+    --font-sans: "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: #09090b;
+      --foreground: #f4f4f5;
+      --muted: #18181b;
+      --muted-foreground: #a1a1aa;
+      --card: #111114;
+      --card-foreground: #f4f4f5;
+      --secondary: #18181c;
+      --secondary-foreground: #e4e4e7;
+      --border: #27272a;
+      --ring: #818cf8;
+      --primary: #818cf8;
+      --accent-surface: #1e1b4b;
+      --destructive: #f87171;
+      --destructive-surface: #2d1414;
+      --warning: #fbbf24;
+      --warning-surface: #2c200b;
+      --success: #4ade80;
+      --info: #60a5fa;
+      --code-background: #1f1f24;
+    }
+  }
+  html[data-theme="light"] {
+    --background: #ffffff;
+    --foreground: #18181b;
+    --muted: #f4f4f5;
+    --muted-foreground: #52525b;
+    --card: #ffffff;
+    --card-foreground: #18181b;
+    --secondary: #fafafa;
+    --secondary-foreground: #27272a;
+    --border: #e4e4e7;
+    --ring: #6366f1;
+    --primary: #4f46e5;
+    --accent-surface: #eef2ff;
+    --destructive: #dc2626;
+    --destructive-surface: #fef2f2;
+    --warning: #b45309;
+    --warning-surface: #fffbeb;
+    --success: #15803d;
+    --info: #1d4ed8;
+    --code-background: #f4f4f5;
+  }
+  html[data-theme="dark"] {
+    --background: #09090b;
+    --foreground: #f4f4f5;
+    --muted: #18181b;
+    --muted-foreground: #a1a1aa;
+    --card: #111114;
+    --card-foreground: #f4f4f5;
+    --secondary: #18181c;
+    --secondary-foreground: #e4e4e7;
+    --border: #27272a;
+    --ring: #818cf8;
+    --primary: #818cf8;
+    --accent-surface: #1e1b4b;
+    --destructive: #f87171;
+    --destructive-surface: #2d1414;
+    --warning: #fbbf24;
+    --warning-surface: #2c200b;
+    --success: #4ade80;
+    --info: #60a5fa;
+    --code-background: #1f1f24;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 48px;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    background: var(--code-background);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--foreground);
+    word-break: break-word;
+  }
+  header.top {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  header.top h1 {
+    margin: 0;
+    font-size: 19px;
+    line-height: 1.35;
+  }
+  .meta {
+    font-size: 12px;
+    color: var(--muted-foreground);
+    margin-top: 4px;
+  }
+  .meta a { color: var(--primary); text-decoration: none; }
+  .meta a:hover { text-decoration: underline; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .pill-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .ctrl-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--muted-foreground);
+    margin-right: 4px;
+  }
+  .pill {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--card-foreground);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 11px;
+    border-radius: 999px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: border-color 0.15s, background-color 0.15s;
+  }
+  .pill:hover { border-color: var(--ring); }
+  .pill[aria-pressed="true"] {
+    border-color: var(--primary);
+    background: var(--accent-surface);
+    color: var(--foreground);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .dot-ok { background: var(--success); }
+  .dot-warn { background: var(--warning); }
+  .dot-err { background: var(--destructive); }
+  .dot-info { background: var(--info); }
+
+  .route-banner {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    font-size: 12.5px;
+    color: var(--muted-foreground);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 10px;
+  }
+  .route-banner strong { color: var(--foreground); }
+
+  .stage {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    transition: opacity 0.18s, border-color 0.18s, box-shadow 0.18s;
+  }
+  .stage-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .stage-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--card-foreground);
+  }
+  .num {
+    width: 23px;
+    height: 23px;
+    border-radius: 50%;
+    background: var(--accent-surface);
+    border: 1px solid var(--border);
+    color: var(--foreground);
+    font-size: 11.5px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .b-auto {
+    background: color-mix(in srgb, var(--success) 15%, transparent);
+    color: var(--success);
+    border: 1px solid color-mix(in srgb, var(--success) 38%, transparent);
+  }
+  .b-human {
+    background: var(--warning-surface);
+    color: var(--warning);
+    border: 1px solid color-mix(in srgb, var(--warning) 42%, transparent);
+  }
+  .b-deny {
+    background: var(--destructive-surface);
+    color: var(--destructive);
+    border: 1px solid color-mix(in srgb, var(--destructive) 42%, transparent);
+  }
+  .b-info {
+    background: color-mix(in srgb, var(--info) 15%, transparent);
+    color: var(--info);
+    border: 1px solid color-mix(in srgb, var(--info) 38%, transparent);
+  }
+
+  .arrow-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 10px;
+    margin: -6px 0;
+    color: var(--muted-foreground);
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .step {
+    background: var(--secondary);
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    padding: 10px 11px;
+  }
+  .step-k {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted-foreground);
+    margin-bottom: 3px;
+  }
+  .step-v {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--foreground);
+  }
+  .step-sub {
+    font-size: 11.5px;
+    color: var(--muted-foreground);
+    margin-top: 4px;
+    line-height: 1.5;
+  }
+
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+
+  .subbox {
+    background: var(--secondary);
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    padding: 12px 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: opacity 0.18s, border-color 0.18s, box-shadow 0.18s;
+  }
+  .subbox-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--foreground);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .subbox p, .subbox ul {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted-foreground);
+    line-height: 1.55;
+  }
+  .subbox ul { padding-left: 16px; }
+  .subbox li { margin-bottom: 3px; }
+  .subbox li:last-child { margin-bottom: 0; }
+  .subbox strong { color: var(--foreground); }
+
+  .lanes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .lane {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--code-background);
+    border: 1px solid var(--border);
+    color: var(--foreground);
+  }
+  .lane span {
+    color: var(--muted-foreground);
+    font-family: var(--font-sans);
+    font-weight: 400;
+  }
+
+  .branch-ok { border-color: color-mix(in srgb, var(--success) 48%, var(--border)); }
+  .branch-warn { border-color: color-mix(in srgb, var(--warning) 48%, var(--border)); }
+  .branch-deny { border-color: color-mix(in srgb, var(--destructive) 48%, var(--border)); }
+  .branch-info { border-color: color-mix(in srgb, var(--info) 48%, var(--border)); }
+
+  .retry-note {
+    margin-top: 10px;
+    padding: 8px 11px;
+    border-radius: calc(var(--radius) - 2px);
+    background: color-mix(in srgb, var(--info) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--info) 32%, transparent);
+    font-size: 12px;
+    color: var(--foreground);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    align-items: center;
+  }
+
+  .dim { opacity: 0.30; }
+  .hl-ok { box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 55%, transparent); }
+  .hl-warn { box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 55%, transparent); }
+  .hl-deny { box-shadow: 0 0 0 2px color-mix(in srgb, var(--destructive) 55%, transparent); }
+  .hl-info { box-shadow: 0 0 0 2px color-mix(in srgb, var(--info) 55%, transparent); }
+
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td {
+    text-align: left;
+    padding: 8px 9px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th { color: var(--muted-foreground); font-weight: 600; font-size: 11.5px; }
+  tr:last-child td { border-bottom: none; }
+
+  @media (max-width: 680px) {
+    .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .badge { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="top">
+    <div>
+      <h1>dotfiles 全自動パイプライン・昇格・ロールバック仕様図</h1>
+      <div class="meta">
+        正本: <a href="automation-pipeline.md">automation-pipeline.md</a> ／
+        決定記録: <a href="../adr/0044-github-app-auto-merge-and-3os-ci.md">ADR-0044</a>・<a href="../adr/0045-stage3-smoke-promotion-and-safe-update.md">ADR-0045</a> ／
+        案件: <a href="../change/0067-github-app-auto-merge-and-3os-ci.md">CHG-0067</a>
+      </div>
+    </div>
+    <button class="pill" id="themeBtn" type="button" aria-label="テーマ切替">テーマ切替</button>
+  </header>
+
+  <div class="controls">
+    <div class="pill-group" role="group" aria-label="経路フィルタ">
+      <span class="ctrl-label">経路フィルタ</span>
+      <button class="pill route-pill" data-route="all" aria-pressed="true">全体</button>
+      <button class="pill route-pill" data-route="normal" aria-pressed="false"><span class="dot dot-ok"></span>通常パス（無承認）</button>
+      <button class="pill route-pill" data-route="protected" aria-pressed="false"><span class="dot dot-warn"></span>保護パス（1 クリック承認）</button>
+      <button class="pill route-pill" data-route="workflow" aria-pressed="false"><span class="dot dot-err"></span>Workflows（人手 push）</button>
+      <button class="pill route-pill" data-route="promote" aria-pressed="false"><span class="dot dot-info"></span>main 昇格＆端末安全更新</button>
+    </div>
+  </div>
+
+  <div class="route-banner" id="routeBanner">
+    <strong>全体アーキテクチャ（段 0〜3）</strong>
+    <span>計画合意後の実装・3 OS 検証・<code>develop</code> 無承認統合・自動片付け・隔離スモーク昇格・端末切り戻しまでの一貫仕様です。</span>
+  </div>
+
+  <!-- Stage 1 -->
+  <section class="stage" data-stage="1" data-stage-routes="normal protected workflow">
+    <div class="stage-head">
+      <div class="stage-title"><span class="num">1</span><span>計画合意 ＆ 隔離 worktree 実装（Windows / Ubuntu / WSL / macOS 共通）</span></div>
+      <span class="badge b-info">人＋AI → ローカル自走</span>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-k">起票</div>
+        <div class="step-v">ai/* worktree</div>
+        <div class="step-sub"><code>scripts/ai_pr.py start &lt;slug&gt;</code><br><code>develop</code> 基点で分離</div>
+      </div>
+      <div class="step">
+        <div class="step-k">実装</div>
+        <div class="step-v">親 or worker</div>
+        <div class="step-sub"><code>.tmp/worktrees/&lt;slug&gt;</code> 内完結<br><code>develop</code> / <code>main</code> 直編集禁止</div>
+      </div>
+      <div class="step">
+        <div class="step-k">検証・独立監査</div>
+        <div class="step-v">verify:all + reviewer</div>
+        <div class="step-sub"><code>pre-commit</code> 全段 ＋ 新規文脈の読取専用 <code>reviewer</code></div>
+      </div>
+      <div class="step">
+        <div class="step-k">確定</div>
+        <div class="step-v">ローカル commit</div>
+        <div class="step-sub">Conventional Commits<br>（個別メッセージ承認不要）</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="arrow-row" aria-hidden="true">
+    <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 0v10M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+
+  <!-- Stage 2 -->
+  <section class="stage" data-stage="2" data-stage-routes="normal protected workflow">
+    <div class="stage-head">
+      <div class="stage-title"><span class="num">2</span><span>専用 GitHub App 入口から PR 提出（生の git push 禁止）</span></div>
+      <span class="badge b-auto">App: applejxd-dotfiles-ai</span>
+    </div>
+    <div class="grid-2">
+      <div class="subbox" data-routes="normal protected">
+        <div class="subbox-title">
+          <code>scripts/ai_pr.py submit</code>
+          <span class="badge b-auto">非強制 push</span>
+        </div>
+        <ul>
+          <li><code>--dry-run</code> で差分・保護パス・workflows 非含有を事前検査</li>
+          <li><code>merge-base..HEAD</code> 全履歴を <code>gitleaks</code> で走査</li>
+          <li>短命 Installation Token で <code>ai/*</code> へ push → PR 作成 ＋ <strong>Squash Auto-Merge 予約</strong></li>
+        </ul>
+      </div>
+      <div class="subbox" data-routes="workflow">
+        <div class="subbox-title">
+          <span>遮断されている操作（二層防御）</span>
+          <span class="badge b-deny">DENY / 拒否</span>
+        </div>
+        <ul>
+          <li>生の <code>git push</code>・<code>gh pr merge</code>・<code>~/.config/dotfiles-ai</code> 読取 → pi 権限で <strong>deny</strong></li>
+          <li><code>develop</code> 直接 push → Ruleset <code>GH013</code> でサーバ側拒否</li>
+          <li><code>.github/workflows/**</code> → 入口拒否 ＋ App に <code>workflows</code> 権限なしでサーバ側拒否</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="arrow-row" aria-hidden="true">
+    <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 0v10M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+
+  <!-- Stage 3 -->
+  <section class="stage" data-stage="3" data-stage-routes="normal protected workflow">
+    <div class="stage-head">
+      <div class="stage-title"><span class="num">3</span><span>3 OS CI・単一ゲート <code>ci-gate</code>・3 層の権限境界</span></div>
+      <span class="badge b-info">Ruleset #28273156（Squash / 最新 base 必須）</span>
+    </div>
+
+    <div class="lanes">
+      <div class="lane">policy <span>(base 側 ci_policy.py + gitleaks)</span></div>
+      <div class="lane">static <span>(pre-commit / lint_templates / shellcheck)</span></div>
+      <div class="lane">linux <span>(ubuntu-24.04 + JUnit)</span></div>
+      <div class="lane">windows <span>(windows-2025 + JUnit)</span></div>
+      <div class="lane">macos <span>(macos-latest + JUnit)</span></div>
+    </div>
+
+    <div class="grid-3">
+      <div class="subbox branch-ok" data-branch="normal">
+        <div class="subbox-title">
+          <span>通常パス</span>
+          <span class="badge b-auto">無承認統合</span>
+        </div>
+        <p>一般 dotfiles・<code>AGENTS.md</code>・スキル・docs</p>
+        <p><code>protected-approval</code> 自動 skip → <strong>ci-gate 成功 → App が即 Squash Auto-Merge</strong></p>
+      </div>
+
+      <div class="subbox branch-warn" data-branch="protected">
+        <div class="subbox-title">
+          <span>保護パス</span>
+          <span class="badge b-human">1 クリック承認</span>
+        </div>
+        <p>権限・ガード・pi 拡張・<code>agents/</code>・検査/更新基盤・<code>.chezmoiscripts/</code></p>
+        <p>3 OS 通過後 <code>protected-path-approval</code>（<code>deployment: false</code>）で <strong>Waiting</strong> → オーナー承認後に自動統合</p>
+      </div>
+
+      <div class="subbox branch-deny" data-branch="workflow">
+        <div class="subbox-title">
+          <span>Workflows 変更</span>
+          <span class="badge b-deny">人手 push のみ</span>
+        </div>
+        <p><code>.github/workflows/**</code></p>
+        <p>App トークンでは push 自体が拒否されるため、利用者が手動 push し 3 OS CI 通過後に統合。</p>
+      </div>
+    </div>
+
+    <div class="retry-note">
+      <strong>CI 失敗時:</strong>
+      <span>失敗ログで原因特定 → 同一 <code>ai/*</code> 枝で修正・検査・独立再監査・再 <code>submit</code>（<strong>最大 2 ラウンド</strong>で停止し利用者へ報告）</span>
+    </div>
+  </section>
+
+  <div class="arrow-row" aria-hidden="true">
+    <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 0v10M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+
+  <!-- Stage 4 -->
+  <section class="stage" data-stage="4" data-stage-routes="normal protected">
+    <div class="stage-head">
+      <div class="stage-title"><span class="num">4</span><span>終了後の自動片付け（リモート・ローカルとも残骸 0 本）</span></div>
+      <span class="badge b-auto">SHA 照合つき自動掃除</span>
+    </div>
+    <div class="grid-2">
+      <div class="subbox">
+        <div class="subbox-title">
+          <span>リモート側</span>
+          <span class="badge b-auto">完全自動</span>
+        </div>
+        <ul>
+          <li>マージ時: リポジトリ設定 <code>delete_branch_on_merge</code> が <code>ai/*</code> を即時削除</li>
+          <li>未マージ close 時: <code>cleanup-closed-ai-branch.yml</code> が自動削除</li>
+        </ul>
+      </div>
+      <div class="subbox">
+        <div class="subbox-title">
+          <span>ローカル側</span>
+          <span class="badge b-auto">誤削除防止ガード</span>
+        </div>
+        <ul>
+          <li><code>scripts/ai_pr.py cleanup --verify-github</code></li>
+          <li>本体 <code>develop</code> を <code>ff-only</code> 更新 ＋ GitHub 上で open PR 不在・<code>merged</code>・ローカル先端 SHA 一致の <code>[gone]</code> 枝/worktree のみ削除</li>
+          <li>未 push・dirty・open PR・未マージ close・<code>.tmp/worktrees</code> 外は自動保護</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="arrow-row" aria-hidden="true">
+    <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 0v10M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+
+  <!-- Stage 5 -->
+  <section class="stage" data-stage="5" data-stage-routes="promote">
+    <div class="stage-head">
+      <div class="stage-title"><span class="num">5</span><span><code>develop</code> → <code>main</code> 昇格 ＆ 端末の安全更新・自動切り戻し（段 3・ADR-0045）</span></div>
+      <span class="badge b-human">隔離スモーク ＋ 2 段防御ロールバック</span>
+    </div>
+    <div class="grid-2">
+      <div class="subbox branch-info" data-branch="promote">
+        <div class="subbox-title">
+          <span>A. <code>main</code> 昇格ゲート（<code>promote-main.yml</code>）</span>
+          <span class="badge b-human">手動起動＋人承認</span>
+        </div>
+        <ul>
+          <li><code>workflow_dispatch</code> で起動 → <strong>3 OS（Ubuntu / Windows / macOS）で <code>scripts/isolated_smoke.py</code></strong> を並列実行</li>
+          <li>使い捨て HOME に <code>chezmoi init</code> → 2 回 <code>apply --exclude scripts,externals</code> → <strong>残差分 0 件</strong> ＋ Pi JSON・gitconfig・Vim・PowerShell / bash / zsh 起動スモーク</li>
+          <li>3 OS 全通後に <code>protected-path-approval</code> 承認 → <code>develop</code> を <code>main</code> へ昇格</li>
+        </ul>
+      </div>
+      <div class="subbox branch-info" data-branch="promote">
+        <div class="subbox-title">
+          <span>B. 端末安全更新（<code>scripts/chezmoi_safe_update.py</code>）</span>
+          <span class="badge b-auto">自動ファイル切り戻し</span>
+        </div>
+        <ul>
+          <li><strong>第 1 段（実機無傷プレフライト）</strong>: 更新先 SHA を一時 worktree ＋ <code>isolated_smoke</code> で事前検証。失敗時は実機 <code>$HOME</code> に一切触れず停止</li>
+          <li><strong>第 2 段（自動切り戻し）</strong>: 本番 <code>apply</code>（恒久 <code>source</code> から実行）または実機 <code>check-dest</code> 失敗時、直前の正常 SHA（<code>last_good_sha</code>）へ戻して管理ファイルを自動復元</li>
+          <li><strong>副作用境界の明示</strong>: <code>run_*</code> が走っていた場合はパッケージ・OS 設定等の外部副作用が自動では戻らない旨と対象スクリプト一覧を警告出力</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Defense summary table -->
+  <section class="stage">
+    <div class="stage-head" style="margin-bottom:6px;">
+      <div class="stage-title"><span>信頼境界と復旧境界の一覧</span></div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>境界</th>
+            <th>ローカル側の防御・検査</th>
+            <th>GitHub サーバ / 実行時の強制境界</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>develop 破壊・直 push</strong></td>
+            <td>生 <code>git push</code> deny・<code>ai/*</code> 枝名検証</td>
+            <td>Ruleset <code>#28273156</code>（PR・<code>ci-gate</code>・Squash・最新 base 必須、App は bypass 不可）</td>
+          </tr>
+          <tr>
+            <td><strong>保護パスの無断改変</strong></td>
+            <td><code>ai_pr.py</code> が保護対象を事前表示・PR 明記</td>
+            <td>base コミット側 <code>ci_policy.py</code> で判定 → <code>protected-path-approval</code> で承認停止</td>
+          </tr>
+          <tr>
+            <td><strong>CI・昇格 workflow 改ざん</strong></td>
+            <td><code>submit</code> が <code>.github/workflows/</code> を即拒否</td>
+            <td>専用 App に <code>workflows</code> 権限なし（サーバ側で物理拒否、人手 push のみ）</td>
+          </tr>
+          <tr>
+            <td><strong>端末適用での環境破壊</strong></td>
+            <td><code>isolated_smoke.py</code> による実機前プレフライト</td>
+            <td>失敗時は <code>last_good_sha</code> へ管理ファイルを自動復元（<code>run_*</code> の外部副作用は警告明示）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+  const routeInfo = {
+    all: {
+      title: "全体アーキテクチャ（段 0〜3）",
+      desc: "計画合意後の実装・3 OS 検証・<code>develop</code> 無承認統合・自動片付け・隔離スモーク昇格・端末切り戻しまでの一貫仕様です。"
+    },
+    normal: {
+      title: "通常パス（無承認 Auto-Merge）",
+      desc: "対象: 一般 dotfiles・<code>AGENTS.md</code>・スキル・docs。3 OS CI 通過後、承認スキップで App が自動 Squash 統合 → <code>cleanup --verify-github</code> で完結。"
+    },
+    protected: {
+      title: "保護パス（オーナー 1 クリック承認）",
+      desc: "対象: 権限ポリシー・<code>.chezmoiscripts/</code>・pi 拡張・<code>agents/</code>・検査/更新スクリプト等。3 OS 全通後に <code>protected-path-approval</code> で待機し、承認後に自動統合。"
+    },
+    workflow: {
+      title: "Workflows 変更（人手 push 必須）",
+      desc: "対象: <code>.github/workflows/**</code>。専用 App に <code>workflows</code> 権限が無いため AI からは push 不可。利用者が手動 push し 3 OS CI を通します。"
+    },
+    promote: {
+      title: "main 昇格 ＆ 端末の安全更新・自動切り戻し（段 3）",
+      desc: "手動トリガー＋3 OS 隔離スモーク＋人承認で <code>main</code> を更新。各端末は <code>mise run safe-update</code> で事前スモーク＆失敗時ファイル自動復元を行います。"
+    }
+  };
+
+  const pills = document.querySelectorAll(".route-pill");
+  const banner = document.getElementById("routeBanner");
+  const branches = document.querySelectorAll("[data-branch]");
+  const routeBoxes = document.querySelectorAll("[data-routes]");
+  const stages = document.querySelectorAll("[data-stage-routes]");
+
+  function applyRoute(route) {
+    pills.forEach(p => p.setAttribute("aria-pressed", String(p.dataset.route === route)));
+    const info = routeInfo[route] || routeInfo.all;
+    banner.innerHTML = `<strong>${info.title}</strong><span>${info.desc}</span>`;
+
+    stages.forEach(st => {
+      st.classList.remove("dim");
+      if (route === "all") return;
+      const list = st.dataset.stageRoutes.split(" ");
+      if (!list.includes(route)) st.classList.add("dim");
+    });
+
+    branches.forEach(el => {
+      el.classList.remove("dim", "hl-ok", "hl-warn", "hl-deny", "hl-info");
+      if (route === "all") return;
+      if (el.dataset.branch === route) {
+        const cls = route === "normal" ? "hl-ok" : route === "protected" ? "hl-warn" : route === "workflow" ? "hl-deny" : "hl-info";
+        el.classList.add(cls);
+      } else if (el.closest(".stage:not(.dim)")) {
+        el.classList.add("dim");
+      }
+    });
+
+    routeBoxes.forEach(el => {
+      el.classList.remove("dim");
+      if (route === "all") return;
+      const list = el.dataset.routes.split(" ");
+      if (!list.includes(route) && el.closest(".stage:not(.dim)")) el.classList.add("dim");
+    });
+  }
+
+  pills.forEach(p => p.addEventListener("click", () => applyRoute(p.dataset.route)));
+
+  document.getElementById("themeBtn").addEventListener("click", () => {
+    const html = document.documentElement;
+    const cur = html.getAttribute("data-theme");
+    const isDark = cur ? cur === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    html.setAttribute("data-theme", isDark ? "light" : "dark");
+  });
+</script>
+</body>
+</html>

@@ -58,6 +58,8 @@ _spec.loader.exec_module(policy)
         "scripts/verify_stamp.py",
         "scripts/ci_policy.py",
         "scripts/ai_pr.py",
+        "scripts/isolated_smoke.py",
+        "scripts/chezmoi_safe_update.py",
         "test/agents/agents_common.py",
         "test/agents/conftest.py",
         "test/test_verify.py",
@@ -68,6 +70,8 @@ _spec.loader.exec_module(policy)
         "test/test_pi_sandbox_toggle.py",
         "test/test_ci_policy.py",
         "test/test_ai_pr.py",
+        "test/test_isolated_smoke.py",
+        "test/test_chezmoi_safe_update.py",
         # Windows パス区切り・大文字小文字・./ 付きでもすり抜けないこと
         r".github\workflows\ci.yml",
         "HOME/.chezmoitemplates/PI-PERMISSION-POLICY.JSON",

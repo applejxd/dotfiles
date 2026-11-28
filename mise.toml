@@ -30,6 +30,14 @@ run = "uv run --no-project python scripts/verify.py --changed"
 description = "検証を全件実行する（安い検査を先に回し、前の段が落ちたら止まる。コミット前に 1 回）"
 run = "uv run --no-project python scripts/verify.py --all"
 
+[tasks."smoke:isolated"]
+description = "使い捨てディレクトリへ chezmoi init/apply/diff + 起動スモークを実行する（実機 $HOME は変更しない）"
+run = "uv run --no-project python scripts/isolated_smoke.py isolate"
+
+[tasks."safe-update"]
+description = "隔離プレフライト後に chezmoi 更新適用し、失敗時は直前正常世代へ管理ファイルを自動切り戻す"
+run = "uv run --no-project python scripts/chezmoi_safe_update.py update"
+
 [tasks."websearch:keys"]
 description = "web-search の API キーを Bitwarden から取り直す（BW_SESSION が無ければ bw unlock を求める）"
 run = "uv run --no-project {{ get_env(name='USERPROFILE', default=env.HOME) }}/.config/agents/websearch/core.py sync-keys --force --unlock"

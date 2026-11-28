@@ -364,7 +364,7 @@ chezmoi apply --exclude=scripts
 
 ### `main` への昇格と旧 `git flow` について
 
-- **main へ**: 現時点では全件検証（`mise run verify:all`）の後、利用者の明示的な指示または人手操作で `develop` を `main` へ統合・push する（隔離 `chezmoi apply` + 起動スモークによる自動昇格は [CHG-0067](../change/0067-github-app-auto-merge-and-3os-ci.md) 段 3 で整備予定）。
+- **main へ**: 手動トリガーの `.github/workflows/promote-main.yml` で 3 OS 隔離スモーク（`scripts/isolated_smoke.py`）を通し、オーナー承認を経て `develop` → `main` を更新する（[ADR-0045](../adr/0045-stage3-smoke-promotion-and-safe-update.md)・[全体パイプライン仕様](automation-pipeline.md)）。各端末の取り込み・適用は隔離プレフライト＋自動ファイル切り戻し付きの `mise run safe-update`（`scripts/chezmoi_safe_update.py`）を使える。AI は利用者の明示指示なしに `main` 昇格や実機への適用を行わない。
 - **旧 `git flow` の扱いと設定の経緯**: ローカルの `git flow feature finish` による `develop` 直統合は廃止した（`git flow * finish` / `git flow integrate` の権限 ask ガードは誤実行防止のため維持）。既存の `feature/*` 枝から移行する場合は、`ai_pr.py start` で作った `ai/*` worktree へ `git cherry-pick` して PR 提出する。共有 `.gitflow` と `scripts/gitflow-setup.sh` は他リポジトリや移行互換のため残しており、グローバル `~/.gitconfig`（`home/dot_config/git/config.tmpl`）の `[gitflow] worktreePath = .tmp/worktrees/{{ branch }}` は `.gitflow` を持たないリポジトリでも git-flow-next の既定（`../<repo>-worktrees/`）が作業ツリー外へ出るのを防ぐ目的で維持している（主 worktree のルート基準）。
 - **ガードと一時領域の補足**: worktree 置き場は主 worktree 直下の `.tmp/worktrees/<slug>` とする。`develop` / `main` の作業ツリーへの直接編集・コミットはローカルのフックではなく `AGENTS.md` の規則と GitHub Ruleset（push 拒否）で守る。linked worktree の中から操作すると本体は作業ツリー外になるため、worktree 内で完結させ、本体の参照は `git show develop:<パス>` を使う。スタンプは worktree ごと。CI は `main` と `develop` への push と全ての pull request で動く。
 

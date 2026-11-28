@@ -25,6 +25,7 @@
 | [0042](0042-t3-code-pi-wrapper-reads-shellenv.md) | T3 Code が起動する pi には、`shellenv.sh` を読む wrapper（`pi-t3`）で環境変数を渡す | T3 のインスタンス環境変数（静的）・fork のパッチ・`userenv.sh` だけを読む案は採らない。wrapper は `shellenv.sh` を stderr へ逃がして読み、`exec pi` するだけ（set -e なし）。撤去条件は「T3 が login shell から任意の変数を取り込むようになったとき」。T3 での確認は未了 |
 | [0043](0043-delegate-bounded-implementation-to-a-single-worker.md) | 条件を満たす実装は 1 件でも `worker` に委譲する | 範囲と合格条件を固定し、引き継ぎに見合う利点があるときに起動する |
 | [0044](0044-github-app-auto-merge-and-3os-ci.md) | `develop` 統合を GitHub App + 3 OS CI + Squash Auto-Merge へ移行する | `ai/*` 枝から専用 GitHub App で PR を立て、`ci-gate`（3 OS・保護パス Environment 承認）通過後に無承認で Squash Auto-Merge し終了後に片付ける。ADR-0039 を置き換える |
+| [0045](0045-stage3-smoke-promotion-and-safe-update.md) | 3 OS 隔離スモーク＋人承認で `main` へ昇格し、端末更新は自動ファイル切り戻し CLI で守る | `develop` → `main` 昇格は手動トリガー＋3 OS `isolated_smoke.py` 全通＋オーナー承認で行い、端末更新は `chezmoi_safe_update.py` で隔離プレフライト後に適用・失敗時は `last_good_sha` へ管理ファイルを自動切り戻す（scripts 副作用は警告で明示） |
 
 撤去した決定（0001・0002・0004〜0009・0012〜0019・0021〜0028・0030・0034）は、[ADR-0037](0037-retire-custom-profile-and-other-harnesses.md) の「置き換えた決定と記録」にまとめた（本文はタグから読める）。
 
@@ -88,3 +89,4 @@ dotfiles は「なぜその形なのか」が失われやすい。
 | [0039](0039-merge-to-develop.md) | `develop` への統合は merge、rebase は feature の追従だけ | Superseded by ADR-0044 | 2026-11-14 | 2026-11-27: GitHub App + Squash Auto-Merge へ置き換え（ADR-0044） |
 | [0043](0043-delegate-bounded-implementation-to-a-single-worker.md) | 条件を満たす実装は 1 件でも `worker` に委譲する | Accepted | 2026-11-26 | ADR-0033 の部分改定 |
 | [0044](0044-github-app-auto-merge-and-3os-ci.md) | `develop` 統合を GitHub App + 3 OS CI + Squash Auto-Merge へ移行する | Accepted | 2026-11-27 | ADR-0039 を置き換える。案件は CHG-0067 |
+| [0045](0045-stage3-smoke-promotion-and-safe-update.md) | 3 OS 隔離スモーク＋人承認で `main` へ昇格し、端末更新は自動ファイル切り戻し CLI で守る | Accepted | 2026-11-28 | 段 3（CHG-0067）の昇格・ロールバック方針 |
