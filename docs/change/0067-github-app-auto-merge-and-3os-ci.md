@@ -6,9 +6,9 @@
 
 ## 要約
 
-- 結論: Windows ネイティブ開発を維持したまま、計画合意後の実装・3 OS 検証・無承認 Squash Auto-Merge・終了後片付けを全自動化する（[ADR-0044](../adr/0044-github-app-auto-merge-and-3os-ci.md)）。
-- いまの判断: 段 0〜2（App 導入・Windows 検証基盤・3 OS `ci-gate`・Ruleset 強制・保護承認 PR #27・無承認 Auto-Merge PR #28・App サーバ拒否・未マージ close 自動削除 PR #29・`cleanup --verify-github`・運用文書同期）の実測まで完了した。
-- 次の一手: 段 3（隔離 `chezmoi apply` + 起動スモークによる `develop` → `main` 昇格と失敗時ロールバック）および他マシンへの `app.pem` 配布設計へ進む。
+- 結論: Windows ネイティブ開発を維持したまま、計画合意後の実装・3 OS 検証・無承認 Squash Auto-Merge・終了後片付け・隔離スモーク昇格・端末自動切り戻しを一貫整備する（[ADR-0044](../adr/0044-github-app-auto-merge-and-3os-ci.md)・[ADR-0045](../adr/0045-stage3-smoke-promotion-and-safe-update.md)・[パイプライン仕様](../spec/automation-pipeline.md)）。
+- いまの判断: 段 0〜2 の全実測と、段 3 の `scripts/isolated_smoke.py`・`scripts/chezmoi_safe_update.py`・冪等修正・仕様 HTML の実装と試験まで完了した。
+- 次の一手: 本 PR を統合したあと、`.github/workflows/promote-main.yml` を人手 push して 3 OS 隔離スモーク付き `main` 昇格を実測する。
 
 ## 目的と非目的
 
@@ -22,7 +22,7 @@
 | 0 | 方式と権限境界の確定 | 3 OS 必須チェック表・保護パス・App 登録・リポ設定・ADR-0044 | 完了 |
 | 1 | Windows 検証基盤と 3 OS ゲート整備 | Win 基本 4 点修正、`ci.yml`（3 OS + `ci-gate` + 保護承認）、未マージ削除、`scripts/ai_pr.py`、権限ポリシー更新 | 完了 |
 | 2 | Ruleset 強制と実戦検証・運用切替 | `develop` Ruleset 有効化、PR #27/#28/#29 による保護承認・無承認自動統合・未マージ削除・App 拒否・pi 実エンジン試験の実測、`cleanup --verify-github`、運用文書同期 | 完了 |
-| 3 | `main` 昇格と端末ロールバック | 隔離 `chezmoi apply` + 起動スモークによる `main` 昇格と、失敗時に 1 つ前へ戻す更新ラッパー | 未着手 |
+| 3 | `main` 昇格と端末ロールバック | `scripts/isolated_smoke.py`、`scripts/chezmoi_safe_update.py`、冪等修正、ADR-0045・仕様 HTML、`promote-main.yml` | 進行中 |
 
 状態: 未着手 / 進行中 / 完了 / 保留 / 見送り / 消滅
 
@@ -56,11 +56,11 @@ flowchart TD
 | 他マシン（WSL・macOS 等）への `app.pem` 配布（Bitwarden 連携） | 段 3 とは別作業で必要になったタイミングで設計・適用 |
 | 旧 CI ワークフロー（`linux.yml`・`windows.yml`）の廃止判断 | `ci.yml` 運用が安定した後に人手 push で `.github/workflows/` を整理 |
 | `home/dot_pi/agent/agents/**` を保護パスに残すか（フロントマターの `tools`/`permission` 保護 vs プロンプト改善頻度） | 実際のプロンプト変更頻度を見て見直す（現行は安全側で保護を維持） |
-| 段 3（隔離 `chezmoi apply`＋起動スモークによる `main` 昇格・ロールバック） | 段 2 完了後の次タスクとして設計・実装 |
+| `promote-main.yml` の初回投入と 3 OS 昇格ゲート実測 | `.github/workflows/**` は App 権限外のため利用者の人手 push 後に `workflow_dispatch` で実測 |
 
 ## 次の調査・実験
 
-- 段 3 として、`develop` → `main` の昇格条件（隔離 `chezmoi apply`＋起動スモーク）と、`run_once_` / `run_onchange_` の副作用境界を含む端末ロールバック方式を設計する。
+- 段 3 の PR 統合後、`.github/workflows/promote-main.yml` を人手 push し、手動トリガーで 3 OS 隔離スモーク → 承認待ち → `main` 昇格を通し検証する。
 
 ## 評価基準
 
@@ -98,7 +98,8 @@ flowchart TD
 | `.github/workflows/ci.yml`・`cleanup-closed-ai-branch.yml` | 3 OS `ci-gate`・保護承認・未マージ削除を追加する | 適用済み（`85a32a96`） |
 | `scripts/ci_policy.py`・`scripts/ai_pr.py` | 保護パス判定と App 認証の `ai/*` 専用入口・`cleanup --verify-github` を追加する | 適用済み（`85a32a96` + 本 PR） |
 | `home/.chezmoitemplates/pi-permission-policy.json` と権限試験 | App 秘密鍵保護と `gh` 危険操作の deny を追加する | 適用済み（`85a32a96`、WSL 実エンジン 15/15 passed） |
-| `docs/spec/development.md`・`testing.md`・`AGENTS.md`・`feature-orchestration` | 新 `ai/*` PR 運用・CI 失敗時修正上限・3 OS CI 契約へ更新する | 適用済み（本 PR） |
+| `docs/spec/development.md`・`testing.md`・`AGENTS.md`・`feature-orchestration` | 新 `ai/*` PR 運用・CI 失敗時修正上限・3 OS CI 契約へ更新する | 適用済み（`cb365df8`） |
+| `scripts/isolated_smoke.py`・`scripts/chezmoi_safe_update.py`・`docs/spec/automation-pipeline.*` | 3 OS 隔離スモーク・安全更新と自動切り戻し・全体仕様 HTML を追加する | 実装済み（本 PR） |
 
 ## 実装・検証
 
@@ -110,11 +111,16 @@ flowchart TD
   - App 認証トークンでの `.github/workflows/**` 変更 push が `workflows` 権限不足で GitHub サーバ側に拒否されることを実測。
   - 未マージ close した PR #29 のリモート `ai/probe-unmerged-close-cleanup` が `cleanup-closed-ai-branch.yml`（run `46098195529`）で自動削除され、リモート `ai/*` 0 本になることを実測。
   - `test/test_pi_permission_decisions.py` を WSL 実機（pi-permission-system + cc-safety-net 実エンジン）で実行し 15/15 passed（0 skipped）を確認（Windows 機は pi 本体の npm 展開先構成の違いで 11 件 skip）。
-  - `scripts/ai_pr.py cleanup --verify-github` を追加し、GitHub PR の `merged_at` とローカル先端 SHA 一致を照合して Squash 済み `[gone]` 枝だけを安全に片付ける動作を単体試験（19 passed）および実 PR #28/#29 で確認。
+  - `scripts/ai_pr.py cleanup --verify-github` を追加し、GitHub PR の `merged_at` とローカル先端 SHA 一致を照合して Squash 済み `[gone]` 枝だけを安全に片付ける動作を単体試験および実 PR #28/#29/#30（`cb365df8`）で確認。
+- 2026-11-28（段 3・隔離スモーク・安全更新 CLI・仕様 HTML）:
+  - `scripts/isolated_smoke.py` を実装し、Windows 実機で隔離 `chezmoi init` → 2 回 `apply --exclude scripts,externals` → 残差分 0 件 → Pi JSON / gitconfig / Vim（ローカル＋`SSH_CONNECTION` ガード）/ PowerShell `profile.ps1` の起動スモーク通過を確認（`home/dot_vimrc` の `silent! colorscheme iceberg` と Keypirinha `modify_*.ini` 3 件の初回改行冪等化も同時修正）。
+  - `scripts/chezmoi_safe_update.py`（隔離プレフライト → ブランチ先行移動なしの本番適用 → 失敗時の直前正常 SHA 自動ファイル切り戻し ＋ `run_*` 副作用警告 ＋ 手動 `rollback` / `status`）と状態遷移試験を実装。
+  - [ADR-0045](../adr/0045-stage3-smoke-promotion-and-safe-update.md) と [パイプライン仕様](../spec/automation-pipeline.md)（および単体仕様図 [automation-pipeline.html](../spec/automation-pipeline.html)）を追加。
 
 ## 重要な更新
 
 | 日付 | 更新 | 理由 |
 | --- | --- | --- |
 | 2026-11-27 | 案件を起票し段 0（App 作成・リポ設定・ADR-0044）を完了 | Windows ネイティブ開発を残した全自動統合へ移行するため |
-| 2026-11-28 | 段 1・段 2 の全実測と運用文書同期を完了し、段 3 待ちへ移行 | PR #27/#28/#29・サーバ側拒否・pi 実エンジン・`cleanup --verify-github` が揃ったため |
+| 2026-11-28 | 段 1・段 2 の全実測と運用文書同期を完了（PR #27〜#30） | 3 OS CI・保護承認・無承認統合・未マージ削除・`cleanup --verify-github` が揃ったため |
+| 2026-11-28 | 段 3 の隔離スモーク・安全更新/自動切り戻し CLI・ADR-0045・仕様 HTML を実装 | `main` 昇格前検査と端末更新の自動復旧を揃えるため |

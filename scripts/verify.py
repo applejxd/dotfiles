@@ -281,6 +281,11 @@ RULES: tuple[Rule, ...] = (
         ("test_ci_policy", "test_ai_pr"),
     ),
     Rule(
+        "隔離スモークと安全更新・切り戻し",
+        ("scripts/isolated_smoke.py", "scripts/chezmoi_safe_update.py", "home/dot_vimrc", ".github/workflows/promote-main.yml"),
+        ("test_isolated_smoke", "test_chezmoi_safe_update"),
+    ),
+    Rule(
         "検証の入口",
         ("scripts/verify.py",),
         ("test_verify", "test_verify_stamp"),

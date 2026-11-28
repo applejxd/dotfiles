@@ -32,6 +32,7 @@
 | [開発環境](dev-environment.md) | C++ の単一ファイル実行（runcpp）、VS Code の拡張、code-exam |
 | [プロジェクト構造](structure.md) | ディレクトリ構成、chezmoi スクリプトの順序、対応 OS、話題別の文書の地図 |
 | [開発ガイド](development.md) | 環境の準備、変更の種類ごとの検証、Windows 実機での検証、スクリプトの追加 |
+| [全自動統合・main 昇格・端末安全更新パイプライン](automation-pipeline.md) | `ai/*` 無承認統合・3 OS `ci-gate`・隔離スモーク `main` 昇格・端末の自動ファイル切り戻し CLI（[単体仕様図 HTML](automation-pipeline.html) 付き） |
 | [スクリプトが作るキャッシュ・状態](script-artifacts.md) | chezmoi スクリプトが直接作るキャッシュ・状態ファイル・再実行の印・一時ファイルを OS ごとに一覧にし、消すと何が起きるかを示す |
 | [テストと検証の仕組み](testing.md) | Docker ハーネスのモード・環境変数・判定の契約、GitHub Actions で見ている範囲、既知の未達 |
 | [セキュリティ](security.md) | 秘密情報の保護対象・脅威と、Bitwarden / sops の方式の理由 |

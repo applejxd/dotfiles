@@ -44,14 +44,18 @@ PROTECTED_EXACT: frozenset[str] = frozenset(
         "scripts/agents/validate_skills.py",
         "scripts/ai_pr.py",
         "scripts/check_staged_drop.py",
+        "scripts/chezmoi_safe_update.py",
         "scripts/ci_policy.py",
         "scripts/gitleaks_prepush.py",
+        "scripts/isolated_smoke.py",
         "scripts/lint_templates.py",
         "test/agents/agents_common.py",
         "test/agents/conftest.py",
         "test/agents/pi_stock/permission_cases.json",
         "test/test_ai_pr.py",
+        "test/test_chezmoi_safe_update.py",
         "test/test_ci_policy.py",
+        "test/test_isolated_smoke.py",
         "test/test_pi_permission_decisions.py",
     )
 )

@@ -15,9 +15,10 @@ if has('termguicolors') | set termguicolors | endif
 
 " ダーク背景前提のテーマ
 " Windows のネイティブ版 vim は ~/vimfiles を見る。iceberg.vim は ~/.vim/colors に置くので探索先へ足す
+" 初回導入のオフライン時や --exclude externals の隔離スモークでも E185 で起動失敗しないよう silent! を付ける
 if has('win32') | set runtimepath^=~/.vim | endif
 set background=dark
-colorscheme iceberg
+silent! colorscheme iceberg
 
 " シンタックス強調（ほぼ必須）
 syntax on
