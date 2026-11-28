@@ -1,6 +1,6 @@
 # CHG-0047: gitflow ブランチモデルへ切り替える（feature の起票・クローズの AI 化は撤去。CHG-0050）
 
-> **2026-11-12**: AI の操作（`gitflow_*`・`guarded_action`）・`common.toml.tmpl` の git 規則・PR ビューアでの統合は、撤去した基盤（[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）の記録。現行の運用は [開発ガイドのブランチモデル](../spec/development.md#ブランチモデルgitflow-lite)。
+> **2026-11-12**: AI の操作（`gitflow_*`・`guarded_action`）・`common.toml.tmpl` の git 規則・PR ビューアでの統合は、撤去した基盤（[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）の記録。現行の運用は [開発ガイドのブランチモデル](../spec/development.md#ブランチモデルai-pr--develop-auto-merge)。
 
 - **状態**: In progress
 - **更新日**: 2026-10-31

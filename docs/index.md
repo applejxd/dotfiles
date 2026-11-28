@@ -43,7 +43,7 @@ pi の設定（権限・MCP・スキル）を chezmoi で配備する。
 | Windows 資産を実機で検証する | [Windows 実機での検証](spec/development.md#windows-実機での検証) |
 | まっさらな Windows への導入を Sandbox で検証する | [Windows Sandbox での検証](spec/development.md#windows-sandbox-でのクリーン導入の検証) |
 | 新しい機械での初回導入を Docker で検証する | [Docker での検証](spec/development.md#新しい機械での初回導入を-docker-で検証する) |
-| gitflow-lite の運用（起票は親、AI は feature の worktree でコミット、統合は利用者の指示で）を知る | [開発ガイドのブランチモデル](spec/development.md#ブランチモデルgitflow-lite) |
+| `ai/*` PR と 3 OS CI・Auto-Merge のブランチ運用を知る | [開発ガイドのブランチモデル](spec/development.md#ブランチモデルai-pr--develop-auto-merge) |
 | pi の設定の生成と所有権（宣言した項目と利用者の項目の分け方）を知る | [設定の生成と所有権](spec/agent-config-generation.md) |
 | 予備のハーネス Claude Code の設定（何を配り、何を配らないか）を知る・直す | [Claude Code の設定](spec/claude-code.md)・[ADR-0041](adr/0041-claude-code-spare-harness-static-config.md) |
 | MCP サーバを追加・変更する | [MCP サーバ](spec/mcp-servers.md#mcp-サーバ) |

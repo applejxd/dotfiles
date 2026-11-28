@@ -170,7 +170,7 @@ hook ごとの所要時間は [開発ガイドの実測メモ](../research/testi
 - 待ちの上限: `VERIFY_LOCK_TIMEOUT`（既定 1800 秒。0 は待たない）。超えたら終了コード 3
 - 解放: OS が行う（`kill -9` でも残らない）
 - 取らない: `--dry-run`・`--list`・`--changed`。git でない・ロックを開けないときは、警告して続行する
-- Windows は `msvcrt` を使う（**未検証**）
+- Windows は `msvcrt` を使い、ロック保持者情報は別ファイルに記録する（Windows 実機 `verify:all` 通過確認済み）
 - 理由: 複数の会話から同時に回すと負荷が上がり、時間に依存する試験が落ちた（実測）
 - 実装: `scripts/verify.py` の `acquire_all_lock`
 
@@ -342,22 +342,31 @@ chezmoi apply --exclude=scripts
 恒久的に無効化する場合は、対象ファイルの `run_` 属性を外すか削除する。
 `.tmpl` は実行属性ではないため、拡張子だけを外しても無効化されない。
 
-## ブランチモデル（gitflow-lite）
+## ブランチモデル（`ai/*` PR + `develop` Auto-Merge）
 
-このリポジトリは、`main`（リリース。他のマシンの `chezmoi update` が見る）・`develop`（統合。この PC の chezmoi のソースが指す）・`feature/<名前>`（作業。専用の worktree）で運用する（[CHG-0047](../change/0047-gitflow.md)）。`release`・`hotfix` は使わない。
+このリポジトリは、`main`（リリース。他マシンの `chezmoi update` が見る）・`develop`（統合。日常の開発起点）・`ai/<slug>`（作業。専用の worktree）で運用する（[ADR-0044](../adr/0044-github-app-auto-merge-and-3os-ci.md)。旧 `git flow feature finish` 運用を定めた [ADR-0039](../adr/0039-merge-to-develop.md) を置き換えた）。
 
-- **feature**: 親が `git flow feature start <名前> --worktree --no-fetch` で起票する。AI は担当 feature の worktree（`.tmp/worktrees/<名前>`）で、`git commit` で細かくコミットする。検証と必要な監査の後は、ローカルコミットのメッセージに個別承認を求めない。hook・権限の確認は残す。`develop` への統合と `chezmoi apply` のゲートは変えない。AI の `gitflow_feature_*` の操作は撤去した（CHG-0050、[ADR-0037](../adr/0037-retire-custom-profile-and-other-harnesses.md)）
-- **feature の統合（2026-11-14。[ADR-0039](../adr/0039-merge-to-develop.md)）**: `develop` へは merge（`git flow feature finish <名前> --no-ff --no-squash …`）。2 件以上は、束ね用の feature へ `git merge` で取り込んでから、1 回だけ `finish` する。rebase は `git flow feature update <名前> --rebase`（feature を最新の `develop` に追従させる）だけ。統合後の実機への反映は `chezmoi apply`（`chezmoi update` は pull --rebase を固定で行うので、未 push の merge commit がある間は使わない）。
-- **main へ**: 検証（`mise run verify:all`）の後、`git flow integrate develop` で `develop` を `main` に merge する（タグ・fetch は既定でオフ）。`push` は利用者が行う。
-- **統合の規則（stock の pi。2026-11-11）**: 保護ブランチへの統合（`git flow feature finish`・`git flow integrate`）は、AI は**原則実行しない**。**利用者が自分から明示的に指示したときだけ**実行する。
-  - AI が「統合してよいですか」と聞いて得た返事は、承認に数えない。AI は、許可を求める質問をせず、「準備ができた」（検証の結果・統合する内容）という報告だけにする。
-  - 実行するのは、指示された 1 回の操作だけ（`push` はしない。`git push` は権限の方針で deny）。
-  - **機構の裏づけ（2026-11-11）**: `develop`・`main` へのマージは、権限の方針で確認（ask）にしてある（`git flow feature|release|hotfix|bugfix|support finish` と `git flow integrate`。`-C` 付き・`git-flow` 形も）。確認の画面は、利用者が指示した操作の確認で、AI の質問への返事ではない。無人（`/goal`・away-shift）では 5 分で拒否される。**feature 同士のマージと、`develop` から feature への取り込み（`git merge`・`git flow update`・`git flow feature rebase`）は確認なし**。
-  - **限界**: 生の `git merge`・`git checkout main && git merge` は、機構では守れない（feature の枝への日常のマージを止めてしまうため）。指示だけが頼り。
-  - `integrate` は `main` に切り替えたまま終わるので、実行したら `develop` に戻す。
-- **設定**: 共有の `.gitflow`（`gitflow.worktreePath` を含む）を、`scripts/gitflow-setup.sh` で作る・取り込む。グローバルの `~/.gitconfig` に旧キー `gitflow.branch.master` が残っていると、`git flow` が期待どおり動かないことがある（`dot_config/git/config.tmpl` からは消してあり、`chezmoi apply` で反映する）。**サンドボックスの外で、利用者が一度だけ**行う（`.git/config` を書くため）。新しい clone や別のマシンでは、同じスクリプトで `git flow config sync` する（Windows では Git for Windows の `sh` で動く。`git-flow` は mise が入れる。[cli-management](cli-management.md#git-flowgit-flow-next)）。 **worktree の置き場の既定は、グローバル（`home/dot_config/git/config.tmpl` の `[gitflow] worktreePath = .tmp/worktrees/{{ branch }}`）にも置く**（2026-11-16）。git-flow-next の既定は `../<repo>-worktrees/<ブランチ名>` で、`.gitflow` を持たない repo では、作業ツリーの外に作ってしまい、確認や削除が止まる（別の repo で実際に起きた）。リポジトリ側の設定（`.git/config`・`.gitflow`）が優先される（git の範囲の優先順位）。グローバルは接頭辞つきの `{{ branch }}`（`feature/x` と `hotfix/x` が衝突しない。この repo の `.gitflow` は `{{ branchName }}` で、feature だけなので衝突しない）。相対パスは**主 worktree のルート基準**なので、linked worktree の中で作っても、置き場は主 worktree の `.tmp/worktrees/` で、実行中の作業ツリーの外になる（子は自分の作業ツリーの外に書けない）。親が主 worktree で作る運用が前提。実機の確認（scratch の repo。2026-11-16）: global なしは `<repo>-worktrees/feature/a1`、`{{ branch }}` の global ありは `<repo>/.tmp/worktrees/feature/x` と `.../hotfix/x`（同名でも衝突しない）。
-- **ガード**: develop / main の作業ツリーへの直接の編集・コミットは、機械では止めない（pi のガードの gate は 2026-10-31 に撤去。CHG-0050）。`AGENTS.md` と `commit` スキルの指示で、feature の worktree で作業する運用にしている
-- **検査**: スタンプは worktree ごと。push の基準は `origin/develop`（あれば）、無ければ `origin/main`。CI は `main` と `develop` への push と、全ての pull request で動く
+### `develop` への統合（専用 GitHub App + 3 OS `ci-gate`）
+
+- **起票**: `uv run --no-project python scripts/ai_pr.py start <slug>` で、`develop` 基点の `ai/<slug>` 枝と `.tmp/worktrees/<slug>` を作る。AI は担当 worktree の中だけで実装・検証・独立レビュー・ローカルコミットを行う（`develop` / `main` への直接コミット禁止）。
+- **提出と無承認 Auto-Merge**: `uv run --no-project python scripts/ai_pr.py submit --cwd .tmp/worktrees/<slug> --title "<Conventional Commits>" --summary "<1〜3行要約>"` を使う（事前に `--dry-run` で差分と保護パス判定を確認する）。生の `git push` や `gh pr merge` は使わない。
+  - 専用 GitHub App（`applejxd-dotfiles-ai`、`contents: write` / `pull_requests: write` / `metadata: read` のみ）が内部で `gitleaks` 検査・`ai/*` への非強制 push・`develop` 向け PR 作成・Squash Auto-Merge の予約を行う。
+  - `develop` には Branch Ruleset（`protect-develop-ci-gate`、ID `28273156`）が有効で、PR 必須・Squash のみ・最新 base 必須・`ci-gate`（GitHub Actions）必須をサーバ側で強制する。App は bypass 対象外。
+  - 保護パス（権限ポリシー・ガード・pi 拡張・agent 定義・検査基盤・`.chezmoiscripts/**`、`scripts/ci_policy.py` が正本）を含まない PR は、3 OS CI と `ci-gate` の通過後に無承認で Squash Auto-Merge される。
+  - 保護パスを含む PR は、3 OS CI 通過後に GitHub Environment `protected-path-approval`（`deployment: false`）で承認待ち（`waiting`）になり、オーナーの 1 クリック承認後にのみ自動統合される。`.github/workflows/**` の変更は App に `workflows` 権限を与えずサーバ側で物理拒否するため、人手で push する。
+- **CI 失敗時の自動修正ループと停止条件**:
+  - 3 OS CI が失敗した場合は、GitHub Actions の失敗ログ（T3 Code の `ci_logs` ツール、または `gh run view --log-failed`）で原因を特定して同一 `ai/*` 枝で修正 → 関連検査・独立レビュー → 再 `submit` を行う。
+  - 自動修正は **最大 2 ラウンド** までとする。同じ失敗に対する修正を 2 回試して原因を絞れない、保護パス／`.github/workflows/**` 変更が必要になった、または仕様判断が要る場合は再 `submit` せず停止して利用者に報告する。
+- **片付け**:
+  - リモート: マージ時はリポジトリ設定 `delete_branch_on_merge`、未マージ close 時は `.github/workflows/cleanup-closed-ai-branch.yml` が `ai/*` 枝を自動削除する。
+  - ローカル: `uv run --no-project python scripts/ai_pr.py cleanup --verify-github` で、`origin` を prune して本体 `develop` を `ff-only` 更新し、GitHub 上で `merged` かつローカル先端 SHA が一致する `[gone]` な `ai/*` の worktree と枝だけを安全に削除する（未 push コミット・dirty・open PR・未マージ close 枝は保護される）。未マージ close 枝を手動確認後に消す場合は `--branch ai/<slug> --allow-squashed` を使う。
+- **端末反映**: 統合（`develop` 更新）と実機反映は別段階。必要な端末で `develop` を同期したあと `chezmoi apply [対象]` を実行する（`chezmoi apply` は利用者確認が要る）。
+
+### `main` への昇格と旧 `git flow` について
+
+- **main へ**: 現時点では全件検証（`mise run verify:all`）の後、利用者の明示的な指示または人手操作で `develop` を `main` へ統合・push する（隔離 `chezmoi apply` + 起動スモークによる自動昇格は [CHG-0067](../change/0067-github-app-auto-merge-and-3os-ci.md) 段 3 で整備予定）。
+- **旧 `git flow` の扱いと設定の経緯**: ローカルの `git flow feature finish` による `develop` 直統合は廃止した（`git flow * finish` / `git flow integrate` の権限 ask ガードは誤実行防止のため維持）。既存の `feature/*` 枝から移行する場合は、`ai_pr.py start` で作った `ai/*` worktree へ `git cherry-pick` して PR 提出する。共有 `.gitflow` と `scripts/gitflow-setup.sh` は他リポジトリや移行互換のため残しており、グローバル `~/.gitconfig`（`home/dot_config/git/config.tmpl`）の `[gitflow] worktreePath = .tmp/worktrees/{{ branch }}` は `.gitflow` を持たないリポジトリでも git-flow-next の既定（`../<repo>-worktrees/`）が作業ツリー外へ出るのを防ぐ目的で維持している（主 worktree のルート基準）。
+- **ガードと一時領域の補足**: worktree 置き場は主 worktree 直下の `.tmp/worktrees/<slug>` とする。`develop` / `main` の作業ツリーへの直接編集・コミットはローカルのフックではなく `AGENTS.md` の規則と GitHub Ruleset（push 拒否）で守る。linked worktree の中から操作すると本体は作業ツリー外になるため、worktree 内で完結させ、本体の参照は `git show develop:<パス>` を使う。スタンプは worktree ごと。CI は `main` と `develop` への push と全ての pull request で動く。
 
 ## 作業ツリーの一時領域（`.tmp/`）
 

@@ -37,7 +37,7 @@
 # 既定は ../<repo>-worktrees/ で、作業ツリーの外に作ってしまう (書き込みの確認・削除が止まる)。
 # 変数は接頭辞つきのブランチ名 (feature/x) で、feature/x と hotfix/x が衝突しない。
 # リポジトリ側 (.git/config・.gitflow) の値が優先される。
-# see docs/spec/development.md#ブランチモデルgitflow-lite
+# see docs/spec/development.md#ブランチモデルai-pr--develop-auto-merge
 [gitflow]
 	worktreePath = .tmp/worktrees/{{ "{{ branch }}" }}
 
