@@ -2,7 +2,7 @@
 # gitflow-lite (main / develop / feature。squash) の設定を、このリポジトリで作る・取り込む。
 # サンドボックスの外 (普通のシェル) で、利用者が実行する (.git/config を書くため)。
 # 新しい clone・別のマシンでは、同じスクリプトで共有の .gitflow を取り込む。何度実行しても同じ結果になる。
-# see docs/spec/development.md#ブランチモデルgitflow-lite
+# see docs/spec/development.md#ブランチモデルai-pr--develop-auto-merge
 set -eu
 
 if ! command -v git-flow >/dev/null 2>&1; then

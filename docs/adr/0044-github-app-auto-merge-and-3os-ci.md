@@ -46,11 +46,11 @@
 
 ## 決定の確認方法
 
-- [ ] App 認証トークンで `.github/workflows/**` を含む push が GitHub に拒否されることを実測する。
-- [ ] App 認証トークンで `develop` への直接 push が Ruleset で拒否されることを実測する。
-- [ ] 通常 PR（例: Vim の SSH 修正）が 3 OS `ci-gate` 通過後に無承認で Squash Auto-Merge され、リモート枝とローカル worktree が片付くことを実測する。
-- [ ] 保護パス PR が通常テスト通過後に `protected-path-approval` で `Waiting` 停止し、オーナーの 1 クリック承認後にのみ Auto-Merge されることを実測する。
-- [ ] 未マージ close した `ai/*` PR のリモート枝が自動削除されることを実測する。
+- [x] App 認証トークンで `.github/workflows/**` を含む push が GitHub に拒否されることを実測する（2026-11-28 実測: `refusing to allow a GitHub App to create or update workflow ... without workflows permission` でサーバ側拒否）。
+- [x] App 認証トークンで `develop` への直接 push が Ruleset で拒否されることを実測する（2026-11-28 実測: `GH013: Repository rule violations found for refs/heads/develop` で `Changes must be made through a pull request`・`Required status check "ci-gate" is expected` によりサーバ側拒否）。
+- [x] 通常 PR（例: Vim の SSH 修正）が 3 OS `ci-gate` 通過後に無承認で Squash Auto-Merge され、リモート枝とローカル worktree が片付くことを実測する（2026-11-28 PR #28 / CI run `46093465952`、`mergedBy: app/applejxd-dotfiles-ai`、`53c134fb`）。
+- [x] 保護パス PR が通常テスト通過後に `protected-path-approval` で `Waiting` 停止し、オーナーの 1 クリック承認後にのみ Auto-Merge されることを実測する（2026-11-28 PR #27 / CI run `46085908844`、`c2500be3`）。
+- [x] 未マージ close した `ai/*` PR のリモート枝が自動削除されることを実測する（2026-11-28 PR #29 / `cleanup-closed-ai-branch.yml` run `46098195529` で削除完了、リモート `ai/*` 0 本）。
 
 ## 結果
 

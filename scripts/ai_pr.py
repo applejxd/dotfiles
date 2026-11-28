@@ -152,6 +152,8 @@ def _github_json(
         detail = exc.read().decode("utf-8", errors="replace")
         # 秘密が混入しないよう応答本文を短く切り、トークン文字列を絶対に露出させない
         raise AiPrError(f"GitHub API {method} {url} が失敗しました (HTTP {exc.code}): {detail[:400]}") from exc
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise AiPrError(f"GitHub API {method} {url} の通信または応答解析に失敗しました: {exc}") from exc
 
 
 def mint_installation_token(app_id: int, installation_id: int, pem_path: Path) -> str:
@@ -285,8 +287,17 @@ def _push_with_app_token(root: Path, branch: str, token: str) -> None:
             raise AiPrError(f"git push ({branch}) に失敗しました:\n{safe_err.strip()}")
 
 
-def _find_open_pr(branch: str, token: str) -> dict[str, object] | None:
-    q = urllib.parse.urlencode({"state": "open", "head": f"{REPO_OWNER}:{branch}", "base": BASE_BRANCH})
+def _find_prs_for_branch(branch: str, token: str, *, state: str = "all") -> list[dict[str, object]]:
+    q = urllib.parse.urlencode(
+        {
+            "state": state,
+            "head": f"{REPO_OWNER}:{branch}",
+            "base": BASE_BRANCH,
+            "sort": "updated",
+            "direction": "desc",
+            "per_page": 20,
+        }
+    )
     url = f"https://api.github.com/repos/{REPO_FULL}/pulls?{q}"
     req = urllib.request.Request(
         url,
@@ -297,9 +308,49 @@ def _find_open_pr(branch: str, token: str) -> dict[str, object] | None:
             "User-Agent": "applejxd-dotfiles-ai-pr",
         },
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        items = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            items = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise AiPrError(f"GitHub API GET {url} が失敗しました (HTTP {exc.code}): {detail[:400]}") from exc
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise AiPrError(f"GitHub API GET {url} の通信または応答解析に失敗しました: {exc}") from exc
+    return items if isinstance(items, list) else []
+
+
+def _find_open_pr(branch: str, token: str) -> dict[str, object] | None:
+    items = _find_prs_for_branch(branch, token, state="open")
     return items[0] if items else None
+
+
+def _verify_pr_terminal_state(branch: str, local_sha: str, token: str) -> tuple[bool, str]:
+    """GitHub 上で branch の PR が終端状態にあり、ローカル先端 SHA と一致するかを検証する。
+
+    - open PR は state=open で別照会し、1 件でも残っていれば削除不可（ページング影響を避ける）。
+    - ローカル先端 SHA と一致する PR が merged なら安全に削除可。
+    - 一致する PR が未マージ closed のみ、またはローカルに追加コミットがある場合は削除しない。
+    """
+    if _find_prs_for_branch(branch, token, state="open"):
+        return False, "open PR が残存"
+    # 同名 ai/* の直近 20 件（updated 降順）からローカル先端 SHA と一致する closed PR を照合する。
+    prs = _find_prs_for_branch(branch, token, state="closed")
+    matched = [
+        pr
+        for pr in prs
+        if isinstance(pr.get("head"), dict) and pr["head"].get("sha") == local_sha
+    ]
+    if not matched:
+        return False, f"ローカル先端 {local_sha[:8]} に対応する PR が見つからない（未 push コミットの可能性）"
+    merged_pr = next((pr for pr in matched if pr.get("merged_at")), None)
+    if merged_pr is not None:
+        return True, f"PR #{merged_pr.get('number')} merged ({local_sha[:8]})"
+    closed_num = matched[0].get("number")
+    return (
+        False,
+        f"PR #{closed_num} は未マージで close 済み"
+        f"（自動削除しない。手動確認して削除する場合は --branch {branch} --allow-squashed）",
+    )
 
 
 def _create_or_update_pr(
@@ -506,6 +557,7 @@ def _cmd_cleanup(args: argparse.Namespace) -> int:
 
     removed_worktrees: list[str] = []
     deleted_branches: list[str] = []
+    verified_prs: dict[str, str] = {}
     skipped: list[str] = []
 
     wt_root = (main_root / ".tmp" / "worktrees").resolve()
@@ -537,6 +589,15 @@ def _cmd_cleanup(args: argparse.Namespace) -> int:
         elif line.startswith("branch refs/heads/") and cur_wt is not None:
             wt_map[line[len("branch refs/heads/") :]] = cur_wt
 
+    github_token: str | None = None
+
+    def get_github_token() -> str:
+        nonlocal github_token
+        if github_token is None:
+            app_id, installation_id, pem_path = load_app_config(args.config_dir)
+            github_token = mint_installation_token(app_id, installation_id, pem_path)
+        return github_token
+
     for branch in targets:
         # リモートにまだ ai/* が残っている進行中ブランチは触らない
         remote_exists = (
@@ -546,10 +607,11 @@ def _cmd_cleanup(args: argparse.Namespace) -> int:
         if remote_exists:
             skipped.append(f"{branch} (リモートに残存)")
             continue
-        # 引数なしの自動掃除も --allow-squashed も、一度 push されてリモートから消えた [gone] 枝だけを対象にする。
+        # 引数なしの自動掃除・--allow-squashed・--verify-github は、
+        # 一度 push されてリモートから消えた [gone] 枝だけを対象にする。
         # start 直後や未 push の仕掛り枝・並列 worker の worktree を巻き込まない（P1-1 対策）。
         track = upstream_track.get(branch, "")
-        if (not args.branch or args.allow_squashed) and track != "[gone]":
+        if (not args.branch or args.allow_squashed or args.verify_github) and track != "[gone]":
             skipped.append(f"{branch} (未 push または追跡対象外: track={track or 'none'})")
             continue
 
@@ -558,9 +620,21 @@ def _cmd_cleanup(args: argparse.Namespace) -> int:
             _git(main_root, "merge-base", "--is-ancestor", branch, f"origin/{BASE_BRANCH}", check=False).returncode
             == 0
         )
-        if not merged and not args.allow_squashed:
-            skipped.append(f"{branch} (未マージ。Squash 済みなら --branch {branch} --allow-squashed を指定)")
-            continue
+        pending_verified_reason: str | None = None
+        if not merged:
+            if args.verify_github:
+                local_sha = _git(main_root, "rev-parse", f"refs/heads/{branch}").stdout.strip()
+                ok, reason = _verify_pr_terminal_state(branch, local_sha, get_github_token())
+                if not ok:
+                    skipped.append(f"{branch} ({reason})")
+                    continue
+                pending_verified_reason = reason
+            elif not args.allow_squashed:
+                skipped.append(
+                    f"{branch} (未マージ。GitHub 上の Squash 統合を照合して片付けるなら --verify-github、"
+                    f"手動確認済みなら --branch {branch} --allow-squashed を指定)"
+                )
+                continue
 
         wt = wt_map.get(branch)
         if wt is not None:
@@ -580,14 +654,18 @@ def _cmd_cleanup(args: argparse.Namespace) -> int:
             flag = "-d" if merged else "-D"
             _git(main_root, "branch", flag, branch)
         deleted_branches.append(branch)
+        if pending_verified_reason is not None:
+            verified_prs[branch] = pending_verified_reason
 
     print(
         json.dumps(
             {
                 "dry_run": args.dry_run,
+                "verify_github": args.verify_github,
                 "updated_develop": updated_develop,
                 "removed_worktrees": removed_worktrees,
                 "deleted_branches": deleted_branches,
+                "verified_prs": verified_prs,
                 "skipped": skipped,
             },
             ensure_ascii=False,
@@ -619,7 +697,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     p_clean = sub.add_parser("cleanup", help="完了済み ai/* の worktree とローカル枝を片付け develop を更新する")
     p_clean.add_argument("--branch", default=None, help="特定の ai/* 枝だけ片付ける")
-    p_clean.add_argument("--allow-squashed", action="store_true", help="リモートから消えた Squash 済み ai/* 枝の削除を許可する")
+    p_clean.add_argument(
+        "--verify-github",
+        action="store_true",
+        help="GitHub API で PR の merged 状態とローカル先端 SHA の一致を照合し、Squash 統合済みの [gone] 枝だけを安全に自動片付けする",
+    )
+    p_clean.add_argument(
+        "--allow-squashed",
+        action="store_true",
+        help="リモートから消えた Squash 済み ai/* 枝の削除を手動確認済みとして許可する",
+    )
     p_clean.add_argument("--dry-run", action="store_true", help="削除せず対象を表示するだけ")
     p_clean.set_defaults(func=_cmd_cleanup)
 

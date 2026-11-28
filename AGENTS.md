@@ -14,9 +14,9 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 ## 常に守ること
 
 - 公開リポジトリ。私物の環境以外の具体（勤務先・組織の情報）と秘密は、コード・docs・コミットのどこにも書かない。
-- `develop` / `main` に直接コミットしない。実装は feature の worktree(`.tmp/worktrees/<名前>/`)で行う。担当の `feature/*` へのローカルコミットは、必要な検証・監査の後、メッセージの個別承認を求めず実行する。
-- `feature/*` 同士のローカル取り込みは個別承認を求めない。`main` / `develop` など保護ブランチへの統合と `chezmoi apply` のゲートには、この扱いを適用しない。
-- 保護ブランチへの統合（`git flow feature finish`・`git flow integrate`）は、AI は原則実行しない。**利用者が自分から明示的に指示したときだけ**実行する。AI が「統合してよいですか」と聞いて得た返事は数えない（許可を求める質問はせず、「準備ができた」という報告だけにする）。`git push` は方針で deny（利用者が行う）。
+- `develop` / `main` に直接コミットしない。実装は `scripts/ai_pr.py start <slug>` で作った `ai/<slug>` の worktree（`.tmp/worktrees/<slug>/`）で行い、検証・独立監査の後はローカルコミットのメッセージに個別承認を求めない。
+- `develop` への統合は、専用 GitHub App 入口（`scripts/ai_pr.py submit`）から `ai/*` PR を立てて 3 OS CI の `ci-gate` 通過後に Squash Auto-Merge する（[ADR-0044](docs/adr/0044-github-app-auto-merge-and-3os-ci.md)）。保護パスは GitHub Environment `protected-path-approval` の利用者承認を待ち、`.github/workflows/**` は人手で push する。`git push` は方針で deny。
+- `main` への昇格・旧 `git flow` 統合コマンド・`chezmoi apply` は、AI が勝手に実行しない。利用者が自分から明示的に指示したときだけ実行する（許可を求める質問はせず、「準備ができた」という報告だけにする）。
 - 生成先（`~/.pi/agent/mcp.json` 等）を直接編集しない。MCP の宣言は `home/.chezmoitemplates/pi-mcp-servers.toml` が単一ソース。
 - docs・コメント・コミットメッセージは日本語で書く。
 - `.ps1` / `.ps1.tmpl` は UTF-8 BOM 付きで保存する。
@@ -27,5 +27,5 @@ chezmoi で Windows / Ubuntu / WSL / macOS の dotfiles を管理する個人用
 
 - `dotfiles-conventions`: このリポジトリのファイルを編集・検証するときの規則（検証の限界・Windows 実機・chezmoi の作法・docs・試験の登録・`pk`）。
 - `chezmoi-usage`: chezmoi 本体の知識と落とし穴（属性・特殊ファイル・scripts の実行条件と適用順序・テンプレート・`update` / `diff` の限界・`inconsistent state`）。
-- `feature-orchestration`: feature 起票・worker への委譲・並列実装・取り込み・統合。
+- `feature-orchestration`: `ai/*` worktree の起票・worker への委譲・並列実装・`scripts/ai_pr.py` による PR 提出・片付け。
 - `pi-extension-dev`: pi の機能を足す・直すときの進め方（既存の拡張・設定の評価が先。自作は最後の手段）。

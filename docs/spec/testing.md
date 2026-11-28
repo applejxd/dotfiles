@@ -63,6 +63,8 @@ Python の Windows 環境変数復元処理は空文字列を削除してしま�
 
 ## Linux の GitHub Actions
 
+> 移行期間として並走中。`ci.yml` の `linux` ジョブが後継（`zsh` 導入・JUnit 0 件収集/skip 上限検査付き）。`ci.yml` の安定運用後に人手 push で廃止予定。
+
 `.github/workflows/linux.yml` が `ubuntu-24.04` の素の runner で pytest の全件を回す
 （`uv run … pytest test/ -n auto --dist worksteal`。`scripts/verify.py` の全件と同じ並列の設定）。
 `main` と `develop` への push、`pull_request`、手動実行で起動する。chezmoi を入れる（無いとテンプレートの試験が
@@ -75,6 +77,8 @@ Python の Windows 環境変数復元処理は空文字列を削除してしま�
 その分の skip が実際には実行されて落ちる可能性がある。
 
 ## Windows の GitHub Actions
+
+> 移行期間として並走中。`ci.yml` の `windows` ジョブが後継（共通コア＋Windows 資産・PowerShell 関数・JUnit 検査付き）。`ci.yml` の安定運用後に人手 push で廃止予定。
 
 `.github/workflows/windows.yml` が `windows-2025` の runner で `test/agents/` と
 `test/test_windows_assets.py` を回す。Windows 関連のパス（`*.ps1`、PowerShell の設定、`300_windows/`、
@@ -331,10 +335,8 @@ OVERALL STATUS: FAILED
 
 現状:
 
-- Linux の CI は `linux.yml`（全件の pytest）。ほかの GitHub Actions は
-  `windows.yml`（パス絞りの push と手動。
-  `windows-2025` で `test/agents/` と `test/test_windows_assets.py`、`timeout-minutes: 30`）と
-  `e2e.yml`（毎月 2 日の schedule と手動。cold start）だけ
+- 主力の CI は `ci.yml`（`policy`・`static`〔pre-commit / `lint_templates` / shellcheck〕・`linux`・`windows`・`macos`・`protected-approval`・`ci-gate`）。Ruleset `protect-develop-ci-gate`（ID `28273156`）は `ci-gate` を必須チェックに強制している。未マージ close 時の `ai/*` 自動削除は `cleanup-closed-ai-branch.yml`。
+- 旧ワークフロー `linux.yml`・`windows.yml` は移行期間として並走中。cold start の検証は `e2e.yml`（毎月 2 日の schedule と手動）。
 - リポジトリは public
 
 ## 既知の未達
@@ -345,9 +347,9 @@ OVERALL STATUS: FAILED
 
 ### 未着手
 
-- `pre-commit` や `lint_templates` を CI で回す（mise を入れる必要がある）
 - 2 フェーズ bootstrap の本物の `bw` での確認（`bootstrap` モードはスタブで流れだけを見る）
 - `arm2404`（arm64、Pi 扱いなし）での `apply`
+- 旧ワークフロー `linux.yml`・`windows.yml` の整理（人手 push が必要）
 
 ### 未検証のまま残っているもの
 

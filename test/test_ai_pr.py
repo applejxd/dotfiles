@@ -210,3 +210,194 @@ def test_cleanup_removes_merged_worktree_and_keeps_active_remote_branch(tmp_path
     out = json.loads(capsys.readouterr().out)
     assert out["deleted_branches"] == ["ai/squashed"]
     assert not wt_sq.exists()
+
+
+def test_cleanup_verify_github_deletes_only_sha_matched_merged_prs(tmp_path, monkeypatch, capsys):
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "--bare", "-q", str(origin))
+
+    repo = tmp_path / "repo"
+    _git(tmp_path, "clone", "-q", str(origin), str(repo))
+    _git(repo, "checkout", "-q", "-b", "develop")
+    (repo / "a.txt").write_text("base\n", encoding="utf-8")
+    _git(repo, "add", "a.txt")
+    _git(repo, "commit", "-q", "-m", "chore: init")
+    _git(repo, "push", "-q", "-u", "origin", "develop")
+
+    def make_gone_branch(name: str, file_name: str) -> tuple[Path, str]:
+        slug = name.removeprefix("ai/")
+        wt = repo / ".tmp" / "worktrees" / slug
+        wt.parent.mkdir(parents=True, exist_ok=True)
+        _git(repo, "worktree", "add", "-q", "-b", name, str(wt), "develop")
+        (wt / file_name).write_text("ok\n", encoding="utf-8")
+        _git(wt, "add", file_name)
+        _git(wt, "commit", "-q", "-m", f"feat: {slug}")
+        _git(wt, "push", "-q", "-u", "origin", name)
+        sha = _git(wt, "rev-parse", "HEAD").strip()
+        _git(repo, "push", "-q", "origin", f":{name}")
+        return wt, sha
+
+    # 1. Squash merged かつ ローカル先端 SHA 一致 → 自動削除される
+    wt_merged, sha_merged = make_gone_branch("ai/vg-merged", "m.txt")
+
+    # 2. PR は merged だが、ローカルに追加の未 push コミットがある → 保護される
+    wt_extra, sha_extra_pushed = make_gone_branch("ai/vg-extra-commit", "e1.txt")
+    (wt_extra / "e2.txt").write_text("local only\n", encoding="utf-8")
+    _git(wt_extra, "add", "e2.txt")
+    _git(wt_extra, "commit", "-q", "-m", "feat: unpushed follow-up")
+
+    # 3. 未マージで close された PR → 自動削除しない（手動確認へ委ねる）
+    wt_closed, sha_closed = make_gone_branch("ai/vg-closed-unmerged", "c.txt")
+
+    # 4. まだ open PR が残っている（リモート枝だけ誰かが消した異常系） → 保護される
+    wt_open, sha_open = make_gone_branch("ai/vg-still-open", "o.txt")
+
+    # 5. Squash merged かつ SHA 一致だが、worktree に未コミットの変更がある → 保護される
+    wt_dirty, sha_dirty = make_gone_branch("ai/vg-dirty", "d.txt")
+    (wt_dirty / "d.txt").write_text("dirty\n", encoding="utf-8")
+
+    # 6. 同名枝で過去の merged PR と新 SHA の open PR が混在 → open PR 保護が勝つ
+    wt_reused, sha_reused = make_gone_branch("ai/vg-reused", "r.txt")
+
+    # 7. .tmp/worktrees 外の worktree → 保護され verified_prs にも入らない
+    wt_outside = tmp_path / "outside-wt"
+    _git(repo, "worktree", "add", "-q", "-b", "ai/vg-outside", str(wt_outside), "develop")
+    (wt_outside / "out.txt").write_text("ok\n", encoding="utf-8")
+    _git(wt_outside, "add", "out.txt")
+    _git(wt_outside, "commit", "-q", "-m", "feat: outside")
+    _git(wt_outside, "push", "-q", "-u", "origin", "ai/vg-outside")
+    sha_outside = _git(wt_outside, "rev-parse", "HEAD").strip()
+    _git(repo, "push", "-q", "origin", ":ai/vg-outside")
+
+    # 8. 未 push 枝 → [gone] でないため保護される
+    wt_unpushed = repo / ".tmp" / "worktrees" / "vg-unpushed"
+    _git(repo, "worktree", "add", "-q", "-b", "ai/vg-unpushed", str(wt_unpushed), "develop")
+
+    fake_prs: dict[str, list[dict[str, object]]] = {
+        "ai/vg-merged": [
+            {"number": 101, "state": "closed", "merged_at": "2026-11-28T01:00:00Z", "head": {"sha": sha_merged}}
+        ],
+        "ai/vg-extra-commit": [
+            {"number": 102, "state": "closed", "merged_at": "2026-11-28T01:00:00Z", "head": {"sha": sha_extra_pushed}}
+        ],
+        "ai/vg-closed-unmerged": [
+            {"number": 103, "state": "closed", "merged_at": None, "head": {"sha": sha_closed}}
+        ],
+        "ai/vg-still-open": [
+            {"number": 104, "state": "open", "merged_at": None, "head": {"sha": sha_open}}
+        ],
+        "ai/vg-dirty": [
+            {"number": 105, "state": "closed", "merged_at": "2026-11-28T01:00:00Z", "head": {"sha": sha_dirty}}
+        ],
+        "ai/vg-reused": [
+            {"number": 106, "state": "open", "merged_at": None, "head": {"sha": "f" * 40}},
+            {"number": 107, "state": "closed", "merged_at": "2026-11-28T01:00:00Z", "head": {"sha": sha_reused}},
+        ],
+        "ai/vg-outside": [
+            {"number": 108, "state": "closed", "merged_at": "2026-11-28T01:00:00Z", "head": {"sha": sha_outside}}
+        ],
+    }
+
+    def fake_find_prs(branch: str, token: str, *, state: str = "all") -> list[dict[str, object]]:
+        items = fake_prs.get(branch, [])
+        if state == "all":
+            return items
+        return [item for item in items if item.get("state") == state]
+
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(ai_pr, "load_app_config", lambda config_dir=None: (1, 2, tmp_path / "dummy.pem"))
+    monkeypatch.setattr(ai_pr, "mint_installation_token", lambda a, i, p: "dummy-token")
+    monkeypatch.setattr(ai_pr, "_find_prs_for_branch", fake_find_prs)
+
+    # まず dry-run で削除せず判定のみ確認（dirty / outside は verified_prs に混入しない）
+    rc = ai_pr.main(["cleanup", "--verify-github", "--dry-run"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["dry_run"] is True
+    assert out["verify_github"] is True
+    assert out["deleted_branches"] == ["ai/vg-merged"]
+    assert list(out["verified_prs"].keys()) == ["ai/vg-merged"]
+    assert wt_merged.exists()
+
+    # --verify-github と --allow-squashed を併用しても未マージ close 枝は検証を迂回して消えない
+    rc = ai_pr.main(["cleanup", "--branch", "ai/vg-closed-unmerged", "--verify-github", "--allow-squashed"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["deleted_branches"] == []
+    assert wt_closed.exists()
+
+    # --branch 指定 + --verify-github で 1 本だけ片付ける
+    rc = ai_pr.main(["cleanup", "--branch", "ai/vg-merged", "--verify-github"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["deleted_branches"] == ["ai/vg-merged"]
+    assert list(out["verified_prs"].keys()) == ["ai/vg-merged"]
+    assert not wt_merged.exists()
+    assert "ai/vg-merged" not in _git(repo, "branch", "--list", "ai/vg-merged")
+
+    # 残りの枝に対する本実行: すべて保護され 1 本も消えない
+    rc = ai_pr.main(["cleanup", "--verify-github"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["deleted_branches"] == []
+    assert out["verified_prs"] == {}
+    assert wt_extra.exists()
+    assert wt_closed.exists()
+    assert wt_open.exists()
+    assert wt_dirty.exists()
+    assert wt_reused.exists()
+    assert wt_outside.exists()
+    assert wt_unpushed.exists()
+    assert any("ai/vg-extra-commit" in s and "未 push" in s for s in out["skipped"])
+    assert any("ai/vg-closed-unmerged" in s and "未マージ" in s for s in out["skipped"])
+    assert any("ai/vg-still-open" in s and "open PR" in s for s in out["skipped"])
+    assert any("ai/vg-reused" in s and "open PR" in s for s in out["skipped"])
+    assert any("ai/vg-dirty" in s and "未コミット" in s for s in out["skipped"])
+    assert any("ai/vg-outside" in s and ".tmp/worktrees 外" in s for s in out["skipped"])
+    assert any("ai/vg-unpushed" in s for s in out["skipped"])
+
+
+def test_find_prs_for_branch_query_and_error_handling(monkeypatch):
+    import io
+    import urllib.error
+
+    seen_urls: list[str] = []
+
+    class FakeResp:
+        def __init__(self, body: bytes):
+            self._body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return self._body
+
+    def ok_urlopen(req, timeout=30):
+        seen_urls.append(req.full_url)
+        assert req.get_header("Authorization") == "Bearer tok-secret"
+        return FakeResp(b'[{"number": 1, "state": "open"}]')
+
+    monkeypatch.setattr(ai_pr.urllib.request, "urlopen", ok_urlopen)
+    items = ai_pr._find_prs_for_branch("ai/sample", "tok-secret", state="open")
+    assert items == [{"number": 1, "state": "open"}]
+    assert "state=open" in seen_urls[0]
+    assert "head=applejxd%3Aai%2Fsample" in seen_urls[0]
+    assert "base=develop" in seen_urls[0]
+
+    def http_err_urlopen(req, timeout=30):
+        raise urllib.error.HTTPError(req.full_url, 500, "err", {}, io.BytesIO(b"internal error"))
+
+    monkeypatch.setattr(ai_pr.urllib.request, "urlopen", http_err_urlopen)
+    with pytest.raises(ai_pr.AiPrError, match="HTTP 500"):
+        ai_pr._find_prs_for_branch("ai/sample", "tok-secret", state="closed")
+
+    def url_err_urlopen(req, timeout=30):
+        raise urllib.error.URLError("network down")
+
+    monkeypatch.setattr(ai_pr.urllib.request, "urlopen", url_err_urlopen)
+    with pytest.raises(ai_pr.AiPrError, match="通信または応答解析"):
+        ai_pr._find_prs_for_branch("ai/sample", "tok-secret", state="closed")
