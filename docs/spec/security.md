@@ -21,6 +21,7 @@ sops (age) に置き、リポジトリにはそれを引くテンプレートと
 | --- | --- | --- |
 | Git の `user.name` / `user.email` | Bitwarden の Login 項目 `gitconfig`（Username と、カスタムフィールド `email`） | `~/.config/git/user` |
 | sops 用の age 秘密鍵 | Bitwarden の Secure Note `SOPS age identity personal`（ノートに鍵の行） | `~/.config/sops/age/keys.txt`（mode 600） |
+| 専用 GitHub App（`applejxd-dotfiles-ai`）の設定と秘密鍵 | Bitwarden の Secure Note `dotfiles-ai-github-app`（ノートに PEM 本文、カスタムフィールド `app_id`・`installation_id`） | `~/.config/dotfiles-ai/app.json`・`~/.config/dotfiles-ai/app.pem`（mode 600、初回のみ展開） |
 | Web 検索の API キー（Brave・Exa・Tavily・OpenAlex） | Bitwarden の Login 項目 `websearch-<名前>`（Password 欄） | `~/.config/agents/websearch-keys.json`（`apply` が核の `sync-keys` で作る。[仕様](web-search.md#鍵)） |
 | Hugging Face のアクセストークン | Bitwarden の Login 項目 `huggingface-token`（Password 欄） | `~/.cache/huggingface/token`（`apply` が `uvx hf auth login` で作らせる。[仕様](#hugging-face-のトークンの-login)） |
 | プロジェクトの API キー | 各プロジェクトの `.env.json`（sops で暗号化してコミット） | ファイルには出さない。mise がプロジェクト内でだけ環境変数に載せる |
@@ -29,8 +30,8 @@ sops (age) に置き、リポジトリにはそれを引くテンプレートと
 Bitwarden 由来のファイルを展開するのは、ユーザ名が `applejxd` の機械だけ。
 それ以外のユーザでは `.chezmoiignore.tmpl` が外す。
 
-- Git の user 情報は Ubuntu / WSL / macOS / Windows native で展開する
-  （`bw` は Windows では Winget で入る）
+- Git の user 情報と専用 GitHub App の鍵（`~/.config/dotfiles-ai/`）は Ubuntu / WSL / macOS / Windows native で展開する
+  （`bw` は Windows では Winget で入る。`~/.config/dotfiles-ai/` も `.config/git/` と同じくディレクトリだけを戻し、`BW_SESSION` ありの初回のみ展開する。`pi-permission-policy.json` で AI からの直接読み書きは deny）
 - age 秘密鍵は Ubuntu / WSL / macOS だけ。Windows native では `.config/*` の除外に
   入ったままにしている（Windows で sops を使っていないため）
 

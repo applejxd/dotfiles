@@ -1,0 +1,13 @@
+{{- /*
+  専用 GitHub App（applejxd-dotfiles-ai）のメタデータ（~/.config/dotfiles-ai/app.json）。
+  Bitwarden の Secure Note 項目 `dotfiles-ai-github-app`（カスタムフィールド `app_id`・`installation_id`）から
+  初回のみ展開する。`.chezmoiignore.tmpl` により applejxd かつ BW_SESSION ありの未展開時のみ有効。
+  see docs/spec/security.md#保護対象と置き場所
+*/ -}}
+{{- if and (regexMatch "(?i)(^|\\\\)applejxd$" .chezmoi.username) (lookPath "bw") -}}
+{{-   with (bitwardenFields "item" "dotfiles-ai-github-app") -}}
+{{-     $meta := dict "app_id" (int .app_id.value) "installation_id" (int .installation_id.value) "pem_path" (joinPath $.chezmoi.homeDir ".config/dotfiles-ai/app.pem") -}}
+{{ $meta | toPrettyJson }}
+{{ "" }}
+{{-   end -}}
+{{- end -}}
