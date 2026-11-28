@@ -13,6 +13,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -112,12 +113,14 @@ def test_service_env_script_is_for_every_wsl_regardless_of_is_work(username, osr
     assert bool(_render(username, osrelease, work).strip()) is deployed
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="127_t3code_service_env は WSL (Linux + GNU chmod) 専用")
 def test_service_env_is_left_alone_when_t3_home_is_missing(home):
     result = home.run(_script())
     assert result.returncode == 0, result.stderr
     assert not (home.home / ".t3").exists()
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="127_t3code_service_env は WSL (Linux + GNU chmod) 専用")
 def test_service_env_is_created_private_with_the_two_keys(home):
     (home.home / ".t3").mkdir()
     result = home.run(_script())
@@ -127,6 +130,7 @@ def test_service_env_is_created_private_with_the_two_keys(home):
         assert stat.S_IMODE(home.env_file.stat().st_mode) == 0o600
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="127_t3code_service_env は WSL (Linux + GNU chmod) 専用")
 def test_service_env_replaces_only_the_managed_keys_and_keeps_the_rest(home):
     (home.home / ".t3").mkdir()
     home.env_file.write_text(
@@ -146,6 +150,7 @@ def test_service_env_replaces_only_the_managed_keys_and_keeps_the_rest(home):
     )
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="127_t3code_service_env は WSL (Linux + GNU chmod) 専用")
 def test_service_env_second_run_changes_nothing(home):
     (home.home / ".t3").mkdir()
     assert home.run(_script()).returncode == 0
@@ -156,6 +161,7 @@ def test_service_env_second_run_changes_nothing(home):
     assert "設定済み" in second.stdout
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="127_t3code_service_env は WSL (Linux + GNU chmod) 専用")
 def test_service_env_script_never_restarts_the_service(home):
     # 再起動は実行中のエージェントの処理を止める。案内するだけで、自動では呼ばない
     (home.home / ".t3").mkdir()
@@ -169,6 +175,7 @@ def test_service_env_script_never_restarts_the_service(home):
     assert "systemctl" not in code
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="127_t3code_service_env は WSL (Linux + GNU chmod) 専用")
 def test_service_env_script_does_not_touch_other_files(home):
     (home.home / ".t3").mkdir()
     other = home.home / ".t3" / "keep.txt"
@@ -180,6 +187,7 @@ def test_service_env_script_does_not_touch_other_files(home):
 
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="127_t3code_service_env は WSL (Linux + GNU chmod) 専用")
 def test_service_env_keeps_the_mode_of_an_existing_file(home):
     if os.name != "posix":
         pytest.skip("権限ビットは POSIX だけ")
@@ -191,6 +199,7 @@ def test_service_env_keeps_the_mode_of_an_existing_file(home):
     assert "OTHER=1\n" in home.env_file.read_text(encoding="utf-8")
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="127_t3code_service_env は WSL (Linux + GNU chmod) 専用")
 def test_service_env_follows_a_symlink_instead_of_replacing_it(home):
     if os.name != "posix":
         pytest.skip("symlink は POSIX だけ")
@@ -203,6 +212,7 @@ def test_service_env_follows_a_symlink_instead_of_replacing_it(home):
     assert real.read_text(encoding="utf-8") == "OTHER=1\nT3CODE_PORT=3776\nT3CODE_HOST=127.0.0.1\n"
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="127_t3code_service_env は WSL (Linux + GNU chmod) 専用")
 def test_service_env_is_not_touched_when_it_is_not_a_regular_file(home):
     (home.home / ".t3" / "service.env").mkdir(parents=True)
     result = home.run(_script())
@@ -210,6 +220,7 @@ def test_service_env_is_not_touched_when_it_is_not_a_regular_file(home):
     assert "通常のファイルではない" in result.stderr
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="127_t3code_service_env は WSL (Linux + GNU chmod) 専用")
 def test_service_env_is_not_overwritten_when_it_changes_during_processing(home):
     # t3 up などが、読んでから置き換えるまでの間に書き足したら、その追加を消さない
     if os.name != "posix":
@@ -245,6 +256,7 @@ def _fake_awk_that_then_runs(home: Home, command: str) -> None:
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="127_t3code_service_env は WSL (Linux + GNU chmod) 専用")
 def test_service_env_is_not_recreated_when_it_is_deleted_during_processing(home):
     (home.home / ".t3").mkdir()
     home.env_file.write_text("OTHER=1\n", encoding="utf-8")
@@ -255,6 +267,7 @@ def test_service_env_is_not_recreated_when_it_is_deleted_during_processing(home)
     assert "処理中に変わった" in result.stderr
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="127_t3code_service_env は WSL (Linux + GNU chmod) 専用")
 def test_service_env_is_not_overwritten_when_it_is_created_during_processing(home):
     (home.home / ".t3").mkdir()
     _fake_awk_that_then_runs(home, 'echo "CREATED_BY_T3_UP=1" > "$HOME/.t3/service.env"')

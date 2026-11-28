@@ -604,6 +604,9 @@ def test_main_all_acquires_lock_but_other_modes_do_not(monkeypatch):
     monkeypatch.setattr(verify, "_stamp_snapshot", lambda: None)
     monkeypatch.setattr(verify, "_write_stamp", lambda started=None, scope=None: None)
     monkeypatch.setattr(verify.os, "nice", lambda n: 0, raising=False)
+    # CI の PR マージコミット (detached HEAD・refs/heads/develop なし) でも resolve_base に依存しないよう差し替える
+    monkeypatch.setattr(verify, "resolve_base", lambda _run: ("develop", "HEAD", "HEAD"))
+    monkeypatch.setattr(verify, "collect_changed", lambda _run, _base="HEAD": [])
     for argv in (["--all", "--dry-run"], ["--dry-run"], ["--list"], ["--changed", "--dry-run"]):
         assert verify.main(argv) == 0
     assert calls == []

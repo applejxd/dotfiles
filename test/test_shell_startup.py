@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -210,6 +211,7 @@ def test_shellenv_defines_no_alias_or_function(home):
     assert done.stdout == "" and done.stderr == ""
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="WSL の _wsl_vscode_user_bin 分岐は Linux テンプレート専用")
 @pytest.mark.parametrize("shell", ["bash", "zsh"])
 def test_wsl_user_vscode_bin_goes_to_the_end_of_path_once(home, shell):
     """ユーザーが書き込める VS Code の bin は、PATH の最後に 1 つだけ置く。
@@ -353,6 +355,10 @@ def test_runcpp_release_runs_judge_like(runcpp):
     assert sorted(p.name for p in runcpp.work.iterdir()) == ["a.cpp"]
 
 
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="macOS 26 (arm64) では -fsanitize=address のバイナリ起動が dyld 初期化デッドロックする上流不具合 (llvm/llvm-project#200447)",
+)
 def test_runcpp_debug_is_default_and_detects_out_of_bounds(runcpp):
     done = runcpp("1", "a.cpp")
     assert done.returncode == 0, done.stderr
@@ -851,7 +857,7 @@ def test_bashrc_leaves_no_ros_residue(home):
 
 _SHELLS = {
     "zsh": lambda: [_zsh(), "-c", 'print -r -- "$PATH"'],
-    "login-bash": lambda: ["bash", "-lc", 'printf "%s\\n" "$PATH"'],
+    "login-bash": lambda: [shutil.which("bash") or "/bin/bash", "-lc", 'printf "%s\\n" "$PATH"'],
 }
 
 
@@ -880,19 +886,21 @@ def test_shims_are_first_and_unique(shims_path):
 
 def test_shims_inherited_in_path_are_moved_to_front_without_duplicates(shims_path, tmp_path):
     shims = str(tmp_path / "mise-data" / "shims")
-    inherited = f"/opt/x:{shims}:/usr/bin:{shims}:{shims}:/bin"
+    # macOS の login bash は /etc/profile の path_helper が /usr/bin を先頭へ再配置するため、
+    # ユーザー独自パス同士の相対順序 (/opt/x < /opt/y) で継承順序の保持を検証する
+    inherited = f"/opt/x:{shims}:/opt/y:{shims}:{shims}:/usr/bin:/bin"
     _, entries = shims_path(path=inherited)
     assert entries[0] == shims
     assert entries.count(shims) == 1
-    assert entries.index("/opt/x") < entries.index("/usr/bin")  # 他の要素の順序は保つ
+    assert entries.index("/opt/x") < entries.index("/opt/y")  # 他の要素の順序は保つ
 
 
 def test_venv_bin_stays_ahead_of_shims(shims_path, tmp_path):
     shims = str(tmp_path / "mise-data" / "shims")
     venv = str(tmp_path / "venv")
-    _, entries = shims_path(path=f"{venv}/bin:/usr/bin:{shims}", VIRTUAL_ENV=venv)
+    _, entries = shims_path(path=f"{venv}/bin:/opt/y:/usr/bin:{shims}", VIRTUAL_ENV=venv)
     assert entries.index(f"{venv}/bin") < entries.index(shims)
-    assert entries.index(shims) < entries.index("/usr/bin")
+    assert entries.index(shims) < entries.index("/opt/y")
     assert entries.count(shims) == 1
 
 

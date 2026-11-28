@@ -6,8 +6,8 @@ export LANG="${LANG:-ja_JP.UTF-8}"
 # PATH #
 #------#
 
-# The default (lowest priority, first declaration)
-export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin${PATH:+:${PATH}}"
+# The default (lowest priority, append after inherited PATH so venv / user PATH order stays intact)
+export PATH="${PATH:+${PATH}:}/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 # MacTeX (brew install mactex が作る固定のシンボリックリンク。no_global_rcs で path_helper が動かないので自分で通す)
 [[ -d "/Library/TeX/texbin" ]] && export PATH="/Library/TeX/texbin:${PATH}"
