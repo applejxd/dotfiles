@@ -89,16 +89,16 @@ def _create_mini_dotfiles_repo(repo: Path, *, marker: str = "v1") -> str:
 @needs_chezmoi
 def test_update_happy_path_preflight_failure_and_manual_rollback(tmp_path, capsys):
     origin = tmp_path / "origin.git"
-    _git(tmp_path, "init", "--bare", "-q", str(origin))
+    _git(tmp_path, "init", "--bare", "-q", "-b", "main", str(origin))
 
     seed = tmp_path / "seed"
     sha_v1 = _create_mini_dotfiles_repo(seed, marker="v1")
     _git(seed, "remote", "add", "origin", str(origin))
     _git(seed, "push", "-q", "-u", "origin", "main")
 
-    # クライアント端末のクローンと隔離 $HOME
+    # クライアント端末のクローンと隔離 $HOME（-b main を明示して git 既定ブランチ差に依存しない）
     client = tmp_path / "client-repo"
-    _git(tmp_path, "clone", "-q", str(origin), str(client))
+    _git(tmp_path, "clone", "-q", "-b", "main", str(origin), str(client))
     dest = tmp_path / "dest"
     dest.mkdir()
     state_dir = tmp_path / "state"
