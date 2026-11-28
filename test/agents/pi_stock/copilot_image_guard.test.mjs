@@ -27,7 +27,8 @@ function hooks(selected = model()) {
     return payload;
   };
   const cacheWarming = () => handlers.get("cache_warming_decision")({ action: "warm" }, ctx);
-  return { ctx, notices, project, request, run, cacheWarming };
+  const sessionStart = () => handlers.get("session_start")({ type: "session_start", reason: "new" }, ctx);
+  return { ctx, notices, project, request, run, cacheWarming, sessionStart };
 }
 
 for (const id of ids) {
@@ -82,6 +83,122 @@ test("同じ『続けて』が履歴にあってもネイティブの role を�
   const transcript = [repeated, message("toolResult", ...many(10)), repeated, message("toolResult", image(11))];
   assert.deepEqual(images(run(transcript)), [...many(10).slice(1), image(11)].map(url));
   assert.equal(ctx.signal.aborted, false);
+});
+
+test("長いテキスト履歴があるとき、画像単体が 3.5 MiB 未満でも全体 4 MiB に収まるよう過去画像を削る", () => {
+  const { ctx, notices, run } = hooks();
+  const longText = { type: "text", text: "a".repeat(2_000_000) };
+  const transcript = [
+    message("user", longText, image(1, 1_000_000), image(2, 1_000_000)),
+    message("assistant", { type: "text", text: "ok" }),
+    message("user", { type: "text", text: "続けて" }),
+  ];
+  const sent = run(transcript);
+  assert.ok(Buffer.byteLength(JSON.stringify(sent), "utf8") <= 4 * 1024 * 1024);
+  assert.equal(ctx.signal.aborted, false);
+  assert.ok(images(sent).length < 2);
+  assert.match(notices[0][0], /省略/);
+});
+
+test("長いテキスト履歴が 4 MiB 超で画像 0 枚のときは画像ガードで止めない", () => {
+  const { ctx, notices, run } = hooks();
+  const hugeText = { type: "text", text: "a".repeat(4_500_000) };
+  const transcript = [
+    message("user", hugeText, image(1, 100_000)),
+    message("assistant", { type: "text", text: "ok" }),
+    message("user", { type: "text", text: "続けて" }),
+  ];
+  const sent = run(transcript);
+  assert.deepEqual(images(sent), []);
+  assert.equal(ctx.signal.aborted, false);
+  assert.match(notices[0][0], /1 枚省略/);
+});
+
+test("テキストだけで 4 MiB 超かつ元々画像 0 枚のときも止めない", () => {
+  const { ctx, notices, run } = hooks();
+  const transcript = [message("user", { type: "text", text: "a".repeat(4_500_000) })];
+  run(transcript);
+  assert.equal(ctx.signal.aborted, false);
+  assert.deepEqual(notices, []);
+});
+
+test("長いテキスト履歴 + 現在ターンの画像 1 枚で 4 MiB 超のときは詳細つきで中止する", () => {
+  const { ctx, notices, run } = hooks();
+  const transcript = [
+    message("user", { type: "text", text: "a".repeat(2_600_000) }, image(1, 500_000)),
+    message("assistant", { type: "text", text: "ok" }),
+    message("user", { type: "text", text: "見て" }, image(2, 1_500_000)),
+  ];
+  const sent = run(transcript);
+  assert.deepEqual(images(sent), [url(transcript[2].content[1])]);
+  assert.equal(ctx.signal.aborted, true);
+  assert.match(notices[0][0], /画像 1 枚/);
+  assert.match(notices[0][0], /全体 \d+\.\d{2} MiB/);
+  assert.match(notices[0][0], /画像 \d+\.\d{2} MiB/);
+});
+
+test("非画像の長文送信の直後は余地を既定値に戻し、次の画像を不要に削らない", () => {
+  const { ctx, notices, run } = hooks();
+  // 1 回目: 大きなテキスト（3 MiB）、画像なし
+  run([message("user", { type: "text", text: "x".repeat(3_000_000) })]);
+  assert.equal(ctx.signal.aborted, false);
+  // 2 回目: 小さな会話 + 過去画像 1 枚 + 現在画像 1 枚（合計 ~2 MiB << 4 MiB）
+  const transcript = [
+    message("user", image(1, 700_000)),
+    message("assistant", { type: "text", text: "ok" }),
+    message("user", image(2, 700_000)),
+  ];
+  const sent = run(transcript);
+  assert.equal(ctx.signal.aborted, false);
+  assert.deepEqual(images(sent), [url(transcript[0].content[0]), url(transcript[2].content[0])]);
+  assert.deepEqual(notices, []);
+});
+
+test("toolResult.details 等の送信されないメタデータで過去画像を過剰に削らない", () => {
+  const { ctx, notices, run } = hooks();
+  const transcript = [
+    message("user", image(1, 500_000)),
+    { role: "toolResult", toolName: "read", toolCallId: "call_1", content: [{ type: "text", text: "ok" }], details: { raw: "z".repeat(3_000_000) } },
+    message("user", image(2, 500_000)),
+  ];
+  const sent = run(transcript);
+  assert.equal(ctx.signal.aborted, false);
+  assert.deepEqual(images(sent), [url(transcript[0].content[0]), url(transcript[2].content[0])]);
+  assert.deepEqual(notices, []);
+});
+
+test("観測したツール定義等のオーバーヘッドが既定 512 KiB を超えるとき、次回見積もりに反映して過去画像を削る", () => {
+  const bigTools = [{ type: "function", function: { name: "t", description: "x".repeat(700_000) } }];
+  const transcript = [
+    message("user", { type: "text", text: "a".repeat(2_000_000) }, image(1, 600_000)),
+    message("assistant", { type: "text", text: "ok" }),
+    message("user", { type: "text", text: "見て" }, image(2, 600_000)),
+  ];
+  // 対照群: 観測前（既定 512 KiB）では画像合計 ~1.6 MB <= 残予算 ~1.67 MB のため過去画像を削らず、
+  // ツール 0.7 MB を足した実送信が ~4.3 MB > 4 MiB で中止になる。
+  const cold = hooks();
+  const coldPayload = { ...outbound(cold.ctx.model.id, cold.project(transcript)), tools: bigTools };
+  assert.equal(cold.request(coldPayload), undefined);
+  assert.equal(cold.ctx.signal.aborted, true);
+  assert.equal(images(coldPayload).length, 2);
+
+  // 観測後: 1 回目の送信でツール定義のオーバーヘッドを観測したインスタンスでは、
+  // 同じ transcript でも過去画像を削って 4 MiB 以下で送信できる。
+  const warm = hooks();
+  const basePayload = (msgs) => ({ ...outbound(warm.ctx.model.id, msgs), tools: bigTools });
+  assert.equal(warm.request(basePayload(warm.project([message("user", { type: "text", text: "hi" })]))), undefined);
+  assert.equal(warm.ctx.signal.aborted, false);
+  const warmPayload = basePayload(warm.project(transcript));
+  assert.equal(warm.request(warmPayload), undefined);
+  assert.equal(warm.ctx.signal.aborted, false);
+  assert.deepEqual(images(warmPayload), [url(transcript[2].content[1])]);
+  assert.ok(Buffer.byteLength(JSON.stringify(warmPayload), "utf8") <= 4 * 1024 * 1024);
+
+  // session_start で観測済みのオーバーヘッドをリセットする
+  warm.sessionStart();
+  const afterReset = basePayload(warm.project(transcript));
+  assert.equal(warm.request(afterReset), undefined);
+  assert.equal(warm.ctx.signal.aborted, true);
 });
 
 for (const kind of ["追加", "欠落", "置換", "順序変更"]) {
