@@ -719,23 +719,27 @@
   ["./python3 $HOME/.agents/skills/x/y.py", [["$HOME/.agents/skills/x/y.py", "unproven"]]]
  ],
  "t3_mcp": {
-  "_説明": "T3 の MCP ツール (pi では mcp__t3-code__<名前>) 71 本の分類 (2026-11-21 の時点)。allow は、読み取り・表示・ブラウザの閲覧・HTML の描画・元に戻せる整理・自分の子の起動と取消 (方針の mcp に t3-code:<名前> で足す。ブラウザ・描画の 4 本 (preview_open・preview_navigate・html_preview・html_render) は、直接の外部送信に追加の対策を入れないリスクを、利用者が受容した)。ask は、ほかのスレッドへ触れるもの・新しいスレッドの作成・スケジュール・設定とプロジェクトの変更・ブラウザの操作系・別途検討とした「その他」。判定は、実ゲートの normalizeInput (対象の生成。面全体の mcp を含む 7 つ) と evaluateAnyValue で確かめる。サーバ単位の allow は、全ツールと将来の追加分まで通すので使わない。T3 のツールが増減したら、この表と方針をそろえる",
+  "_説明": "T3 の MCP ツール (pi では mcp__t3-code__<名前>) 91 本の分類 (2026-11-28 更新)。allow は 52 本: 読み取り・PR/Issue/リンク参照・表示・ブラウザの閲覧・HTML の描画・元に戻せる整理・PR/背景監視・新規スレッド起動・自分の子の起動と取消 (方針の mcp に t3-code:<名前> で足す)。ask は 39 本: 既存他スレッドへの送信/中断/設定変更・GitHub への書き込み系 PR/Issue/CI 再実行・環境リンク登録/解除・スケジュール・設定とプロジェクトの変更・ブラウザの操作系・その他。サーバ単位の allow は全ツールと将来の追加分まで通すので使わない。T3 のツールが増減したら、この表と方針をそろえる",
   "allow": [
    "orchestrator_capabilities", "task_status", "t3_thread_list", "t3_thread_search", "t3_thread_read", "t3_thread_wait",
    "t3_worktree_list", "t3_worktree_status", "list_thread_pull_requests", "read_pull_request_guide", "t3_project_list", "t3_project_read",
-   "t3_environment_read", "list_scheduled_tasks", "t3_preview_list", "preview_status", "t3_theme_read", "device_list",
+   "t3_environment_read", "t3_environment_links", "list_scheduled_tasks", "t3_preview_list", "preview_status", "t3_theme_read", "device_list",
+   "pull_request_read", "pull_request_list", "ci_logs", "list_issues", "read_issue", "list_thread_issues",
    "send_to_user", "preview_wait_for", "t3_preview_close", "preview_open", "preview_navigate", "preview_snapshot",
    "preview_recording_start", "preview_recording_stop", "preview_resize", "preview_set_appearance", "html_preview", "html_render",
    "t3_thread_update", "t3_thread_organize", "link_pull_request", "link_pull_requests", "unlink_pull_request", "unlink_pull_requests",
-   "unwatch_pull_request", "delegate_task", "task_cancel"
+   "watch_pull_request", "unwatch_pull_request", "link_issue", "unlink_issue", "t3_background_wait",
+   "t3_thread_launch", "create_threads", "delegate_task", "task_cancel"
   ],
   "ask": [
-   "create_threads", "t3_thread_launch", "t3_thread_send", "t3_thread_send_attachments", "t3_thread_interrupt", "t3_workflow_stop",
+   "t3_thread_send", "t3_thread_send_attachments", "t3_thread_interrupt", "t3_workflow_stop",
    "t3_thread_transfer", "t3_thread_configure", "t3_queue", "schedule_task", "delete_scheduled_task", "run_scheduled_task_now",
    "t3_project_create", "t3_project_update", "t3_project_delete", "t3_project_clone", "t3_environment_preferences_update", "t3_theme_set",
-   "t3_worktree_handoff", "preview_act", "preview_evaluate", "preview_dialog", "request_secret", "t3_pending_request",
-   "write_pull_request_guides", "watch_pull_request", "t3_attachment_prepare_upload", "t3_attachment_discard", "device_open", "device_close",
-   "device_screenshot", "t3_background_wait"
+   "t3_environment_link", "t3_environment_unlink", "t3_worktree_handoff", "preview_act", "preview_evaluate", "preview_dialog",
+   "request_secret", "t3_pending_request", "write_pull_request_guides", "t3_attachment_prepare_upload", "t3_attachment_discard",
+   "device_open", "device_close", "device_screenshot",
+   "pull_request_create", "pull_request_update", "pull_request_respond", "pull_request_review", "pull_request_merge",
+   "ci_rerun", "create_issue", "comment_on_issue", "set_issue_state"
   ]
  },
  "project": {

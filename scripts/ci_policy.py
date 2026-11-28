@@ -66,6 +66,7 @@ PROTECTED_PREFIXES: tuple[str, ...] = tuple(
         ".github/workflows/",
         "home/.chezmoiscripts/",
         "home/dot_cc-safety-net/",
+        "home/dot_config/dotfiles-ai/",
         "home/dot_config/pi-sandbox/",
         "home/dot_pi/agent/agents/",
         "home/dot_pi/agent/extensions/",

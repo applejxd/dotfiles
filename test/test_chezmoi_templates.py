@@ -23,7 +23,12 @@ ROOT = Path(__file__).resolve().parents[1]
 IGNORE_TEMPLATE = ROOT / "home" / ".chezmoiignore.tmpl"
 CONFIG_TEMPLATE = ROOT / "home" / ".chezmoi.toml.tmpl"
 EXTERNAL_TEMPLATE = ROOT / "home" / ".chezmoiexternal.toml.tmpl"
-BITWARDEN_TARGETS = (".config/git/user", ".config/sops/age/keys.txt")
+BITWARDEN_TARGETS = (
+    ".config/git/user",
+    ".config/sops/age/keys.txt",
+    ".config/dotfiles-ai/app.json",
+    ".config/dotfiles-ai/app.pem",
+)
 
 
 def chezmoi_bin() -> str:
@@ -102,10 +107,40 @@ def test_bitwarden_targets_are_expanded_only_once(tmp_path, target):
     assert target in render(home=str(tmp_path), bw_session="dummy-session")
 
 
-@pytest.mark.parametrize("target", BITWARDEN_TARGETS)
+@pytest.mark.parametrize("target", (".config/git/user", ".config/sops/age/keys.txt"))
 def test_bitwarden_targets_are_personal_only(tmp_path, target):
     """個人 PC 以外では Bitwarden 由来のファイルを置かない。"""
     assert target in render(home=str(tmp_path), username="other", bw_session="dummy")
+
+
+def test_dotfiles_ai_is_personal_only(tmp_path):
+    """個人 PC 以外では ~/.config/dotfiles-ai/ ごと除外する。"""
+    rendered = render(home=str(tmp_path), username="other", bw_session="dummy")
+    assert ".config/dotfiles-ai/" in rendered
+    assert ".config/dotfiles-ai/**" in rendered
+
+
+def test_dotfiles_ai_is_deployed_once_on_windows(tmp_path):
+    """Windows でも .config/dotfiles-ai/ はディレクトリだけ戻し、初回のみ展開する。"""
+    rendered = render(home=str(tmp_path), os_name="windows", bw_session="session")
+    assert "!.config/dotfiles-ai/" in rendered
+    assert "!.config/dotfiles-ai/**" not in rendered
+    assert ".config/dotfiles-ai/app.json" not in rendered
+    assert ".config/dotfiles-ai/app.pem" not in rendered
+
+    # BW_SESSION が無い間は除外される
+    no_sess = render(home=str(tmp_path), os_name="windows")
+    assert ".config/dotfiles-ai/app.json" in no_sess
+    assert ".config/dotfiles-ai/app.pem" in no_sess
+
+    # 展開済みならセッションがあっても再描画しない
+    d = tmp_path / ".config" / "dotfiles-ai"
+    d.mkdir(parents=True)
+    (d / "app.json").write_text("{}", encoding="utf-8")
+    (d / "app.pem").write_text("pem", encoding="utf-8")
+    after = render(home=str(tmp_path), os_name="windows", bw_session="session")
+    assert ".config/dotfiles-ai/app.json" in after
+    assert ".config/dotfiles-ai/app.pem" in after
 
 
 

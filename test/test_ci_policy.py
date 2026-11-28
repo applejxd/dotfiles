@@ -39,6 +39,7 @@ _spec.loader.exec_module(policy)
         "home/.chezmoitemplates/pi-mcp-servers.toml",
         "home/.chezmoitemplates/pi-permission-policy.json",
         "home/dot_cc-safety-net/rules/dotfiles-guard/rulebook.json",
+        "home/dot_config/dotfiles-ai/private_app.pem.tmpl",
         "home/dot_config/pi-sandbox/runner.toml",
         "home/dot_local/bin/executable_pib",
         "home/dot_local/bin/executable_pib-shell",

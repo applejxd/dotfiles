@@ -179,6 +179,7 @@ RULES: tuple[Rule, ...] = (
             "home/.chezmoi.toml.tmpl",
             "home/dot_config/mise/config.toml.tmpl",
             "home/dot_config/git/config.tmpl",
+            "home/dot_config/dotfiles-ai/**",
         ),
         (
             "test_chezmoi_templates",
